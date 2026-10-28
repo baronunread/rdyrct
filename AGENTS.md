@@ -15,15 +15,21 @@ path is **KV**; custom domains use **Cloudflare for SaaS**. Product host:
 
 Always use **bun**, never npm/npx.
 
+**Setting up and running the app is in the README's "Local development"**
+(what you need, first run, day to day, LAN mode, integrations, and what to
+do when something is off). Read it once; the rules below are the parts an
+agent needs while working.
+
 ```sh
 bun install
-bun run dev                 # app + Resend inbox + Google sign-in emulator, each behind portless; prints the URLs (see "Dev addresses" below)
+bun run dev                 # first run creates .dev.vars and migrates; starts app + mail inbox + Google emulator behind portless; prints the URLs
 bun scripts/dev-hosts.ts    # print this checkout's dev URLs (`... app` for one; read mail: curl "$(bun scripts/dev-hosts.ts mail)/emails" -H 'authorization: Bearer test_token_admin')
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
-bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
+bun run db:seed:local       # seed local D1/KV with fake data (run dev server first; finds this checkout's server itself)
+bun run polar:listen        # forward Polar sandbox webhooks to this checkout (needs the Polar CLI)
 bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
 
@@ -71,8 +77,8 @@ run uses `.dev.vars.self-host`, not your `.dev.vars`: no email, no Polar,
 no Google, so it also covers sign-up without a code, no billing and the
 `/admin` warning.
 
-**Dev addresses.** `bun run dev` (`scripts/dev.ts`) names everything after
-the checkout: `rdyrct`, `rdyrct-mail` and `rdyrct-google` in the main
+**Dev addresses.** Rules for agents; the README explains the same for
+people. `bun run dev` (`scripts/dev.ts`) names everything after the checkout: `rdyrct`, `rdyrct-mail` and `rdyrct-google` in the main
 checkout, `rdyrct-<branch>`, `rdyrct-<branch>-mail` and so on in a git
 worktree, so any number of checkouts run at once. portless picks the TLD:
 `https://rdyrct.localhost` normally, `https://rdyrct.local` once its proxy
@@ -84,7 +90,10 @@ names on a network. The launcher hands the Worker its addresses (`APP_URL`,
 `scripts/dev-host-keys.ts`), so `.dev.vars` must not set them: its values
 would win, and the launcher refuses to start if it does. It also creates
 `.dev.vars` from the example on a first run and applies the local D1
-migrations. Never hard-code a dev URL in a script; ask `scripts/dev-hosts.ts`.
+migrations. Never hard-code a dev URL (`rdyrct.localhost`, a port) in a
+script, a doc or a test: ask `bun scripts/dev-hosts.ts` (`app`, `mail`,
+`google`). Open the URL it prints, never `localhost:<port>`: sign-in
+actions answer "Invalid origin" from any other address.
 Sandbox billing webhooks: run `bun run polar:listen` beside it. When
 `.dev.vars` sets no `POLAR_WEBHOOK_SECRET`, `bun run dev` hands the Worker
 the one `polar listen` signs with, so forwarded events verify as they are.
@@ -101,7 +110,7 @@ without wrangler CLI calls).
 bun run check                          # app + shared, worker, worker tests (three bun check runs)
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
-bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
+bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars, and a .env like CI's (cp .env.build.example .env if you have none)
 bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
 bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs

@@ -55,39 +55,91 @@ Application layer:
 - [Drizzle ORM](https://orm.drizzle.team) over D1
 - React 19 + Vite + [`@cloudflare/vite-plugin`](https://github.com/cloudflare/workers-sdk)
 - Tailwind v4 + [Base UI](https://base-ui.com)
-- TanStack Query + React Router
+- TanStack Query + TanStack Router
 - [Polar](https://polar.sh) for billing, [Resend](https://resend.com) for transactional email
 
 ---
 
 ## Local development
 
+### What you need
+
+- [Bun](https://bun.sh) 1.4 or newer.
+- macOS or Linux. Dev servers run behind [portless](https://github.com/vercel-labs/portless) (installed with the project), which gives each one a stable HTTPS name instead of a port.
+- Optional: the [Polar CLI](https://polar.sh/docs), only to receive sandbox billing webhooks.
+
+### First run
+
 ```sh
 bun install
-bun run dev                        # https://rdyrct.localhost, plus a local inbox and Google sign-in
+bun run dev
 ```
 
-`bun run dev` creates `.dev.vars` from `.dev.vars.local.example` on the first
-run, applies the local D1 migrations, and prints its URLs. Set
-`SUPERADMIN_EMAIL` in `.dev.vars` to your address to get the admin console.
-In a git worktree the names carry the branch (`https://rdyrct-<branch>.localhost`),
-so several checkouts run side by side. To open the dev server from another
-computer or a phone on the same network, switch portless to LAN mode once
-(`sudo portless service install --lan`); the URLs then end in `.local`.
+That is the whole setup. On the first run `bun run dev`:
 
-- Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user. `bun run db:seed:local` fills the database with fake orgs, and `/__dev/scenarios` signs in as one in each plan state.
-- The dev server runs the self-hosted app. Add `VITE_RDYRCT_SITE=1` to `.env` to work on rdyrct.com's own landing and marketing pages.
-- New accounts see a create-org prompt on org-scoped pages until they create their first organization.
-- Email verification codes are sent through [emulate.dev](https://emulate.dev)'s Resend emulator instead of a real inbox. Read it with:
+1. creates `.dev.vars` from `.dev.vars.local.example`, with an auth secret of its own (every other value works locally as it is);
+2. applies the local database migrations (it does this on every run, so a pull never leaves you a migration behind);
+3. starts the app, a local email inbox and a local Google sign-in, each behind portless (portless may ask for your password once, to listen on port 443 and trust its own certificate);
+4. prints the addresses once the app answers:
+
+```
+  rdyrct     https://rdyrct.localhost
+  scenarios  https://rdyrct.localhost/__dev/scenarios
+  inbox      https://rdyrct-mail.localhost/emails  (header: authorization: Bearer test_token_admin)
+  google     https://rdyrct-google.localhost
+```
+
+Then, in a second terminal, fill the database with fake organizations, links and clicks:
+
+```sh
+bun run db:seed:local
+```
+
+and open the **scenarios** page. It signs you in as a seeded account in each state the app has (Pro, Hobby and Free owners, a member, a viewer, an org over its plan, a read-only org, a platform admin…). `/__dev/scenarios/<name>?to=/links` opens a page directly.
+
+Ctrl+C stops everything. If one of the three crashes, the other two stop with it.
+
+### Day to day
+
+- **One name per checkout.** The main checkout is `rdyrct`, `rdyrct-mail`, `rdyrct-google`; a git worktree gets the branch in its names (`rdyrct-<branch>`, `rdyrct-<branch>-mail`…), so any number of checkouts run side by side. `bun scripts/dev-hosts.ts` prints this checkout's addresses.
+- **Email.** Sign-up codes and every other mail land in the local inbox, never a real one:
 
   ```sh
   curl "$(bun scripts/dev-hosts.ts mail)/emails" -H 'authorization: Bearer test_token_admin'
   ```
 
-  and copy the 6-digit code out of the latest message.
+- **Google sign-in** goes through the local emulator with two accounts, `testuser@gmail.com` and `admin@gmail.com`.
+- **The admin console.** Set `SUPERADMIN_EMAIL` in `.dev.vars` to an address and sign up with it (or use the `admin` scenario).
+- **Start the database over:** `bun run db:reset:local`, then `bun run dev` and `bun run db:seed:local` again.
+- **rdyrct.com's own pages.** The dev server runs the self-hosted app. Add `VITE_RDYRCT_SITE=1` to `.env` to work on the landing and marketing pages.
 
-- Setting `CF_DEV_ENV=simulated` (the `.dev.vars.local.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 3 seconds and TLS after about 12 seconds, so "Check status" shows the same progression without a real zone. `CF_DEV_ENV=instant` reports both ready at once, which is what the e2e run uses so it does not sit through the timer. Without either, missing `CF_API_TOKEN`/`CF_ZONE_ID` fails closed instead of faking a response.
-- Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
+### From another computer or a phone
+
+Switch portless to LAN mode once:
+
+```sh
+sudo portless service install --lan
+```
+
+The addresses then end in `.local` (`https://rdyrct.local`) and any device on the same network opens them; `bun run dev` says so when it starts. The first visit from another device shows a certificate warning, because that device does not trust portless's certificate: continue past it. Every name is a single word before `.local` on purpose: Windows finds only those on a network. On Linux, LAN mode needs `avahi-utils`.
+
+### Integrations
+
+| Service                              | Locally                                                                                                   | What to do                                                                                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email (Resend)                       | the local inbox                                                                                           | nothing                                                                                                                                                                                                                       |
+| Google sign-in                       | the local emulator                                                                                        | nothing                                                                                                                                                                                                                       |
+| Bot check (Turnstile)                | Cloudflare's always-pass test keys                                                                        | nothing                                                                                                                                                                                                                       |
+| Custom domains (Cloudflare for SaaS) | simulated: DNS is ready after ~3 s and TLS after ~12 s (`CF_DEV_ENV=simulated`; `instant` skips the wait) | nothing                                                                                                                                                                                                                       |
+| Billing (Polar)                      | your [Polar sandbox](https://sandbox.polar.sh)                                                            | put the sandbox token and product ids in `.dev.vars`; run `bun run polar:listen` beside `bun run dev` to receive webhooks. `bun run dev` gives the app the secret `polar listen` signs them with, so there is nothing to copy |
+| Blog (`/blog`)                       | proxied to the rdyrct-blog dev server                                                                     | run that repo's dev server; `BLOG_ORIGIN_URL` points at it                                                                                                                                                                    |
+
+### When something is off
+
+- **"`.dev.vars` sets this checkout's addresses"**: `bun run dev` works out `APP_URL`, `APP_HOST`, `SHARED_LINK_HOST`, `RESEND_BASE_URL` and `GOOGLE_EMULATOR_URL` itself. Delete the lines it lists from `.dev.vars` (an old copy has them).
+- **"Invalid origin" when saving or signing out**: open the address `bun run dev` printed, not `localhost:<port>`.
+- **A page will not load at all**: `bunx portless doctor` checks the proxy, and `bunx portless list` shows what is running.
+- **The seed stops with a 500**: the local database is busy (a browser test run, say). Run it again when it is quiet.
 
 ---
 
@@ -102,8 +154,10 @@ bun run verify        # types, lint, formatting, unit, and Worker tests
 ```
 
 Playwright owns the local server lifecycle and never resets or seeds local
-Cloudflare state. Failed browser tests keep a screenshot and trace in
-`test-results/`.
+Cloudflare state, so the browser tests run with or without `bun run dev`.
+They expect a `.env` like CI's: with none of your own, copy
+`.env.build.example` to `.env` first, or the analytics tests fail. Failed
+browser tests keep a screenshot and trace in `test-results/`.
 
 ---
 
