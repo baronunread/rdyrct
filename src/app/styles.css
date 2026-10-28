@@ -431,6 +431,18 @@ html {
   scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
 }
 
+/* The sheet keeps room for its scrollbar whether or not it has one, on both
+   sides so the page stays centred: where a scrollbar takes width (Windows,
+   Linux), a page growing past the window (the dashboard as its data lands)
+   otherwise jumped left. The track is transparent, so the room does not
+   show. Desktop only: on a phone the page scrolls, and the html rule above
+   keeps its gutter. */
+@media (min-width: 48rem) {
+  [data-app-sheet] {
+    scrollbar-gutter: stable both-edges;
+  }
+}
+
 /* Marketing-to-marketing navigation (the viewTransition Links in
    landing-header.tsx and friends) cross-fades through a view transition, not
    a CSS transition: a view transition fades two snapshots on the
