@@ -5,7 +5,8 @@ import { m } from "motion/react";
 import { useAddresses, useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useToast } from "../ui/toast";
-import { Slug, Td } from "../ui/misc";
+import { Td } from "../ui/misc";
+import { ShortAddress } from "./short-address";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
@@ -45,58 +46,70 @@ function AliasRow({
   const isTemp = address.kind === "temp_alias";
 
   return (
+    // The link's own five columns, so an alias lines up under its link:
+    // address over what kind of alias it is, the shared destination, its
+    // clicks (a week's, said so), when it was made, and its menu.
     <m.tr
-      className="bg-surface-2/30"
+      className="bg-surface-2/40"
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 2 }}
+      exit={{ opacity: 0, y: -2, transition: { duration: 0.15 } }}
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
-      <Td className="py-1.5">
-        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
-          <span className="w-5.5 shrink-0" />
-          <Slug slug={address.slug} className="font-mono text-xs text-muted" />
-          <span className="shrink-0">
-            <CopyButton
-              text={address.url}
-              label={`Copy ${address.url}`}
-              onCopy={(text) => copyToClipboard(text, toast)}
-            />
+      <Td className="py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Under the link's chevron: a rule that ties the row to it. */}
+          <span aria-hidden className="flex w-6 shrink-0 justify-center self-stretch">
+            <span className="w-px bg-border" />
           </span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-1">
+              <ShortAddress url={address.url} slug={address.slug} />
+              <CopyButton
+                text={address.url}
+                label={`Copy ${address.url}`}
+                onCopy={(text) => copyToClipboard(text, toast)}
+              />
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted">
+              {isTemp ? (
+                <>
+                  Temporary alias · expires in {timeLeft(address.expiresAt!)}
+                  <Tooltip content="Temporary redirects do not count toward your plan's links.">
+                    <button
+                      type="button"
+                      aria-label="About temporary aliases"
+                      className="relative cursor-help text-muted after:absolute after:-inset-1.5 [@media(hover:hover)]:hover:text-text"
+                    >
+                      <Info size={12} />
+                    </button>
+                  </Tooltip>
+                </>
+              ) : (
+                "Permanent alias"
+              )}
+            </span>
+          </div>
         </div>
       </Td>
-      {/* An alias has no title of its own. */}
-      <Td className="hidden py-1.5 lg:table-cell" />
-      <Td className="hidden py-1.5 text-xs text-muted xl:table-cell">
-        {isTemp ? (
-          <span className="inline-flex items-center gap-1">
-            Expires in {timeLeft(address.expiresAt!)}
-            <Tooltip content="Temporary redirects do not affect the link counter.">
-              <button
-                type="button"
-                aria-label="About temporary aliases"
-                className="relative cursor-help text-muted after:absolute after:-inset-1.5 hover:text-text"
-              >
-                <Info size={12} />
-              </button>
-            </Tooltip>
-          </span>
-        ) : (
-          "Permanent alias"
-        )}
+      <Td className="hidden py-2 text-xs text-muted lg:table-cell">Same destination</Td>
+      <Td className="py-2 text-end">
+        <span className="tnum block font-semibold">
+          {address.recentClicks.toLocaleString("en-US")}
+        </span>
+        <span className="block text-xs text-muted">7 days</span>
       </Td>
-      <Td className="tnum py-1.5 text-end">{address.recentClicks}</Td>
-      <Td className="hidden py-1.5 text-xs whitespace-nowrap text-muted sm:table-cell">
+      <Td className="hidden py-2 text-xs whitespace-nowrap text-muted sm:table-cell">
         {shortDate(address.createdAt)}
       </Td>
-      <Td className="py-1.5">
+      <Td className="py-2">
         <Menu
           align="end"
           label={`Actions for ${address.slug}`}
           trigger={
             <div className="flex justify-end">
-              <span className="rounded p-1.5 text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
-                <Ellipsis size={15} />
+              <span className="grid size-8 place-items-center rounded-md text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
+                <Ellipsis size={16} />
               </span>
             </div>
           }
@@ -129,25 +142,18 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
 
   if (addresses.isLoading)
     return (
-      // The span has to match how many columns are actually rendered, and
-      // that changes with the viewport: the table hides Title below lg and
-      // Destination below xl, and a hidden cell creates no column at all.
-      // A flat colSpan={6} asked for a column that did not exist, so the
-      // browser made one and squeezed the real ones to fit: the header
-      // visibly jumped while the aliases loaded and snapped back after.
-      //
-      // Three is the count that is always there (Short link, Clicks,
-      // Actions); the three trailing cells appear exactly when their columns
-      // do.
+      // One cell per column the table draws at this width: Link, Clicks and
+      // the menu always, Created from sm and Destination from lg. A span
+      // asking for a column the table does not have makes the browser add
+      // one, and the header jumps while the aliases load.
       <tr>
-        <Td colSpan={3} className="bg-surface-2/30">
+        <Td colSpan={3} className="bg-surface-2/40">
           <SkeletonStatus className="flex justify-center py-1">
             <Skeleton className="h-4 w-32" />
           </SkeletonStatus>
         </Td>
-        <Td className="hidden bg-surface-2/30 sm:table-cell" />
-        <Td className="hidden bg-surface-2/30 lg:table-cell" />
-        <Td className="hidden bg-surface-2/30 xl:table-cell" />
+        <Td className="hidden bg-surface-2/40 sm:table-cell" />
+        <Td className="hidden bg-surface-2/40 lg:table-cell" />
       </tr>
     );
 
