@@ -1,5 +1,6 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import type { ReactElement, ReactNode } from "react";
+import { cn } from "./cn";
 
 /**
  * Tooltips that sit side by side, like the folded sidebar's icons: the first
@@ -14,6 +15,16 @@ export function TooltipGroup({ children }: { children: ReactNode }) {
     </BaseTooltip.Provider>
   );
 }
+
+/** Delays for a tooltip on its own; a TooltipGroup sets them for its members. */
+const ALONE = { delay: 40, closeDelay: 120 };
+
+const POPUP =
+  "max-w-xs origin-[var(--transform-origin)] rounded-md bg-surface-2 px-2.5 py-1.5 text-xs text-text transition-[opacity,scale] duration-125 ease-out smooth-shadow-ring-sm data-[ending-style]:opacity-0 data-[instant]:duration-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 motion-reduce:transition-none";
+
+/** A label in a row of them goes the moment the pointer leaves: a fade there
+ * trails behind somebody already looking elsewhere. */
+const GROUPED_POPUP = "data-[ending-style]:duration-0";
 
 export function Tooltip({
   content,
@@ -39,11 +50,7 @@ export function Tooltip({
             re-entered, and started again, so the fade stuttered instead of
             running once. A tenth of a second absorbs that and is still gone
             before anyone reads it as lag. */}
-      <BaseTooltip.Trigger
-        delay={grouped ? undefined : 40}
-        closeDelay={grouped ? undefined : 120}
-        render={children}
-      />
+      <BaseTooltip.Trigger {...(grouped ? {} : ALONE)} render={children} />
       <BaseTooltip.Portal>
         {/* Above every dialog, the nested ones (z-[70]) included: a tooltip
               is transient and always explains what is on top of it. */}
@@ -61,7 +68,7 @@ export function Tooltip({
                 data-instant is Base UI saying this one was not opened by
                 hovering (keyboard focus, or a second tip while one is already
                 up), where an animation is a delay nobody asked for. */}
-          <BaseTooltip.Popup className="max-w-xs origin-[var(--transform-origin)] rounded-md bg-surface-2 px-2.5 py-1.5 text-xs text-text transition-[opacity,scale] duration-125 ease-out smooth-shadow-ring-sm data-[ending-style]:opacity-0 data-[instant]:duration-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 motion-reduce:transition-none">
+          <BaseTooltip.Popup className={cn(POPUP, grouped && GROUPED_POPUP)}>
             {content}
           </BaseTooltip.Popup>
         </BaseTooltip.Positioner>
