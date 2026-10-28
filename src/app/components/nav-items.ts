@@ -12,7 +12,7 @@ import {
 
 /** The app's main nav, shared by AppShell and AppShellSkeleton so the
  * skeleton's inert copy can never drift from the real links. The icons are
- * the mock's own (ui/nav-icons.tsx). */
+ * Tabler at the mock's lighter stroke (ui/nav-icons.tsx). */
 export const appNavItems = [
   { to: "/dashboard", icon: GridIcon, label: "Dashboard" },
   { to: "/analytics", icon: ChartIcon, label: "Analytics" },
