@@ -19,7 +19,8 @@ export async function copyToClipboard(
     if (messages?.success) toast(messages.success);
     else {
       const code = copiedCode(text);
-      toast(code ? "Copied" : "Copied to clipboard", "info", { code });
+      if (code) toast("Copied", "info", { code });
+      else toast("Copied to clipboard");
     }
   } catch (error) {
     toast(messages?.error ?? "Could not copy to clipboard", "error");
