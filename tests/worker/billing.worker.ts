@@ -20,6 +20,7 @@ import {
   POLAR_PRO_YEARLY_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
   seedBillingUser as seedUser,
+  unreachableBilling,
 } from "./support";
 import type { Env } from "../../src/worker/env";
 import type { JsonValue } from "../../src/shared/types";
@@ -48,6 +49,7 @@ const checkoutsGet = vi.fn<() => Promise<CheckoutStatus>>(async () => ({
 }));
 const customerSessionsCreate = vi.fn(async () => ({
   customer_portal_url: "https://sandbox.polar.sh/portal/test",
+  token: "polar_cst_test",
 }));
 const subscriptionsRevoke = vi.fn(async (id: string) => ({ id }));
 const subscriptionsList = vi.fn<() => Promise<{ items: { id: string }[] }>>(async () => ({
@@ -57,6 +59,7 @@ const billingProvider: BillingProvider = {
   checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
   subscriptions: { revoke: subscriptionsRevoke, list: subscriptionsList },
+  customerPortal: unreachableBilling.customerPortal,
 };
 
 /** billingEnv() with the stand-in checkout/portal client wired in. */

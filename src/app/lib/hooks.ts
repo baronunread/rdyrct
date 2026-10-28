@@ -14,6 +14,7 @@ import posthog from "./posthog";
 import { FUNNEL, captureGoogleSignup } from "./funnel";
 import type { LinkImportDTO } from "@/shared/link-import";
 import type {
+  BillingDetails,
   CurrentUser,
   AppConfig,
   AddressDTO,
@@ -112,6 +113,26 @@ export const configQuery = queryOptions({
 });
 
 export const useConfig = () => useQuery(configQuery);
+
+/**
+ * The card and invoices on the billing page, from Polar by way of the
+ * Worker. Only for an account with a billing account: anybody else has
+ * neither, and the page shows them nothing to ask about. No retry: when
+ * Polar fails the page falls back to the portal buttons, which is better
+ * than a second wait for the same failure.
+ */
+export const billingDetailsQuery = (enabled: boolean) =>
+  queryOptions<BillingDetails>({
+    queryKey: ["billingDetails"],
+    queryFn: () => api("/billing/details"),
+    enabled,
+    staleTime: 60_000,
+    // Back from the portal, possibly with a new card: ask again.
+    refetchOnWindowFocus: "always",
+    retry: false,
+  });
+
+export const useBillingDetails = (enabled: boolean) => useQuery(billingDetailsQuery(enabled));
 
 // The host shared-domain links display, copy, and redirect through. Falls
 // back to the current origin's host while config is still loading.

@@ -822,3 +822,41 @@ export interface InvitePreview {
 }
 
 export type Sort = { key: string; dir: 1 | -1 };
+
+/**
+ * The signed-in user's card and invoices, as `GET /api/billing/details`
+ * answers them from Polar. Empty (no card, no invoices) for anybody Polar
+ * has no customer for: free, comped, or a copy that sells nothing.
+ */
+export interface BillingDetails {
+  /** The default card on file, or null with none. */
+  card: PaymentCard | null;
+  /** Newest first. */
+  invoices: Invoice[];
+}
+
+export interface PaymentCard {
+  /** "visa", "mastercard", "amex"… as Polar names it. */
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+export interface Invoice {
+  /** Polar's order id. */
+  id: string;
+  /** Epoch ms. */
+  date: number;
+  /** The plan the order paid for, or null for a product this copy does not map. */
+  plan: (typeof COMP_PLANS)[number] | null;
+  /** What was charged, tax included. */
+  amountCents: number;
+  /** ISO 4217, "usd". */
+  currency: string;
+  /** "credit": a negative order, what a plan change gave back. */
+  status: "paid" | "open" | "refunded" | "credit";
+  /** `/api/billing/invoices/<id>`, which redirects to the PDF; null while
+   * there is nothing to download (an open order). */
+  pdfUrl: string | null;
+}

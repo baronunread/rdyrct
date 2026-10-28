@@ -135,6 +135,16 @@ export const unreachableBilling: BillingProvider = {
   checkouts: { create: noPolar, get: noPolar },
   customerSessions: { create: noPolar },
   subscriptions: { revoke: noPolar, list: noPolar },
+  customerPortal: {
+    customers: { get: noPolar, listPaymentMethods: noPolar },
+    orders: {
+      list: noPolar,
+      get: noPolar,
+      invoice: noPolar,
+      generateInvoice: noPolar,
+      receipt: noPolar,
+    },
+  },
 };
 
 export const testEnv: Env = {

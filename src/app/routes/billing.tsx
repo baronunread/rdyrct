@@ -14,10 +14,12 @@ import {
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  billingDetailsQuery,
   clickUsageQuery,
   domainsQuery,
   linkQuotaUsageQuery,
   membersQuery,
+  useBillingDetails,
   useCurrentUser,
   useLinkQuotaUsage,
   useClickUsage,
@@ -26,6 +28,7 @@ import {
   useCheckout,
   usePortal,
   useConfirmCheckout,
+  userQuery,
 } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
@@ -34,7 +37,10 @@ import {
   PLAN_PRICES,
   PLAN_PRICES_YEARLY,
   YEARLY_DISCOUNT_LABEL,
+  type BillingDetails,
   type ClickUsage,
+  type Invoice,
+  type PaymentCard,
   type OrgPlan,
   type PlanLimits,
 } from "@/shared/types";
@@ -46,7 +52,6 @@ import {
   resetDay,
 } from "@/shared/click-usage";
 import { Check, Download } from "@/app/ui/icons";
-import type { BillingDetails, Invoice, PaymentCard } from "../lib/billing-details";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
@@ -529,9 +534,9 @@ function PaidPlan({
   );
 }
 
-/** The card and the invoices. Both live in Polar's portal, which every
- * button here opens; the rows show the card and the list themselves once the
- * API sends them (`BillingDetails`). */
+/** The card and the invoices, as Polar holds them (`BillingDetails`). The
+ * portal buttons stay beside them as the way to change anything, and are all
+ * that is left when Polar did not answer. */
 function PaymentGroups({
   snapshot,
   commands,
@@ -564,8 +569,13 @@ function PaymentGroups({
         </SettingsRow>
       </SettingsGroup>
       <SettingsGroup title="Invoices">
-        {details?.invoices && details.invoices.length > 0 ? (
-          details.invoices.map((invoice) => <InvoiceRow key={invoice.id} invoice={invoice} />)
+        {details?.invoices.map((invoice) => (
+          <InvoiceRow key={invoice.id} invoice={invoice} />
+        ))}
+        {details?.invoices.length ? (
+          <SettingsRow label="Older invoices and receipts" hint="In the subscription portal.">
+            {portalButton("View invoices")}
+          </SettingsRow>
         ) : (
           <SettingsRow
             label="Every invoice and receipt"
@@ -579,15 +589,24 @@ function PaymentGroups({
   );
 }
 
+/** The brands whose names are not just their id with a capital letter. */
+const CARD_BRANDS = new Map([
+  ["amex", "American Express"],
+  ["diners", "Diners Club"],
+  ["jcb", "JCB"],
+  ["unionpay", "UnionPay"],
+]);
+
 /** "Visa · Ending 4242, expires 08/28". The brand as a word, not a logo:
  * the CSP allows no remote image and a drawn logo would be a trademark. */
 function CardFace({ card }: { card: PaymentCard }) {
-  const brand = card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
+  const brand =
+    CARD_BRANDS.get(card.brand) ?? card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
   const mm = String(card.expMonth).padStart(2, "0");
   const yy = String(card.expYear).slice(-2);
   return (
     <span className="flex items-center gap-2 text-sm tnum">
-      <span className="rounded-[5px] bg-surface-2 px-1.5 py-0.5 text-xs font-semibold">
+      <span className="shrink-0 rounded-[5px] bg-surface-2 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap">
         {brand}
       </span>
       Ending {card.last4}, expires {mm}/{yy}
@@ -595,19 +614,25 @@ function CardFace({ card }: { card: PaymentCard }) {
   );
 }
 
+const INVOICE_STATUS = {
+  paid: { label: "Paid", dot: "bg-accent-2" },
+  open: { label: "Open", dot: "bg-butter" },
+  refunded: { label: "Refunded", dot: "bg-muted" },
+  credit: { label: "Credit", dot: "bg-muted" },
+} satisfies Record<Invoice["status"], { label: string; dot: string }>;
+
 function InvoiceRow({ invoice }: { invoice: Invoice }) {
-  const paid = invoice.status === "paid";
+  const status = INVOICE_STATUS[invoice.status];
   return (
-    <div className="grid min-h-11 grid-cols-[1fr_auto_auto_2rem] items-center gap-x-4 px-4 py-2 text-sm sm:grid-cols-[1fr_5rem_5rem_4rem_2rem]">
-      <span className="tnum">{shortDate(invoice.date)}</span>
-      <span className="text-muted max-sm:hidden">{PLAN_LABEL[invoice.plan]}</span>
+    <div className="grid min-h-11 grid-cols-[1fr_auto_2rem] items-center gap-x-4 px-4 py-2 text-sm sm:grid-cols-[1fr_5rem_5rem_5rem_2rem]">
+      <span className="tnum whitespace-nowrap">{shortDate(invoice.date)}</span>
+      <span className="text-muted max-sm:hidden">
+        {invoice.plan ? PLAN_LABEL[invoice.plan] : ""}
+      </span>
       <span className="text-right tnum">{formatMoney(invoice.amountCents, invoice.currency)}</span>
       <span className="inline-flex items-center gap-1.5 text-xs max-sm:hidden">
-        <span
-          aria-hidden
-          className={cn("size-1.5 rounded-full", paid ? "bg-accent-2" : "bg-butter")}
-        />
-        {paid ? "Paid" : "Open"}
+        <span aria-hidden className={cn("size-1.5 rounded-full", status.dot)} />
+        {status.label}
       </span>
       {invoice.pdfUrl ? (
         <a
@@ -1231,13 +1256,18 @@ function firstLinkAction(
 
 function useBillingPageModel() {
   const account = useBillingAccount();
+  const details = useBillingDetails(account.hasBillingAccount);
   const flow = useCheckoutFlow();
   const usage = useBillingUsageSnapshot(flow.plan, account.ownedOrgs);
   const navigate = useNavigate();
   const dismissCelebration = () => flow.setShowCelebration(false);
 
   return {
-    loading: account.isLoading,
+    // Waits for the card and invoices too, so the payment rows arrive whole
+    // rather than as portal buttons that turn into a list. A Polar failure
+    // ends the wait and leaves the buttons.
+    loading: account.isLoading || (account.hasBillingAccount && details.isPending),
+    details: details.data,
     planActions: {
       snapshot: {
         plan: flow.plan,
@@ -1265,6 +1295,13 @@ function useBillingPageModel() {
       onFirstLink: firstLinkAction(usage, dismissCelebration, navigate),
     },
   };
+}
+
+/** The card and invoices belong to the account, not an org, and the page
+ * opens org-less too: preloaded here, for an account Polar bills. */
+export function preloadAccount(qc: QueryClient) {
+  const billed = qc.getQueryData(userQuery.queryKey)?.user.hasBillingAccount ?? false;
+  return settle([billed ? qc.ensureQueryData(billingDetailsQuery(true)) : undefined]);
 }
 
 /** Everything the billing page's first frame reads (see
@@ -1319,7 +1356,7 @@ export function BillingPage() {
               onChangePlan={() => setChangingPlan(true)}
               onPortal={commands.onPortal}
             />
-            <PaymentGroups snapshot={snapshot} commands={commands} details={undefined} />
+            <PaymentGroups snapshot={snapshot} commands={commands} details={model.details} />
             {canChangePlan(snapshot) && (
               <ChangePlanDialog
                 open={changingPlan}
