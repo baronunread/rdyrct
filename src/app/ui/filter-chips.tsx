@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { cn } from "./cn";
 import { useScrollFade } from "./scroll-fade";
+import { StableLabel } from "./stable-label";
 
 /**
  * A row of filters with their counts ("All 199 · Needs attention 3"), the
@@ -50,7 +51,7 @@ export function FilterChips<Id extends string>({
                 : "text-muted [@media(hover:hover)]:hover:text-text",
             )}
           >
-            {item.label}
+            <StableLabel>{item.label}</StableLabel>
             {item.count !== undefined && (
               <span className={cn("tnum font-medium", on ? "text-muted" : "text-placeholder")}>
                 {item.count.toLocaleString("en-US")}

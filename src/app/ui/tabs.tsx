@@ -1,6 +1,7 @@
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { StableLabel } from "./stable-label";
 
 /**
  * Several lists in one card, switched by underline tabs (rdyrct-design, "The
@@ -15,7 +16,8 @@ export function PanelTabs({
   end,
   className,
 }: {
-  tabs: { value: string; label: ReactNode; panel: ReactNode }[];
+  /** `count` follows the label, muted, when there is one. */
+  tabs: { value: string; label: string; count?: number; panel: ReactNode }[];
   defaultValue?: string;
   /** Something on the right of the tab row, e.g. an "All links" link. */
   end?: ReactNode;
@@ -34,7 +36,10 @@ export function PanelTabs({
               value={tab.value}
               className="cursor-pointer pb-2.5 text-sm whitespace-nowrap text-muted outline-none focus-visible:text-text data-[active]:font-semibold data-[active]:text-text [@media(hover:hover)]:hover:text-text"
             >
-              {tab.label}
+              <StableLabel>{tab.label}</StableLabel>
+              {tab.count !== undefined && (
+                <span className="tnum ml-1.5 font-normal text-muted">{tab.count}</span>
+              )}
             </BaseTabs.Tab>
           ))}
           {/* One underline that slides to the chosen tab; the panel itself

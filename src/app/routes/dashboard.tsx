@@ -210,14 +210,8 @@ function DashboardBody({
             },
             {
               value: "attention",
-              label: (
-                <>
-                  Needs attention
-                  {attention.length > 0 && (
-                    <span className="tnum ml-1.5 font-normal text-muted">{attention.length}</span>
-                  )}
-                </>
-              ),
+              label: "Needs attention",
+              count: attention.length > 0 ? attention.length : undefined,
               panel: <AttentionList rows={attention.slice(0, 6)} />,
             },
           ]}

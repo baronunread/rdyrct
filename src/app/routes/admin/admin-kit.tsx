@@ -7,6 +7,7 @@
 import type { ReactNode } from "react";
 import { Ellipsis } from "@/app/ui/icons";
 import { cn } from "../../ui/cn";
+import { StableLabel } from "../../ui/stable-label";
 
 const COUNT = new Intl.NumberFormat("en-US");
 
@@ -78,7 +79,7 @@ export function FilterPill({
           : "text-muted [@media(hover:hover)]:hover:text-text",
       )}
     >
-      {label}
+      <StableLabel>{label}</StableLabel>
       {count !== undefined && (
         <span
           aria-hidden

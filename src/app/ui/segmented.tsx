@@ -1,6 +1,7 @@
 import { IconLock } from "@tabler/icons-react";
 import { cn } from "./cn";
 import { Tooltip } from "./tooltip";
+import { StableLabel } from "./stable-label";
 
 /** One choice. A locked one is shown, with a lock, but not chosen: the
  * control says what the plan hides instead of hiding it. */
@@ -52,7 +53,7 @@ export function Segmented<Id extends string>({
             )}
           >
             {item.locked && <IconLock aria-hidden size={11} stroke={2} />}
-            {item.label}
+            <StableLabel>{item.label}</StableLabel>
           </button>
         );
         return item.locked && item.hint ? (

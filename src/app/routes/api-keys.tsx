@@ -29,6 +29,7 @@ import { McpConnectWizard } from "../components/mcp-connect-wizard";
 import { CreateApiKeyDialog } from "../components/create-api-key-dialog";
 import { NoOrgState } from "../components/no-org";
 import { ApiKeysSkeleton } from "../components/skeletons";
+import { StableLabel } from "../ui/stable-label";
 
 function ConnectedAppRow({ app, onRevoke }: { app: ConnectedApp; onRevoke: () => void }) {
   return (
@@ -401,7 +402,7 @@ function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTa
               : "text-muted [@media(hover:hover)]:hover:text-text",
           )}
         >
-          {tab.label}
+          <StableLabel>{tab.label}</StableLabel>
         </button>
       ))}
       <a

@@ -17,6 +17,7 @@ import { AdminSectionSkeleton } from "../../components/skeletons";
 import { useConfig } from "../../lib/hooks";
 import { Segmented } from "../../ui/segmented";
 import { useUsageRange, RANGE_ITEMS } from "./usage-range";
+import { StableLabel } from "../../ui/stable-label";
 
 // The mock's order: who is on the instance before what they made.
 const TABS = [
@@ -81,7 +82,7 @@ export function AdminLayout() {
               }}
               inactiveProps={{ className: "text-muted [@media(hover:hover)]:hover:text-text" }}
             >
-              {label}
+              <StableLabel>{label}</StableLabel>
             </Link>
           ))}
           <TabUnderline bar={bar} className="h-0.5" />
