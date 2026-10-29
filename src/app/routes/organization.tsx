@@ -19,6 +19,7 @@ import { buttonClass } from "../ui/button-class";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useCurrentOrg } from "../lib/current-org";
 import { api } from "../lib/api";
+import { displayHost } from "../lib/display-url";
 import type { OrgRole, UserOrg } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
@@ -134,7 +135,7 @@ function DefaultDomainRow({ orgId, canChange }: { orgId: string; canChange: bool
   const { setDefault } = useDomainMutations(orgId);
   const options = [
     { id: "", host: linkHost, note: "shared" },
-    ...activeDomains.map((d) => ({ id: d.id, host: d.hostname, note: "" })),
+    ...activeDomains.map((d) => ({ id: d.id, host: displayHost(d.hostname), note: "" })),
   ];
   const current = options.find((o) => o.id === (defaultDomainId ?? "")) ?? options[0];
   const choose = (id: string) => {

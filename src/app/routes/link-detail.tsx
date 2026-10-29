@@ -28,6 +28,8 @@ import { LinkEditor } from "../components/link-editor";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { linkFeatures } from "../lib/links-data";
 import { LinkDetailSide } from "../components/link-detail-side";
+import { ShortAddress } from "../components/short-address";
+import { displayAddress } from "../lib/display-url";
 import { LinkDetailSkeleton } from "../components/skeletons";
 import { RangeControl } from "../components/range-control";
 import { SourceTile } from "../components/source-tile";
@@ -96,19 +98,6 @@ function useLinkRow(orgId: string, s: LinkStats | undefined): LinkDTO | null {
   const links = useLinks(s ? orgId : "", rowSearch(s?.slug ?? ""));
   if (!s) return null;
   return links.data?.items.find((l) => l.id === s.id) ?? null;
-}
-
-/** "go.example.com/" muted, then the slug: the part people read is the
- * part that differs between links. */
-function ShortAddress({ url }: { url: string }) {
-  const address = linkDisplayTitle(url);
-  const cut = address.lastIndexOf("/") + 1;
-  return (
-    <span className="truncate font-mono text-sm" title={address}>
-      <span className="text-muted">{address.slice(0, cut)}</span>
-      {address.slice(cut)}
-    </span>
-  );
 }
 
 /** The link's own QR code, small, as the page's picture of it. Opens the
@@ -208,7 +197,7 @@ function LinkDetailHeader({
   onDelete: () => void;
 }) {
   const toast = useToast();
-  const address = linkDisplayTitle(s.url);
+  const address = displayAddress(s.url);
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
       <div className="flex min-w-0 flex-1 items-center gap-3.5">
@@ -218,6 +207,7 @@ function LinkDetailHeader({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h1
+              dir={s.title ? "auto" : undefined}
               className="truncate text-xl font-semibold tracking-tight"
               title={s.title || address}
               {...morphPart("title")}
@@ -235,7 +225,7 @@ function LinkDetailHeader({
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-1">
             <span className="flex min-w-0" {...morphPart("addr")}>
-              <ShortAddress url={s.url} />
+              <ShortAddress url={s.url} slug={s.slug} className="text-sm" />
             </span>
             <CopyButton
               text={s.url}

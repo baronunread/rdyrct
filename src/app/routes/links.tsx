@@ -50,6 +50,7 @@ import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { linkFeatures } from "../lib/links-data";
+import { displayHost } from "../lib/display-url";
 import { useDebounced } from "../lib/use-debounced";
 import { downloadQrCodes } from "../lib/bulk-qr";
 import {
@@ -741,7 +742,7 @@ function LinksToolbar({
               options={[
                 { value: "all", label: "All domains" },
                 { value: "shared", label: "Shared domain" },
-                ...domains.map((d) => ({ value: d.hostname, label: d.hostname })),
+                ...domains.map((d) => ({ value: d.hostname, label: displayHost(d.hostname) })),
               ]}
             />
           </div>

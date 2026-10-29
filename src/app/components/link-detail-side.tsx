@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import { useAddresses } from "../lib/hooks";
 import { relativeDate, shortDate } from "../lib/dates";
 import { copyToClipboard } from "../lib/clipboard";
-import { linkDisplayTitle } from "../lib/link-display";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { ExportCsvButton } from "./export-csv-button";
+import { ShortAddress } from "./short-address";
+import { readableUrl } from "../lib/display-url";
 import type { LinkStats } from "@/shared/types";
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -18,8 +19,11 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Every other address that still leads to this link: aliases and the 48h
- * one a rename leaves behind. Nothing at all when there are none. */
-function OtherAddresses({ orgId, linkId }: { orgId: string; linkId: string }) {
+ * one a rename leaves behind. Nothing at all when there are none. An
+ * address on the link's own host shows only its slug; the host is in the
+ * page header, and repeating it pushed the slugs out of line. */
+function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string; url: string }) {
+  const host = new URL(url).host;
   const toast = useToast();
   const addresses = useAddresses(orgId, linkId);
   const others = (addresses.data ?? []).filter((a) => a.kind !== "primary" && !a.retiredAt);
@@ -29,9 +33,12 @@ function OtherAddresses({ orgId, linkId }: { orgId: string; linkId: string }) {
       <ul className="flex flex-col">
         {others.map((a) => (
           <li key={a.id} className="flex min-w-0 items-center justify-between gap-1">
-            <span className="truncate font-mono text-sm" title={a.url}>
-              {linkDisplayTitle(a.url)}
-            </span>
+            <ShortAddress
+              url={a.url}
+              slug={a.slug}
+              hideHost={new URL(a.url).host === host}
+              className="text-sm"
+            />
             <CopyButton
               text={a.url}
               label={`Copy ${a.url}`}
@@ -65,10 +72,10 @@ export function LinkDetailSide({
           rel="noreferrer"
           className="text-sm text-accent [overflow-wrap:anywhere] hover:underline"
         >
-          {s.destination}
+          {readableUrl(s.destination)}
         </a>
       </Fact>
-      <OtherAddresses orgId={orgId} linkId={s.id} />
+      <OtherAddresses orgId={orgId} linkId={s.id} url={s.url} />
       <div className="grid grid-cols-2 gap-3">
         <Fact label="Created">
           <span className="tnum text-sm">{shortDate(s.createdAt)}</span>

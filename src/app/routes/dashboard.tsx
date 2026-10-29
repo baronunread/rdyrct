@@ -33,6 +33,7 @@ import {
 import { AreaChart, BarList, LinkBarLabel, StatsChart } from "../components/charts";
 import { countryName } from "../lib/places";
 import { linkPagePath } from "../lib/link-display";
+import { displayHost } from "../lib/display-url";
 import { dayTick, hourTick } from "../lib/dates";
 import { useNewLink, NewLinkButton } from "../components/new-link-host";
 import { RangeControl } from "../components/range-control";
@@ -486,7 +487,7 @@ function QuickCreateDomainSelect({
         onChange={(v) => onChange(v || null)}
         options={[
           { value: "", label: `shared: ${linkHost}` },
-          ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
+          ...activeDomains.map((d) => ({ value: d.id, label: displayHost(d.hostname) })),
         ]}
       />
     </div>

@@ -41,6 +41,7 @@ import {
 } from "../../lib/admin-data";
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
+import { ShortAddress } from "../../components/short-address";
 import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
 import { Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
@@ -322,23 +323,6 @@ function ReportsCell({ count }: { count: number }) {
   );
 }
 
-/** The short address on one line: the host quiet, the slug in ink, so the
- * eye finds the part a report quotes. Truncated, with all of it on hover. */
-function ShortAddress({ url }: { url: string }) {
-  const text = linkDisplayTitle(url);
-  const cut = text.indexOf("/");
-  return (
-    // The host gives way first: a long custom domain is cut, the slug never.
-    <span className="flex min-w-0 font-mono text-sm" title={text}>
-      <span className="truncate text-muted">{text.slice(0, cut)}</span>
-      <span className="shrink-0">
-        <span className="text-muted">/</span>
-        <span className="font-semibold">{text.slice(cut + 1)}</span>
-      </span>
-    </span>
-  );
-}
-
 function LinkRow({
   link,
   selectable,
@@ -358,7 +342,12 @@ function LinkRow({
         </Td>
       )}
       <Td className={`${PHONE.main} ${selectable ? "max-sm:w-[calc(100%-5.5rem)]" : ""}`}>
-        <ShortAddress url={link.url} />
+        <ShortAddress
+          url={link.url}
+          slug={link.slug}
+          className="text-sm"
+          slugClassName="font-semibold"
+        />
       </Td>
       <Td
         className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0"

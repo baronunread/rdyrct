@@ -40,6 +40,7 @@ import { NoOrgState } from "../components/no-org";
 import { PaidBadge, UpgradeDialog } from "../components/upgrade-dialog";
 import { domainsBlockedBy } from "../lib/org-limits";
 import { displayUrl, parentDomain } from "../lib/domain-display";
+import { displayHost } from "../lib/display-url";
 import { graceLabel, graceRunning } from "../lib/grace";
 import { shortDate } from "../lib/dates";
 import { CopyButton } from "../ui/copy-button";
@@ -787,7 +788,9 @@ function DomainRow({
     <div className="flex min-h-[60px] items-start gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-mono text-sm font-bold [overflow-wrap:anywhere]">{d.hostname}</span>
+          <span className="font-mono text-sm font-bold [overflow-wrap:anywhere]" title={d.hostname}>
+            {displayHost(d.hostname)}
+          </span>
           {isDefault && <span className="text-xs text-muted">Default</span>}
         </p>
         <DomainDetail
