@@ -23,6 +23,5 @@ export const pointerTooltip = {
   placement: "auto",
   offset: 16,
   motion: followSpring,
-  className:
-    "pointer-events-none rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg",
+  className: "pointer-events-none",
 } as const;

@@ -15,6 +15,7 @@ import { motion } from "@tanstack/charts/motion";
 import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { pointerTooltip } from "./chart-tooltip";
+import { ClicksTip } from "./clicks-tip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { CountryMap } from "./country-map";
@@ -163,12 +164,7 @@ export function AreaChart({
       renderTooltipBody={({ points }) => {
         const datum = points[0]?.datum;
         if (!datum) return null;
-        return (
-          <>
-            <span className="text-muted">{tickFormat(datum.day)}</span>{" "}
-            <span className="tnum font-bold">{datum.clicks}</span>
-          </>
-        );
+        return <ClicksTip label={tickFormat(datum.day)} clicks={datum.clicks} />;
       }}
     />
   );
@@ -392,12 +388,7 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
       renderTooltipBody={({ points }) => {
         const datum = points[0]?.datum;
         if (!datum) return null;
-        return (
-          <>
-            <span className="text-muted">{datum.hour}:00</span>{" "}
-            <span className="tnum font-bold">{datum.clicks}</span>
-          </>
-        );
+        return <ClicksTip label={`${datum.hour}:00`} clicks={datum.clicks} />;
       }}
     />
   );

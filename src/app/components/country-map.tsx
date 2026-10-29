@@ -13,6 +13,7 @@ import { motion } from "@tanstack/charts/motion";
 import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { pointerTooltip } from "./chart-tooltip";
+import { ClicksTip } from "./clicks-tip";
 
 const WIDTH = 960;
 const HEIGHT = 500;
@@ -112,12 +113,10 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
         const named = f.properties as { name?: string } | null;
         const clicksByAlpha2 = new Map(data.map((d) => [d.key, d.clicks]));
         return (
-          <>
-            <span className="text-muted">
-              {alpha2 ? fmtCountry(alpha2) : String(named?.name ?? "")}
-            </span>{" "}
-            <span className="tnum font-bold">{(alpha2 && clicksByAlpha2.get(alpha2)) || 0}</span>
-          </>
+          <ClicksTip
+            label={alpha2 ? fmtCountry(alpha2) : String(named?.name ?? "")}
+            clicks={(alpha2 && clicksByAlpha2.get(alpha2)) || 0}
+          />
         );
       }}
     />
