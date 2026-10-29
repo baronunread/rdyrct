@@ -16,6 +16,8 @@
  */
 import { useEffect, useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
+import { ApiError } from "@/app/lib/api";
+import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 import { ArrowRight } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { useToast } from "../ui/toast";
@@ -32,13 +34,35 @@ import { clicksLabel, shortenAnonymously, useAnonClicks } from "../lib/shorten-a
 import { trackCta } from "../lib/track-cta";
 import { launchHeroHop } from "../lib/hero-hop";
 import { HrefLink } from "../lib/router-search";
-import { HERO_CARD, HeroBar, HeroFooter, HostPrefix, MadeLinkPanel } from "./hero-link-bar";
+import {
+  type BarError,
+  HERO_CARD,
+  HeroBar,
+  HeroFooter,
+  HostPrefix,
+  MadeLinkPanel,
+} from "./hero-link-bar";
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
 function shortenErrorMessage(cause: unknown): string {
   return errorMessage(cause, "Could not shorten that link");
 }
+
+/** A 400 is the server refusing the address itself (not a web address, a
+ * blocked host, another shortener), so it marks the bar; anything else
+ * (rate limit, outage) has no field to mark and stays a toast. */
+function refusedAddress(cause: unknown): BarError | null {
+  if (!isRefusal(cause)) return null;
+  const detail = cause.message;
+  return {
+    reason: /web address/i.test(detail) ? "Not a web address" : "Can't shorten this",
+    detail,
+  };
+}
+
+const isRefusal = (cause: unknown): cause is ApiError =>
+  cause instanceof ApiError && cause.status === 400 && cause.code !== TURNSTILE_FAILED_CODE;
 
 /** The ask, once, under the link it is about. Once the link has been
  * clicked, the count leads: it is the visitor's own result, and "see where
@@ -112,6 +136,7 @@ function useAnonShortener() {
   const turnstile = useTurnstile("anon-link");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<BarError | null>(null);
   // Seeded from storage, so a reload keeps what this browser already made
   // rather than presenting an empty form to somebody who has a link.
   const [made, setMade] = useState<StoredAnonLink[]>([]);
@@ -135,7 +160,9 @@ function useAnonShortener() {
       launchHeroHop(link.url.replace(/^https?:\/\//, ""));
       trackCta("hero_shortener");
     } catch (error) {
-      toast(shortenErrorMessage(error), "error");
+      const mark = refusedAddress(error);
+      if (mark) setRefused(mark);
+      else toast(shortenErrorMessage(error), "error");
     } finally {
       setBusy(false);
     }
@@ -143,7 +170,11 @@ function useAnonShortener() {
 
   return {
     destination,
-    setDestination,
+    setDestination: (value: string) => {
+      setDestination(value);
+      setRefused(null);
+    },
+    refused,
     busy,
     made,
     atCap,
@@ -156,8 +187,18 @@ function useAnonShortener() {
 }
 
 export function HeroShortener() {
-  const { destination, setDestination, button, made, atCap, canSubmit, submit, prime, challenge } =
-    useAnonShortener();
+  const {
+    destination,
+    setDestination,
+    refused,
+    button,
+    made,
+    atCap,
+    canSubmit,
+    submit,
+    prime,
+    challenge,
+  } = useAnonShortener();
   // The shared domain the slug will follow. This card only exists on
   // rdyrct.com, whose shared host is rdyr.cc, so that stands in until the
   // config answers.
@@ -169,8 +210,8 @@ export function HeroShortener() {
       // Priming here, not on mount: the Turnstile challenge runs while they type,
       // and someone who never uses the form never pays for it.
       onInput={prime}
-      // No native validation: errors in this app go to toasts, and a browser
-      // validity bubble is neither a toast nor dismissible by us. It also
+      // No native validation: a refused address marks the bar, and a browser
+      // validity bubble is neither that nor dismissible by us. It also
       // silently refuses to submit, which reads as a dead button. The server
       // decides what counts as a web address, and it accepts scheme-less
       // input the same way the signed-in quick-create does.
@@ -190,6 +231,7 @@ export function HeroShortener() {
         busy={button.spinning}
         waiting={button.waiting}
         again={made.length > 0}
+        error={refused}
       />
 
       {/* Says why the button is dead, rather than leaving somebody to work

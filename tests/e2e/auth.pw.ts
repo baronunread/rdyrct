@@ -153,7 +153,9 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByLabel("Password")).toHaveValue("password");
-    await expect(page.getByText("Enter a valid email address")).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByLabel("Email")).toBeFocused();
+    await expect(page.getByText("Not a valid email")).toBeVisible();
     expect(authRequests.count).toBe(0);
   });
 
@@ -167,7 +169,8 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByLabel("Password")).toHaveValue("short");
-    await expect(page.getByText("Password must be at least 8 characters")).toBeVisible();
+    await expect(page.getByLabel("Password")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("At least 8 characters")).toBeVisible();
     expect(authRequests.count).toBe(0);
   });
 
@@ -183,7 +186,8 @@ test.describe("authentication forms", () => {
 
     await page.getByLabel("Email").fill("person@localhost");
     await page.getByRole("button", { name: "Send reset link" }).click();
-    await expect(page.getByText("Enter a valid email address")).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("Not a valid email")).toBeVisible();
     expect(authRequests.count).toBe(0);
 
     await page.unroute("**/api/auth/**");

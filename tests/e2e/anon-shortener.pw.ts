@@ -108,7 +108,7 @@ test("signing up keeps the link that was made before the account (#65)", async (
   expect(Number(anon[0].n)).toBe(0);
 });
 
-test("a destination that is not a web address is refused, in a toast", async ({ page }) => {
+test("a destination that is not a web address marks the field", async ({ page }) => {
   // "not-a-web-address" has no dot, so it survives the scheme-less
   // normalisation the signed-in quick-create also does and then fails the
   // hostname check, which is the boundary worth showing here.
@@ -117,9 +117,11 @@ test("a destination that is not a web address is refused, in a toast", async ({ 
   await field.fill("not-a-web-address");
   await page.getByRole("button", { name: "Shorten it" }).click();
 
-  await expect(page.getByText(/does not look like a web address/i)).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(field).toHaveAttribute("aria-invalid", "true", { timeout: 20_000 });
+  await expect(page.getByText("Not a web address")).toBeVisible();
+  // Typing again clears the mark.
+  await field.fill("example.com");
+  await expect(field).not.toHaveAttribute("aria-invalid");
   await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(0);
 });
 

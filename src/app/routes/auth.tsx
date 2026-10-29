@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSearchParams, HrefLink } from "../lib/router-search";
@@ -32,7 +32,7 @@ import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
+import { Field, FieldReason, Input, InvalidMark, invalidAria, type InvalidAria } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -68,16 +68,18 @@ function ForgotView({
   onBack: () => void;
 }) {
   const button = guardedButton(busy, challenge);
-  const toast = useToast();
-  const { register, handleSubmit, getValues } = useForm<ForgotForm>({
+  const {
+    register,
+    handleSubmit,
+    getValues,
+    formState: { errors },
+  } = useForm<ForgotForm>({
     resolver: valibotResolver(forgotSchema),
     defaultValues: { email: initialEmail },
   });
 
-  const onFormSubmit = handleSubmit(
-    (data) => onSubmit(data.email),
-    (errors) => toast(firstFormError(errors, "Enter a valid email address"), "error"),
-  );
+  // A bad address marks the field (react-hook-form focuses it); nothing toasts.
+  const onFormSubmit = handleSubmit((data) => onSubmit(data.email));
 
   return (
     <AuthPanel>
@@ -88,12 +90,11 @@ function ForgotView({
           <span className="font-mono text-text">{getValues("email")}</span>.
         </p>
       ) : (
-        <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
-          <Field label="Email">
+        <form onSubmit={onFormSubmit} noValidate className="flex flex-col gap-4">
+          <Field label="Email" error={errors.email?.message}>
             <Input
               type="email"
               {...register("email")}
-              required
               autoComplete="email"
               placeholder="you@company.com"
               className="h-10"
@@ -267,32 +268,90 @@ function SignupViewed() {
 function PasswordField({
   mode,
   password,
+  error,
   onForgot,
   input,
 }: {
   mode: "login" | "signup";
   password: string;
+  /** Why the password is wrong: on the label line, like Field's. */
+  error?: string;
   onForgot: () => void;
-  input: (id: string) => ReactNode;
+  input: (id: string, aria: InvalidAria) => ReactNode;
 }) {
   const id = useId();
+  const reasonId = useId();
   return (
     <div>
-      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs text-muted">
-        <label htmlFor={id}>Password</label>
-        {mode === "login" && (
-          <button type="button" className={AUTH_LINK} onClick={onForgot}>
-            Forgot it?
-          </button>
-        )}
+      <div className="mb-1.5 flex min-h-4 items-center gap-3 text-xs text-muted">
+        <label htmlFor={id} className="shrink-0">
+          Password
+        </label>
+        <span className="ml-auto flex min-w-0 items-center gap-3">
+          {error && <FieldReason id={reasonId} reason={error} />}
+          {mode === "login" && (
+            <button type="button" className={cn(AUTH_LINK, "shrink-0")} onClick={onForgot}>
+              Forgot it?
+            </button>
+          )}
+        </span>
       </div>
-      {input(id)}
+      {/* The input is the peer: its aria-invalid shows the ×. */}
+      <span className="relative block">
+        {input(id, invalidAria(error, reasonId))}
+        <InvalidMark className="hidden peer-aria-invalid:block" />
+      </span>
       {mode === "signup" && (
         <span className="mt-1.5 block text-xs text-muted">
           <PasswordMeter password={password} />
         </span>
       )}
     </div>
+  );
+}
+
+/** Email and password, each marked with its own reason when it is wrong. */
+function CredentialFields({
+  mode,
+  register,
+  errors,
+  password,
+  onForgot,
+}: {
+  mode: "login" | "signup";
+  register: UseFormRegister<AuthForm>;
+  errors: FieldErrors<AuthForm>;
+  password: string;
+  onForgot: () => void;
+}) {
+  return (
+    <>
+      <Field label="Email" error={errors.email?.message}>
+        <Input
+          type="email"
+          {...register("email")}
+          autoComplete="email"
+          placeholder="you@company.com"
+          className="h-10"
+        />
+      </Field>
+      <PasswordField
+        mode={mode}
+        password={password}
+        error={errors.password?.message}
+        onForgot={onForgot}
+        input={(id, aria) => (
+          <Input
+            id={id}
+            type="password"
+            {...register("password")}
+            {...aria}
+            autoComplete={AUTH_MODE_COPY[mode].passwordAutoComplete}
+            className="peer h-10 aria-invalid:pr-8"
+          />
+        )}
+      />
+    </>
   );
 }
 
@@ -409,7 +468,6 @@ function AuthFormView({
 }) {
   const copy = AUTH_MODE_COPY[mode];
   const button = guardedButton(busy, challenge);
-  const toast = useToast();
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
@@ -424,7 +482,13 @@ function AuthFormView({
     }
     onFirstInput();
   };
-  const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
+  const {
+    register,
+    handleSubmit,
+    watch,
+    getValues,
+    formState: { errors },
+  } = useForm<AuthForm>({
     resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
@@ -448,7 +512,7 @@ function AuthFormView({
     (errors) => {
       if (mode === "signup")
         posthog.capture(SIGNUP_FAILED, { reason: `invalid_${Object.keys(errors).join("_")}` });
-      toast(firstFormError(errors, "Check your email and password"), "error");
+      // The fields carry the reasons; react-hook-form focuses the first.
       shake.start();
     },
   );
@@ -472,30 +536,12 @@ function AuthFormView({
           or
           <span className="h-px flex-1 bg-border" />
         </div>
-        <Field label="Email">
-          <Input
-            type="email"
-            {...register("email")}
-            required
-            autoComplete="email"
-            placeholder="you@company.com"
-            className="h-10"
-          />
-        </Field>
-        <PasswordField
+        <CredentialFields
           mode={mode}
+          register={register}
+          errors={errors}
           password={password}
           onForgot={() => onForgot(getValues("email"))}
-          input={(id) => (
-            <Input
-              id={id}
-              type="password"
-              {...register("password")}
-              required
-              autoComplete={copy.passwordAutoComplete}
-              className="h-10"
-            />
-          )}
         />
         {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
