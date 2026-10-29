@@ -21,11 +21,12 @@ import { SortTh } from "../ui/sort-th";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { hasQrOverride, tableDate, trendNote, type LinkRow } from "../lib/links-data";
+import { tableDate, trendNote, type LinkRow } from "../lib/links-data";
+import { displayHost, displayPath } from "../lib/display-url";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
 import { ShortAddress } from "./short-address";
-import { QrThumb, SiteLetter, Sparkline } from "./link-marks";
+import { SiteLetter, Sparkline } from "./link-marks";
 import { CursorPager } from "../ui/pagination";
 import { morphKey, morphPart, setMorphLink, useIsMorphLink } from "../lib/link-morph";
 
@@ -93,24 +94,21 @@ function RowCheck({
   );
 }
 
-/** The link in two lines (rdyrct-design, "Tables earn two lines"): the QR
- * thumbnail, then its title in bold over the short address in mono. An
- * untitled link puts the address on the first line alone. */
+/** The link in two lines (rdyrct-design, "Tables earn two lines"): its
+ * title in bold over the short address in mono. An untitled link puts the
+ * address on the first line alone. The QR code is in the row's menu. */
 function LinkCell({
   link,
   isExpanded,
   onToggle,
-  onQrClick,
   navigate,
 }: {
   link: LinkRow;
   isExpanded: boolean;
   onToggle: (() => void) | null;
-  onQrClick: (link: LinkDTO) => void;
   navigate: (to: string) => void;
 }) {
   const aliases = link.addressCount - 1;
-  const custom = link.qrCustom ?? hasQrOverride(link);
   const key = morphKey(link);
   const morphing = useIsMorphLink(key);
   // Marked before the click navigates, so the page being left has this
@@ -131,61 +129,57 @@ function LinkCell({
       })
       .catch(() => {});
   return (
-    <div className="flex min-w-0 items-center gap-3">
-      <button
-        type="button"
-        onClick={() => onQrClick(link)}
-        aria-label={`QR code for ${link.slug}`}
-        {...morphPart("qr", morphing)}
-        className="shrink-0 cursor-pointer rounded-md transition-[scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        <QrThumb url={link.url} custom={custom} />
-      </button>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={open}
-            onPointerEnter={preload}
-            onFocus={preload}
-            {...morphPart("title", morphing)}
-            className="min-w-0 cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={open}
+          onPointerEnter={preload}
+          onFocus={preload}
+          {...morphPart("title", morphing)}
+          // A title in Arabic or Hebrew runs right to left: `dir="auto"`
+          // lets it, so it truncates at its own end and keeps its order.
+          dir={link.title ? "auto" : undefined}
+          title={link.title || undefined}
+          className={cn(
+            "min-w-0 cursor-pointer text-start text-sm font-semibold [@media(hover:hover)]:hover:underline",
+            link.title ? "truncate" : "flex",
+          )}
+        >
+          {link.title || (
+            <ShortAddress url={link.url} slug={link.slug} className="text-sm font-normal" />
+          )}
+        </button>
+        {link.suspendedAt && (
+          <span
+            className="shrink-0"
+            title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
           >
-            {link.title || (
-              <ShortAddress url={link.url} slug={link.slug} className="text-sm font-normal" />
-            )}
-          </button>
-          {link.suspendedAt && (
-            <span
-              className="shrink-0"
-              title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
-            >
-              <Badge color="pink">paused</Badge>
-            </span>
-          )}
-          {onToggle && (
-            <button
-              type="button"
-              onClick={onToggle}
-              aria-label={`${isExpanded ? "Hide" : "Show"} ${aliases} alias${aliases === 1 ? "" : "es"}`}
-              aria-expanded={isExpanded}
-              className="-my-1 inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 text-xs text-muted transition-[background-color,color,scale] duration-150 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
-            >
-              <span className="tnum">+{aliases}</span>
-              <IconChevronRight
-                size={12}
-                aria-hidden
-                className={cn("transition-transform duration-150", isExpanded && "rotate-90")}
-              />
-            </button>
-          )}
-        </span>
-        {link.title && (
-          <span className="flex min-w-0 self-start" {...morphPart("addr", morphing)}>
-            <ShortAddress url={link.url} slug={link.slug} />
+            <Badge color="pink">paused</Badge>
           </span>
         )}
-      </div>
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={`${isExpanded ? "Hide" : "Show"} ${aliases} alias${aliases === 1 ? "" : "es"}`}
+            aria-expanded={isExpanded}
+            className="-my-1 inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 text-xs text-muted transition-[background-color,color,scale] duration-150 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          >
+            <span className="tnum">+{aliases}</span>
+            <IconChevronRight
+              size={12}
+              aria-hidden
+              className={cn("transition-transform duration-150", isExpanded && "rotate-90")}
+            />
+          </button>
+        )}
+      </span>
+      {link.title && (
+        <span className="flex max-w-full min-w-0 self-start" {...morphPart("addr", morphing)}>
+          <ShortAddress url={link.url} slug={link.slug} />
+        </span>
+      )}
     </div>
   );
 }
@@ -197,8 +191,9 @@ function DestinationCell({ destination }: { destination: string }) {
   let rest = "";
   try {
     const url = new URL(destination);
-    host = url.host;
-    rest = `${url.pathname === "/" ? "" : url.pathname}${url.search}`;
+    // Shown as people read them; the href and the tooltip keep the raw URL.
+    host = displayHost(url.host);
+    rest = displayPath(`${url.pathname === "/" ? "" : url.pathname}${url.search}`);
   } catch {
     // Stored destinations are absolute URLs; show anything else as it is.
   }
@@ -319,7 +314,7 @@ function LinkRowView({
 }) {
   return (
     <>
-      <tr className={cn("group", selected && "bg-accent/[0.06]")}>
+      <tr className={cn("group", selected && "bg-accent/[0.06]", isExpanded && "alias-parent")}>
         <Td className="hidden w-10 py-2.5 pr-0 pl-2 sm:table-cell">
           <RowCheck checked={selected} onChange={onSelect} label={`Select ${link.slug}`} />
         </Td>
@@ -328,7 +323,6 @@ function LinkRowView({
             link={link}
             isExpanded={isExpanded}
             onToggle={onToggle}
-            onQrClick={actions.onQrClick}
             navigate={actions.navigate}
           />
         </Td>
@@ -338,13 +332,17 @@ function LinkRowView({
         <Td className="hidden py-2 xl:table-cell">
           <TrendCell link={link} />
         </Td>
-        <Td className="tnum py-3 text-end text-[15px] font-semibold max-sm:w-16">
+        <Td className="tnum py-3 text-end text-[15px] font-semibold whitespace-nowrap max-sm:w-[5.25rem] max-sm:px-1">
           {link.clicks.toLocaleString("en-US")}
         </Td>
         <Td className="hidden py-3 sm:table-cell">
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="tnum text-sm whitespace-nowrap">{tableDate(link.createdAt)}</span>
-            {creator && <span className="truncate text-xs text-placeholder">{creator}</span>}
+            {creator && (
+              <span dir="auto" title={creator} className="truncate text-xs text-placeholder">
+                {creator}
+              </span>
+            )}
           </span>
         </Td>
         <Td className="py-3 pr-2 pl-0 max-sm:w-11">
@@ -440,14 +438,15 @@ export function LinksTable({
                   className="max-sm:pl-3"
                 />
                 {/* fallow-ignore-next-line css-token-drift */}
-                <Th className="hidden lg:table-cell lg:w-[30%]">Destination</Th>
-                <Th className="hidden w-32 text-end xl:table-cell">Last 7 days</Th>
+                <Th className="hidden lg:table-cell lg:w-[22%]">Destination</Th>
+                <Th className="hidden w-28 text-end xl:table-cell">Last 7 days</Th>
+                {/* Wide enough for "9,874,312" in tabular figures. */}
                 <SortTh
                   label="Clicks"
                   sortKey="clicks"
                   sort={sort}
                   onSort={onSort}
-                  className="w-20 text-end"
+                  className="w-[5.25rem] text-end sm:w-28"
                 />
                 <SortTh
                   label="Created"

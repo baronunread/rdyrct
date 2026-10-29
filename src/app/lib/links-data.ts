@@ -1,11 +1,6 @@
 /**
  * The links page's data beyond the shared hooks: the filter counts, the
  * list rows, creator names and past imports.
- *
- * `qrCustom` asks for a flag the API does not send yet. It is optional, and
- * its reader treats "absent" as "do not show", so it appears the moment the
- * Worker starts answering. The shape is written out in
- * rdyrct-app-audit/overnight/links.md.
  */
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import type { LinkDTO, LinkFacets, LinkFilter, LinkInput, LinkListItem } from "@/shared/types";
@@ -13,10 +8,8 @@ import type { LinkImportHistory } from "@/shared/link-import";
 import { api } from "./api";
 import { useMembers } from "./hooks";
 
-/** One row of the table: the list route's item, plus a flag the API may
- * grow: true when the link's QR code differs from the org's defaults, or has
- * been downloaded. */
-export type LinkRow = LinkListItem & { qrCustom?: boolean };
+/** One row of the table: the list route's item. */
+export type LinkRow = LinkListItem;
 
 export interface LinkPageQuery {
   q: string;
@@ -103,19 +96,6 @@ export function tableDate(ts: number): string {
 /** The link's address as one line, "go.example.com/slug". */
 export function addressOf(link: Pick<LinkDTO, "url" | "slug">): string {
   return `${new URL(link.url).host}/${link.slug}`;
-}
-
-/** Whether a link's QR code looks different from the org's: any override set. */
-export function hasQrOverride(link: LinkDTO): boolean {
-  return Boolean(
-    link.qrLogo ||
-    link.qrStyle ||
-    link.qrColor ||
-    link.qrCorner ||
-    link.qrBg ||
-    link.qrEyeColor ||
-    link.qrLogoSize !== null,
-  );
 }
 
 /**

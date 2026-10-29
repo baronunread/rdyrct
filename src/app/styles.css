@@ -695,6 +695,117 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The links table's aliases as tree rows (components/alias-thread.tsx).
+   Desktop: the line grows out of the parent's checkbox (its centre is 28px
+   into the cell), runs down the checkbox column and turns into each alias
+   with a rounded elbow; each slug starts where the parent's title does.
+   Phone, with no checkbox column: the line hangs from the title's left edge
+   inside the link cell. The group sits on a faint tint, a hairline parts
+   one alias from the next starting where the slug starts (so it never
+   crosses the line), and a row lights up on hover. */
+.alias-row {
+  --alias-line: var(--border);
+  --alias-hairline: color-mix(in oklab, var(--border) 55%, transparent);
+  --alias-x: 28px;
+  --alias-pad: 16px;
+}
+.alias-parent > td,
+.alias-row > td {
+  border-bottom-width: 0;
+}
+.alias-row-last > td {
+  border-bottom-width: 1px;
+}
+.alias-row > td {
+  background-color: color-mix(in oklab, var(--surface-2) 40%, transparent);
+}
+@media (hover: hover) {
+  .alias-row:hover > td {
+    background-color: color-mix(in oklab, var(--surface-2) 85%, transparent);
+  }
+}
+.alias-row + .alias-row > td:not(.alias-tree-check, .alias-tree-link) {
+  box-shadow: inset 0 1px 0 var(--alias-hairline);
+}
+.alias-row + .alias-row > td.alias-tree-link {
+  background-image: linear-gradient(var(--alias-hairline), var(--alias-hairline));
+  background-size: calc(100% - var(--alias-pad)) 1px;
+  background-position: right top;
+  background-repeat: no-repeat;
+}
+.alias-tree-check,
+.alias-tree-link,
+.alias-parent > td:first-child {
+  position: relative;
+}
+.alias-tree-link {
+  padding-left: var(--alias-pad);
+}
+.alias-tree-check::before,
+.alias-tree-check::after,
+.alias-tree-link::before,
+.alias-tree-link::after,
+.alias-parent > td:first-child::after {
+  position: absolute;
+  pointer-events: none;
+}
+@media (min-width: 40rem) {
+  .alias-parent > td:first-child::after {
+    content: "";
+    left: 28px;
+    top: calc(50% + 12px);
+    bottom: 0;
+    border-left: 1px solid var(--border);
+  }
+  .alias-tree-check::before {
+    content: "";
+    left: var(--alias-x);
+    top: 0;
+    height: 50%;
+    width: calc(100% - var(--alias-x));
+    border-left: 1px solid var(--alias-line);
+    border-bottom: 1px solid var(--alias-line);
+    border-bottom-left-radius: 7px;
+  }
+  .alias-row:not(.alias-row-last) > .alias-tree-check::after {
+    content: "";
+    left: var(--alias-x);
+    top: 50%;
+    bottom: 0;
+    border-left: 1px solid var(--alias-line);
+  }
+  .alias-tree-link::before {
+    content: "";
+    left: 0;
+    top: 50%;
+    width: 10px;
+    border-top: 1px solid var(--alias-line);
+  }
+}
+@media (max-width: 39.99rem) {
+  .alias-row {
+    --alias-x: 14px;
+    --alias-pad: 38px;
+  }
+  .alias-tree-link::before {
+    content: "";
+    left: var(--alias-x);
+    top: 0;
+    height: 50%;
+    width: 16px;
+    border-left: 1px solid var(--alias-line);
+    border-bottom: 1px solid var(--alias-line);
+    border-bottom-left-radius: 7px;
+  }
+  .alias-row:not(.alias-row-last) > .alias-tree-link::after {
+    content: "";
+    left: var(--alias-x);
+    top: 50%;
+    bottom: 0;
+    border-left: 1px solid var(--alias-line);
+  }
+}
+
 /* Toasts share one grid cell (true overlap, not just visual stacking) so a
    collapsed toast can sit exactly behind the one in front of it. Collapsed
    position/scale/opacity are index-based (a fixed per-slot look, matching

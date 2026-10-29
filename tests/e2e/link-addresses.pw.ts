@@ -125,17 +125,53 @@ test("renaming a custom-domain link leaves a temporary alias, which can be made 
   await renameEditor.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(`${hostname}/new-slug`)).toBeVisible();
 
-  // Expand the alias thread and check the temporary alias it left behind.
-  await page.getByRole("button", { name: /Show \d+ alias/ }).click();
-  const aliasRow = page.getByRole("row", { name: /old-slug/ });
-  await expect(aliasRow.getByText(/expires in/i)).toBeVisible();
+  // A permanent alias too, made after the rename: newer, but the temporary
+  // one still comes first because it asks for a decision.
+  await page
+    .getByRole("row", { name: /new-slug/ })
+    .getByRole("button", { name: "Actions for new-slug" })
+    .click();
+  await page.getByRole("menuitem", { name: "Add another short link" }).click();
+  const aliasDialog = page.getByRole("dialog", { name: "Create alias" });
+  await aliasDialog.getByPlaceholder("promo-2026").fill("kept-slug");
+  await aliasDialog.getByRole("button", { name: "Create alias" }).click();
+  await expect(aliasDialog).toBeHidden();
 
-  // Make the temporary alias permanent, from its own row actions menu.
-  await aliasRow.getByRole("button", { name: "Actions for old-slug" }).click();
-  await page.getByRole("menuitem", { name: "Make permanent" }).click();
-  await expect(page.getByText("Address made permanent")).toBeVisible();
-  await expect(aliasRow.getByText("Permanent alias")).toBeVisible();
-  await expect(aliasRow.getByText(/expires in/i)).not.toBeVisible();
+  // "+2" next to the title opens the aliases as tree rows: slug only (the
+  // host is the link's), temporary first with its time left in hours.
+  const toggle = page.getByRole("button", { name: "Show 2 aliases" });
+  await expect(toggle).toContainText("+2");
+  await toggle.click();
+  const aliasRows = page.locator("tr.alias-row");
+  await expect(aliasRows).toHaveCount(2);
+  await expect(aliasRows.nth(0)).toContainText("/old-slug");
+  await expect(aliasRows.nth(0)).toContainText(/\d+h left/);
+  await expect(aliasRows.nth(0)).not.toContainText(hostname);
+  await expect(aliasRows.nth(1)).toContainText("/kept-slug");
+  await expect(aliasRows.nth(1)).not.toContainText(/left|Keep/);
+  // None of the old repeated labels.
+  await expect(page.getByText(/Permanent alias|Same destination|Alias clicks count/)).toHaveCount(
+    0,
+  );
+
+  // Keep it, inline, by keyboard: the button is a tab stop in the row.
+  const keep = aliasRows.nth(0).getByRole("button", { name: "Keep old-slug for good" });
+  await keep.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Kept old-slug")).toBeVisible();
+  await expect(page.locator("tr.alias-row", { hasText: "/old-slug" })).not.toContainText(
+    /left|Keep/,
+  );
+
+  // The row menu opens from the keyboard and gives focus back on Escape.
+  const menu = page
+    .locator("tr.alias-row", { hasText: "/old-slug" })
+    .getByRole("button", { name: "Actions for old-slug" });
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "Make primary" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeFocused();
 });
 
 test("creating a link to an already-shortened destination offers to reuse it (#38)", async ({
