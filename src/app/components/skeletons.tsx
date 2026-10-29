@@ -120,10 +120,7 @@ function StatsChartSkeleton({ figures, chartHeight }: { figures: number; chartHe
         {Array.from({ length: figures }, (_, i) => (
           <div
             key={i}
-            className={cn(
-              "flex min-w-[40%] flex-1 flex-col gap-0.5 rounded-lg px-2.5 py-2 sm:min-w-0",
-              i === 0 && "bg-bg",
-            )}
+            className={cn("flex min-w-[40%] flex-1 flex-col gap-0.5 px-2.5 py-2 sm:min-w-0")}
           >
             <span className="flex h-4 items-center">
               <Skeleton className="h-2.5 w-16" />
