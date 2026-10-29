@@ -37,7 +37,7 @@ import {
   DomainsSkeleton,
 } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
-import { PaidBadge, UpgradeDialog } from "../components/upgrade-dialog";
+import { FeatureLocked, useOwnerLabel } from "../components/plan-upsell";
 import { domainsBlockedBy } from "../lib/org-limits";
 import { displayUrl, parentDomain } from "../lib/domain-display";
 import { displayHost } from "../lib/display-url";
@@ -113,7 +113,17 @@ export function DomainsPage() {
     );
   if (!org) return <NoOrgState />;
 
-  if (!canManageDomains(!!currentUser.data?.user.isAdmin, org.role))
+  // A plan without domains says so to everyone, whoever may manage them:
+  // the lock is about the plan, and the plan is the owner's to change.
+  const canManage = canManageDomains(!!currentUser.data?.user.isAdmin, org.role);
+  if (!canManage && PLAN_LIMITS[org.plan].domains === 0)
+    return (
+      <div className="mx-auto w-full max-w-[760px]">
+        <PageHeader title="Domains" />
+        <DomainsLocked orgId={orgId} isOwner={false} />
+      </div>
+    );
+  if (!canManage)
     return (
       <div className="mx-auto w-full max-w-[760px]">
         <PageHeader title="Domains" />
@@ -122,17 +132,6 @@ export function DomainsPage() {
     );
 
   return <DomainsSection orgId={orgId} plan={org.plan} />;
-}
-
-/** What the upgrade dialog says a paid plan gives a domain, with the counts
- * from the plans themselves. */
-function domainBenefits(): string[] {
-  const hobby = PLAN_LIMITS.hobby.domains;
-  return [
-    "Short links on your own domain",
-    "Slugs you choose",
-    `${hobby} ${hobby === 1 ? "domain" : "domains"} on Hobby, ${PLAN_LIMITS.pro.domains} on Pro`,
-  ];
 }
 
 type HostnameForm = { hostname: string };
@@ -456,41 +455,36 @@ function useDomainsModel(orgId: string, plan: OrgPlan) {
 type DomainsModel = ReturnType<typeof useDomainsModel>;
 
 /**
- * What Add domain does here: open the form, offer the plan, or nothing.
- *
- * A plan without domains and an org with none gets the page a paid plan
- * gets, and Add domain offers the plan instead of the form. An org that kept
- * domains past a downgrade (#159), or a read-only one (#160), gets no
- * button: its rows and the notice above the page say what happened.
+ * The page's one primary button. A plan without domains gets none: with no
+ * domains the page is the locked state, and an org that kept domains past
+ * a downgrade (#159), or a read-only one (#160), has its rows and the notice
+ * above the page to say what happened.
  */
-function addDomainMode(model: DomainsModel): "add" | "upgrade" | null {
-  const blockedBy = domainsBlockedBy(model.limits.domains, !model.canWrite);
-  if (blockedBy === null) return "add";
-  return blockedBy === "plan" && model.domains.data?.length === 0 ? "upgrade" : null;
+function AddDomainAction({ model }: { model: DomainsModel }) {
+  if (domainsBlockedBy(model.limits.domains, !model.canWrite) !== null) return null;
+  return (
+    <Button variant="primary" onClick={model.openAdd}>
+      <Plus size={15} aria-hidden />
+      Add domain
+    </Button>
+  );
 }
 
-/** The page's one primary button, badged "Paid" when it offers the plan,
- * with the dialog that offer opens. */
-function AddDomainAction({ model }: { model: DomainsModel }) {
-  const mode = addDomainMode(model);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  if (mode === null) return null;
-  const upgrade = mode === "upgrade";
+/** Domains on a plan without them, before any exist: one locked state. */
+function DomainsLocked({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
+  const owner = useOwnerLabel(orgId);
   return (
-    <>
-      <Button variant="primary" onClick={upgrade ? () => setUpgradeOpen(true) : model.openAdd}>
-        <Plus size={15} aria-hidden />
-        Add domain
-        {upgrade && <PaidBadge onPrimary />}
-      </Button>
-      <UpgradeDialog
-        open={upgradeOpen}
-        onClose={() => setUpgradeOpen(false)}
-        title="Custom domains come with a paid plan"
-        benefits={domainBenefits()}
-        unlockedBy="hobby"
-      />
-    </>
+    <FeatureLocked
+      title="Custom domains are available on Hobby and Pro."
+      line={
+        <>
+          Your short links on a domain you own, like{" "}
+          <span className="font-mono">go.yourbrand.com/spring</span>, with slugs you choose.
+        </>
+      }
+      isOwner={isOwner}
+      ownerNote={`Only ${owner} can upgrade.`}
+    />
   );
 }
 
@@ -548,9 +542,9 @@ const EXAMPLE_DOMAIN: DomainDTO = {
 };
 
 /**
- * Before the first domain: what will appear, then one faded row drawn by the
- * real row component, so the page shows what a domain looks like here. The
- * same on every plan; only the header button differs. The example is hidden
+ * Before the first domain, on a plan with domains: what will appear, then
+ * one faded row drawn by the real row component, so the page shows what a
+ * domain looks like here. The example is hidden
  * from assistive tech and takes no input: it is a picture, not a domain.
  */
 function DomainsEmpty({ appHost }: { appHost: string }) {
@@ -602,9 +596,14 @@ const NOTHING_PENDING: DomainsModel["pending"] = {
 function DomainsBody({ model }: { model: DomainsModel }) {
   const { domains, org, appHost, actions, pending } = model;
   if (domains.isLoading) return <DomainsSkeleton />;
-  // A read-only org (#160) gets it too, with no button: the notice above
-  // the page says why.
-  if (!model.hasDomains) return <DomainsEmpty appHost={appHost} />;
+  if (!model.hasDomains)
+    return model.limits.domains === 0 ? (
+      <DomainsLocked orgId={org?.id ?? ""} isOwner={org?.role === "owner"} />
+    ) : (
+      // A read-only org (#160) gets it too, with no button: the notice
+      // above the page says why.
+      <DomainsEmpty appHost={appHost} />
+    );
 
   return (
     <SettingsGroup>

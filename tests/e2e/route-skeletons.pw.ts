@@ -167,14 +167,15 @@ test("Organization waits for fresh ownership before showing destructive controls
   );
 });
 
-test("Domains keeps its Add domain button out until the current user arrives", async () => {
+test("Domains keeps its plan answer out until the current user arrives", async () => {
   const page = sharedPage;
   await warmShell(page, sharedEmail);
+  // A free account: what settles is the locked state with its way to the plans.
   await expectFreshUserSkeleton(
     page,
     "/domains",
     "domains-page-skeleton",
-    page.getByRole("button", { name: "Add domain" }),
+    page.getByTestId("feature-locked"),
   );
 });
 
