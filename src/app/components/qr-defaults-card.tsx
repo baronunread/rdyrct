@@ -271,6 +271,16 @@ function tryRowCopy({
 
 const QR_TRY_TITLE = "Every new QR code starts like this";
 
+/** The plan picker, opened with a style tried (Save) or from the row alone. */
+const PICKER_SAVE = {
+  title: "Save this QR style",
+  why: "Pick a plan. Your style is saved once you've paid.",
+};
+const PICKER_TRY = {
+  title: "QR styles come with a paid plan",
+  why: "Your logo, colours and dots on every new QR code.",
+};
+
 /**
  * The card on a plan without `qrCustom`: the real editor, fully usable, to
  * try a style on the live preview (a logo stays in the browser). Its last
@@ -345,12 +355,7 @@ function TryQrDefaults({
         <PlanPickerDialog
           open={picker}
           onClose={() => setPicker(false)}
-          title="Keep this QR style"
-          why={
-            dirty
-              ? "Both plans save this style as the default for every new QR code. It is kept while you check out."
-              : "Both plans let you save a logo, colours and dot style for every new QR code."
-          }
+          {...(dirty ? PICKER_SAVE : PICKER_TRY)}
           reason="qr"
           onCheckout={() => {
             if (dirty) keepPendingQrStyle({ orgId, values: form.values });

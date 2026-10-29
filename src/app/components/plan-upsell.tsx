@@ -12,9 +12,9 @@
  * have more than you pay for") and stay with `OverLimitBanner` and
  * `LockedPanel`.
  */
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { Lock } from "@/app/ui/icons";
+import { Check, Lock } from "@/app/ui/icons";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { useCheckout, useMembers } from "../lib/hooks";
 import { HrefLink } from "../lib/router-search";
@@ -82,25 +82,28 @@ export function FeatureLocked({
   );
 }
 
-/** What brought someone to the picker: that fact is the one emphasised. */
+/** What brought someone to the picker: that fact leads each card. */
 type Reason = "qr" | "domains";
 
-function planFacts(plan: PaidPlan): { key: Reason | "other"; text: string }[] {
+const PLAN_NAMES = { hobby: "Hobby", pro: "Pro" } as const;
+
+/** Four facts per plan, the one that brought them here first. Each fits
+ * one line of a card. */
+function planFacts(plan: PaidPlan, reason: Reason): string[] {
   const l = PLAN_LIMITS[plan];
   const n = (count: number) => count.toLocaleString("en-US");
-  return [
-    { key: "domains", text: `${l.domains} custom domain${l.domains === 1 ? "" : "s"}` },
-    { key: "qr", text: "QR styles" },
-    { key: "other", text: `${n(l.links)} links` },
-    { key: "other", text: `${l.members} members` },
-    ...(l.orgs > 1 ? [{ key: "other" as const, text: `${l.orgs} organizations` }] : []),
-  ];
+  const domains = `${l.domains} custom domain${l.domains === 1 ? "" : "s"}`;
+  const qr = "QR style on every code";
+  const orgs = `${l.orgs} organization${l.orgs === 1 ? "" : "s"}`;
+  const [lead, next] = reason === "qr" ? [qr, domains] : [domains, qr];
+  return [lead, next, `${n(l.links)} links`, orgs];
 }
 
 /**
- * Hobby and Pro side by side with their prices and what each gives, Hobby
- * picked, and checkout for the one picked. `onCheckout` runs just before the
- * browser leaves, for whatever has to survive the trip (a tried QR style).
+ * Hobby and Pro as two cards to pick from, each with its price and four
+ * facts, Hobby picked; the button names the plan and goes to its checkout.
+ * `onCheckout` runs just before the browser leaves, for whatever has to
+ * survive the trip (a tried QR style).
  */
 export function PlanPickerDialog({
   open,
@@ -121,6 +124,7 @@ export function PlanPickerDialog({
   const [leaving, setLeaving] = useState(false);
   const checkout = useCheckout();
   const toast = useToast();
+  const cta = useRef<HTMLButtonElement>(null);
 
   const go = async () => {
     posthog.capture("checkout_started", { target_plan: plan, interval: "month", from: reason });
@@ -136,55 +140,72 @@ export function PlanPickerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()} title={title} size="md">
-      <div className="flex flex-col gap-4">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title={title}
+      size="lg"
+      initialFocus={cta}
+    >
+      <div className="flex flex-col gap-5">
         <p className="-mt-2 text-sm text-pretty text-muted">{why}</p>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="sr-only">Plan</legend>
-          {(["hobby", "pro"] as const).map((p) => (
-            <label
-              key={p}
-              className={cn(
-                "grid cursor-pointer grid-cols-[16px_1fr_auto] items-baseline gap-x-2.5 gap-y-1 rounded-[11px] px-3.5 py-3 transition-[box-shadow,background-color] duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
-                plan === p
-                  ? "bg-accent/6 shadow-[0_0_0_1.5px_var(--accent)]"
-                  : "smooth-shadow-ring-xs",
-              )}
-            >
-              <input
-                type="radio"
-                name="plan"
-                value={p}
-                checked={plan === p}
-                onChange={() => setPlan(p)}
-                className="translate-y-0.5 accent-accent focus-visible:outline-none"
-              />
-              <span className="font-semibold">{p === "hobby" ? "Hobby" : "Pro"}</span>
-              <span className="tnum text-sm">
-                {PLAN_PRICES[p]} <span className="text-xs text-muted">a month</span>
-              </span>
-              <ul className="col-span-2 col-start-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-muted">
-                {planFacts(p).map((f) => (
-                  <li key={f.text} className={cn(f.key === reason && "font-medium text-text")}>
-                    {f.text}
-                  </li>
-                ))}
-              </ul>
-            </label>
-          ))}
-        </fieldset>
-        <div className="flex flex-wrap items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
+        <div role="radiogroup" aria-label="Plan" className="grid gap-3 sm:grid-cols-2">
+          {(["hobby", "pro"] as const).map((p) => {
+            const on = plan === p;
+            return (
+              <button
+                key={p}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setPlan(p)}
+                className={cn(
+                  "relative flex cursor-pointer flex-col gap-3 rounded-xl p-4 text-start transition-[box-shadow,background-color] duration-150 ease-out outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  on
+                    ? "bg-accent/6 shadow-[0_0_0_1.5px_var(--accent)]"
+                    : "smooth-shadow-ring-xs [@media(hover:hover)]:hover:bg-surface-2/60",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute top-3.5 right-3.5 grid size-5 place-items-center rounded-full transition-[opacity,scale] duration-150 ease-out",
+                    on ? "scale-100 bg-accent text-bg opacity-100" : "scale-75 opacity-0",
+                  )}
+                >
+                  <Check size={13} stroke={2.5} />
+                </span>
+                <span className="text-sm font-medium text-muted">{PLAN_NAMES[p]}</span>
+                <span className="tnum -mt-1.5 flex items-baseline gap-1">
+                  <span className="text-2xl font-semibold tracking-tight">{PLAN_PRICES[p]}</span>
+                  <span className="text-xs text-muted">a month</span>
+                </span>
+                <ul className="flex flex-col gap-1.5 text-[13px]">
+                  {planFacts(p, reason).map((fact, i) => (
+                    <li key={fact} className="flex gap-2">
+                      <Check
+                        aria-hidden
+                        size={14}
+                        stroke={2.25}
+                        className={cn("mt-0.5 shrink-0", i === 0 ? "text-accent" : "text-muted")}
+                      />
+                      <span className={i === 0 ? "text-text" : "text-muted"}>{fact}</span>
+                    </li>
+                  ))}
+                </ul>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-3 max-sm:flex-col-reverse max-sm:items-stretch">
           <HrefLink
             href="/billing"
             className="mr-auto text-sm text-muted underline decoration-from-font underline-offset-2 max-sm:mx-auto max-sm:py-2 [@media(hover:hover)]:hover:text-text"
           >
-            Compare every plan
+            Compare plans
           </HrefLink>
-          <Button variant="ghost" onClick={onClose} disabled={leaving}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => void go()} disabled={leaving}>
-            <BusyContent busy={leaving}>Continue to checkout</BusyContent>
+          <Button ref={cta} variant="primary" onClick={() => void go()} disabled={leaving}>
+            <BusyContent busy={leaving}>Continue with {PLAN_NAMES[plan]}</BusyContent>
           </Button>
         </div>
       </div>

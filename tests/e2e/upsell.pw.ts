@@ -70,15 +70,17 @@ test("free plan: QR defaults can be tried, and Upgrade to save opens the plan pi
 
   await section.getByRole("button", { name: "Classy", exact: true }).first().click();
   await row.getByRole("button", { name: "Upgrade to save" }).click();
-  const dialog = page.getByRole("dialog", { name: "Keep this QR style" });
+  const dialog = page.getByRole("dialog", { name: "Save this QR style" });
   await expect(dialog).toBeVisible();
   // Hobby and Pro, Hobby picked, each with its price.
   await expect(dialog.getByRole("radio", { name: /Hobby/ })).toBeChecked();
   await expect(dialog.getByRole("radio", { name: /Pro/ })).not.toBeChecked();
   await expect(dialog).toContainText("$4");
   await expect(dialog).toContainText("$9");
-  await expect(dialog.getByRole("link", { name: "Compare every plan" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Continue to checkout" })).toBeVisible();
-  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog.getByRole("link", { name: "Compare plans" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Continue with Hobby" })).toBeVisible();
+  await dialog.getByRole("radio", { name: /Pro/ }).click();
+  await expect(dialog.getByRole("button", { name: "Continue with Pro" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 });
