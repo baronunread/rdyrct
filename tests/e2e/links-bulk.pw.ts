@@ -44,23 +44,15 @@ test("ticked rows download their QR codes and delete together; one link asks for
     .getByRole("button", { name: "Reject" })
     .click();
 
-  // One link from its row menu: the dialog names it and wants its slug.
+  // One link from its row menu: the dialog names it, says what goes, and
+  // one press of Delete link confirms. No typing.
   const row = page.getByRole("row", { name: /Bulk 0/ });
   await row.hover();
   await row.getByRole("button", { name: /^Actions for / }).click();
   await page.getByRole("menuitem", { name: "Delete link" }).click();
   const one = page.getByRole("dialog", { name: /^Delete .+\/.+\?$/ });
   await expect(one.getByText(/stop working at once, including printed copies/)).toBeVisible();
-  const slugField = one.getByRole("textbox", { name: "Type the slug to confirm" });
-  // The field, not the close button, has the focus.
-  await expect(slugField).toBeFocused();
-  // A wrong slug marks the field and keeps the dialog open.
-  await slugField.fill("not-it");
-  await one.getByRole("button", { name: "Delete link" }).click();
-  await expect(slugField).toHaveAttribute("aria-invalid", "true");
-  await expect(one.getByText("Doesn't match")).toBeVisible();
-  const slug = await slugField.getAttribute("placeholder");
-  await slugField.fill(slug ?? "");
+  await expect(one.getByRole("textbox")).toHaveCount(0);
   await one.getByRole("button", { name: "Delete link" }).click();
   await expect(page.getByText("Link deleted")).toBeVisible();
   await expect(page.getByRole("row", { name: /Bulk 0/ })).toHaveCount(0);
@@ -78,9 +70,6 @@ test("ticked rows download their QR codes and delete together; one link asks for
 
   await bar.getByRole("button", { name: "Delete" }).click();
   const many = page.getByRole("dialog", { name: "Delete 2 links?" });
-  await many.getByRole("button", { name: "Delete 2 links" }).click();
-  await expect(many.getByText("Required")).toBeVisible();
-  await many.getByRole("textbox", { name: "Type delete to confirm" }).fill("delete");
   await many.getByRole("button", { name: "Delete 2 links" }).click();
   await expect(page.getByText("2 links deleted")).toBeVisible();
 

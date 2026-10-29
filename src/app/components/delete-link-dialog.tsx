@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useHeld } from "../lib/use-held";
 import type { LinkDTO } from "@/shared/types";
 import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { useLinkMutations } from "../lib/hooks";
@@ -35,10 +34,8 @@ function warning(links: LinkDTO[]): string {
  * The delete confirmation, for one link from its row menu or the editor, or
  * for the rows ticked in the table.
  *
- * Typing the slug (or "delete" for several) is the confirmation, because the
- * button sits where a hurried click lands and a printed QR code cannot be
- * reprinted. A mismatch marks the field and says so in its label row; the
- * button stays enabled so a wrong guess is explained rather than ignored.
+ * A plain confirmation: the dialog names the link and says what goes with
+ * it. Typing a name to confirm is kept for deleting a whole organization.
  */
 export function DeleteLinkDialog({
   orgId,
@@ -91,27 +88,11 @@ function DeleteForm({
 }) {
   const toast = useToast();
   const { remove } = useLinkMutations(orgId);
-  const [typed, setTyped] = useState("");
-  const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
   const single = links.length === 1;
-  const expected = single ? links[0].slug : "delete";
-
-  // The dialog focuses its first control (the close button) as it opens;
-  // the field is where the next keystroke belongs.
-  useEffect(() => {
-    const id = window.setTimeout(() => input.current?.focus(), 60);
-    return () => window.clearTimeout(id);
-  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (typed.trim() !== expected) {
-      setError(typed.trim() ? "Doesn't match" : "Required");
-      input.current?.focus();
-      return;
-    }
     setBusy(true);
     const done: string[] = [];
     try {
@@ -138,21 +119,6 @@ function DeleteForm({
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4" noValidate>
       <p className="text-sm text-pretty text-muted">{warning(links)}</p>
-      <Field label={single ? "Type the slug to confirm" : "Type delete to confirm"} error={error}>
-        <Input
-          ref={input}
-          value={typed}
-          onChange={(e) => {
-            setTyped(e.target.value);
-            if (error) setError(undefined);
-          }}
-          placeholder={expected}
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          className="font-mono"
-        />
-      </Field>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
