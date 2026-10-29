@@ -24,10 +24,16 @@ test("the yearly toggle drives the checkout interval and the button price", asyn
   await page.goto("/billing");
 
   const proButton = page.getByRole("button", { name: /Upgrade to Pro/ });
-  await expect(proButton).toContainText("$9/mo");
+  // The price sits on the card, above the button: the button only says where it goes.
+  const proCard = page
+    .locator("div")
+    .filter({ has: page.getByRole("heading", { name: "Pro", exact: true }) })
+    .filter({ has: proButton })
+    .last();
+  await expect(proCard).toContainText("$9 a month");
 
   await page.getByRole("button", { name: /^Yearly/ }).click();
-  await expect(proButton).toContainText("$8.10/mo");
+  await expect(proCard).toContainText("$8.10 a month, billed yearly");
 
   await proButton.click();
   await expect.poll(() => checkoutBody).toEqual({ plan: "pro", interval: "year" });

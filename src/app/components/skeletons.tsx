@@ -958,32 +958,16 @@ function MeterRowSkeleton({ label, hint }: { label: string; hint?: boolean }) {
   );
 }
 
-/** Each plan's feature lines (Free, Hobby, Pro), one of which wraps to two
- * lines at three cards a row. Side by side the grid makes every card as tall
- * as Pro's; stacked on a phone each is its own height. */
+/** Each plan's feature lines (Free, Hobby, Pro), as widths close to the
+ * text each stands in for. Every width is unique in its list: it is the key. */
 const planFeatureLines = [
-  [{ w: "w-24" }, { w: "w-28" }, { w: "w-32" }, { w: "w-28" }],
-  [
-    { w: "w-24" },
-    { w: "w-28" },
-    { w: "w-32" },
-    { w: "w-28" },
-    { w: "w-44", wraps: true },
-    { w: "w-32" },
-  ],
-  [
-    { w: "w-24" },
-    { w: "w-28" },
-    { w: "w-32" },
-    { w: "w-28" },
-    { w: "w-36" },
-    { w: "w-44", wraps: true },
-    { w: "w-32" },
-  ],
+  ["w-16", "w-18", "w-34", "w-36"],
+  ["w-16", "w-18", "w-28", "w-34", "w-38", "w-32"],
+  ["w-18", "w-22", "w-30", "w-26", "w-36", "w-40", "w-32"],
 ];
 
 /** PlanCard: name, price, the feature list and the button at the foot. */
-function PlanCardSkeleton({ lines }: { lines: { w: string; wraps?: boolean }[] }) {
+function PlanCardSkeleton({ lines }: { lines: string[] }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
       <span className="flex h-6 items-center">
@@ -993,11 +977,8 @@ function PlanCardSkeleton({ lines }: { lines: { w: string; wraps?: boolean }[] }
         <Skeleton className="h-5 w-24" />
       </span>
       <div className="flex flex-col gap-1.5">
-        {lines.map(({ w, wraps }) => (
-          <span
-            key={w}
-            className={cn("flex flex-col justify-center", wraps ? "h-5 sm:h-10" : "h-5")}
-          >
+        {lines.map((w) => (
+          <span key={w} className="flex h-5 flex-col justify-center">
             <Skeleton className={cn("h-3 max-w-full", w)} />
           </span>
         ))}

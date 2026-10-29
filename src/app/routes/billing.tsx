@@ -74,14 +74,6 @@ type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
 /** How a subscription is billed. Yearly is 10% cheaper per month. */
 type BillingInterval = "month" | "year";
 
-/** The upgrade-button label's price suffix for a plan at an interval. No
- * "billed yearly" here: the toggle right above the buttons already says
- * that, and the fixed button height (h-9) has no room for a wrapped third
- * line on the narrow two-up mobile layout. */
-function priceSuffix(plan: "hobby" | "pro", interval: BillingInterval): string {
-  return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
-}
-
 type PlanActionSnapshot = {
   plan: OrgPlan;
   hasBillingAccount: boolean;
@@ -168,7 +160,7 @@ function planFeatures(plan: SellablePlan): string[] {
       : [limits.domains === 1 ? "1 custom domain" : `${limits.domains} custom domains`]),
     ...(limits.orgs > 1 ? [`${limits.orgs} organizations`] : []),
     `${limits.analyticsDays} days of analytics`,
-    `${exactCount(limits.trackedClicks)} clicks counted a month`,
+    `${exactCount(limits.trackedClicks)} clicks a month`,
     ...(limits.qrCustom ? ["QR logo and colors"] : []),
   ];
 }
@@ -269,9 +261,7 @@ function FreePlans({
       onAnimationEnd={shake[target].end}
       onClick={() => onUpgrade(target, interval)}
     >
-      <BusyContent busy={checkoutPlan === target}>
-        Upgrade to {PLAN_LABEL[target]} · {priceSuffix(target, interval)}
-      </BusyContent>
+      <BusyContent busy={checkoutPlan === target}>Upgrade to {PLAN_LABEL[target]}</BusyContent>
     </Button>
   );
   return (
