@@ -5,15 +5,11 @@ import { openNewLinkDialog } from "./orgs";
 
 const password = "test-password-123";
 
-/** Sets a native colour input the way the picker does when you choose. */
+/** Opens a colour chip's picker, types a hex into it, and closes it. */
 async function pickColour(page: Page, label: string, hex: string) {
-  await page.getByLabel(`${label} colour`).evaluate((el, value) => {
-    // SAFETY: getByLabel on "… colour" resolves to the chip's <input type=color>.
-    const input = el as HTMLInputElement;
-    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    set?.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, hex);
+  await page.getByRole("button", { name: new RegExp(`^${label} colour, `) }).click();
+  await page.getByRole("textbox", { name: `${label} colour, hex` }).fill(hex);
+  await page.keyboard.press("Escape");
 }
 
 /**
@@ -71,7 +67,7 @@ test("the QR editor checks contrast, and Cancel puts the look back", async ({ pa
   await editor.getByRole("button", { name: "Cancel" }).click();
   await expect(editor.getByRole("textbox", { name: /^Destination/ })).toBeVisible();
   await editor.getByRole("button", { name: "Customize QR" }).click();
-  await expect(editor.getByLabel("Dots colour")).toHaveValue("#17151f");
+  await expect(editor.getByRole("button", { name: "Dots colour, #17151f" })).toBeVisible();
   await expect(dots.getByRole("button", { name: "Rounded", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",

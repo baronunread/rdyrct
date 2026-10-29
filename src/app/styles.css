@@ -1063,3 +1063,40 @@ body {
     scroll-behavior: smooth;
   }
 }
+
+/* The colour picker in a colour chip's popover (ui/color-chips.tsx), on
+   react-colorful: a rounded square, a slim hue strip under it, and small
+   ringed handles, instead of the library's chunky defaults. */
+.rdyrct-color-picker .react-colorful {
+  width: 100%;
+  height: 168px;
+  gap: 10px;
+}
+.rdyrct-color-picker .react-colorful__saturation {
+  border-radius: 10px;
+  border-bottom: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text) 12%, transparent);
+}
+.rdyrct-color-picker .react-colorful__hue {
+  flex: none;
+  height: 12px;
+  border-radius: 999px;
+}
+.rdyrct-color-picker .react-colorful__last-control {
+  border-radius: 999px;
+}
+.rdyrct-color-picker .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.25),
+    0 1px 3px rgb(0 0 0 / 0.35);
+}
+.rdyrct-color-picker .react-colorful__hue-pointer {
+  width: 14px;
+  height: 14px;
+}
+.rdyrct-color-picker .react-colorful__interactive:focus .react-colorful__pointer {
+  transform: translate(-50%, -50%) scale(1.15);
+}
