@@ -5,12 +5,12 @@
  *
  * Each row is a setting: its name and current value on the left, the control
  * on the right. Shapes are small drawings of the shape, colours are chips
- * around the native picker, the logo is a size and an on/off switch. Callers
+ * that open a picker, the logo is a file with its size. Callers
  * hand in what the code renders with (already resolved over any defaults)
  * and get back a patch in the link/org field names.
  */
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Switch as BaseSwitch } from "@base-ui/react/switch";
+import { Button } from "../ui/button";
 import { IconCheck, IconAlertTriangle, IconX } from "@tabler/icons-react";
 import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
 import { errorMessage } from "@/app/lib/error-message";
@@ -43,6 +43,10 @@ const CORNER_NAMES = {
   square: "Square",
   classy: "Classy",
 } satisfies Record<CornerStyle, string>;
+
+/** A small action in a row's second line (Replace, Remove). */
+const TEXT_ACTION =
+  "cursor-pointer text-muted underline decoration-from-font underline-offset-2 [@media(hover:hover)]:hover:text-text";
 
 /** The four logo sizes, as the share of the code the logo covers. */
 const LOGO_SIZES = [
@@ -239,32 +243,10 @@ export type QrPatch = Partial<{
   qrLogoSize: number;
 }>;
 
-/** The logo switch. Base UI's switch, with the kit's look, plus a disabled
- * state the kit's own Switch does not offer. */
-function LogoSwitch({
-  checked,
-  onCheckedChange,
-  disabled,
-}: {
-  checked: boolean;
-  onCheckedChange: (on: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <BaseSwitch.Root
-      checked={checked}
-      onCheckedChange={onCheckedChange}
-      disabled={disabled}
-      aria-label="Logo"
-      className="relative inline-flex h-[22px] w-9 shrink-0 cursor-pointer items-center rounded-full bg-surface-2 smooth-shadow-ring-xs transition-[background-color] duration-150 after:absolute after:-inset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent/30 data-[checked]:bg-accent data-[checked]:shadow-none data-[disabled]:cursor-default data-[disabled]:opacity-50"
-    >
-      <BaseSwitch.Thumb className="pointer-events-none block size-4 translate-x-[3px] rounded-full bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition-transform duration-150 ease-out data-[checked]:translate-x-[17px] data-[checked]:bg-bg" />
-    </BaseSwitch.Root>
-  );
-}
-
-/** The logo row: its size, whether there is one, and which file it is. A
- * drop on the row replaces it. */
+/** The logo row: which file it is, with Replace and Remove, and its size;
+ * or an Upload button when there is none. A drop on the row sets it. No
+ * on/off switch: switching off threw the file away, so switching back on
+ * meant uploading it again. */
 function LogoRow({
   logo,
   logoSize,
@@ -280,7 +262,7 @@ function LogoRow({
   localOnly?: boolean;
   /** What to call the logo in the row: a file name, or whose it is. */
   name: string;
-  /** Why the logo can't be switched off here, when it can't. */
+  /** Why the logo can't be removed here, when it can't. */
   lockedOn?: string;
   disabled?: boolean;
   onChange: (patch: QrPatch, fileName?: string) => void;
@@ -319,32 +301,26 @@ function LogoRow({
       {!disabled && (
         <>
           <span aria-hidden>·</span>
-          <button
-            type="button"
-            onClick={pick}
-            className="cursor-pointer text-muted underline decoration-from-font underline-offset-2 [@media(hover:hover)]:hover:text-text"
-          >
+          <button type="button" onClick={pick} className={TEXT_ACTION}>
             Replace
           </button>
+          {!lockedOn && (
+            <>
+              <span aria-hidden>·</span>
+              <button
+                type="button"
+                onClick={() => onChange({ qrLogo: "" })}
+                className={TEXT_ACTION}
+              >
+                Remove
+              </button>
+            </>
+          )}
         </>
       )}
     </span>
   ) : (
-    <span className="flex items-baseline gap-1">
-      None
-      {!disabled && (
-        <>
-          <span aria-hidden>·</span>
-          <button
-            type="button"
-            onClick={pick}
-            className="cursor-pointer text-muted underline decoration-from-font underline-offset-2 [@media(hover:hover)]:hover:text-text"
-          >
-            Upload
-          </button>
-        </>
-      )}
-    </span>
+    "None"
   );
 
   return (
@@ -377,7 +353,7 @@ function LogoRow({
           e.target.value = "";
         }}
       />
-      <span className={cn("transition-opacity", !logo && "opacity-50")}>
+      {logo ? (
         <fieldset disabled={disabled} className="contents">
           <Segmented
             label="Logo size"
@@ -386,14 +362,13 @@ function LogoRow({
             onChange={(id) => onChange({ qrLogoSize: Number(id) })}
           />
         </fieldset>
-      </span>
-      <span title={lockedOn} className="inline-flex">
-        <LogoSwitch
-          checked={!!logo}
-          disabled={disabled || busy || (!!logo && !!lockedOn)}
-          onCheckedChange={(on) => (on ? pick() : onChange({ qrLogo: "" }))}
-        />
-      </span>
+      ) : (
+        !disabled && (
+          <Button size="sm" onClick={pick} disabled={busy}>
+            Upload
+          </Button>
+        )
+      )}
     </QrRow>
   );
 }
