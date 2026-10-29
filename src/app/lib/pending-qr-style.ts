@@ -12,7 +12,7 @@
  */
 import { useEffect } from "react";
 import * as v from "valibot";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PLAN_LIMITS } from "@/shared/types";
 import { api, uploadQrLogo } from "./api";
 import { useCurrentUser } from "./hooks";
@@ -66,11 +66,31 @@ function clearPendingQrStyle(): void {
   }
 }
 
-async function logoUrl(orgId: string, logo: string): Promise<string> {
-  if (!logo.startsWith("data:")) return logo;
-  const blob = await (await fetch(logo)).blob();
-  const ext = blob.type === "image/svg+xml" ? "svg" : "webp";
-  return uploadQrLogo(orgId, new File([blob], `qr-logo.${ext}`, { type: blob.type }));
+/** A data URL back into the file it was read from, with no fetch. */
+function fileFromDataUrl(dataUrl: string): File {
+  const [head, body = ""] = dataUrl.split(",");
+  const type = head.slice("data:".length).split(";")[0] || "image/webp";
+  const binary = atob(body);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new File([bytes], `qr-logo.${type === "image/svg+xml" ? "svg" : "webp"}`, { type });
+}
+
+async function saveStyle(orgId: string, values: QrValues): Promise<void> {
+  const logo = values.qrLogo.startsWith("data:")
+    ? await uploadQrLogo(orgId, fileFromDataUrl(values.qrLogo))
+    : values.qrLogo;
+  await api(`/orgs/${orgId}`, {
+    method: "PATCH",
+    body: {
+      qrLogo: logo,
+      qrStyle: values.qrStyle,
+      qrColor: values.qrColor,
+      qrCorner: values.qrCorner,
+      qrBg: values.qrBg,
+      qrEyeColor: values.qrEyeColor,
+      qrLogoSize: values.qrLogoSize === "" ? null : Number(values.qrLogoSize),
+    },
+  });
 }
 
 /** Saves a waiting style once its org is on a plan that keeps QR styles. */
@@ -78,38 +98,27 @@ export function useSavePendingQrStyle(): void {
   const currentUser = useCurrentUser();
   const qc = useQueryClient();
   const toast = useToast();
+  const { mutate } = useMutation({
+    mutationFn: ({ orgId, values }: { orgId: string; name: string; values: QrValues }) =>
+      saveStyle(orgId, values),
+    onSuccess: async (_, { name }) => {
+      await qc.invalidateQueries({ queryKey: ["user"] });
+      posthog.capture("qr_defaults_saved", { after_checkout: true });
+      toast(`QR style saved for ${name}`);
+    },
+    onError: (e) => toast(errorMessage(e), "error"),
+  });
   const orgs = currentUser.data?.orgs;
 
   useEffect(() => {
-    for (const org of orgs ?? []) {
-      if (!PLAN_LIMITS[org.plan].qrCustom || org.locked) continue;
-      const values = readPendingQrStyle(org.id);
-      if (!values) continue;
-      // Cleared before the request, so a second caller (or a re-render)
-      // never saves it twice.
-      clearPendingQrStyle();
-      void (async () => {
-        try {
-          await api(`/orgs/${org.id}`, {
-            method: "PATCH",
-            body: {
-              qrLogo: await logoUrl(org.id, values.qrLogo),
-              qrStyle: values.qrStyle,
-              qrColor: values.qrColor,
-              qrCorner: values.qrCorner,
-              qrBg: values.qrBg,
-              qrEyeColor: values.qrEyeColor,
-              qrLogoSize: values.qrLogoSize === "" ? null : Number(values.qrLogoSize),
-            },
-          });
-          await qc.invalidateQueries({ queryKey: ["user"] });
-          posthog.capture("qr_defaults_saved", { after_checkout: true });
-          toast(`QR style saved for ${org.name}`);
-        } catch (e) {
-          toast(errorMessage(e), "error");
-        }
-      })();
-      return;
-    }
-  }, [orgs, qc, toast]);
+    const org = orgs?.find(
+      (o) => PLAN_LIMITS[o.plan].qrCustom && !o.locked && readPendingQrStyle(o.id) !== null,
+    );
+    const values = org && readPendingQrStyle(org.id);
+    if (!org || !values) return;
+    // Cleared before the request, so a second caller (or a re-render)
+    // never saves it twice.
+    clearPendingQrStyle();
+    mutate({ orgId: org.id, name: org.name, values });
+  }, [orgs, mutate]);
 }

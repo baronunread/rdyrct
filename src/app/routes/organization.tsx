@@ -355,7 +355,10 @@ export function OrganizationPage() {
           currentName={currentName}
           isSubmitting={isSubmitting}
         />
-        <QrDefaultsCard key={org.id} />
+        {/* Keyed by plan too: a style tried on Free and saved after checkout
+            (lib/pending-qr-style.ts) lands with the plan change, and the
+            card starts again from what is now saved. */}
+        <QrDefaultsCard key={`${org.id}:${org.plan}:${org.qrStyle}:${org.qrColor}:${org.qrLogo}`} />
         {isOwner && <DeleteOrgGroup orgId={orgId} onDelete={() => deleteOrgFlow.setOpen(true)} />}
       </div>
 
