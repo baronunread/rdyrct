@@ -65,6 +65,7 @@ import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+import { useSavePendingQrStyle } from "../lib/pending-qr-style";
 import { shouldOfferFirstLink } from "../lib/billing-page";
 
 /** The three shake handles the page owns, one per button it can bounce. */
@@ -1317,6 +1318,9 @@ export function preload(qc: QueryClient, orgId: string) {
 
 export function BillingPage() {
   const model = useBillingPageModel();
+  // Checkout comes back here: a QR style tried on Free is saved as soon as
+  // the webhook puts its org on a paid plan.
+  useSavePendingQrStyle();
   const { data: current } = useCurrentUser();
   const [changingPlan, setChangingPlan] = useState(false);
   // A self-hosted instance sells nothing.

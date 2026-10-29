@@ -101,3 +101,16 @@ export async function uploadPreparedQrLogo(orgId: string, file: File): Promise<s
   if (!file.type.startsWith("image/")) throw new Error("Logo must be an image file");
   return uploadQrLogo(orgId, await prepare(file));
 }
+
+/** Prepares the picked file the same way and keeps it in the browser, as a
+ * data URL: for a plan that may try a logo but not store one. */
+export async function readPreparedQrLogo(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("Logo must be an image file");
+  const prepared = await prepare(file);
+  const bytes = new Uint8Array(await prepared.arrayBuffer());
+  let binary = "";
+  // In chunks: one spread of 256 KB of arguments overflows the call stack.
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${prepared.type};base64,${btoa(binary)}`;
+}

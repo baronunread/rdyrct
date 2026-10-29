@@ -305,6 +305,20 @@
   }
 }
 
+/* A row whose words and buttons change in place (the QR defaults save row):
+   the new ones fade in where the old ones were, nothing moves. */
+@keyframes swap-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .swap-in {
+    animation: swap-in 150ms ease-out;
+  }
+}
+
 @keyframes shake {
   0%,
   100% {

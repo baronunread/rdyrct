@@ -26,13 +26,13 @@ function byUrgency(a: AddressDTO, b: AddressDTO): number {
   return temp || b.createdAt - a.createdAt;
 }
 
-/** "30h left" under two days, so the last day and a half is not all "2d";
- * "5d left" beyond that. */
-export function timeLeft(expiresAt: number, now = Date.now()): string {
+/** Hours up to two days ("48h left" for a rename's fresh 48h alias, "30h
+ * left"), so the last two days are not all "2d"; "5d left" beyond that. */
+function timeLeft(expiresAt: number, now = Date.now()): string {
   const ms = expiresAt - now;
   if (ms <= 0) return "Expired";
   const hours = Math.ceil(ms / HOUR);
-  return hours < 48 ? `${hours}h left` : `${Math.floor(hours / 24)}d left`;
+  return hours <= 48 ? `${hours}h left` : `${Math.floor(hours / 24)}d left`;
 }
 
 /** 32px to look like the link's own menu, 40px to hit (the ::after). */

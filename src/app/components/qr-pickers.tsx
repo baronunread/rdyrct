@@ -20,7 +20,7 @@ import { Segmented } from "../ui/segmented";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { useCurrentOrg } from "../lib/current-org";
-import { uploadPreparedQrLogo } from "../lib/qr-logo-file";
+import { readPreparedQrLogo, uploadPreparedQrLogo } from "../lib/qr-logo-file";
 import { qrContrast, toHex6 } from "../lib/qr-contrast";
 import { hasTransparency } from "../lib/qr-look";
 
@@ -271,10 +271,13 @@ function LogoRow({
   name,
   lockedOn,
   disabled,
+  localOnly,
   onChange,
 }: {
   logo: string;
   logoSize: number;
+  /** Read the picked image in the browser and never upload it. */
+  localOnly?: boolean;
   /** What to call the logo in the row: a file name, or whose it is. */
   name: string;
   /** Why the logo can't be switched off here, when it can't. */
@@ -292,7 +295,10 @@ function LogoRow({
     if (!file || !org || busy || disabled) return;
     setBusy(true);
     try {
-      onChange({ qrLogo: await uploadPreparedQrLogo(org.id, file) }, file.name);
+      const logo = localOnly
+        ? await readPreparedQrLogo(file)
+        : await uploadPreparedQrLogo(org.id, file);
+      onChange({ qrLogo: logo }, file.name);
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {
@@ -405,6 +411,7 @@ export function QrEditorRows({
   logoName,
   logoLockedOn,
   disabled,
+  localLogo,
 }: {
   look: QrLookValue;
   onChange: (patch: QrPatch, fileName?: string) => void;
@@ -413,6 +420,8 @@ export function QrEditorRows({
   logoName?: string;
   logoLockedOn?: string;
   disabled?: boolean;
+  /** A picked logo stays in the browser: the preview only, no upload. */
+  localLogo?: boolean;
 }) {
   const seeThrough = hasTransparency(look.bg);
   const named = (name: string, fromOrg?: boolean) => (fromOrg ? `${name} (default)` : name);
@@ -486,6 +495,7 @@ export function QrEditorRows({
           name={logoName ?? "Your logo"}
           lockedOn={logoLockedOn}
           disabled={disabled}
+          localOnly={localLogo}
           onChange={onChange}
         />
       </div>
