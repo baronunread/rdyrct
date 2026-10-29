@@ -100,7 +100,8 @@ export const userQuery = queryOptions<CurrentUser | null>({
 export function useShellUser(): CurrentUser | null {
   const currentUser = useCurrentUser();
   const [cached] = useState(readCachedUser);
-  return currentUser.data ?? cached ?? null;
+  // Once /user has answered, its answer wins, null (signed out) included.
+  return currentUser.data !== undefined ? currentUser.data : (cached ?? null);
 }
 
 // Deployment config (e.g. appHost for DNS instructions) — static per deploy.

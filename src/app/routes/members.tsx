@@ -483,7 +483,7 @@ function canManageOrg(role: OrgRole): boolean {
 }
 
 type MemberManagement = ReturnType<typeof useMemberManagement>;
-type SeatSummary = { limit: number; taken: number; left: number };
+type SeatSummary = { limit: number; taken: number; left: number; invited: ReadonlySet<string> };
 
 function rowCount(rows: readonly object[] | undefined): number {
   return rows ? rows.length : 0;
@@ -495,7 +495,12 @@ function seatSummary(org: UserOrg, management: MemberManagement): SeatSummary {
   // the invite with a 402, so offering the form is offering an error (#161).
   // Counted from the same figure the server uses, members plus open invites.
   const taken = rowCount(management.members.data) + rowCount(management.invites.data);
-  return { limit, taken, left: Math.max(0, limit - taken) };
+  // Addresses with an open invite already hold their seat: asking again
+  // resends the same invite, so the dialog must not count them twice.
+  const invited = new Set(
+    (management.invites.data ?? []).flatMap((i) => (i.email ? [i.email.toLowerCase()] : [])),
+  );
+  return { limit, taken, left: Math.max(0, limit - taken), invited };
 }
 
 /** The seat count under the title. A self-hosted instance has no limit to

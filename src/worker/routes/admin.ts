@@ -695,10 +695,14 @@ adminRoutes.get("/users", async (c) => {
         select count(*) from org_members where org_members.user_id = "user".id
       )`,
         // literal "user".id: interpolated columns render unqualified inside
-        // correlated subqueries and bind to the wrong table
+        // correlated subqueries and bind to the wrong table. last_seen_at
+        // outlives the sessions a sign-out deletes (memberLastActiveAt).
         lastSeen: sql<number | null>`(
-        select max(session.updated_at) from session
-        where session.user_id = "user".id
+        select max(t) from (
+          select session.updated_at as t from session where session.user_id = "user".id
+          union all
+          select "user".last_seen_at
+        )
       )`,
       })
       .from(schema.user),

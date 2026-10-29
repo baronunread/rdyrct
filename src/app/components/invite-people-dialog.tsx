@@ -32,9 +32,9 @@ function sendLabel(count: number): string {
 
 /** Why the addresses cannot go yet, or undefined when they can. Short, for
  * the label row. */
-function emailsError(emails: string[], seatsLeft: number, limited: boolean): string | undefined {
+function emailsError(emails: string[], needed: number, seatsLeft: number, limited: boolean) {
   if (emails.length === 0) return "Add an email";
-  return badEmailsError(emails) ?? (limited ? seatsError(emails.length, seatsLeft) : undefined);
+  return badEmailsError(emails) ?? (limited ? seatsError(needed, seatsLeft) : undefined);
 }
 
 function badEmailsError(emails: string[]): string | undefined {
@@ -69,7 +69,7 @@ export function InvitePeopleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   org: UserOrg;
-  seats: { limit: number; left: number };
+  seats: { limit: number; left: number; invited: ReadonlySet<string> };
   sendEmailInvites: {
     mutate: (params: EmailInvites, opts?: { onSuccess?: (data: InvitesCreated) => void }) => void;
     isPending: boolean;
@@ -85,6 +85,8 @@ export function InvitePeopleDialog({
   // No limit to explain on a self-hosted instance.
   const limited = org.plan !== "unlimited";
   const all = [...emails, ...splitEmails(draft)];
+  // A retry after a failed email reuses its invite and takes no new seat.
+  const needed = all.filter((e) => !seats.invited.has(e.toLowerCase())).length;
 
   const close = (next: boolean) => {
     onOpenChange(next);
@@ -98,7 +100,7 @@ export function InvitePeopleDialog({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (sendEmailInvites.isPending) return;
-    const reason = emailsError(all, seats.left, limited);
+    const reason = emailsError(all, needed, seats.left, limited);
     setEmails(all);
     setDraft("");
     setError(reason);
@@ -158,7 +160,7 @@ export function InvitePeopleDialog({
           </div>
           <p className="text-xs text-pretty text-muted sm:pt-5">{ROLE_HINT[role]}</p>
         </div>
-        {limited && <p className="text-xs text-muted tnum">{seatsLine(all.length, seats.left)}</p>}
+        {limited && <p className="text-xs text-muted tnum">{seatsLine(needed, seats.left)}</p>}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             type="button"

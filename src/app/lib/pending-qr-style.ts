@@ -72,7 +72,8 @@ function fileFromDataUrl(dataUrl: string): File {
   const type = head.slice("data:".length).split(";")[0] || "image/webp";
   const binary = atob(body);
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-  return new File([bytes], `qr-logo.${type === "image/svg+xml" ? "svg" : "webp"}`, { type });
+  // "image/png" → png, "image/svg+xml" → svg. The upload reads the type, not the name.
+  return new File([bytes], `qr-logo.${type.slice("image/".length).replace("+xml", "")}`, { type });
 }
 
 async function saveStyle(orgId: string, values: QrValues): Promise<void> {

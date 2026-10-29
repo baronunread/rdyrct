@@ -149,23 +149,31 @@ export function PlanPickerDialog({
     >
       <div className="flex flex-col gap-5">
         <p className="-mt-2 text-sm text-pretty text-muted">{why}</p>
-        <div role="radiogroup" aria-label="Plan" className="grid gap-3 sm:grid-cols-2">
+        <fieldset className="grid gap-3 sm:grid-cols-2">
+          <legend className="sr-only">Plan</legend>
           {(["hobby", "pro"] as const).map((p) => {
             const on = plan === p;
             return (
-              <button
+              // A native radio in each card: one Tab stop, arrows move between them.
+              <label
                 key={p}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => setPlan(p)}
                 className={cn(
-                  "relative flex cursor-pointer flex-col gap-3 rounded-xl p-4 text-start transition-[box-shadow,background-color] duration-150 ease-out outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  "relative flex cursor-pointer flex-col gap-3 rounded-xl p-4 text-start transition-[box-shadow,background-color] duration-150 ease-out has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
                   on
                     ? "bg-accent/6 shadow-[0_0_0_1.5px_var(--accent)]"
                     : "smooth-shadow-ring-xs [@media(hover:hover)]:hover:bg-surface-2/60",
                 )}
               >
+                <input
+                  type="radio"
+                  name="plan"
+                  value={p}
+                  checked={on}
+                  onChange={() => setPlan(p)}
+                  aria-label={`${PLAN_NAMES[p]}, ${PLAN_PRICES[p]} a month`}
+                  // Invisible, over the whole card: the card is what you press.
+                  className="absolute inset-0 cursor-pointer appearance-none rounded-xl opacity-0"
+                />
                 <span
                   aria-hidden
                   className={cn(
@@ -193,10 +201,10 @@ export function PlanPickerDialog({
                     </li>
                   ))}
                 </ul>
-              </button>
+              </label>
             );
           })}
-        </div>
+        </fieldset>
         <div className="flex items-center gap-3 max-sm:flex-col-reverse max-sm:items-stretch">
           <HrefLink
             href="/billing"

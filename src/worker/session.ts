@@ -138,6 +138,23 @@ function sessionUserOf(user: AuthSession["user"]): SessionUser {
   } satisfies SessionUser;
 }
 
+const SEEN_EVERY_MS = 60 * 60 * 1000;
+
+/** Records that the account was here, at most once an hour: the condition
+ * makes every other request a read that changes nothing. */
+function markSeen(db: DB, userId: string) {
+  const now = Date.now();
+  return db
+    .update(schema.user)
+    .set({ lastSeenAt: now })
+    .where(
+      and(
+        eq(schema.user.id, userId),
+        or(isNull(schema.user.lastSeenAt), lt(schema.user.lastSeenAt, now - SEEN_EVERY_MS)),
+      ),
+    );
+}
+
 /**
  * Attaches db + user to context, from the BetterAuth session cookie or, for
  * a caller with no browser session (a remote MCP client, #139), either a
@@ -158,23 +175,6 @@ function sessionUserOf(user: AuthSession["user"]): SessionUser {
  * authenticated dispatch() — and restricting it there would break every
  * OAuth-authenticated tool call.
  */
-const SEEN_EVERY_MS = 60 * 60 * 1000;
-
-/** Records that the account was here, at most once an hour: the condition
- * makes every other request a read that changes nothing. */
-function markSeen(db: DB, userId: string) {
-  const now = Date.now();
-  return db
-    .update(schema.user)
-    .set({ lastSeenAt: now })
-    .where(
-      and(
-        eq(schema.user.id, userId),
-        or(isNull(schema.user.lastSeenAt), lt(schema.user.lastSeenAt, now - SEEN_EVERY_MS)),
-      ),
-    );
-}
-
 export function withSession(opts: { oauthTokenPath?: string } = {}) {
   return createMiddleware<AppEnv>(async (c, next) => {
     configureBilling(c.env);
