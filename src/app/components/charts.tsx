@@ -284,18 +284,19 @@ export interface ChartFigure {
 
 /**
  * The figures and the chart in one card (rdyrct-design, "Stats and the chart
- * share a card"): a strip of figures above the chart, the first underlined
- * in the line's colour because it is the one the chart plots, each with its
- * change beside it.
+ * share a card"): a strip of figures above the chart, clicks first,
+ * right above the line that plots them, each with its change beside it. No
+ * figure is marked: only clicks has a series, so a marker would look like a
+ * tab that never switches.
  */
 export function StatsChart({ figures, children }: { figures: ChartFigure[]; children: ReactNode }) {
   return (
     <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
       <dl className="flex flex-wrap gap-1 p-1.5">
-        {figures.map((f, i) => (
+        {figures.map((f) => (
           <div
             key={f.label}
-            className={`relative flex min-w-[40%] flex-1 flex-col gap-0.5 px-2.5 py-2 sm:min-w-0 ${i === 0 ? "after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-chart" : ""}`}
+            className="flex min-w-[40%] flex-1 flex-col gap-0.5 px-2.5 py-2 sm:min-w-0"
           >
             <dt className="truncate text-xs text-muted">{f.label}</dt>
             <dd className="tnum flex min-w-0 items-baseline gap-2 text-xl leading-tight font-semibold tracking-tight">
