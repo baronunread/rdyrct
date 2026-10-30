@@ -207,6 +207,11 @@ export function Footer({ featured = false }: { featured?: boolean }) {
               </MarketingLink>
             </li>
             <li>
+              <MarketingLink to="/google-url-shortener" className={linkClass}>
+                goo.gl replacement
+              </MarketingLink>
+            </li>
+            <li>
               <MarketingLink to="/pricing" className={linkClass}>
                 Pricing
               </MarketingLink>
@@ -279,6 +284,16 @@ export function Footer({ featured = false }: { featured?: boolean }) {
             <li>
               <MarketingLink to="/dub-alternative" className={linkClass}>
                 Dub alternative
+              </MarketingLink>
+            </li>
+            <li>
+              <MarketingLink to="/tinyurl-alternative" className={linkClass}>
+                TinyURL alternative
+              </MarketingLink>
+            </li>
+            <li>
+              <MarketingLink to="/qr-code-monkey-alternative" className={linkClass}>
+                QR Code Monkey alternative
               </MarketingLink>
             </li>
             <li>

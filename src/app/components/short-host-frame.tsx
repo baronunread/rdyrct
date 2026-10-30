@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MADE_WITH_SLOT } from "@/shared/link-pages";
 import { FrameRow } from "./marketing-kit";
 
 /**
@@ -6,8 +7,19 @@ import { FrameRow } from "./marketing-kit";
  * (NotFoundView), and the held and warning pages (link-state-views.tsx). It
  * wears the marketing frame (rdyrct-design, "Light on the marketing pages")
  * but names no brand, because a customer's domain shows it too.
+ *
+ * `madeWith` adds the one exception, a quiet link at the foot of the page
+ * that the Worker keeps only on rdyrct.com's own hosts and strips everywhere
+ * else. Pinned to the bottom edge, so the frame stays centred whether or not
+ * the link survives.
  */
-export function ShortHostFrame({ children }: { children: ReactNode }) {
+export function ShortHostFrame({
+  children,
+  madeWith = false,
+}: {
+  children: ReactNode;
+  madeWith?: boolean;
+}) {
   return (
     <div className="relative isolate grid min-h-dvh place-items-center overflow-hidden px-6 py-16">
       <div
@@ -20,6 +32,15 @@ export function ShortHostFrame({ children }: { children: ReactNode }) {
         </FrameRow>
         <FrameRow />
       </div>
+      {madeWith && (
+        <a
+          data-slot={MADE_WITH_SLOT}
+          href="/"
+          className="absolute inset-x-0 bottom-6 mx-auto w-fit py-2 text-xs text-muted hover:text-text"
+        >
+          Made with rdyrct
+        </a>
+      )}
     </div>
   );
 }

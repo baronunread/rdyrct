@@ -17,7 +17,7 @@ import {
   WARN_PAGE,
 } from "../shared/link-pages";
 import { escapeHtml, safeUrl } from "./email-html";
-import { PAGE_HEADERS, prerenderedPage } from "./not-found-page";
+import { madeWith, PAGE_HEADERS, prerenderedPage } from "./not-found-page";
 
 const plainPage = (name: string, title: string, body: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title></head><body data-page="${name}"><div id="root">${body}</div></body></html>`;
@@ -60,11 +60,18 @@ export async function heldPage(assets: Fetcher, requestUrl: string): Promise<Res
 /**
  * The page for a banned owner's link or custom domain. A 410: the link is
  * gone for good unless an admin reverses the ban, and the org it belongs to
- * is deleted 90 days on.
+ * is deleted 90 days on. `home` is rdyrct's URL on our own hosts and null
+ * on a customer's domain, for the "Made with rdyrct" link.
  */
-export async function disabledPage(assets: Fetcher, requestUrl: string): Promise<Response> {
+export async function disabledPage(
+  assets: Fetcher,
+  requestUrl: string,
+  home: string | null,
+): Promise<Response> {
   const html = (await prerenderedPage(assets, requestUrl, "link-disabled")) ?? PLAIN_DISABLED;
-  return new Response(html, { status: 410, headers: HEADERS });
+  return madeWith(new HTMLRewriter(), home, "disabled").transform(
+    new Response(html, { status: 410, headers: HEADERS }),
+  );
 }
 
 /**

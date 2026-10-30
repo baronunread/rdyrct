@@ -35,3 +35,8 @@ export const WARN_PAGE = {
 /** The markers the Worker fills in on the warning page. */
 export const WARN_HOST_SLOT = "warn-host";
 export const WARN_CONTINUE_SLOT = "warn-continue";
+
+/** The quiet "Made with rdyrct" link under the 404 and the disabled page.
+ *  The Worker points it at rdyrct.com, or removes it on a customer's own
+ *  domain and in a self-hosted build (src/worker/not-found-page.ts). */
+export const MADE_WITH_SLOT = "made-with";

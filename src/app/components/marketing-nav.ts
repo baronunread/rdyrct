@@ -28,6 +28,12 @@ const PRODUCT_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/google-url-shortener",
+  "/whatsapp-qr-code",
+  "/vcard-qr-code",
+  "/wifi-qr-code",
+  "/qr-code-monkey-alternative",
+  "/tinyurl-alternative",
 ]);
 
 /** The nav item for the page you are on, or null where none applies (the home page). */
