@@ -15,6 +15,7 @@ describe("currentNavKey", () => {
       "/compare",
       "/roadmap",
       "/bitly-alternative",
+      "/google-url-shortener",
       "/whatsapp-qr-code",
       "/vcard-qr-code",
       "/wifi-qr-code",

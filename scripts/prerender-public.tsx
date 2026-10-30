@@ -75,6 +75,7 @@ const ROUTE_SOURCES = new Map([
   ["/rebrandly-alternative", "src/app/routes/alternatives.tsx"],
   ["/dub-alternative", "src/app/routes/alternatives.tsx"],
   ["/short-io-alternative", "src/app/routes/alternatives.tsx"],
+  ["/google-url-shortener", "src/app/routes/google-url-shortener.tsx"],
   ["/whatsapp-qr-code", "src/app/routes/qr-types.tsx"],
   ["/vcard-qr-code", "src/app/routes/qr-types.tsx"],
   ["/wifi-qr-code", "src/app/routes/qr-types.tsx"],

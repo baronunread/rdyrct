@@ -139,6 +139,14 @@ export function marketingRoutes() {
     }),
     createRoute({
       ...child,
+      path: "/google-url-shortener",
+      component: lazyRouteComponent(
+        () => import("./routes/google-url-shortener"),
+        "GoogleUrlShortenerPage",
+      ),
+    }),
+    createRoute({
+      ...child,
       path: "/whatsapp-qr-code",
       component: lazyRouteComponent(qrTypes, "WhatsappQrPage"),
     }),

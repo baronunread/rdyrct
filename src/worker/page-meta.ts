@@ -171,7 +171,7 @@ export function markdownPage(url: URL, accept: string | null | undefined): Respo
 
 /** The same links index.html's fallback ends on, so every page a crawler
  * reads still leads to the others. */
-const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/wifi-qr-code">WiFi QR code generator</a> <a href="/vcard-qr-code">vCard QR code generator</a> <a href="/whatsapp-qr-code">WhatsApp QR code generator</a> <a href="/utm-builder">UTM builder</a> <a href="/branded-link-shortener">Branded link shortener</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
+const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/wifi-qr-code">WiFi QR code generator</a> <a href="/vcard-qr-code">vCard QR code generator</a> <a href="/whatsapp-qr-code">WhatsApp QR code generator</a> <a href="/utm-builder">UTM builder</a> <a href="/branded-link-shortener">Branded link shortener</a> <a href="/google-url-shortener">Google URL shortener (goo.gl)</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
 
 /**
  * What a client that never runs JavaScript reads in this page's body.

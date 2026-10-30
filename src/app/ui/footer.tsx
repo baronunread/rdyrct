@@ -207,6 +207,11 @@ export function Footer({ featured = false }: { featured?: boolean }) {
               </MarketingLink>
             </li>
             <li>
+              <MarketingLink to="/google-url-shortener" className={linkClass}>
+                goo.gl replacement
+              </MarketingLink>
+            </li>
+            <li>
               <MarketingLink to="/pricing" className={linkClass}>
                 Pricing
               </MarketingLink>

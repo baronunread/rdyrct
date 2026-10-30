@@ -33,6 +33,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/google-url-shortener",
   "/whatsapp-qr-code",
   "/vcard-qr-code",
   "/wifi-qr-code",
@@ -135,6 +136,25 @@ Make a QR code that opens a WhatsApp chat with your number, with an optional mes
 To count scans or change the number later, make a short link to the wa.me address in rdyrct and a QR code for that.
 
 [Open the WhatsApp QR code generator](/whatsapp-qr-code)`,
+  },
+  "/google-url-shortener": {
+    title: "Google URL shortener (goo.gl) shut down: what to use now",
+    description:
+      "What happened to goo.gl: Google stopped new links in 2018 and turned off unused ones on August 25, 2025. Which links still work, and how to move yours.",
+    markdown: `# Google URL shortener (goo.gl): what happened, and what to use now
+
+You cannot make goo.gl links any more: Google stopped taking new ones in 2018. On August 1, 2025 it said links still in use would keep working, and only links with no activity in late 2024, which had shown the notice "This link will no longer work in the near future", would stop. Those stopped on August 25, 2025. Links Google's own apps make, such as Maps shares, keep working.
+
+## Move your links
+
+1. Open each goo.gl link and note where it goes.
+2. Make a new short link to the same place in rdyrct, on your own domain from $4 a month.
+3. Replace the old link on your site, profiles and documents. Make a QR code for anything printed.
+4. Watch the clicks by country, referrer and device.
+
+Sources: [Google, August 1, 2025](https://blog.google/technology/developers/googl-link-shortening-update/), [Google for Developers, July 18, 2024](https://developers.googleblog.com/en/google-url-shortener-links-will-no-longer-be-available/).
+
+[Sign up free](/signup)`,
   },
   "/branded-link-shortener": {
     title: "Branded link shortener - short links on your own domain",

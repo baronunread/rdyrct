@@ -73,6 +73,7 @@
 - [QR code generator](https://rdyrct.com/qr-code-generator)
 - [UTM builder](https://rdyrct.com/utm-builder)
 - [Branded link shortener](https://rdyrct.com/branded-link-shortener)
+- [Google URL shortener (goo.gl): what happened](https://rdyrct.com/google-url-shortener)
 - [WhatsApp QR code generator](https://rdyrct.com/whatsapp-qr-code)
 - [vCard QR code generator](https://rdyrct.com/vcard-qr-code)
 - [WiFi QR code generator](https://rdyrct.com/wifi-qr-code)
