@@ -368,6 +368,58 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
+/** A vendor's plans: the first column bold, the price in tabular figures,
+ *  what it includes muted, then the note on how the page read. */
+function PlansSection({
+  heading,
+  headers,
+  rows,
+  note,
+}: {
+  heading: string;
+  headers: string[];
+  rows: string[][];
+  note: string;
+}) {
+  return (
+    <section className="flex flex-col gap-6 pb-12">
+      <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">{heading}</h2>
+      <Table minWidth={headers.length > 3 ? "min-w-2xl" : "min-w-xl"} className={LIT_TABLE}>
+        <thead>
+          <tr>
+            {headers.map((header) => (
+              <Th key={header}>{header}</Th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.join(" ")}>
+              {row.map((cell, i) => (
+                <Td
+                  key={headers[i]}
+                  className={
+                    i === 0
+                      ? "font-bold"
+                      : headers[i] === "Price"
+                        ? "tnum whitespace-nowrap"
+                        : i === row.length - 1
+                          ? "text-muted"
+                          : undefined
+                  }
+                >
+                  {cell}
+                </Td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+      <p className="text-xs text-muted">{note}</p>
+    </section>
+  );
+}
+
 function Questions({ faq, blog }: Pick<Alternative, "faq" | "blog">) {
   return (
     <section className="mx-auto flex max-w-3xl flex-col gap-6 pb-12">
@@ -474,30 +526,12 @@ function AlternativePage({ data }: { data: Alternative }) {
         </div>
       </section>
 
-      <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          {data.name} plans
-        </h2>
-        <Table minWidth="min-w-xl" className={LIT_TABLE}>
-          <thead>
-            <tr>
-              <Th>Plan</Th>
-              <Th>Price</Th>
-              <Th>What it includes</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.plans.map(([plan, price, includes]) => (
-              <tr key={plan}>
-                <Td className="font-bold">{plan}</Td>
-                <Td className="tnum whitespace-nowrap">{price}</Td>
-                <Td className="text-muted">{includes}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-        <p className="text-xs text-muted">{data.planNote}</p>
-      </section>
+      <PlansSection
+        heading={`${data.name} plans`}
+        headers={["Plan", "Price", "What it includes"]}
+        rows={data.plans}
+        note={data.planNote}
+      />
 
       <Questions faq={data.faq} blog={data.blog} />
       <SignupBand />
@@ -677,34 +711,12 @@ function QrAlternativePage() {
         </div>
       </section>
 
-      <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Their plans</h2>
-        <Table minWidth="min-w-2xl" className={LIT_TABLE}>
-          <thead>
-            <tr>
-              <Th>Tool</Th>
-              <Th>Plan</Th>
-              <Th>Price</Th>
-              <Th>What it includes</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {QR_PLANS.map(([tool, plan, price, includes]) => (
-              <tr key={`${tool} ${plan}`}>
-                <Td className="font-bold">{tool}</Td>
-                <Td>{plan}</Td>
-                <Td className="tnum whitespace-nowrap">{price}</Td>
-                <Td className="text-muted">{includes}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-        <p className="text-xs text-muted">
-          QR Code Generator Pro's page loads its prices for your region in the browser and showed
-          none to our reader, so check them there. It quotes them before VAT. QR.io offers a 7-day
-          money-back guarantee.
-        </p>
-      </section>
+      <PlansSection
+        heading="Their plans"
+        headers={["Tool", "Plan", "Price", "What it includes"]}
+        rows={QR_PLANS}
+        note="QR Code Generator Pro's page loads its prices for your region in the browser and showed none to our reader, so check them there. It quotes them before VAT. QR.io offers a 7-day money-back guarantee."
+      />
 
       <Questions faq={QR_FAQ} />
       <SignupBand>
