@@ -123,6 +123,15 @@ jobs:
       # (.dev.vars.playwright, BUILD_ENV).
       - name: Production build, in a browser
         run: bun run e2e:production
+      - name: Upload traces and report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-production
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
 
   e2e:
     runs-on: ubuntu-latest
@@ -173,6 +182,17 @@ jobs:
       - name: Browser smoke test, full suite (shard ${{ matrix.shard }}/6)
         if: github.event_name != 'pull_request'
         run: bunx playwright test --shard=${{ matrix.shard }}/6
+      # A red run is debugged from its traces (trace: retain-on-failure) and
+      # the HTML report, which otherwise die with the runner.
+      - name: Upload traces and report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-shard-${{ matrix.shard }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
 
   observability:
     runs-on: ubuntu-latest
