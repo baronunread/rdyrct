@@ -13,16 +13,17 @@ export default defineConfig({
   fullyParallel: true,
   // Playwright defaults to half the machine's cores, which is 2 on a CI runner
   // and 4 or more on a dev machine. Every worker talks to the same single
-  // Miniflare dev server, so the extra ones only queue behind each other:
-  // tests that pass in CI time out locally, and the whole suite runs slower
-  // (1.6m at 4 workers, 1.3m at 2). Pinned so both match.
+  // `vite dev` server, which is the bottleneck: on an 8-core Mac, 4 workers
+  // took the full suite from 7.8m to 6.9m but made each test about 1.75x
+  // slower and let races through that 2 workers never hit. Pinned so a local
+  // run and a CI shard match. CI gets its speed from shards instead.
   workers: 2,
-  // Playwright's default is 30s, which was set for tests that click around a
-  // page. Nearly every test here starts by creating a real account: a Turnstile
-  // challenge, an account write, a mail send and a six-digit code
-  // read back out of the emulator. That is most of 30s before the test has
-  // begun, and it is why failures kept landing on the first assertion after
-  // sign-up rather than on anything the test was written to check.
+  // Playwright's default is 30s. Most tests start from a ready account
+  // (`signUpAndVerify`, one request), and the slowest take about 25s on an
+  // idle machine: multi-account flows like downgrade, link import, domains.
+  // A loaded machine or a dev server still compiling a route on its first
+  // request can double that, and a timeout there says nothing about the
+  // feature, so the limit leaves room for it.
   timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
