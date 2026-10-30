@@ -185,10 +185,16 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
  * The Continue button goes straight to the destination, so nothing on this
  * host can be used to skip the warning.
  */
-function serveLink(c: Context<AppEnv>, hit: KVSlugValue | null): Promise<Response> | null {
+function serveLink(
+  c: Context<AppEnv>,
+  hit: KVSlugValue | null,
+  home: string | null,
+): Promise<Response> | null {
   if (!hit || !isLive(hit)) return null;
   if (isHeld(hit))
-    return hit.disabled ? disabledPage(c.env.ASSETS, c.req.url) : heldPage(c.env.ASSETS, c.req.url);
+    return hit.disabled
+      ? disabledPage(c.env.ASSETS, c.req.url, home)
+      : heldPage(c.env.ASSETS, c.req.url);
   if (hit.warn) {
     c.executionCtx.waitUntil(
       hit.orgId ? enqueueClick(c, hit) : countAnonClick(c.env, hit.linkId, c.req.method),
@@ -250,7 +256,7 @@ async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   // Somebody who types the bare host wants to know what it is.
   if (!slug) return c.redirect(c.env.APP_URL, 302);
   if (!slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
-    const served = serveLink(c, await resolveLink(c, slug, null));
+    const served = serveLink(c, await resolveLink(c, slug, null), c.env.APP_URL);
     if (served) return served;
   }
   return notFoundPage(c.env.ASSETS, c.req.url, c.env.APP_URL);
@@ -270,7 +276,7 @@ app.use("*", async (c, next) => {
   // downgrade, because most of what reaches a dead short link is a machine,
   // and an honest 404 is the answer a machine can act on.
   if (!domainServing(domain)) return notFoundPage(c.env.ASSETS, c.req.url, null);
-  if (domain.disabled) return disabledPage(c.env.ASSETS, c.req.url);
+  if (domain.disabled) return disabledPage(c.env.ASSETS, c.req.url, null);
 
   const path = new URL(c.req.url).pathname;
   // This middleware is a dead end for a host it owns: it never calls next(),
@@ -279,7 +285,7 @@ app.use("*", async (c, next) => {
   // a miss and falls all the way through to the domain's root redirect.
   const slug = path.slice(1).replace(/\/+$/, "");
   if (slug && !slug.includes("/")) {
-    const served = serveLink(c, await resolveLink(c, slug, host));
+    const served = serveLink(c, await resolveLink(c, slug, host), null);
     if (served) return served;
   }
   // root and misses land on the org's configured root redirect
@@ -565,7 +571,7 @@ app.get("/:slug", async (c, next) => {
   // In any case: the fallback below moves /PRICING to /pricing, and 404s the
   // reserved words that are no page (/audit, /app).
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
-  const served = serveLink(c, await resolveLink(c, slug, null));
+  const served = serveLink(c, await resolveLink(c, slug, null), c.env.APP_URL);
   if (served) return served;
   // A slug nobody registered, or one that has expired, is not a page. This
   // used to fall through to the SPA under a 200, so every mistyped or retired

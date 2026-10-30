@@ -31,7 +31,7 @@ export function HeldView() {
 /** A link whose owner was banned. */
 export function DisabledView() {
   return (
-    <ShortHostFrame>
+    <ShortHostFrame madeWith>
       <StoppedHop />
       <h1 className="mt-6 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
         {DISABLED_PAGE.heading}

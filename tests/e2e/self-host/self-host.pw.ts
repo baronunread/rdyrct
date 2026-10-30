@@ -34,6 +34,15 @@ test("rdyrct.com's pages are not there", async ({ page }) => {
   }
 });
 
+test("a dead link does not advertise rdyrct", async ({ page }) => {
+  const res = await page.goto("/no-such-link-x9");
+  expect(res?.status()).toBe(404);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Nothing lives at this link." }),
+  ).toBeVisible();
+  await expect(page.getByText("Made with rdyrct")).toHaveCount(0);
+});
+
 test("nothing in the page reports to rdyrct.com or claims its address", async ({ request }) => {
   const html = await (await request.get("/login")).text();
   expect(html).not.toContain("stats.brnr.dev");
