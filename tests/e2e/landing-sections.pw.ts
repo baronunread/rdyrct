@@ -105,7 +105,9 @@ test("the cards play while they are on screen", async ({ page }) => {
   const scene = await linkScene(page);
   const first = await scene.getAttribute("data-step");
   expect(first).not.toBeNull();
-  await expect(scene).not.toHaveAttribute("data-step", first!, { timeout: 2_000 });
+  // The first change comes one step (700ms) after the card hydrates and is
+  // half on screen; on the dev server that took about 1.5s.
+  await expect(scene).not.toHaveAttribute("data-step", first!, { timeout: 5_000 });
 });
 
 test("under reduced motion the cards hold their finished state", async ({ page }) => {
