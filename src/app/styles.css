@@ -290,6 +290,35 @@
   }
 }
 
+/* A chart whose range changed: the old one has nothing to morph into (hours
+   and days share no points), so the new one fades in over it. */
+@keyframes chart-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chart-in {
+    animation: chart-in 200ms ease-out;
+  }
+}
+
+/* A row whose words and buttons change in place (the QR defaults save row):
+   the new ones fade in where the old ones were, nothing moves. */
+@keyframes swap-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .swap-in {
+    animation: swap-in 150ms ease-out;
+  }
+}
+
 @keyframes shake {
   0%,
   100% {
@@ -388,6 +417,65 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* The app on a desktop scrolls inside its sheet (lib/sidebar.ts,
+   shellLayout), so the page itself neither scrolls nor keeps a gutter for a
+   scrollbar it will never show. */
+@media (min-width: 48rem) {
+  html:has([data-app-sheet]) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+}
+
+/* While the cookie banner is up it sits over the sheet's bottom right
+   corner, where a page's last button usually is (Delete account, Save).
+   The sheet gets that much more room to scroll, so nothing ends up out of
+   reach underneath it. */
+@media (min-width: 48rem) {
+  html:has([data-consent-banner]) [data-app-sheet] {
+    padding-bottom: 11rem;
+    scroll-padding-bottom: 11rem;
+  }
+}
+
+/* Where a scrollbar takes room (Windows, Linux), a thin one in the muted
+   ink, with no arrows: the default grey block reads as a second frame. */
+[data-app-sheet] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
+}
+
+/* A sideways-scrolling row with more behind an edge fades that edge
+   (ui/scroll-fade.ts), so a row cut off by a narrow window shows there is
+   more. */
+[data-fade="right"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+[data-fade="left"] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+[data-fade="both"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+}
+
+/* The sheet keeps room for its scrollbar whether or not it has one, on both
+   sides so the page stays centred: where a scrollbar takes width (Windows,
+   Linux), a page growing past the window (the dashboard as its data lands)
+   otherwise jumped left. The track is transparent, so the room does not
+   show. Desktop only: on a phone the page scrolls, and the html rule above
+   keeps its gutter. */
+@media (min-width: 48rem) {
+  [data-app-sheet] {
+    scrollbar-gutter: stable both-edges;
+  }
+}
+
 /* Marketing-to-marketing navigation (the viewTransition Links in
    landing-header.tsx and friends) cross-fades through a view transition, not
    a CSS transition: a view transition fades two snapshots on the
@@ -430,6 +518,150 @@ html {
 
 [data-marketing-pill] {
   view-transition-name: marketing-header;
+}
+
+/* App page to app page (APP_PAGE_TRANSITION in main.tsx): only what is in
+   the sheet crossfades. The window itself swaps with no animation, so the
+   sidebar and the sheet's frame never move. Named only for the length of an
+   `app-page` transition, so nothing else captures them.
+
+   The sheet's scroller is the part that fades, not the page inside it: on a
+   desktop it is a scroll box, so its snapshot is the visible part only, and
+   a page scrolled down does not spill over the paper around the sheet. On a
+   phone the bar and the drawer, which sit over the page, are named too, so
+   they stay above the fading page instead of under it. */
+html:active-view-transition-type(app-page) {
+  [data-app-sheet] {
+    view-transition-name: app-page;
+  }
+  [data-app-bar] {
+    view-transition-name: app-bar;
+  }
+  [data-app-drawer] {
+    view-transition-name: app-drawer;
+  }
+  &::view-transition-old(root),
+  &::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+::view-transition-group(app-page),
+::view-transition-group(app-bar),
+::view-transition-old(app-bar),
+::view-transition-new(app-bar),
+::view-transition-group(app-drawer),
+::view-transition-new(app-drawer) {
+  animation: none;
+}
+
+/* The drawer closes with its own animation, which plays on in the live new
+   image; the frozen old one would show an open drawer under it. */
+::view-transition-old(app-drawer) {
+  animation: none;
+  opacity: 0;
+}
+
+/* Same length and curve both ways, so whatever the two pages share (the
+   banner over them, a header in the same place) holds steady as one fades
+   into the other. The new page rises 4px into place. */
+::view-transition-old(app-page) {
+  animation: 160ms ease-out both app-page-out;
+}
+
+::view-transition-new(app-page) {
+  animation: 160ms ease-out both app-page-in;
+}
+
+@keyframes app-page-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes app-page-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+/* Links to one link's page and back (lib/link-morph.ts, page-transition.ts):
+   the link's QR code, title and address travel between its row and the page
+   header. The page around them waits: the old one leaves quickly and the new
+   one arrives once the parts have mostly landed, so nothing crosses them in
+   flight. Words fade between their two sizes rather than stretching. */
+html:active-view-transition-type(link-morph) {
+  [data-morph="qr"] {
+    view-transition-name: link-qr;
+  }
+  [data-morph="title"] {
+    view-transition-name: link-title;
+  }
+  [data-morph="addr"] {
+    view-transition-name: link-addr;
+  }
+  &::view-transition-old(app-page) {
+    animation-duration: 100ms;
+  }
+  &::view-transition-new(app-page) {
+    animation-delay: 180ms;
+    animation-duration: 180ms;
+  }
+}
+
+::view-transition-group(link-qr),
+::view-transition-group(link-title),
+::view-transition-group(link-addr) {
+  animation-duration: 340ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+::view-transition-old(link-title),
+::view-transition-old(link-addr) {
+  animation: 120ms ease-out both app-page-out;
+}
+
+::view-transition-new(link-title),
+::view-transition-new(link-addr) {
+  animation: 240ms ease-out both link-part-in;
+}
+
+@keyframes link-part-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* One Platform tab to another: the title and the tab bar hold still (the
+   underline slides in the live new image) and only the tab's content
+   crossfades. The old image is hidden so the two underlines never show. */
+html:active-view-transition-type(platform) [data-platform-head] {
+  view-transition-name: platform-head;
+}
+
+::view-transition-group(platform-head),
+::view-transition-new(platform-head) {
+  animation: none;
+}
+
+::view-transition-old(platform-head) {
+  animation: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(app-page),
+  ::view-transition-new(app-page),
+  ::view-transition-group(link-qr),
+  ::view-transition-group(link-title),
+  ::view-transition-group(link-addr),
+  ::view-transition-old(link-title),
+  ::view-transition-new(link-title),
+  ::view-transition-old(link-addr),
+  ::view-transition-new(link-addr) {
+    animation: none;
+  }
 }
 
 body {
@@ -477,6 +709,117 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The links table's aliases as tree rows (components/alias-thread.tsx).
+   Desktop: the line grows out of the parent's checkbox (its centre is 28px
+   into the cell), runs down the checkbox column and turns into each alias
+   with a rounded elbow; each slug starts where the parent's title does.
+   Phone, with no checkbox column: the line hangs from the title's left edge
+   inside the link cell. The group sits on a faint tint, a hairline parts
+   one alias from the next starting where the slug starts (so it never
+   crosses the line), and a row lights up on hover. */
+.alias-row {
+  --alias-line: var(--border);
+  --alias-hairline: color-mix(in oklab, var(--border) 55%, transparent);
+  --alias-x: 28px;
+  --alias-pad: 16px;
+}
+.alias-parent > td,
+.alias-row > td {
+  border-bottom-width: 0;
+}
+.alias-row-last > td {
+  border-bottom-width: 1px;
+}
+.alias-row > td {
+  background-color: color-mix(in oklab, var(--surface-2) 40%, transparent);
+}
+@media (hover: hover) {
+  .alias-row:hover > td {
+    background-color: color-mix(in oklab, var(--surface-2) 85%, transparent);
+  }
+}
+.alias-row + .alias-row > td:not(.alias-tree-check, .alias-tree-link) {
+  box-shadow: inset 0 1px 0 var(--alias-hairline);
+}
+.alias-row + .alias-row > td.alias-tree-link {
+  background-image: linear-gradient(var(--alias-hairline), var(--alias-hairline));
+  background-size: calc(100% - var(--alias-pad)) 1px;
+  background-position: right top;
+  background-repeat: no-repeat;
+}
+.alias-tree-check,
+.alias-tree-link,
+.alias-parent > td:first-child {
+  position: relative;
+}
+.alias-tree-link {
+  padding-left: var(--alias-pad);
+}
+.alias-tree-check::before,
+.alias-tree-check::after,
+.alias-tree-link::before,
+.alias-tree-link::after,
+.alias-parent > td:first-child::after {
+  position: absolute;
+  pointer-events: none;
+}
+@media (min-width: 40rem) {
+  .alias-parent > td:first-child::after {
+    content: "";
+    left: 28px;
+    top: calc(50% + 12px);
+    bottom: 0;
+    border-left: 1px solid var(--border);
+  }
+  .alias-tree-check::before {
+    content: "";
+    left: var(--alias-x);
+    top: 0;
+    height: 50%;
+    width: calc(100% - var(--alias-x));
+    border-left: 1px solid var(--alias-line);
+    border-bottom: 1px solid var(--alias-line);
+    border-bottom-left-radius: 7px;
+  }
+  .alias-row:not(.alias-row-last) > .alias-tree-check::after {
+    content: "";
+    left: var(--alias-x);
+    top: 50%;
+    bottom: 0;
+    border-left: 1px solid var(--alias-line);
+  }
+  .alias-tree-link::before {
+    content: "";
+    left: 0;
+    top: 50%;
+    width: 10px;
+    border-top: 1px solid var(--alias-line);
+  }
+}
+@media (max-width: 39.99rem) {
+  .alias-row {
+    --alias-x: 14px;
+    --alias-pad: 38px;
+  }
+  .alias-tree-link::before {
+    content: "";
+    left: var(--alias-x);
+    top: 0;
+    height: 50%;
+    width: 16px;
+    border-left: 1px solid var(--alias-line);
+    border-bottom: 1px solid var(--alias-line);
+    border-bottom-left-radius: 7px;
+  }
+  .alias-row:not(.alias-row-last) > .alias-tree-link::after {
+    content: "";
+    left: var(--alias-x);
+    top: 50%;
+    bottom: 0;
+    border-left: 1px solid var(--alias-line);
+  }
+}
+
 /* Toasts share one grid cell (true overlap, not just visual stacking) so a
    collapsed toast can sit exactly behind the one in front of it. Collapsed
    position/scale/opacity are index-based (a fixed per-slot look, matching
@@ -485,7 +828,7 @@ body {
 .toast-stack {
   left: 50%;
   display: grid;
-  width: min(22rem, calc(100vw - 2rem));
+  width: min(26.25rem, calc(100vw - 1.5rem));
   min-height: 2.75rem;
   transform: translateX(-50%);
   pointer-events: none;
@@ -537,10 +880,12 @@ body {
   display: none;
 }
 
+/* 0.75rem from the top: centred on a one-line toast (44px tall, a 20px
+   button), and level with the first line of a toast with a second one. */
 .rdyrct-toast-close {
   position: absolute;
-  top: 0.55rem;
-  right: 0.55rem;
+  top: 0.75rem;
+  right: 0.75rem;
   display: grid;
   width: 1.25rem;
   height: 1.25rem;
@@ -717,4 +1062,41 @@ body {
   html {
     scroll-behavior: smooth;
   }
+}
+
+/* The colour picker in a colour chip's popover (ui/color-chips.tsx), on
+   react-colorful: a rounded square, a slim hue strip under it, and small
+   ringed handles, instead of the library's chunky defaults. */
+.rdyrct-color-picker .react-colorful {
+  width: 100%;
+  height: 168px;
+  gap: 10px;
+}
+.rdyrct-color-picker .react-colorful__saturation {
+  border-radius: 10px;
+  border-bottom: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text) 12%, transparent);
+}
+.rdyrct-color-picker .react-colorful__hue {
+  flex: none;
+  height: 12px;
+  border-radius: 999px;
+}
+.rdyrct-color-picker .react-colorful__last-control {
+  border-radius: 999px;
+}
+.rdyrct-color-picker .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.25),
+    0 1px 3px rgb(0 0 0 / 0.35);
+}
+.rdyrct-color-picker .react-colorful__hue-pointer {
+  width: 14px;
+  height: 14px;
+}
+.rdyrct-color-picker .react-colorful__interactive:focus .react-colorful__pointer {
+  transform: translate(-50%, -50%) scale(1.15);
 }

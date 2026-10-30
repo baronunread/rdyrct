@@ -23,7 +23,8 @@ import { cn } from "../ui/cn";
 import { OrgMenuItems } from "./org-menu-items";
 import { HERO_CARD, HeroBar, HeroFooter, MadeLinkPanel } from "./hero-link-bar";
 import { useCurrentOrg } from "../lib/current-org";
-import { useCurrentUser, useLinkMutations, useStats } from "../lib/hooks";
+import { useCurrentUser, useLinkMutations } from "../lib/hooks";
+import { useInsightStats } from "../lib/insights-data";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
@@ -42,7 +43,7 @@ function NoOrgYet() {
     <div className={cn(HERO_CARD, "flex flex-col gap-3 p-5")}>
       <p className="text-sm">You are signed in, but you have no organization yet.</p>
       <p className="text-xs text-muted">
-        Links live in an organization. Making one takes a name and nothing else.
+        Links belong to an organization. To make one, you only need a name.
       </p>
       <Link
         to="/dashboard"
@@ -128,7 +129,7 @@ const clicksThisWeek = (n: number) =>
 
 /** "Welcome back, Mara · 577 clicks this week": the line before a link. */
 function WeekLine({ name, orgId }: { name: string; orgId: string }) {
-  const { data } = useStats(orgId);
+  const { data } = useInsightStats(orgId);
   // The name arrives with the /user query, and the card can render before it
   // does: the signed-in hint comes from storage. Without the guard that first
   // paint reads "Welcome back, ."
@@ -164,7 +165,7 @@ function Made({ link, existing, orgName }: { link: LinkDTO; existing: boolean; o
         }
       />
       <HeroFooter ruled action={<DashboardLink>Open in dashboard</DashboardLink>}>
-        Saved to {orgName}, kept for good.
+        Saved to {orgName}.
       </HeroFooter>
     </>
   );
@@ -229,7 +230,7 @@ function QuickBar({
   again: boolean;
 }) {
   const { limits } = useOrgLimits();
-  const { data: stats } = useStats(orgId);
+  const { data: stats } = useInsightStats(orgId);
   const atLimit = atLinkLimit(stats?.totalLinks, limits.links);
   const { ref, ...field } = form.register("destination");
   return (

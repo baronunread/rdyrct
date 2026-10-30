@@ -17,10 +17,11 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
 
   await setPlan(page, email);
   const hostname = await addCustomDomain(page, `links-${Date.now()}.example.com`);
-  await expect(page.getByText(hostname, { exact: true })).toBeVisible();
+  // The row names the host first; its DNS records repeat it below.
+  await expect(page.getByText(hostname, { exact: true }).first()).toBeVisible();
 
   await page.goto("/links");
-  await page.getByRole("button", { name: "New link" }).click();
+  await page.getByRole("button", { name: "New link" }).first().click();
   const editor = page.getByRole("dialog", { name: "New link" });
   await editor.getByPlaceholder("https://example.com/launch").fill("example.com/editor");
   await editor.getByPlaceholder("Spring launch").fill("Editor link");
@@ -28,9 +29,20 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page.getByText("Editor link")).toBeVisible();
 
   await page.goto("/members");
-  await page.getByPlaceholder("teammate@company.com").fill(`invitee-${Date.now()}@gmail.com`);
-  await page.getByRole("button", { name: "Send invite" }).click();
-  await expect(page.getByText("Invite sent")).toBeVisible();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = page.getByRole("dialog", { name: "Invite people" });
+  // Several addresses at once: each one turns into a chip as it is ended.
+  const invitees = [`invitee-a-${Date.now()}@gmail.com`, `invitee-b-${Date.now()}@gmail.com`];
+  await invite.getByLabel("Emails").fill(`${invitees[0]}, `);
+  await invite.getByLabel("Emails").pressSequentially(invitees[1]);
+  await expect(invite.getByRole("button", { name: `Remove ${invitees[0]}` })).toBeVisible();
+  await invite.getByRole("button", { name: "Send 2 invites" }).click();
+  await expect(page.getByText("2 invites sent")).toBeVisible();
+  // Both wait in the same table as the people they will become.
+  for (const address of invitees)
+    await expect(page.locator("tbody tr").filter({ hasText: address })).toContainText(
+      "Invite sent",
+    );
 
   await page.goto("/settings");
 
@@ -49,13 +61,21 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   );
   const rootEl = page.locator("html");
   const themeBefore = await rootEl.getAttribute("data-theme");
-  await page.getByRole("switch", { name: "Dark mode" }).click();
+  await page
+    .getByRole("group", { name: "Theme" })
+    .getByRole("button", { name: themeBefore === "dark" ? "Light" : "Dark" })
+    .click();
   await expect(rootEl).not.toHaveAttribute("data-theme", themeBefore ?? "");
 
   // Organization settings live on their own page now.
   await page.goto("/organization");
   await page.getByLabel("Organization name").fill("Playwright Org Renamed");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // The QR defaults card has a Save of its own further down.
+  await page
+    .locator("form")
+    .filter({ has: page.getByLabel("Organization name") })
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
 
   // The theme item in the account menu toggles without closing the menu.
@@ -115,10 +135,10 @@ test("a signed-in visitor makes a real link from the hero, not an anonymous one"
   await destination.fill("https://example.com/hero-quick-create");
   await page.getByRole("button", { name: "Shorten it" }).click();
   // The same panel the anonymous card opens: the link to copy, its QR, and
-  // a footer that says this one is kept.
+  // a footer that says which organization it was saved to.
   await expect(page.getByRole("link", { name: "Your short link" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Copy https?:\/\// })).toBeVisible();
-  await expect(page.getByText(/kept for good/)).toBeVisible();
+  await expect(page.getByText(/^Saved to /)).toBeVisible();
   await expect(destination).toHaveValue("");
 
   await destination.fill("https://example.com/hero-quick-create");

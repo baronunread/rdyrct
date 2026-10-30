@@ -24,9 +24,11 @@
  */
 import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
 import { oneOf } from "../shared/lookup";
+import { LINK_FILTERS, type LinkFacets, type LinkFilter } from "../shared/types";
 import * as v from "valibot";
 import * as schema from "./db/schema";
-import { linkClicksTotal } from "./rollups";
+import type { DB } from "./env";
+import { computeWindows, linkClicksTotal } from "./rollups";
 
 const LINK_SORTS = ["created", "slug", "clicks"] as const;
 type LinkSort = (typeof LINK_SORTS)[number];
@@ -46,6 +48,8 @@ export interface LinkPageParams {
   q: string;
   /** "" for every domain, "shared" for the default host, else a hostname. */
   domain: string;
+  /** Which chip is picked above the table. */
+  filter: LinkFilter;
 }
 
 /**
@@ -68,7 +72,126 @@ export function readLinkPageParams(url: URL): LinkPageParams {
     cursor: decodeCursor(url.searchParams.get("cursor")),
     q: (url.searchParams.get("q") ?? "").trim(),
     domain: (url.searchParams.get("domain") ?? "").trim(),
+    filter: oneOf(LINK_FILTERS, url.searchParams.get("filter") ?? "", "all"),
   };
+}
+
+/* ---------------- the chips: one definition for count and filter ---------------- */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A link with a drop in clicks worth saying needs this many clicks in the
+ * week before, so that half of them going is not noise. */
+const DROP_FLOOR = 10;
+
+// Literal `links.` and `click_daily.` columns throughout: these run as
+// correlated subqueries, where an interpolated drizzle column renders
+// unqualified and SQLite binds it to the subquery's own table.
+
+/** The link's QR code has an override of its own. */
+const hasQrSql = sql`(links.qr_logo <> '' or links.qr_style <> '' or links.qr_color <> ''
+  or links.qr_corner <> '' or links.qr_bg <> '' or links.qr_eye_color <> ''
+  or links.qr_logo_size is not null)`;
+
+const customDomainSql = sql`(links.domain_id is not null)`;
+
+/**
+ * A link needs attention when it is paused, shows a warning, has gone a week
+ * without a click after its first week, or its last 7 days fell under half
+ * of the 7 before (from at least DROP_FLOOR). The "Needs attention" count and
+ * filter both read this, and `attentionNote` below says the same thing in
+ * words for one row. Weeks are whole UTC days, as on the stats pages.
+ */
+function attentionSql(now: number): SQL {
+  const { since7, prev7Since } = computeWindows(7, now);
+  const before = sql`coalesce(sum(case when click_daily.day < ${since7} then click_daily.clicks end), 0)`;
+  const after = sql`coalesce(sum(case when click_daily.day >= ${since7} then click_daily.clicks end), 0)`;
+  return sql`(links.suspended_at is not null
+    or links.warned_at is not null
+    or (links.created_at < ${now - 7 * DAY_MS} and not exists (
+      select 1 from click_daily where click_daily.link_id = links.id and click_daily.day >= ${since7}))
+    or exists (
+      select 1 from click_daily where click_daily.link_id = links.id and click_daily.day >= ${prev7Since}
+      group by click_daily.link_id having ${before} >= ${DROP_FLOOR} and 2 * ${after} < ${before}))`;
+}
+
+function chipSql(filter: LinkFilter, now: number): SQL | undefined {
+  if (filter === "attention") return attentionSql(now);
+  if (filter === "qr") return hasQrSql;
+  if (filter === "custom") return customDomainSql;
+  return undefined;
+}
+
+const countWhere = (cond: SQL) =>
+  sql<number>`coalesce(sum(case when ${cond} then 1 else 0 end), 0)`;
+
+/** The count beside each chip, over the org's whole list. */
+export async function linkFacets(db: DB, orgId: string, now = Date.now()): Promise<LinkFacets> {
+  const [row] = await db
+    .select({
+      all: sql<number>`count(*)`,
+      attention: countWhere(attentionSql(now)),
+      qr: countWhere(hasQrSql),
+      customDomain: countWhere(customDomainSql),
+    })
+    .from(schema.links)
+    .where(eq(schema.links.orgId, orgId));
+  return row ?? { all: 0, attention: 0, qr: 0, customDomain: 0 };
+}
+
+/** Days read per row: two weeks, so "needs attention" can compare this week
+ * with the one before. */
+const SPARK_DAYS = 14;
+
+/** Days a row's sparkline shows: one week, on every plan. The free plan's
+ * analytics window is 7 days, and the table must not show more than the
+ * plan's own charts do. */
+export const SPARK_SHOWN = 7;
+
+/** The first UTC day a sparkline covers. */
+export const sparkSince = (now = Date.now()) => computeWindows(SPARK_DAYS, now).since;
+
+/**
+ * Each link's 14 daily counts, oldest first and zero-filled, out of the
+ * rollup rows `sparkRows` read for the page.
+ */
+export function sparkLines(
+  rows: { linkId: string; day: string; clicks: number }[],
+  now = Date.now(),
+): (linkId: string) => number[] {
+  const first = Date.parse(`${sparkSince(now)}T00:00:00Z`);
+  const empty = () => Array.from({ length: SPARK_DAYS }, () => 0);
+  const byLink = new Map<string, number[]>();
+  for (const r of rows) {
+    const i = Math.round((Date.parse(`${r.day}T00:00:00Z`) - first) / DAY_MS);
+    if (i < 0 || i >= SPARK_DAYS) continue;
+    const line = byLink.get(r.linkId) ?? empty();
+    line[i] = r.clicks;
+    byLink.set(r.linkId, line);
+  }
+  return (linkId) => byLink.get(linkId) ?? empty();
+}
+
+/**
+ * Why one listed link needs attention, in words, or null when it does not:
+ * the rule in `attentionSql`, read off the row and its 14-day series. A
+ * paused link says nothing here, because the table's "paused" badge already
+ * says it.
+ */
+export function attentionNote(
+  link: { warnedAt: number | null; createdAt: number },
+  spark: number[],
+  clicks: number,
+  now = Date.now(),
+): string | null {
+  if (link.warnedAt !== null) return "Visitors see a warning";
+  const before = spark.slice(0, 7).reduce((a, b) => a + b, 0);
+  const after = spark.slice(7).reduce((a, b) => a + b, 0);
+  if (after === 0 && link.createdAt < now - 7 * DAY_MS)
+    return clicks === 0 ? "No clicks yet" : "No clicks in 7 days";
+  if (before >= DROP_FLOOR && 2 * after < before)
+    return `${Math.round((1 - after / before) * 100)}% fewer clicks`;
+  return null;
 }
 
 /**
@@ -149,11 +272,16 @@ function filters(params: LinkPageParams): (SQL | undefined)[] {
 
 /** Everything the list query needs beyond its columns: what to keep, where to
  * resume, and in what order. */
-export function linkPageQuery(orgId: string, params: LinkPageParams) {
+export function linkPageQuery(orgId: string, params: LinkPageParams, now = Date.now()) {
   const value = sortExpr(params.sort);
   const direction = params.dir === -1 ? sql`desc` : sql`asc`;
   return {
-    where: and(eq(schema.links.orgId, orgId), ...filters(params), afterCursor(params)),
+    where: and(
+      eq(schema.links.orgId, orgId),
+      ...filters(params),
+      chipSql(params.filter, now),
+      afterCursor(params),
+    ),
     // The id repeats the direction so the tiebreaker matches the comparison
     // the cursor makes.
     orderBy: sql`${value} ${direction}, ${schema.links.id} ${direction}`,

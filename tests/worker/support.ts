@@ -26,7 +26,7 @@ const SPA_SHELL = `<!doctype html><html><head><title>rdyrct - branded short link
 
 /** What `bun run build` writes to 404-short.html (scripts/prerender-404.tsx),
  * cut down to the parts the Worker reads: the marker and the link. */
-const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><h1>Nothing lives at this link.</h1><p><a href="/">Go home</a></p></div></body></html>`;
+const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><h1>No link at this address.</h1><p><a href="/">Go home</a></p></div></body></html>`;
 
 // The worker reaches this binding through serveSpa's `c.env.ASSETS.fetch`
 // in src/worker/index.ts, and for the short-host 404. `connect` is here because
@@ -135,6 +135,16 @@ export const unreachableBilling: BillingProvider = {
   checkouts: { create: noPolar, get: noPolar },
   customerSessions: { create: noPolar },
   subscriptions: { revoke: noPolar, list: noPolar },
+  customerPortal: {
+    customers: { get: noPolar, listPaymentMethods: noPolar },
+    orders: {
+      list: noPolar,
+      get: noPolar,
+      invoice: noPolar,
+      generateInvoice: noPolar,
+      receipt: noPolar,
+    },
+  },
 };
 
 export const testEnv: Env = {
@@ -305,24 +315,32 @@ export interface CapturedEmail {
 export function captureEmails({
   mx,
   hold,
-}: { mx?: "deliverable" | "unroutable"; hold?: Promise<void> } = {}) {
+  refuse,
+}: {
+  mx?: "deliverable" | "unroutable";
+  hold?: Promise<void>;
+  /** Addresses Resend answers with a 500, as an outage or a bounce would. */
+  refuse?: string[];
+} = {}) {
   const sent: CapturedEmail[] = [];
   let started = false;
   const original = globalThis.fetch;
+  const resend = async (init?: RequestInit) => {
+    started = true;
+    // SAFETY: the only caller of this branch is sendEmail(), which posts a
+    // JSON body of exactly these four fields to Resend.
+    const email = JSON.parse(String(init?.body ?? "{}")) as CapturedEmail;
+    if (refuse?.includes(email.to)) return new Response("down", { status: 500 });
+    sent.push(email);
+    if (hold) await hold;
+    return Response.json({ id: "sent" });
+  };
+  const dns = () =>
+    Response.json({ Status: 0, Answer: mx === "deliverable" ? [{ data: "10 mx.example." }] : [] });
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/emails")) {
-      started = true;
-      // SAFETY: the only caller of this branch is sendEmail(), which posts a
-      // JSON body of exactly these four fields to Resend.
-      sent.push(JSON.parse(String(init?.body ?? "{}")) as CapturedEmail);
-      if (hold) await hold;
-      return Response.json({ id: "sent" });
-    }
-    if (mx && url.includes("cloudflare-dns.com")) {
-      const Answer = mx === "deliverable" ? [{ data: "10 mx.example." }] : [];
-      return Response.json({ Status: 0, Answer });
-    }
+    if (url.includes("/emails")) return resend(init);
+    if (mx && url.includes("cloudflare-dns.com")) return dns();
     return original(input, init);
   };
   return { sent, started: () => started, restore: () => (globalThis.fetch = original) };

@@ -282,6 +282,13 @@ export interface MemberDTO {
    * their old role back.
    */
   demoted: boolean;
+  /** Epoch ms of the member's newest session activity, or null when they
+   * have no session left (never signed in, or signed out everywhere). */
+  lastActiveAt: number | null;
+  /** The member's picture, served through this org
+   * (`/api/orgs/:orgId/members/:userId/avatar`), or null when they have none.
+   * The org's members route always sends it; the admin org view does not. */
+  image?: string | null;
 }
 
 export interface InviteDTO {
@@ -291,6 +298,14 @@ export interface InviteDTO {
   email: string | null;
   createdAt: number;
   expiresAt: number;
+}
+
+/** What POST /orgs/:id/invites answers. `failed` lists the addresses whose
+ * email did not go out; their invites exist, and asking again resends the
+ * same ones. */
+export interface InvitesCreated {
+  invites: InviteDTO[];
+  failed: string[];
 }
 
 export interface DomainDTO {
@@ -380,6 +395,30 @@ export interface LinkDTO extends QrOverrides {
   suspendedAt: number | null;
 }
 
+/** The chips above the links table, as `filter=` on the list route. */
+export const LINK_FILTERS = ["all", "attention", "qr", "custom"] as const;
+export type LinkFilter = (typeof LINK_FILTERS)[number];
+
+/** How many of an org's links each chip holds (GET /orgs/:orgId/links/facets).
+ * Counted over the whole org: search and the domain picker do not narrow them. */
+export interface LinkFacets {
+  all: number;
+  /** Paused, warned, quiet for a week, or down by half: see links-page.ts. */
+  attention: number;
+  /** Links whose QR code has an override of its own. */
+  qr: number;
+  customDomain: number;
+}
+
+/** One row of the links list: the link, plus the two things only the list
+ * needs. */
+export interface LinkListItem extends LinkDTO {
+  /** Clicks per UTC day for the last 7 days, oldest first, today last. */
+  spark: number[];
+  /** Why the link needs a look ("82% fewer clicks"), or null when it is fine. */
+  attention: string | null;
+}
+
 /** One address (primary or alias) a link answers to. See #38. */
 export interface AddressDTO {
   id: string;
@@ -436,6 +475,15 @@ export interface DeltaValue {
   pct: number | null;
 }
 
+/** A link as the stats lists name it. `domain` is the custom hostname, or
+ * null on the shared domain: with the slug it is the link's address. */
+export interface StatsLinkRef {
+  id: string;
+  slug: string;
+  title: string;
+  domain: string | null;
+}
+
 export interface OrgStats {
   totalClicks: number;
   totalLinks: number;
@@ -448,14 +496,18 @@ export interface OrgStats {
   hourSeries: SeriesPoint[];
   totalClicksDelta: DeltaValue | null;
   clicks7dDelta: DeltaValue | null;
-  topLinks: { id: string; slug: string; title: string; clicks: number }[];
+  /** The most-clicked links in the range. */
+  topLinks: (StatsLinkRef & { clicks: number })[];
+  /** Whether any link in the org has a click on record, in any range. The
+   * empty Analytics page rests on this, not on the range's own lists. */
+  everClicked: boolean;
   countries: TopEntry[];
   referrers: TopEntry[];
   devices: TopEntry[];
   /** Links with zero clicks in the last 30 days. */
-  deadLinks: { id: string; slug: string; title: string }[];
+  deadLinks: StatsLinkRef[];
   /** Links whose last-7d clicks dropped more than 50% vs the prior 7d. */
-  decayingLinks: { id: string; slug: string; title: string; drop: number }[];
+  decayingLinks: (StatsLinkRef & { drop: number })[];
   /** Day-of-week × hour-of-day heatmap over the window. */
   heatmap: HeatmapRow[];
   /** Clicks grouped by utm_campaign (non-empty only). */
@@ -464,6 +516,13 @@ export interface OrgStats {
   sources: { source: string; clicks: number }[];
   /** Clicks grouped by utm_medium (non-empty only). */
   mediums: { medium: string; clicks: number }[];
+  /** Distinct links with at least one click in the range. */
+  linksClicked: number;
+  /** The same count for the equal range before it. */
+  linksClickedDelta: DeltaValue | null;
+  /** Distinct countries in the range, the ones the edge could not place
+   * left out. */
+  countryCount: number;
 }
 
 export interface HeatmapRow {
@@ -505,6 +564,12 @@ export interface LinkStats {
   createdAt: number;
   lastClick: number | null;
   createdBy: string | null;
+  /** Distinct countries in the range, the ones the edge could not place
+   * left out. */
+  countryCount: number;
+  /** This link's clicks in the range by utm_campaign: one row when the link
+   * carries a campaign tag and has clicks, none otherwise. */
+  campaigns: { campaign: string; clicks: number }[];
 }
 
 export interface AdminUsage {
@@ -515,9 +580,17 @@ export interface AdminUsage {
   clicks7d: number;
   /** People holding a paid plan who actually pay: comped users are excluded. */
   payingUsers: number;
+  /** The range, in days, that `series` and everything said to share its
+   * window cover: 7, 30 or 90, from `?days=`. */
+  days: number;
   series: SeriesPoint[];
   /** New accounts per day, same window as `series`. */
   signups: SeriesPoint[];
+  /** New links per day, same window as `series`. Links deleted since are
+   * not counted: nothing records them once they are gone. */
+  linkSeries: SeriesPoint[];
+  /** Sign-ups in the range, by the plan each account holds today. */
+  signupsByPlan: { free: number; hobby: number; pro: number };
   /** Most-clicked orgs/links over the same window as `series`. */
   topOrgs: { id: string; name: string; clicks: number; plan: OrgPlan }[];
   topLinks: {
@@ -581,6 +654,19 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
+  /** Clicks in the last 30 days (today and the 29 before it). */
+  clicks30d: number;
+  /** Over its plan right now: its `org_entitlements` row names a resource
+   * over cap. */
+  overPlan: boolean;
+  /** When the grace period for being over its plan ends (ms epoch), or null
+   * when it is not over. */
+  graceEndsAt: number | null;
+  /** Read-only after a downgrade (`orgs.locked_at`), or null. */
+  lockedAt: number | null;
+  /** When one of its custom domains stopped serving, being locked past the
+   * grace period, or null. */
+  domainStoppedAt: number | null;
   ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
@@ -710,13 +796,67 @@ export interface AdminUserRow {
   compGrantedBy: string | null;
   createdAt: number;
   orgCount: number;
+  /** Links this person made, across every org. */
+  links: number;
+  /** Their uploaded picture, served to admins, or null for the generated one. */
+  image: string | null;
   /** Last session activity (ms epoch), null if never signed in. */
   lastSeen: number | null;
+}
+
+/** How many links each filter of the admin list holds, under the same
+ * search and org as the list. */
+export interface AdminLinkCounts {
+  all: number;
+  reported: number;
+  flagged: number;
+  suspended: number;
+  warned: number;
 }
 
 export interface InvitePreview {
   orgName: string;
   role: OrgRole;
+  /** The name of whoever made the invite, or null when that account is gone. */
+  invitedBy: string | null;
 }
 
 export type Sort = { key: string; dir: 1 | -1 };
+
+/**
+ * The signed-in user's card and invoices, as `GET /api/billing/details`
+ * answers them from Polar. Empty (no card, no invoices) for anybody Polar
+ * has no customer for: free, comped, or a copy that sells nothing.
+ */
+export interface BillingDetails {
+  /** The default card on file, or null with none. */
+  card: PaymentCard | null;
+  /** Newest first. */
+  invoices: Invoice[];
+}
+
+export interface PaymentCard {
+  /** "visa", "mastercard", "amex"… as Polar names it. */
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+export interface Invoice {
+  /** Polar's order id. */
+  id: string;
+  /** Epoch ms. */
+  date: number;
+  /** The plan the order paid for, or null for a product this copy does not map. */
+  plan: (typeof COMP_PLANS)[number] | null;
+  /** What was charged, tax included. */
+  amountCents: number;
+  /** ISO 4217, "usd". */
+  currency: string;
+  /** "credit": a negative order, what a plan change gave back. */
+  status: "paid" | "open" | "refunded" | "credit";
+  /** `/api/billing/invoices/<id>`, which redirects to the PDF; null while
+   * there is nothing to download (an open order). */
+  pdfUrl: string | null;
+}

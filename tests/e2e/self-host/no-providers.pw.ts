@@ -7,7 +7,8 @@ import { submitSignup } from "../resend";
 // worker tests (no-email-signup, no-polar) only see the API side of it.
 
 const password = "self-host-password-123";
-const NOT_FOUND = "Nothing lives at this link.";
+// Signed in, so the in-app 404: the sidebar stays.
+const NOT_FOUND = "This page does not exist";
 
 /** Signs up and lands on the dashboard: with no email provider there is no
  *  code to wait for, so the account is signed in straight away. */
@@ -21,13 +22,13 @@ async function signUp(page: Page, email: string) {
 
 test("sign-up lands signed in, with no code step", async ({ page }) => {
   await signUp(page, `selfhost-signup-${Date.now()}@example.com`);
-  await expect(page.getByRole("heading", { name: "Enter your code" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Check your email" })).toHaveCount(0);
 });
 
 test("forgot password says this instance cannot send the reset", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(`selfhost-forgot-${Date.now()}@example.com`);
-  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await page.getByRole("button", { name: "Forgot it?" }).click();
   await page.getByRole("button", { name: "Send reset link" }).click();
   await expect(
     page.getByText("This instance has no email provider, so passwords cannot be reset by email."),
@@ -48,9 +49,9 @@ test("without Polar there is nothing to buy and nothing capped", async ({ page }
   await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Billing" })).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+KeyK");
-  const palette = page.getByPlaceholder("Search pages and actions…");
+  const palette = page.getByPlaceholder("Search links, pages and actions");
   await palette.fill("billing");
-  await expect(page.getByRole("option", { name: /billing/i })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Billing", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   // A free account owns one org and the sign-up made it. Here a second one
@@ -60,13 +61,15 @@ test("without Polar there is nothing to buy and nothing capped", async ({ page }
   // The links page counts links without a ceiling, and no banner says this
   // account is over a plan.
   await page.goto("/links");
-  await expect(page.getByText(/^0 links$/)).toBeVisible();
+  await expect(page.getByText(/^0 short links$/)).toBeVisible();
   await expect(page.getByText(/over (your|the) plan|over the limit|upgrade/i)).toHaveCount(0);
 
   // Nor does Members explain a seat limit there is not.
   await page.goto("/members");
-  await expect(page.getByText("Invite by email")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Member limit info" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = page.getByRole("dialog", { name: "Invite people" });
+  await expect(invite.getByRole("button", { name: "Send invite" })).toBeVisible();
+  await expect(invite.getByText(/free seats?/)).toHaveCount(0);
 
   // /billing is not a page here.
   const res = await page.goto("/billing");

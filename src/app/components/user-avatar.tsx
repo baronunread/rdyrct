@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { blobatar } from "blobatar";
 import { cn } from "@/app/ui/cn";
 
@@ -17,6 +18,12 @@ function blobatarDataUri(user: AvatarUser): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/** The picture, unless it is the one that just failed to load; otherwise
+ * the generated face. */
+function avatarSrc(user: AvatarUser, failed: string | null): string {
+  return user.image && user.image !== failed ? user.image : blobatarDataUri(user);
+}
+
 export function UserAvatar({
   user,
   size = 32,
@@ -26,10 +33,13 @@ export function UserAvatar({
   size?: number;
   className?: string;
 }) {
-  const src = user.image ?? blobatarDataUri(user);
+  // A picture that fails to load (removed since the list was fetched, or R2
+  // busy) falls back to the generated face rather than a broken image.
+  const [failed, setFailed] = useState<string | null>(null);
   return (
     <img
-      src={src}
+      src={avatarSrc(user, failed)}
+      onError={() => setFailed(user.image)}
       alt={user.name || user.email || "avatar"}
       width={size}
       height={size}

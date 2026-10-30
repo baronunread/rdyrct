@@ -67,9 +67,10 @@ test("styling a QR is paid, generating one is not", async ({ page }) => {
   const editor = await newLinkDialog(page, email);
 
   // The code itself renders for a free plan: no lock, no empty placeholder.
-  await expect(editor.getByText("QR code", { exact: true })).toBeVisible();
+  await expect(editor.getByRole("img", { name: /^QR code for / })).toBeVisible();
   await expect(editor.getByText(/Add your logo, colors, and dot shapes/)).toBeVisible();
   await expect(editor.getByRole("group", { name: "QR customization" })).toBeHidden();
+  await expect(editor.getByRole("button", { name: "Customize QR" })).toHaveCount(0);
 
   await page.keyboard.press("Escape");
   await setPlan(page, email);
@@ -77,8 +78,10 @@ test("styling a QR is paid, generating one is not", async ({ page }) => {
 
   await page.getByRole("button", { name: "New link" }).first().click();
   const paidEditor = page.getByRole("dialog", { name: "New link" });
-  await expect(paidEditor.getByRole("group", { name: "QR customization" })).toBeVisible();
+  // Paid: the styling options sit one click away, behind Customize QR.
   await expect(paidEditor.getByText(/Add your logo, colors, and dot shapes/)).toBeHidden();
+  await paidEditor.getByRole("button", { name: "Customize QR" }).click();
+  await expect(paidEditor.getByRole("group", { name: "QR customization" })).toBeVisible();
 });
 
 test("a downgraded org can still edit a link that has a QR look", async ({ page }) => {

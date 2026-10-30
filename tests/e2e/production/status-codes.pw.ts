@@ -19,7 +19,7 @@ test("an address with no page is a 404 that still shows the NotFound screen", as
 
   await page.goto("/some/deep/path");
   await expect(
-    page.getByRole("heading", { level: 1, name: "Nothing lives at this link." }),
+    page.getByRole("heading", { level: 1, name: "No link at this address." }),
   ).toBeVisible();
 });
 

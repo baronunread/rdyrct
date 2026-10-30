@@ -39,12 +39,24 @@ import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../ab
 import { checkLinkDestination } from "../destination-check";
 import { orgLinkWarning } from "../link-warning";
 import { claimAnonLink } from "./shorten";
-import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
-import { clicksForLink, linkClicksTotal } from "../rollups";
+import {
+  attentionNote,
+  cursorValueOf,
+  linkFacets,
+  linkPageQuery,
+  readLinkPageParams,
+  sparkLines,
+  SPARK_SHOWN,
+  sparkSince,
+  takePage,
+  type Page,
+} from "../links-page";
+import { clicksForLink, linkClicksTotal, sparkRows } from "../rollups";
 import type {
   AddressDTO,
   LinkDTO,
   LinkInput,
+  LinkListItem,
   OrgPlan,
   PlanLimits,
   QrOverrides,
@@ -70,9 +82,13 @@ function validateSlug(slug: string | undefined): void {
   if (!SLUG_RE.test(slug))
     throw new HTTPException(400, {
       message: "Slug may only contain letters, numbers, - and _ (max 64)",
+      cause: { code: "bad_slug" },
     });
   if (RESERVED_SLUGS.has(slug.toLowerCase()))
-    throw new HTTPException(400, { message: "That slug is reserved" });
+    throw new HTTPException(400, {
+      message: "That slug is reserved",
+      cause: { code: "reserved_slug" },
+    });
 }
 
 function validateInput(body: LinkInput, orgId: string, partial = false) {
@@ -81,6 +97,7 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
     if (!isValidHttpUrl(body.destination))
       throw new HTTPException(400, {
         message: "Destination must be a valid http(s) URL",
+        cause: { code: "bad_destination" },
       });
     assertNotShortener(body.destination);
   }
@@ -536,6 +553,7 @@ async function resolveNewSlug(db: DB, requested: string, domainId: string | null
     throw new HTTPException(400, {
       message:
         "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
+      cause: { code: "slug_locked" },
     });
   if (requested) {
     if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, domainId === null);
@@ -563,6 +581,7 @@ async function resolveRenamedSlug(
     throw new HTTPException(400, {
       message:
         "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
+      cause: { code: "slug_locked" },
     });
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
   if (moved && (await ownsSlugAsAlias(db, existing.id, newSlug, domainId)))
@@ -584,11 +603,13 @@ async function resolveRenamedSlug(
  * browser cannot do either job once it only holds one page.
  */
 linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId")!;
+  const now = Date.now();
   const params = readLinkPageParams(new URL(c.req.url));
-  const query = linkPageQuery(c.req.param("orgId")!, params);
+  const query = linkPageQuery(orgId, params, now);
   // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
   const log = c.get("log");
-  log?.set({ orgId: c.req.param("orgId"), linkList: { sort: params.sort } });
+  log?.set({ orgId, linkList: { sort: params.sort, filter: params.filter } });
 
   const rows = await c.var.db
     .select({
@@ -608,7 +629,38 @@ linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
     params,
     cursorValueOf(params.sort),
   );
-  return c.json(page);
+  const warnedAt = new Map(rows.map((r) => [r.link.id, r.link.warnedAt]));
+  const sparkOf = sparkLines(
+    page.items.length
+      ? await sparkRows(
+          c.var.db,
+          orgId,
+          page.items.map((l) => l.id),
+          sparkSince(now),
+        )
+      : [],
+    now,
+  );
+  return c.json({
+    nextCursor: page.nextCursor,
+    items: page.items.map((link): LinkListItem => {
+      const spark = sparkOf(link.id);
+      const note = { warnedAt: warnedAt.get(link.id) ?? null, createdAt: link.createdAt };
+      return {
+        ...link,
+        spark: spark.slice(-SPARK_SHOWN),
+        attention: attentionNote(note, spark, link.clicks, now),
+      };
+    }),
+  } satisfies Page<LinkListItem>);
+});
+
+/** The counts beside the chips above the links table. */
+linkRoutes.get("/facets", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId")!;
+  const facets = await linkFacets(c.var.db, orgId);
+  c.get("log")?.set({ orgId, linkFacets: facets });
+  return c.json(facets);
 });
 
 // Distinct from the links list's own count: a link plus its kept-forever
@@ -1231,7 +1283,7 @@ linkRoutes.patch("/:linkId/addresses/:addressId", requireOrgRole("member"), asyn
 async function keepAddressForever(c: Context<AppEnv>) {
   const { db, orgId, address } = await findLinkAndAddress(c);
   if (address.kind !== "temp_alias")
-    throw new HTTPException(400, { message: "Only a temporary alias can be kept forever" });
+    throw new HTTPException(400, { message: "Only a temporary alias can be made permanent" });
 
   const { limits } = await orgPlan(db, orgId);
 

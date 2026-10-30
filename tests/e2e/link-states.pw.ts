@@ -55,7 +55,7 @@ test("an admin warns a link in one click, and a visitor continues past the warni
   await row.getByRole("button", { name: `Actions for ${slug}` }).click();
   await page.getByRole("menuitem", { name: "Show a warning" }).click();
   await expect(page.getByText(/Warning on\./)).toBeVisible({ timeout: 10_000 });
-  await expect(row.getByText("warning", { exact: true })).toBeVisible();
+  await expect(row.getByText("Warning", { exact: true })).toBeVisible();
 
   // A visitor, with no session, and no real trip to example.com.
   const visitor = await (await browser.newContext()).newPage();

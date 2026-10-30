@@ -1,0 +1,189 @@
+import { useRef, useState, type FormEvent } from "react";
+import {
+  INVITABLE_ROLES,
+  type InvitableRole,
+  type InvitesCreated,
+  type UserOrg,
+} from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
+import { Link } from "@/app/ui/icons";
+import { Button } from "../ui/button";
+import { Dialog } from "../ui/dialog";
+import { MenuSelect } from "../ui/menu";
+import { BusyContent } from "../ui/spinner";
+import { useToast } from "../ui/toast";
+import { EmailChips } from "./email-chips";
+import { ROLE_OPTIONS, isEmail, splitEmails } from "../lib/members-data";
+
+/** What each role can do, said once, where the role is chosen. Without it
+ * "viewer" and "member" look like the same word twice. */
+const ROLE_HINT = {
+  viewer: "Viewers see links and analytics, and change nothing.",
+  member: "Members create and edit links and see analytics.",
+  admin: "Admins manage links, domains and members.",
+} satisfies Record<InvitableRole, string>;
+
+export type EmailInvites = { emails: string[]; role: InvitableRole };
+
+/** "Send invite", or "Send 3 invites" once there is more than one. */
+function sendLabel(count: number): string {
+  return count > 1 ? `Send ${count} invites` : "Send invite";
+}
+
+/** Why the addresses cannot go yet, or undefined when they can. Short, for
+ * the label row. */
+function emailsError(emails: string[], needed: number, seatsLeft: number, limited: boolean) {
+  if (emails.length === 0) return "Add an email";
+  return badEmailsError(emails) ?? (limited ? seatsError(needed, seatsLeft) : undefined);
+}
+
+function badEmailsError(emails: string[]): string | undefined {
+  const bad = emails.filter((e) => !isEmail(e));
+  if (bad.length === 0) return undefined;
+  return bad.length === 1 ? `Not an email: ${bad[0]}` : `${bad.length} are not emails`;
+}
+
+function seatsError(count: number, seatsLeft: number): string | undefined {
+  if (count <= seatsLeft) return undefined;
+  return seatsLeft === 1 ? "Only 1 seat free" : `Only ${seatsLeft} seats free`;
+}
+
+/** "2 of 18 free seats on your plan." while addresses are in the box. */
+function seatsLine(count: number, left: number): string {
+  if (count === 0)
+    return left === 1 ? "1 free seat on your plan." : `${left} free seats on your plan.`;
+  return `${count} of ${left} free ${left === 1 ? "seat" : "seats"} on your plan.`;
+}
+
+/** "Invite people": any number of addresses at once, or a single-use link
+ * for the same role. Opened from the Members header, never parked on the
+ * page. */
+export function InvitePeopleDialog({
+  open,
+  onOpenChange,
+  org,
+  seats,
+  sendEmailInvites,
+  createInvite,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  org: UserOrg;
+  seats: { limit: number; left: number; invited: ReadonlySet<string> };
+  sendEmailInvites: {
+    mutate: (params: EmailInvites, opts?: { onSuccess?: (data: InvitesCreated) => void }) => void;
+    isPending: boolean;
+  };
+  createInvite: { mutate: (role: InvitableRole) => void; isPending: boolean };
+}) {
+  const toast = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [emails, setEmails] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [role, setRole] = useState<InvitableRole>("member");
+  const [error, setError] = useState<string | undefined>();
+  // No limit to explain on a self-hosted instance.
+  const limited = org.plan !== "unlimited";
+  const all = [...emails, ...splitEmails(draft)];
+  // A retry after a failed email reuses its invite and takes no new seat.
+  const needed = all.filter((e) => !seats.invited.has(e.toLowerCase())).length;
+
+  const close = (next: boolean) => {
+    onOpenChange(next);
+    if (!next) {
+      setEmails([]);
+      setDraft("");
+      setError(undefined);
+    }
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (sendEmailInvites.isPending) return;
+    const reason = emailsError(all, needed, seats.left, limited);
+    setEmails(all);
+    setDraft("");
+    setError(reason);
+    if (reason) {
+      input.current?.focus();
+      return;
+    }
+    sendEmailInvites.mutate(
+      { emails: all, role },
+      {
+        onSuccess: ({ failed }) => {
+          const sent = all.length - failed.length;
+          if (sent > 0) toast(sent > 1 ? `${sent} invites sent` : "Invite sent");
+          if (failed.length === 0) return close(false);
+          // Their invites exist; sending again reuses them. Keep only these
+          // addresses in the field, marked, so Send retries just them.
+          setEmails(failed);
+          setError(
+            failed.length > 1
+              ? "Couldn't email these. Try again"
+              : "Couldn't email this. Try again",
+          );
+          input.current?.focus();
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={close} title="Invite people" size="lg">
+      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        <EmailChips
+          ref={input}
+          label="Emails"
+          emails={emails}
+          onChange={(next) => {
+            setEmails(next);
+            setError(undefined);
+          }}
+          draft={draft}
+          onDraftChange={(next) => {
+            setDraft(next);
+            setError(undefined);
+          }}
+          error={error}
+          placeholder="teammate@company.com"
+        />
+        <div className="grid items-center gap-x-4 gap-y-1.5 sm:grid-cols-2">
+          <div>
+            <span className="mb-1.5 block text-xs text-muted">Role</span>
+            <MenuSelect
+              label="Role"
+              value={role}
+              onChange={(next) => setRole(oneOf(INVITABLE_ROLES, next, "member"))}
+              options={ROLE_OPTIONS}
+            />
+          </div>
+          <p className="text-xs text-pretty text-muted sm:pt-5">{ROLE_HINT[role]}</p>
+        </div>
+        {limited && <p className="text-xs text-muted tnum">{seatsLine(needed, seats.left)}</p>}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            className="mr-auto pl-2.5"
+            disabled={createInvite.isPending}
+            onClick={() => createInvite.mutate(role)}
+            title="Makes a single-use link, valid 7 days, and copies it"
+          >
+            <BusyContent busy={createInvite.isPending}>
+              <span className="inline-flex items-center gap-1.5">
+                <Link size={15} aria-hidden /> Copy invite link
+              </span>
+            </BusyContent>
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => close(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={sendEmailInvites.isPending}>
+            <BusyContent busy={sendEmailInvites.isPending}>{sendLabel(all.length)}</BusyContent>
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}

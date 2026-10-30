@@ -1,26 +1,34 @@
-import { useState } from "react";
+// react-doctor-disable-next-line react-doctor/no-flush-sync -- see open() in LinkRow: the mark must be in the DOM before the transition takes its picture.
+import { flushSync } from "react-dom";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import {
-  ChartColumn,
-  ChevronRight,
-  Ellipsis,
-  ExternalLink,
-  Link,
-  Pencil,
-  QrCode,
-  Trash2,
-} from "@/app/ui/icons";
+  IconChartBar,
+  IconCheck,
+  IconChevronRight,
+  IconDots,
+  IconLinkPlus,
+  IconMinus,
+  IconPencil,
+  IconQrcode,
+  IconTrash,
+} from "@tabler/icons-react";
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Badge, Slug, Table, Th, Td } from "../ui/misc";
+import { Badge, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
-import { shortDate } from "../lib/dates";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
+import { tableDate, trendNote, type LinkRow } from "../lib/links-data";
+import { displayHost, displayPath } from "../lib/display-url";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
+import { ShortAddress } from "./short-address";
+import { SiteLetter, Sparkline } from "./link-marks";
 import { CursorPager } from "../ui/pagination";
+import { morphKey, morphPart, setMorphLink, useIsMorphLink } from "../lib/link-morph";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -40,70 +48,194 @@ interface RowActions {
   onCreateAlias: (link: LinkDTO) => void;
 }
 
-/** The short link itself: expander, domain badge, slug, copy button. */
+/**
+ * A 16px box, ticked in the accent. Native underneath (so Space, labels and
+ * screen readers work as they always do), drawn over by the tick, inside a
+ * 40px target so it is easy to hit without being big.
+ */
+function RowCheck({
+  checked,
+  indeterminate = false,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  const on = checked || indeterminate;
+  return (
+    <label className="relative -my-2 grid size-10 cursor-pointer place-items-center">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        aria-label={label}
+        className={cn(
+          "peer size-4 cursor-pointer appearance-none rounded-[5px] transition-[background-color,box-shadow] duration-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+          on ? "bg-accent" : "bg-surface smooth-shadow-ring-xs",
+        )}
+      />
+      {on && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 grid place-items-center text-bg"
+        >
+          {indeterminate ? <IconMinus size={12} stroke={3} /> : <IconCheck size={12} stroke={3} />}
+        </span>
+      )}
+    </label>
+  );
+}
+
+/** The link in two lines (rdyrct-design, "Tables earn two lines"): its
+ * title in bold over the short address in mono. An untitled link puts the
+ * address on the first line alone. The QR code is in the row's menu. */
 function LinkCell({
   link,
   isExpanded,
   onToggle,
   navigate,
 }: {
-  link: LinkDTO;
+  link: LinkRow;
   isExpanded: boolean;
   onToggle: (() => void) | null;
   navigate: (to: string) => void;
 }) {
-  const toast = useToast();
-  const hidden = link.addressCount - 1;
+  const aliases = link.addressCount - 1;
+  const key = morphKey(link);
+  const morphing = useIsMorphLink(key);
+  // Marked before the click navigates, so the page being left has this
+  // row's parts named when the browser takes its picture (lib/link-morph.ts).
+  const open = () => {
+    flushSync(() => setMorphLink(key));
+    navigate(linkDetailPath(link));
+  };
+  // A button, not a link, so the router's hover preload does not reach it:
+  // ask for the link's page the same way (see lib/route-preload.ts).
+  const router = useRouter();
+  const preload = () =>
+    void router
+      .preloadRoute({
+        to: "/links/$slug",
+        params: { slug: link.slug },
+        search: link.domain ? { domain: link.domain } : {},
+      })
+      .catch(() => {});
   return (
-    <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
-      {onToggle ? (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 items-center gap-2">
         <button
           type="button"
-          onClick={onToggle}
-          aria-label={`${isExpanded ? "Hide" : "Show"} ${hidden} alias${hidden === 1 ? "" : "es"}`}
-          aria-expanded={isExpanded}
-          className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted transition-transform duration-150 active:scale-[0.96] hover:text-text"
+          onClick={open}
+          onPointerEnter={preload}
+          onFocus={preload}
+          {...morphPart("title", morphing)}
+          // A title in Arabic or Hebrew runs right to left: `dir="auto"`
+          // lets it, so it truncates at its own end and keeps its order.
+          dir={link.title ? "auto" : undefined}
+          title={link.title || undefined}
+          className={cn(
+            "min-w-0 cursor-pointer text-start text-sm font-semibold [@media(hover:hover)]:hover:underline",
+            link.title ? "truncate" : "flex",
+          )}
         >
-          <ChevronRight
-            size={14}
-            className={cn("transition-transform", isExpanded && "rotate-90")}
-          />
+          {link.title || (
+            <ShortAddress url={link.url} slug={link.slug} className="text-sm font-normal" />
+          )}
         </button>
-      ) : (
-        <span className="w-5.5 shrink-0" />
-      )}
-      <button
-        type="button"
-        onClick={() => navigate(linkDetailPath(link))}
-        className="group flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
-      >
-        {/* The domain is half the address, so it reads as the address: mono,
-            quiet, directly above the slug it belongs to. It used to sit in a
-            Badge, which is for state (active, pending, blocked) rather than
-            for an identifier. */}
-        <span className="min-w-0 max-w-full truncate font-mono text-2xs text-muted">
-          {new URL(link.url).host}
-        </span>
-        <Slug slug={link.slug} className="font-bold text-accent group-hover:underline" />
-      </button>
-      <span className="shrink-0">
-        <CopyButton
-          text={link.url}
-          label={`Copy ${link.url}`}
-          onCopy={(text) => copyToClipboard(text, toast)}
-        />
+        {link.suspendedAt && (
+          <span
+            className="shrink-0"
+            title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
+          >
+            <Badge color="pink">paused</Badge>
+          </span>
+        )}
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={`${isExpanded ? "Hide" : "Show"} ${aliases} alias${aliases === 1 ? "" : "es"}`}
+            aria-expanded={isExpanded}
+            className="-my-1 inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 text-xs text-muted transition-[background-color,color,scale] duration-150 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          >
+            <span className="tnum">+{aliases}</span>
+            <IconChevronRight
+              size={12}
+              aria-hidden
+              className={cn("transition-transform duration-150", isExpanded && "rotate-90")}
+            />
+          </button>
+        )}
       </span>
-      {link.suspendedAt && (
-        <span
-          className="shrink-0"
-          title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
-        >
-          <Badge color="pink">paused</Badge>
+      {link.title && (
+        <span className="flex max-w-full min-w-0 self-start" {...morphPart("addr", morphing)}>
+          <ShortAddress url={link.url} slug={link.slug} />
         </span>
       )}
     </div>
   );
 }
+
+/** Where the link goes: a letter tile for the site, the host over the rest,
+ * so a column of them scans by site first. */
+function DestinationCell({ destination }: { destination: string }) {
+  let host = destination;
+  let rest = "";
+  try {
+    const url = new URL(destination);
+    // Shown as people read them; the href and the tooltip keep the raw URL.
+    host = displayHost(url.host);
+    rest = displayPath(`${url.pathname === "/" ? "" : url.pathname}${url.search}`);
+  } catch {
+    // Stored destinations are absolute URLs; show anything else as it is.
+  }
+  return (
+    <a
+      href={destination}
+      target="_blank"
+      rel="noreferrer"
+      title={destination}
+      className="flex min-w-0 items-center gap-2.5 [@media(hover:hover)]:hover:text-accent"
+    >
+      <SiteLetter host={host} />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-sm">{host.replace(/^www\./, "")}</span>
+        {rest && <span className="truncate font-mono text-[11.5px] text-placeholder">{rest}</span>}
+      </span>
+    </a>
+  );
+}
+
+function TrendCell({ link }: { link: LinkRow }) {
+  const note = trendNote(link);
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <Sparkline series={link.spark} />
+      {note && (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 text-xs whitespace-nowrap",
+            note.tone === "bad" ? "text-danger" : "text-butter",
+          )}
+        >
+          <span aria-hidden className="size-1.5 rounded-full bg-current" />
+          {note.text}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const ROW_ICON =
+  "grid size-8 place-items-center rounded-md text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text";
 
 function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
   const { navigate, onQrClick, onEdit, onDelete, onCreateAlias, canWrite } = actions;
@@ -112,30 +244,28 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
       align="end"
       label={`Actions for ${link.slug}`}
       trigger={
-        <div className="flex justify-end">
-          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
-            <Ellipsis size={15} />
-          </span>
-        </div>
+        <span className={ROW_ICON}>
+          <IconDots size={16} aria-hidden />
+        </span>
       }
     >
       <MenuItem onClick={() => navigate(linkDetailPath(link))}>
-        <ChartColumn size={14} /> View analytics
+        <IconChartBar size={14} aria-hidden /> Analytics
       </MenuItem>
       <MenuItem onClick={() => onQrClick(link)}>
-        <QrCode size={14} /> QR code
+        <IconQrcode size={14} aria-hidden /> QR code
       </MenuItem>
       {canWrite && (
         <>
           <MenuItem onClick={() => onEdit(link)}>
-            <Pencil size={14} /> Edit
+            <IconPencil size={14} aria-hidden /> Edit
           </MenuItem>
           <MenuItem onClick={() => onCreateAlias(link)}>
-            <Link size={14} /> Create alias
+            <IconLinkPlus size={14} aria-hidden /> Add another short link
           </MenuItem>
           <MenuSeparator />
           <MenuItem className="text-danger" onClick={() => onDelete(link)}>
-            <Trash2 size={14} /> Delete
+            <IconTrash size={14} aria-hidden /> Delete link
           </MenuItem>
         </>
       )}
@@ -143,23 +273,52 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
   );
 }
 
-function LinkRow({
+/** Copy and the menu. Shown on hover or focus where there is hover, always
+ * on a touch screen, where nothing hovers. */
+function RowActionsCell({ link, actions }: { link: LinkDTO; actions: RowActions }) {
+  const toast = useToast();
+  return (
+    <div className="flex items-center justify-end gap-0.5">
+      <span className="max-sm:hidden [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
+        <CopyButton
+          text={link.url}
+          label={`Copy ${link.url}`}
+          onCopy={(text) => copyToClipboard(text, toast)}
+        />
+      </span>
+      <span className="w-8 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 [@media(hover:hover)]:sm:group-focus-within:opacity-100 [@media(hover:hover)]:sm:has-[[aria-expanded=true]]:opacity-100">
+        <RowMenu link={link} actions={actions} />
+      </span>
+    </div>
+  );
+}
+
+function LinkRowView({
   orgId,
   link,
+  selected,
+  onSelect,
   isExpanded,
   onToggle,
+  creator,
   actions,
 }: {
   orgId: string;
-  link: LinkDTO;
+  link: LinkRow;
+  selected: boolean;
+  onSelect: () => void;
   isExpanded: boolean;
   onToggle: (() => void) | null;
+  creator: string | undefined;
   actions: RowActions;
 }) {
   return (
     <>
-      <tr className="group">
-        <Td>
+      <tr className={cn("group", selected && "bg-accent/[0.06]", isExpanded && "alias-parent")}>
+        <Td className="hidden w-10 py-2.5 pr-0 pl-2 sm:table-cell">
+          <RowCheck checked={selected} onChange={onSelect} label={`Select ${link.slug}`} />
+        </Td>
+        <Td className="py-3 max-sm:pl-3">
           <LinkCell
             link={link}
             isExpanded={isExpanded}
@@ -167,36 +326,27 @@ function LinkRow({
             navigate={actions.navigate}
           />
         </Td>
-        {/* An untitled link leaves the cell empty: a dash read as a title,
-            and a word would be mistaken for one. */}
-        <Td
-          className="hidden truncate text-xs text-muted lg:table-cell"
-          title={link.title || undefined}
-        >
-          {link.title}
+        <Td className="hidden py-3 lg:table-cell">
+          <DestinationCell destination={link.destination} />
         </Td>
-        <Td className="hidden max-w-64 xl:table-cell">
-          <a
-            href={link.destination}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 text-muted hover:text-accent"
-          >
-            {/* A destination is a URL somebody pastes and checks character by
-                character, so it keeps the mono face the title beside it does
-                not. */}
-            <span className="truncate font-mono text-xs" title={link.destination}>
-              {link.destination}
-            </span>
-            <ExternalLink size={12} className="shrink-0" />
-          </a>
+        <Td className="hidden py-2 xl:table-cell">
+          <TrendCell link={link} />
         </Td>
-        <Td className="tnum text-end">{link.clicks}</Td>
-        <Td className="hidden text-xs whitespace-nowrap text-muted sm:table-cell">
-          {shortDate(link.createdAt)}
+        <Td className="tnum py-3 text-end text-[15px] font-semibold whitespace-nowrap max-sm:w-[5.25rem] max-sm:px-1">
+          {link.clicks.toLocaleString("en-US")}
         </Td>
-        <Td>
-          <RowMenu link={link} actions={actions} />
+        <Td className="hidden py-3 sm:table-cell">
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="tnum text-sm whitespace-nowrap">{tableDate(link.createdAt)}</span>
+            {creator && (
+              <span dir="auto" title={creator} className="truncate text-xs text-placeholder">
+                {creator}
+              </span>
+            )}
+          </span>
+        </Td>
+        <Td className="py-3 pr-2 pl-0 max-sm:w-11">
+          <RowActionsCell link={link} actions={actions} />
         </Td>
       </tr>
       <AnimatePresence>
@@ -208,23 +358,32 @@ function LinkRow({
 
 export function LinksTable({
   orgId,
-  paged,
+  rows,
   sort,
   onSort,
-  page,
-  hasNext,
-  onNext,
-  onBack,
+  selection,
+  onSelectionChange,
+  creators,
+  paging,
   ...actions
 }: RowActions & {
   orgId: string;
-  paged: LinkDTO[];
+  rows: LinkRow[];
   sort: Sort;
   onSort: (s: Sort) => void;
-  page: number;
-  hasNext: boolean;
-  onNext: () => void;
-  onBack: () => void;
+  /** Ids of the ticked rows on this page. */
+  selection: Set<string>;
+  onSelectionChange: (next: Set<string>) => void;
+  /** Member names by user id, for the line under Created. */
+  creators: Map<string, string>;
+  paging: {
+    page: number;
+    pageSize: number;
+    total?: number;
+    hasNext: boolean;
+    onNext: () => void;
+    onBack: () => void;
+  };
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (id: string) =>
@@ -235,65 +394,102 @@ export function LinksTable({
       return next;
     });
 
+  const ticked = rows.filter((row) => selection.has(row.id)).length;
+  const all = rows.length > 0 && ticked === rows.length;
+  const toggleOne = (id: string) => {
+    const next = new Set(selection);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
+
   return (
     <LazyMotion features={domAnimation}>
-      {/* Load-bearing widths: the table is `fixed`, so these decide the layout
-          rather than describing it, and columns drop in as the screen grows.
-            <sm   50%      + 9rem   (short link, clicks, actions)
-            sm    40%      + 16rem  (+ created)
-            lg    30 + 16% + 16rem  (+ title)
-            xl    26 + 16 + 22% + 16rem  (+ destination)
-          Percentages share the row with 16rem of fixed columns, so they cannot
-          add up to 100, which is also why no width token fits them. */}
-      <Table fixed>
-        <thead>
-          <tr>
-            <SortTh
-              label="Short link"
-              sortKey="slug"
-              sort={sort}
-              onSort={onSort}
-              // fallow-ignore-next-line css-token-drift
-              className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
-            />
-            {/* fallow-ignore-next-line css-token-drift */}
-            <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
-            {/* fallow-ignore-next-line css-token-drift */}
-            <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
-            <SortTh
-              label="Clicks"
-              sortKey="clicks"
-              sort={sort}
-              onSort={onSort}
-              className="w-20 text-end"
-            />
-            <SortTh
-              label="Created"
-              sortKey="createdAt"
-              sort={sort}
-              onSort={onSort}
-              className="hidden sm:table-cell sm:w-28"
-            />
-            <Th className="w-16 text-end whitespace-nowrap">Actions</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {paged.map((link) => {
-            const hasAliases = link.addressCount > 1;
-            return (
-              <LinkRow
-                key={link.id}
-                orgId={orgId}
-                link={link}
-                isExpanded={hasAliases && expanded.has(link.id)}
-                onToggle={hasAliases ? () => toggleExpanded(link.id) : null}
-                actions={actions}
-              />
-            );
-          })}
-        </tbody>
-      </Table>
-      <CursorPager page={page} hasNext={hasNext} onBack={onBack} onNext={onNext} />
+      <div className="overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs">
+        <div className="overflow-x-auto overscroll-x-none">
+          {/* Load-bearing widths: the table is `fixed`, so these decide the
+              layout rather than describing it, and columns drop in as the
+              screen grows.
+                <sm   link + clicks + actions
+                sm    + checkbox + created
+                lg    + destination
+                xl    + last 7 days
+              The link column takes what is left. */}
+          <table className="w-full table-fixed text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40">
+            {/* No header on a phone: two columns explain themselves, and the
+                rows start at the top of the card as the mock draws them. */}
+            <thead className="max-sm:hidden">
+              <tr>
+                <Th className="hidden w-10 py-1.5 pr-0 pl-2 sm:table-cell">
+                  <RowCheck
+                    checked={all}
+                    indeterminate={ticked > 0 && !all}
+                    onChange={() =>
+                      onSelectionChange(all ? new Set() : new Set(rows.map((row) => row.id)))
+                    }
+                    label={all ? "Clear selection" : "Select every link on this page"}
+                  />
+                </Th>
+                <SortTh
+                  label="Link"
+                  sortKey="slug"
+                  sort={sort}
+                  onSort={onSort}
+                  className="max-sm:pl-3"
+                />
+                {/* fallow-ignore-next-line css-token-drift */}
+                <Th className="hidden lg:table-cell lg:w-[22%]">Destination</Th>
+                <Th className="hidden w-28 text-end xl:table-cell">Last 7 days</Th>
+                {/* Wide enough for "9,874,312" in tabular figures. */}
+                <SortTh
+                  label="Clicks"
+                  sortKey="clicks"
+                  sort={sort}
+                  onSort={onSort}
+                  className="w-[5.25rem] text-end sm:w-28"
+                />
+                <SortTh
+                  label="Created"
+                  sortKey="createdAt"
+                  sort={sort}
+                  onSort={onSort}
+                  className="hidden sm:table-cell sm:w-32"
+                />
+                <Th className="w-12 pr-2 pl-0 sm:w-20">
+                  <span className="sr-only">Actions</span>
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((link) => {
+                const hasAliases = link.addressCount > 1;
+                return (
+                  <LinkRowView
+                    key={link.id}
+                    orgId={orgId}
+                    link={link}
+                    selected={selection.has(link.id)}
+                    onSelect={() => toggleOne(link.id)}
+                    isExpanded={hasAliases && expanded.has(link.id)}
+                    onToggle={hasAliases ? () => toggleExpanded(link.id) : null}
+                    creator={link.createdBy ? creators.get(link.createdBy) : undefined}
+                    actions={actions}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <CursorPager
+          page={paging.page}
+          pageSize={paging.pageSize}
+          rows={rows.length}
+          total={paging.total}
+          hasNext={paging.hasNext}
+          onBack={paging.onBack}
+          onNext={paging.onNext}
+        />
+      </div>
     </LazyMotion>
   );
 }

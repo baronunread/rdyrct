@@ -3,6 +3,35 @@
   "finding_counts": {
     "src/app/components/alias-thread.tsx": {
       "crap_high": {
+        "count": 2
+      }
+    },
+    "src/app/components/avatar-input.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/components/charts.tsx": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/app/components/command-menu.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/components/command-sheet.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -11,20 +40,84 @@
         "count": 1
       }
     },
+    "src/app/components/delete-link-dialog.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "src/app/components/dns-records.tsx": {
       "crap_high": {
         "count": 1
       }
     },
+    "src/app/components/email-chips.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/components/invite-people-dialog.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/app/components/link-editor.tsx": {
-      "complexity_moderate": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
         "count": 1
       },
       "crap_moderate": {
         "count": 3
       }
     },
+    "src/app/components/link-marks.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/app/components/links-table.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/components/new-link-host.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/app/components/org-menu-items.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/components/over-limit.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "src/app/components/plan-upsell.tsx": {
       "crap_moderate": {
         "count": 1
       }
@@ -35,13 +128,27 @@
       }
     },
     "src/app/components/qr-defaults-card.tsx": {
-      "crap_critical": {
-        "count": 1
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "src/app/components/qr-logo-input.tsx": {
       "crap_moderate": {
         "count": 1
+      }
+    },
+    "src/app/components/qr-pickers.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
       }
     },
     "src/app/components/qr.tsx": {
@@ -54,9 +161,75 @@
         "count": 1
       }
     },
+    "src/app/components/signing-in-group.tsx": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/app/components/skeletons.tsx": {
       "crap_moderate": {
         "count": 1
+      }
+    },
+    "src/app/lib/account-security.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/lib/display-url.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/lib/go-shortcuts.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/lib/insights-data.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/lib/links-data.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/lib/members-data.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/lib/pending-qr-style.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/routes/admin/audit.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
       }
     },
     "src/app/routes/admin/comp-dialog.tsx": {
@@ -64,12 +237,50 @@
         "count": 1
       }
     },
-    "src/app/routes/admin/orgs.tsx": {
-      "crap_high": {
+    "src/app/routes/admin/layout.tsx": {
+      "crap_moderate": {
         "count": 1
       }
     },
+    "src/app/routes/admin/links.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/routes/admin/orgs.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/app/routes/admin/usage.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
     "src/app/routes/admin/users.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/analytics.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
       "crap_high": {
         "count": 1
       },
@@ -83,11 +294,11 @@
       }
     },
     "src/app/routes/auth.tsx": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 1
+      "crap_high": {
+        "count": 2
       },
       "crap_moderate": {
         "count": 5
@@ -96,6 +307,12 @@
     "src/app/routes/billing.tsx": {
       "complexity_moderate": {
         "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 8
       }
     },
     "src/app/routes/consent.tsx": {
@@ -104,35 +321,61 @@
       }
     },
     "src/app/routes/dashboard.tsx": {
-      "crap_high": {
+      "crap_critical": {
         "count": 1
+      },
+      "crap_high": {
+        "count": 3
       },
       "crap_moderate": {
         "count": 3
       }
     },
     "src/app/routes/domains.tsx": {
-      "crap_high": {
+      "complexity_critical": {
         "count": 1
       },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 2
+      },
       "crap_moderate": {
-        "count": 4
+        "count": 2
+      }
+    },
+    "src/app/routes/invite.tsx": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/routes/link-detail.tsx": {
-      "crap_high": {
+      "complexity_critical": {
         "count": 1
-      }
-    },
-    "src/app/routes/link-import.tsx": {
+      },
       "crap_critical": {
         "count": 1
       },
       "crap_high": {
-        "count": 5
+        "count": 1
       },
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/link-import.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
         "count": 3
+      },
+      "crap_moderate": {
+        "count": 4
       }
     },
     "src/app/routes/links.tsx": {
@@ -140,8 +383,13 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 1
+        "count": 3
       },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/members.tsx": {
       "crap_high": {
         "count": 1
       },
@@ -151,6 +399,9 @@
     },
     "src/app/routes/organization.tsx": {
       "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -162,7 +413,23 @@
         "count": 2
       }
     },
+    "src/app/routes/shell.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
     "src/app/ui/dialog.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/app/ui/field.tsx": {
       "crap_moderate": {
         "count": 1
       }
@@ -170,6 +437,21 @@
     "src/app/ui/otp.tsx": {
       "crap_high": {
         "count": 1
+      }
+    },
+    "src/app/ui/pagination.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/ui/segmented.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/ui/toast.tsx": {
+      "crap_high": {
+        "count": 2
       }
     },
     "src/shared/link-import.ts": {
@@ -220,8 +502,42 @@
   },
   "runtime_coverage_findings": [],
   "target_keys": [
+    "src/app/ui/command.tsx:dead code",
     "src/app/lib/current-org.ts:high impact",
+    "src/app/routes/admin/audit.tsx:hidden coupling",
+    "src/app/components/qr-defaults-card.tsx:hidden coupling",
+    "src/worker/abuse.ts:hidden coupling",
+    "src/app/lib/posthog.ts:hidden coupling",
+    "src/worker/routes/orgs.ts:hidden coupling",
     "src/app/lib/use-shake.ts:high impact",
-    "src/app/lib/mcp-url.ts:high impact"
+    "src/app/lib/mcp-url.ts:high impact",
+    "src/app/components/link-editor.tsx:complexity",
+    "src/app/routes/admin/orgs.tsx:hidden coupling",
+    "src/app/routes/dashboard.tsx:hidden coupling",
+    "src/worker/routes/links.ts:hidden coupling",
+    "src/app/routes/link-import.tsx:complexity",
+    "src/app/routes/admin/users.tsx:hidden coupling",
+    "src/app/lib/account-security.ts:complexity",
+    "src/app/routes/links.tsx:hidden coupling",
+    "src/app/components/command-menu.tsx:complexity",
+    "src/worker/routes/billing.ts:hidden coupling",
+    "src/app/routes/admin/links.tsx:hidden coupling",
+    "tests/consent.test.ts:hidden coupling",
+    "src/worker/routes/admin-links.ts:hidden coupling",
+    "tests/e2e/pages.ts:hidden coupling",
+    "scripts/prerender-public.tsx:hidden coupling",
+    "src/worker/security-headers.ts:hidden coupling",
+    "vite.config.ts:hidden coupling",
+    "tests/e2e/funnel.pw.ts:hidden coupling",
+    "src/app/routes/terms.tsx:hidden coupling",
+    "src/app/components/landing-pillars.tsx:hidden coupling",
+    "tests/e2e/production/csp.pw.ts:hidden coupling",
+    "src/app/routes/privacy.tsx:hidden coupling",
+    "tests/e2e/landing-sections.pw.ts:hidden coupling",
+    "tests/worker/admin-moderation.worker.ts:hidden coupling",
+    "tests/worker/billing.worker.ts:hidden coupling",
+    "tests/e2e/production/seo.pw.ts:hidden coupling",
+    "tests/e2e/admin-moderation.pw.ts:hidden coupling",
+    "playwright.config.ts:hidden coupling"
   ]
 }

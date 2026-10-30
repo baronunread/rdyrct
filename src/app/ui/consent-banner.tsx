@@ -19,6 +19,7 @@ export function ConsentBanner() {
     <div
       role="region"
       aria-label="Cookie consent"
+      data-consent-banner
       className="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl bg-surface/95 p-4 text-xs text-muted smooth-shadow-ring-xl backdrop-blur"
     >
       <p className="leading-relaxed">

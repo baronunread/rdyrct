@@ -12,6 +12,12 @@ export async function expectRedirect(page: Page, slug: string, destination: stri
   expect(res.headers()["location"]).toBe(destination);
 }
 
+/** The org name the sidebar's switcher shows, without the initial drawn
+ * beside it (aria-hidden, so not part of the name). */
+export function currentOrgName(page: Page) {
+  return page.getByTitle("Switch organization").locator("span:not([aria-hidden])");
+}
+
 /** Opens the org switcher and creates another org under the same signed-in
  * account, for tests that share one user (see link-addresses.pw.ts) and so
  * have already left the no-org state behind by the time they need this.
@@ -21,8 +27,8 @@ export async function createAdditionalOrg(page: Page, name: string) {
   await page.getByRole("menuitem", { name: "New organization" }).click();
   const dialog = page.getByRole("dialog", { name: "New organization" });
   await dialog.getByLabel("Name").fill(name);
-  await dialog.getByRole("button", { name: "Create" }).click();
-  await expect(page.getByTitle("Switch organization")).toHaveText(name);
+  await dialog.getByRole("button", { name: "Create organization" }).click();
+  await expect(currentOrgName(page)).toHaveText(name);
 }
 
 /** Adds a custom domain from the Domains page and returns its hostname.
@@ -31,8 +37,11 @@ export async function createAdditionalOrg(page: Page, name: string) {
  * since how long they're willing to wait varies by test. */
 export async function addCustomDomain(page: Page, hostname = `e2e-${Date.now()}.example.com`) {
   await page.goto("/domains");
-  await page.getByPlaceholder("links.example.com").fill(hostname);
   await page.getByRole("button", { name: "Add domain" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add a domain" });
+  await dialog.getByRole("textbox", { name: "Domain" }).fill(hostname);
+  await dialog.getByRole("button", { name: "Add domain" }).click();
+  await expect(dialog).toBeHidden();
   return hostname;
 }
 
@@ -44,7 +53,7 @@ export async function addCustomDomain(page: Page, hostname = `e2e-${Date.now()}.
  * take most of the default budget. */
 export async function addActiveCustomDomain(page: Page, hostname?: string) {
   const added = await addCustomDomain(page, hostname);
-  await expect(page.getByText("active", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 30_000 });
   return added;
 }
 
@@ -55,14 +64,24 @@ export async function openNewLinkDialog(page: Page) {
   return page.getByRole("dialog", { name: "New link" });
 }
 
-/** Fills the dashboard's quick-create field and submits it, waiting for the
- * confirmation dialog. The first thing a signed-in test does, since an
- * account starts with an organization and no links. */
+/** Creates a link from the dashboard (or the links page) and waits for the
+ * confirmation dialog. On an org with no links yet the dashboard asks for the
+ * first one with its own field; after that, the header's New link button
+ * opens the New link dialog. Either way the same "Link created" dialog
+ * answers. */
 export async function createQuickLink(page: Page, destination: string) {
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(field).toBeVisible();
-  await field.fill(destination);
-  await page.getByRole("button", { name: "Create link" }).click();
+  const firstRunField = page.getByRole("textbox", { name: "Destination URL", exact: true });
+  const newLinkButton = page.getByRole("button", { name: "New link" }).first();
+  await expect(firstRunField.or(newLinkButton).first()).toBeVisible();
+  if (await firstRunField.isVisible()) {
+    await firstRunField.fill(destination);
+    await page.getByRole("button", { name: "Create link" }).click();
+  } else {
+    await newLinkButton.click();
+    const dialog = page.getByRole("dialog", { name: "New link" });
+    await dialog.getByRole("textbox", { name: "Destination", exact: true }).fill(destination);
+    await dialog.getByRole("button", { name: "Create link" }).click();
+  }
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 }
 
@@ -87,9 +106,13 @@ export async function ownerWithInviteLink(
   await seed?.(page);
 
   await page.goto("/members");
-  await page.getByRole("button", { name: "Invite link" }).click();
-  await page.getByRole("button", { name: "Create invite link" }).click();
-  await expect(page.getByText("Pending invites")).toBeVisible();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Invite people" })
+    .getByRole("button", { name: "Copy invite link" })
+    .click();
+  // The open invite joins the members table as a row of its own.
+  await expect(page.locator("tbody tr").filter({ hasText: "Invite link" })).toHaveCount(1);
 
   const [invite] = await queryRows<{ token: string }>(
     page,

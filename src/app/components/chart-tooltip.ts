@@ -8,7 +8,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
  * cursor. Left unset, a chart falls back to the renderer's default tween,
  * which is slow enough to read as drag.
  */
-export const followSpring = { type: "spring", stiffness: 170, damping: 22, mass: 1 } as const;
+const followSpring = { type: "spring", stiffness: 170, damping: 22, mass: 1 } as const;
 
 /**
  * The one tooltip every chart in the app uses: parked beside the pointer,
@@ -23,6 +23,5 @@ export const pointerTooltip = {
   placement: "auto",
   offset: 16,
   motion: followSpring,
-  className:
-    "pointer-events-none rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg",
+  className: "pointer-events-none",
 } as const;

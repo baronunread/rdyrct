@@ -1,15 +1,28 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Ban, Check, Ellipsis, Eye, Trash2, Undo2 } from "@/app/ui/icons";
+import { settle } from "../../lib/route-preload";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { ArrowRight, Ban, Check, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { buttonClass } from "../../ui/button-class";
-import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
+import { useAdminOrgDetail } from "../../lib/hooks";
+import { adminOrgsQuery, useAdminOrgsData } from "../../lib/admin-data";
 import { api } from "../../lib/api";
-import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
+import type { AdminOrgRow, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
-import { Badge, Card, PageHeader, Table, Td, Th } from "../../ui/misc";
+import { Table, Td, Th } from "../../ui/misc";
+import {
+  FilterBar,
+  FilterRow,
+  LetterTile,
+  PHONE,
+  RowMenuTrigger,
+  SectionHeading,
+  StateLabel,
+  fullNumber,
+  type StateTone,
+} from "./admin-kit";
 import { OrgDetailSkeleton } from "../../components/skeletons";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
@@ -22,44 +35,71 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
-import { formatNumber } from "../../lib/numbers";
 import { Pager } from "../../ui/pagination";
-import { Segmented } from "../../ui/segmented";
-
-const roleColor = {
-  owner: "accent",
-  admin: "mint",
-  member: "muted",
-  viewer: "muted",
-} satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
 /** What an empty table says. It names the filter that matched nothing: with
  * only a status picked there is no search term to quote. */
 function emptyMessage(status: OrgStatus, term: string): string {
   if (term) return `No organizations match “${term}”.`;
-  if (status === "review") return "No organizations need review.";
-  if (status === "suspended") return "No organizations are suspended.";
-  return "No organizations yet.";
+  const none = {
+    all: "No organizations yet.",
+    over: "No organization is over its plan.",
+    locked: "No organizations are locked.",
+    disabled: "No organizations are disabled.",
+    suspended: "No organizations are suspended.",
+    review: "No organizations need review.",
+  } satisfies Record<OrgStatus, string>;
+  return none[status];
 }
 
-const hasStatus = (o: AdminOrgRow, status: OrgStatus) =>
-  status === "all" || (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null;
+const STATUS_TEST = {
+  all: () => true,
+  over: (o) => o.overPlan,
+  locked: (o) => o.lockedAt != null,
+  disabled: (o) => o.disabledAt != null,
+  suspended: (o) => o.linksSuspendedAt != null,
+  review: (o) => o.reviewFlaggedAt != null,
+} satisfies Record<string, (o: AdminOrgRow) => boolean>;
+
+const hasStatus = (o: AdminOrgRow, status: OrgStatus) => STATUS_TEST[status](o);
 
 const matchesSearch = (o: AdminOrgRow, needle: string) =>
   !needle || [o.name, o.ownerName, o.ownerEmail].some((v) => v?.toLowerCase().includes(needle));
 
+/** The mock's three first, then the two the abuse work still needs. */
 const STATUSES = [
   { id: "all", label: "All" },
+  { id: "over", label: "Over plan" },
+  { id: "locked", label: "Locked" },
+  { id: "disabled", label: "Disabled" },
   { id: "suspended", label: "Suspended" },
   { id: "review", label: "Needs review" },
 ] as const;
 type OrgStatus = (typeof STATUSES)[number]["id"];
 
-/** Whether an org's links are stopped, and how to say it: a ban outranks a
- * suspension, since it is the decision. */
-function stoppedLabel(org: AdminOrgRow, suspendedLabel: string): string | null {
-  if (org.disabledAt) return "disabled";
-  return org.linksSuspendedAt ? suspendedLabel : null;
+const DAY_MS = 86_400_000;
+
+/** "Over plan · 10 days left" while the grace period runs, plain "Over plan"
+ * when the API has not said when it ends. */
+function overLabel(org: AdminOrgRow): string {
+  if (org.graceEndsAt == null) return "Over plan";
+  const left = Math.ceil((org.graceEndsAt - Date.now()) / DAY_MS);
+  if (left <= 0) return "Over plan · grace ended";
+  return `Over plan · ${left} ${left === 1 ? "day" : "days"} left`;
+}
+
+/** Every state an admin acts on, worst first. A ban outranks a suspension,
+ * since it is the decision; `suspendedLabel` differs because the table is
+ * cramped and the dialog has room. */
+function orgStates(org: AdminOrgRow, suspendedLabel: string): { tone: StateTone; text: string }[] {
+  const states: { tone: StateTone; text: string }[] = [];
+  if (org.disabledAt) states.push({ tone: "bad", text: "disabled" });
+  else if (org.linksSuspendedAt) states.push({ tone: "bad", text: suspendedLabel });
+  if (org.domainStoppedAt) states.push({ tone: "warn", text: "Domain stopped" });
+  if (org.lockedAt) states.push({ tone: "warn", text: "Locked" });
+  else if (org.overPlan) states.push({ tone: "warn", text: overLabel(org) });
+  if (org.reviewFlaggedAt) states.push({ tone: "warn", text: "needs review" });
+  return states;
 }
 
 /** What an admin can still do to an org: nothing to a banned owner's but
@@ -76,16 +116,18 @@ function ownerOf(org: AdminOrgRow) {
     : null;
 }
 
-/** Plan, plus the two states an admin acts on. `suspendedLabel` differs: the
- * table is cramped, the dialog has room. */
-function OrgBadges({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
-  const stopped = stoppedLabel(org, suspendedLabel);
+/** The states as a dot and a word each, or "Active" when there is none. */
+function OrgStates({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
+  const states = orgStates(org, suspendedLabel);
+  if (states.length === 0) return <StateLabel tone="ok">Active</StateLabel>;
   return (
-    <>
-      <span className="mr-1.5">{org.plan}</span>
-      {stopped && <Badge color="pink">{stopped}</Badge>}{" "}
-      {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
-    </>
+    <span className="flex flex-wrap gap-x-3 gap-y-1">
+      {states.map((st) => (
+        <StateLabel key={st.text} tone={st.tone}>
+          {st.text}
+        </StateLabel>
+      ))}
+    </span>
   );
 }
 
@@ -104,17 +146,7 @@ function OrgMenu({
 }) {
   const { canRestore, canBan } = orgDecisions(org);
   return (
-    <Menu
-      align="end"
-      label={`Actions for ${org.name}`}
-      trigger={
-        <div className="flex justify-end">
-          <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
-            <Ellipsis size={15} />
-          </span>
-        </div>
-      }
-    >
+    <Menu align="end" label={`Actions for ${org.name}`} trigger={<RowMenuTrigger />}>
       <MenuItem onClick={onView}>
         <Eye size={14} /> View details
       </MenuItem>
@@ -141,17 +173,31 @@ function OrgMenu({
   );
 }
 
-function OrgOwner({ org }: { org: AdminOrgRow }) {
-  if (!org.ownerName) return <span className="text-muted">No owner</span>;
+/** The org's name over its owner's address: the name opens the details, the
+ * address is what a report or an email names. */
+function OrgCell({ org, onView }: { org: AdminOrgRow; onView: () => void }) {
+  const owner = org.ownerName ? `${org.ownerName} · ${org.ownerEmail ?? ""}` : "No owner";
   return (
-    <>
-      <span className="block truncate" title={org.ownerName}>
-        {org.ownerName}
+    <span className="flex min-w-0 items-center gap-3">
+      <LetterTile name={org.name} />
+      <span className="flex min-w-0 flex-col gap-0.5 leading-tight">
+        <button
+          type="button"
+          onClick={onView}
+          title={org.name}
+          className="max-w-full cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
+        >
+          {org.name}
+        </button>
+        {org.ownerEmail ? (
+          <span className="truncate font-mono text-xs text-muted" title={owner}>
+            {org.ownerEmail}
+          </span>
+        ) : (
+          <span className="text-xs text-muted">No owner</span>
+        )}
       </span>
-      <span className="block truncate text-xs text-muted" title={org.ownerEmail ?? ""}>
-        {org.ownerEmail}
-      </span>
-    </>
+    </span>
   );
 }
 
@@ -169,29 +215,30 @@ function OrgRow({
   onAct: (path: string, body?: { reason: string }) => void;
 }) {
   return (
-    <tr>
-      <Td className="max-w-48 font-bold">
-        <button
-          type="button"
-          onClick={onView}
-          title={org.name}
-          className="block max-w-full cursor-pointer truncate text-accent hover:underline"
-        >
-          {org.name}
-        </button>
+    <tr className={PHONE.row}>
+      <Td className={PHONE.main}>
+        <OrgCell org={org} onView={onView} />
       </Td>
-      <Td className="max-w-48">
-        <OrgOwner org={org} />
+      <Td
+        className={`${org.plan === "free" ? "text-muted" : ""} capitalize ${PHONE.meta}`}
+        data-label="Plan"
+      >
+        {org.plan}
       </Td>
-      <Td>
-        <OrgBadges org={org} suspendedLabel="suspended" />
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Links">
+        {fullNumber(org.links)}
+      </Td>
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Members">
+        {fullNumber(org.members)}
+      </Td>
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Clicks">
+        {fullNumber(org.clicks30d)}
+      </Td>
+      <Td className="max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0">
+        <OrgStates org={org} suspendedLabel="suspended" />
         <HoldReason why={org.linksSuspendedAt ? org.suspendReason : null} />
       </Td>
-      <Td className="tnum text-right">{org.members}</Td>
-      <Td className="tnum text-right">{org.links}</Td>
-      <Td className="tnum text-right">{org.clicks}</Td>
-      <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
-      <Td>
+      <Td className={`px-2 ${PHONE.menu}`}>
         <OrgMenu
           org={org}
           onView={onView}
@@ -222,7 +269,7 @@ function OrgRows({
   if (rows.length === 0)
     return (
       <tr>
-        <Td colSpan={8} className="py-8 text-center text-muted">
+        <Td colSpan={7} className="block py-8 text-center text-muted sm:table-cell">
           {emptyText}
         </Td>
       </tr>
@@ -246,7 +293,7 @@ function OrgMembersTable({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-medium text-muted">Members</p>
+      <p className="mb-2 text-xs text-muted">Members</p>
       <Table>
         <thead>
           <tr>
@@ -258,11 +305,12 @@ function OrgMembersTable({
         <tbody>
           {members.map((m) => (
             <tr key={m.userId}>
-              <Td>{m.name}</Td>
-              <Td className="text-muted">{m.email}</Td>
-              <Td>
-                <Badge color={roleColor[m.role]}>{m.role}</Badge>
+              <Td className="font-semibold">{m.name}</Td>
+              <Td className="truncate font-mono text-xs text-muted" title={m.email}>
+                {m.email}
               </Td>
+              {/* A role is an attribute of the row: text, not a pill. */}
+              <Td className="text-muted capitalize">{m.role}</Td>
             </tr>
           ))}
         </tbody>
@@ -291,11 +339,11 @@ function OrgLinksRecap({
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-4 py-3">
       <div className="flex-1">
-        <p className="text-xs font-medium text-muted">Links</p>
+        <p className="text-xs text-muted">Links</p>
         <p className="mt-0.5 text-sm">
-          <span className="font-bold tnum">{links.length}</span>{" "}
+          <span className="font-semibold tnum">{fullNumber(links.length)}</span>{" "}
           {links.length === 1 ? "link" : "links"},{" "}
-          <span className="font-bold tnum">{formatNumber(clicks)}</span> clicks between them
+          <span className="font-semibold tnum">{fullNumber(clicks)}</span> clicks between them
         </p>
       </div>
       <HrefLink
@@ -315,8 +363,10 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
     <Dialog open={!!org} onOpenChange={(o) => !o && onClose()} title={org?.name ?? ""} wide>
       {org && (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            <OrgBadges org={org} suspendedLabel="links suspended" />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <LetterTile name={org.name} />
+            <span className="capitalize">{org.plan}</span>
+            <OrgStates org={org} suspendedLabel="links suspended" />
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
@@ -324,10 +374,10 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
             <OrgDetailSkeleton />
           ) : (
             <>
-              <Card>
-                <p className="mb-3 text-xs font-medium text-muted">Clicks per day · 30d</p>
+              <div>
+                <p className="mb-1 text-xs text-muted">Clicks per day, last 30 days</p>
                 <AreaChart data={detail.data.series} />
-              </Card>
+              </div>
 
               <OrgMembersTable members={detail.data.members} />
               <OrgLinksRecap
@@ -343,8 +393,12 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
   );
 }
 
+/** The orgs page's first frame (see lib/route-preload.ts): the list. */
+export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminOrgsQuery)]);
+
 export function AdminOrgsPage() {
-  const orgs = useAdminOrgs();
+  const orgs = useAdminOrgsData();
+  const views = useMemo(() => orgs.data ?? [], [orgs.data]);
   const qc = useQueryClient();
   const toast = useToast();
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
@@ -379,81 +433,89 @@ export function AdminOrgsPage() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const matches = (orgs.data ?? []).filter(
-      (o) => hasStatus(o, status) && matchesSearch(o, needle),
-    );
+    const matches = views.filter((o) => hasStatus(o, status) && matchesSearch(o, needle));
     return sortRows(matches, sort, {
       name: (o) => o.name.toLowerCase(),
-      owner: (o) => o.ownerName?.toLowerCase() ?? "",
       members: (o) => o.members,
       links: (o) => o.links,
-      clicks: (o) => o.clicks,
+      clicks: (o) => o.clicks30d,
       created: (o) => o.createdAt,
     });
-  }, [orgs.data, q, status, sort]);
+  }, [views, q, status, sort]);
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
+  const counts = useMemo(
+    () =>
+      STATUSES.map((s) => ({
+        ...s,
+        count: views.filter((o) => hasStatus(o, s.id)).length,
+      })),
+    [views],
+  );
 
   return (
     <div>
-      <PageHeader title="Organizations" sub="All organizations on this instance" />
-      <SearchInput
-        value={q}
-        onChange={(v) => {
-          setQ(v);
-          setPage(0);
-        }}
-        placeholder="Search by org name or owner…"
-        label="Search organizations"
-        className="mb-4"
-      />
-      <div className="mb-3">
-        <Segmented
-          items={STATUSES}
-          value={status}
-          onChange={(next) => {
-            setStatus(next);
-            setPage(0);
-          }}
-        />
+      <SectionHeading>Organizations</SectionHeading>
+      <div className="mb-4">
+        <FilterBar>
+          <FilterRow
+            label="Filter organizations"
+            items={counts}
+            value={status}
+            onChange={(next) => {
+              setStatus(next);
+              setPage(0);
+            }}
+          />
+          <SearchInput
+            value={q}
+            onChange={(v) => {
+              setQ(v);
+              setPage(0);
+            }}
+            placeholder="Search organization or owner"
+            label="Search organizations"
+          />
+        </FilterBar>
       </div>
       {/* Rows only: the header and search box above are real, so the
           page-level skeleton would draw a second one of each. */}
       {orgs.isLoading ? (
         <TableSkeleton rows={6} testId="admin-orgs-rows-skeleton" />
       ) : (
-        <Table minWidth="min-w-[56rem]">
-          <thead>
+        <Table fixed minWidth={`sm:min-w-[50rem] ${PHONE.table}`}>
+          <thead className={PHONE.head}>
             <tr>
-              <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
-              <SortTh label="Owner" sortKey="owner" sort={sort} onSort={setSort} />
-              <Th>Plan</Th>
-              <SortTh
-                label="Members"
-                sortKey="members"
-                sort={sort}
-                onSort={setSort}
-                className="text-right"
-              />
+              <SortTh label="Organization" sortKey="name" sort={sort} onSort={setSort} />
+              <Th className="w-20">Plan</Th>
               <SortTh
                 label="Links"
                 sortKey="links"
                 sort={sort}
                 onSort={setSort}
-                className="text-right"
+                className="w-20 text-right"
               />
               <SortTh
-                label="Clicks"
+                label="Members"
+                sortKey="members"
+                sort={sort}
+                onSort={setSort}
+                className="w-24 text-right"
+              />
+              <SortTh
+                label="Clicks · 30d"
                 sortKey="clicks"
                 sort={sort}
                 onSort={setSort}
-                className="text-right"
+                className="w-28 text-right"
               />
-              <SortTh label="Created" sortKey="created" sort={sort} onSort={setSort} />
-              <Th className="text-right">Actions</Th>
+              <Th className="w-52">State</Th>
+              <Th className="w-12 px-2">
+                <span className="sr-only">Actions</span>
+              </Th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={PHONE.body}>
             <OrgRows
               rows={rows}
               emptyText={emptyMessage(status, q.trim())}
@@ -481,9 +543,9 @@ export function AdminOrgsPage() {
       >
         {deleting && (
           <>
-            Delete <span className="font-bold text-accent">{deleting.name}</span> with{" "}
-            {deleting.links} links and {deleting.clicks} recorded clicks? All its short links stop
-            working. This cannot be undone.
+            Delete <span className="font-semibold">{deleting.name}</span> with {deleting.links}{" "}
+            links and {deleting.clicks} recorded clicks? All its short links stop working. This
+            cannot be undone.
           </>
         )}
       </ConfirmDialog>

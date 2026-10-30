@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+  queryOptions,
+} from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import { readCachedUser, writeCachedUser } from "./user-cache";
@@ -8,6 +14,7 @@ import posthog from "./posthog";
 import { FUNNEL, captureGoogleSignup } from "./funnel";
 import type { LinkImportDTO } from "@/shared/link-import";
 import type {
+  BillingDetails,
   CurrentUser,
   AppConfig,
   AddressDTO,
@@ -16,16 +23,10 @@ import type {
   MemberDTO,
   InviteDTO,
   DomainDTO,
-  OrgStats,
-  LinkStats,
   RecentClick,
-  AdminUsage,
-  AdminOrgRow,
   AdminReportRow,
   AdminBlockedHostRow,
   AdminOrgDetail,
-  AdminUserRow,
-  AdminLinkRow,
   AdminAnonLinkRow,
   AdminActionRow,
   QuotaUsage,
@@ -45,38 +46,44 @@ import type {
  * anything leaves it enabled and waits for the real answer.
  */
 export function useCurrentUser(enabled = true) {
-  return useQuery<CurrentUser | null>({
-    queryKey: ["user"],
-    enabled,
-    queryFn: async () => {
-      try {
-        const user = await api<CurrentUser>("/user");
-        writeCachedUser(user);
-        posthog.identify(user.user.id, {
-          email: user.user.email,
-          name: user.user.name,
-          plan: user.user.plan,
-          is_admin: user.user.isAdmin,
-        });
-        captureGoogleSignup((event, props) => posthog.capture(event, props));
-        // Backfill the Google address once the OAuth round trip lands, so a
-        // later visit to /login can offer "continue as <email>".
-        if (lastAuth()?.method === "google" && lastAuth()?.email !== user.user.email) {
-          setLastAuth("google", user.user.email);
-        }
-        return user;
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
-          writeCachedUser(null);
-          return null;
-        }
-        throw e;
-      }
-    },
-    staleTime: 60_000,
-    retry: false,
-  });
+  return useQuery({ ...userQuery, enabled });
 }
+
+/**
+ * The signed-in account, or null for nobody. One definition for the hook and
+ * for the route loaders that need it before a page renders (see
+ * lib/route-preload.ts), so both read and fill the same cache entry.
+ */
+export const userQuery = queryOptions<CurrentUser | null>({
+  queryKey: ["user"],
+  queryFn: async () => {
+    try {
+      const user = await api<CurrentUser>("/user");
+      writeCachedUser(user);
+      posthog.identify(user.user.id, {
+        email: user.user.email,
+        name: user.user.name,
+        plan: user.user.plan,
+        is_admin: user.user.isAdmin,
+      });
+      captureGoogleSignup((event, props) => posthog.capture(event, props));
+      // Backfill the Google address once the OAuth round trip lands, so a
+      // later visit to /login can offer "continue as <email>".
+      if (lastAuth()?.method === "google" && lastAuth()?.email !== user.user.email) {
+        setLastAuth("google", user.user.email);
+      }
+      return user;
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        writeCachedUser(null);
+        return null;
+      }
+      throw e;
+    }
+  },
+  staleTime: 60_000,
+  retry: false,
+});
 
 /**
  * Who the shell draws itself as: the checked answer when it is here, the last
@@ -93,19 +100,40 @@ export function useCurrentUser(enabled = true) {
 export function useShellUser(): CurrentUser | null {
   const currentUser = useCurrentUser();
   const [cached] = useState(readCachedUser);
-  return currentUser.data ?? cached ?? null;
+  // Once /user has answered, its answer wins, null (signed out) included.
+  return currentUser.data !== undefined ? currentUser.data : (cached ?? null);
 }
 
 // Deployment config (e.g. appHost for DNS instructions) — static per deploy.
 /** Shared by useConfig and anything that must wait for the answer outside
  * a render, such as the Turnstile guard. */
-export const configQuery = {
+export const configQuery = queryOptions({
   queryKey: ["config"],
   queryFn: () => api<AppConfig>("/config"),
   staleTime: Infinity,
-};
+});
 
-export const useConfig = () => useQuery<AppConfig>(configQuery);
+export const useConfig = () => useQuery(configQuery);
+
+/**
+ * The card and invoices on the billing page, from Polar by way of the
+ * Worker. Only for an account with a billing account: anybody else has
+ * neither, and the page shows them nothing to ask about. No retry: when
+ * Polar fails the page falls back to the portal buttons, which is better
+ * than a second wait for the same failure.
+ */
+export const billingDetailsQuery = (enabled: boolean) =>
+  queryOptions<BillingDetails>({
+    queryKey: ["billingDetails"],
+    queryFn: () => api("/billing/details"),
+    enabled,
+    staleTime: 60_000,
+    // Back from the portal, possibly with a new card: ask again.
+    refetchOnWindowFocus: "always",
+    retry: false,
+  });
+
+export const useBillingDetails = (enabled: boolean) => useQuery(billingDetailsQuery(enabled));
 
 // The host shared-domain links display, copy, and redirect through. Falls
 // back to the current origin's host while config is still loading.
@@ -153,7 +181,10 @@ interface LinkPage {
  * ever apply to the rows already on screen.
  */
 export const useLinks = (orgId: string, query: LinkQuery = {}) =>
-  useQuery<LinkPage>({
+  useQuery(linksQuery(orgId, query));
+
+export const linksQuery = (orgId: string, query: LinkQuery = {}) =>
+  queryOptions<LinkPage>({
     queryKey: ["links", orgId, query],
     queryFn: () => api(`/orgs/${orgId}/links?${linkQueryString(query)}`),
     enabled: !!orgId,
@@ -181,8 +212,10 @@ interface CachedQuotaUsage {
 /** Links used against the plan's `links` cap: a link plus its kept-forever
  * aliases each count (a rename's automatic 48h temp_alias never does), so
  * this can run ahead of `useLinks(...).data.length`. */
-export const useLinkQuotaUsage = (orgId: string) =>
-  useQuery<CachedQuotaUsage>({
+export const useLinkQuotaUsage = (orgId: string) => useQuery(linkQuotaUsageQuery(orgId));
+
+export const linkQuotaUsageQuery = (orgId: string) =>
+  queryOptions<CachedQuotaUsage>({
     queryKey: ["linkQuotaUsage", orgId],
     queryFn: () => api(`/orgs/${orgId}/links/quota-usage`),
     enabled: !!orgId,
@@ -190,8 +223,10 @@ export const useLinkQuotaUsage = (orgId: string) =>
 
 /** Tracked clicks this month against the plan's cap (#387). A minute stale
  * at most: the count moves with every flush, and nothing decides on it. */
-export const useClickUsage = (orgId: string) =>
-  useQuery<ClickUsage>({
+export const useClickUsage = (orgId: string) => useQuery(clickUsageQuery(orgId));
+
+export const clickUsageQuery = (orgId: string) =>
+  queryOptions<ClickUsage>({
     queryKey: ["clickUsage", orgId],
     queryFn: () => api(`/orgs/${orgId}/click-usage`),
     enabled: !!orgId,
@@ -245,34 +280,13 @@ export function useLinkMutations(orgId: string) {
   return { create, update, remove };
 }
 
-export const useStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
-  useQuery<OrgStats>({
-    queryKey: ["stats", orgId, days, bucket],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (days) params.set("days", String(days));
-      if (bucket) params.set("bucket", bucket);
-      const qs = params.size ? `?${params.toString()}` : "";
-      return api<OrgStats>(`/orgs/${orgId}/stats${qs}`);
-    },
-    enabled: !!orgId,
-  });
-
-export const useLinkStats = (orgId: string, slug: string | null, domain?: string | null) =>
-  useQuery<LinkStats>({
-    queryKey: ["linkStats", orgId, slug, domain],
-    queryFn: () => {
-      let path = `/orgs/${orgId}/links/stats/${encodeURIComponent(slug!)}`;
-      if (domain) path += `?domain=${encodeURIComponent(domain)}`;
-      return api<LinkStats>(path);
-    },
-    enabled: !!orgId && !!slug,
-  });
-
 // A link's primary address plus every alias (temporary, permanent, expired).
 // See #38.
 export const useAddresses = (orgId: string, linkId: string | null) =>
-  useQuery<AddressDTO[]>({
+  useQuery(addressesQuery(orgId, linkId));
+
+export const addressesQuery = (orgId: string, linkId: string | null) =>
+  queryOptions<AddressDTO[]>({
     queryKey: ["addresses", orgId, linkId],
     queryFn: () => api(`/orgs/${orgId}/links/${linkId}/addresses`),
     enabled: !!orgId && !!linkId,
@@ -322,29 +336,39 @@ export function useAddressMutations(orgId: string, linkId: string) {
 // The dashboard's live pulse: a cheap indexed read (limit rows by ts desc),
 // so it polls while the page is open.
 export const useRecentClicks = (orgId: string, limit = 8) =>
-  useQuery<RecentClick[]>({
+  useQuery(recentClicksQuery(orgId, limit));
+
+export const recentClicksQuery = (orgId: string, limit = 8) =>
+  queryOptions<RecentClick[]>({
     queryKey: ["recentClicks", orgId, limit],
     queryFn: () => api(`/orgs/${orgId}/clicks?limit=${limit}`),
     enabled: !!orgId,
     refetchInterval: 30_000,
   });
 
-export const useMembers = (orgId: string) =>
-  useQuery<MemberDTO[]>({
+export const useMembers = (orgId: string) => useQuery(membersQuery(orgId));
+
+export const membersQuery = (orgId: string) =>
+  queryOptions<MemberDTO[]>({
     queryKey: ["members", orgId],
     queryFn: () => api(`/orgs/${orgId}/members`),
     enabled: !!orgId,
   });
 
 export const useInvites = (orgId: string, enabled: boolean) =>
-  useQuery<InviteDTO[]>({
+  useQuery(invitesQuery(orgId, enabled));
+
+export const invitesQuery = (orgId: string, enabled = true) =>
+  queryOptions<InviteDTO[]>({
     queryKey: ["invites", orgId],
     queryFn: () => api(`/orgs/${orgId}/invites`),
     enabled: enabled && !!orgId,
   });
 
-export const useDomains = (orgId: string, enabled = true) =>
-  useQuery<DomainDTO[]>({
+export const useDomains = (orgId: string, enabled = true) => useQuery(domainsQuery(orgId, enabled));
+
+export const domainsQuery = (orgId: string, enabled = true) =>
+  queryOptions<DomainDTO[]>({
     queryKey: ["domains", orgId],
     queryFn: () => api(`/orgs/${orgId}/domains`),
     enabled: enabled && !!orgId,
@@ -396,8 +420,10 @@ export function useDomainMutations(orgId: string) {
 
 // API keys (#131): minted per-user but scoped through an owned org (the
 // route is owner-only), same shape as domains above.
-export const useApiKeys = (orgId: string, enabled = true) =>
-  useQuery<ApiKeyDTO[]>({
+export const useApiKeys = (orgId: string, enabled = true) => useQuery(apiKeysQuery(orgId, enabled));
+
+export const apiKeysQuery = (orgId: string, enabled = true) =>
+  queryOptions<ApiKeyDTO[]>({
     queryKey: ["api-keys", orgId],
     queryFn: () => api(`/orgs/${orgId}/api-keys`),
     enabled: enabled && !!orgId,
@@ -436,8 +462,10 @@ export interface ConnectedApp {
 // the OAuth flow in their AI tool" — this list appearing is the signal),
 // and off the moment it does or the person navigates away, so an idle tab
 // on this page isn't polling forever.
-export const useConnectedApps = (polling = false) =>
-  useQuery<ConnectedApp[]>({
+export const useConnectedApps = (polling = false) => useQuery(connectedAppsQuery(polling));
+
+export const connectedAppsQuery = (polling = false) =>
+  queryOptions<ConnectedApp[]>({
     queryKey: ["connected-apps"],
     refetchInterval: polling ? 3000 : false,
     queryFn: async () => {
@@ -505,18 +533,6 @@ export function useConfirmCheckout() {
   });
 }
 
-export const useAdminUsage = () =>
-  useQuery<AdminUsage>({
-    queryKey: ["admin", "usage"],
-    queryFn: () => api("/admin/usage"),
-  });
-
-export const useAdminOrgs = () =>
-  useQuery<AdminOrgRow[]>({
-    queryKey: ["admin", "orgs"],
-    queryFn: () => api("/admin/orgs"),
-  });
-
 export const useAdminOrgDetail = (orgId: string | null) =>
   useQuery<AdminOrgDetail>({
     queryKey: ["admin", "org", orgId],
@@ -524,67 +540,33 @@ export const useAdminOrgDetail = (orgId: string | null) =>
     enabled: !!orgId,
   });
 
-/** The cross-org link list (#67).
- *
- * The search goes to the server, because the table can hold far more links
- * than a browser should filter. Ordering does not: the response is capped, so
- * sorting it is a client concern and the column headers can drive it the way
- * every other table here works. */
-const STATUS_PARAM = {
-  all: "",
-  active: "&suspended=0",
-  suspended: "&suspended=1",
-  warned: "&warned=1",
-};
+export const useAdminAnonLinks = () => useQuery(adminAnonLinksQuery);
 
-export const useAdminLinks = (params: {
-  q: string;
-  status: keyof typeof STATUS_PARAM;
-  org?: string;
-}) =>
-  useQuery<AdminLinkRow[]>({
-    queryKey: ["admin", "links", params],
-    queryFn: () =>
-      api(
-        `/admin/links?q=${encodeURIComponent(params.q)}${STATUS_PARAM[params.status]}` +
-          (params.org ? `&org=${encodeURIComponent(params.org)}` : ""),
-      ),
-    // The search term is part of the key, so without this every pause in
-    // typing replaced the table with a skeleton and put it back. That flashes,
-    // and it also tears out whatever the admin had open: a row's actions menu
-    // is unmounted mid-click when the new page of results lands.
-    placeholderData: keepPreviousData,
-  });
+export const adminAnonLinksQuery = queryOptions<AdminAnonLinkRow[]>({
+  queryKey: ["admin", "anon-links"],
+  queryFn: () => api("/admin/links/anonymous"),
+});
 
-export const useAdminAnonLinks = () =>
-  useQuery<AdminAnonLinkRow[]>({
-    queryKey: ["admin", "anon-links"],
-    queryFn: () => api("/admin/links/anonymous"),
-  });
+export const useAdminReports = () => useQuery(adminReportsQuery);
 
-export const useAdminReports = () =>
-  useQuery<AdminReportRow[]>({
-    queryKey: ["admin", "reports"],
-    queryFn: () => api("/admin/links/reports"),
-  });
+export const adminReportsQuery = queryOptions<AdminReportRow[]>({
+  queryKey: ["admin", "reports"],
+  queryFn: () => api("/admin/links/reports"),
+});
 
-export const useAdminBlockedHosts = () =>
-  useQuery<AdminBlockedHostRow[]>({
-    queryKey: ["admin", "blocked-hosts"],
-    queryFn: () => api("/admin/links/blocked-hosts"),
-  });
+export const useAdminBlockedHosts = () => useQuery(adminBlockedHostsQuery);
 
-export const useAdminAudit = () =>
-  useQuery<AdminActionRow[]>({
-    queryKey: ["admin", "audit"],
-    queryFn: () => api("/admin/audit"),
-  });
+export const adminBlockedHostsQuery = queryOptions<AdminBlockedHostRow[]>({
+  queryKey: ["admin", "blocked-hosts"],
+  queryFn: () => api("/admin/links/blocked-hosts"),
+});
 
-export const useAdminUsers = () =>
-  useQuery<AdminUserRow[]>({
-    queryKey: ["admin", "users"],
-    queryFn: () => api("/admin/users"),
-  });
+export const useAdminAudit = () => useQuery(adminAuditQuery);
+
+export const adminAuditQuery = queryOptions<AdminActionRow[]>({
+  queryKey: ["admin", "audit"],
+  queryFn: () => api("/admin/audit"),
+});
 
 /** One DNS record a domain needs, as GET /domains/:id/records lists it. */
 interface DnsRecordDTO {
@@ -611,8 +593,10 @@ export const useDomainRecords = (orgId: string, domainId: string, enabled = true
  * The org's import from another service (#383) that nobody has put away. It
  * runs on the server, so this asks again every few seconds while it does.
  */
-export const useLinkImport = (orgId: string) =>
-  useQuery<{ import: LinkImportDTO | null }>({
+export const useLinkImport = (orgId: string) => useQuery(linkImportQuery(orgId));
+
+export const linkImportQuery = (orgId: string) =>
+  queryOptions<{ import: LinkImportDTO | null }>({
     queryKey: ["link-import", orgId],
     queryFn: () => api(`/orgs/${orgId}/link-import/current`),
     enabled: !!orgId,

@@ -196,7 +196,7 @@ test("the page says what it is built on, and carries its own title", async ({ pa
   // The libraries doing the work are named and linked.
   await expect(page.getByRole("link", { name: "qr-code-styling" })).toBeVisible();
   await expect(page.getByRole("link", { name: "SVGO" })).toBeVisible();
-  await expect(page.getByText(/free as in beer/i)).toBeVisible();
+  await expect(page.getByText(/should be free and open source/i)).toBeVisible();
 });
 
 test("a logo lands in the middle of the code instead of blanking it", async ({ page }) => {

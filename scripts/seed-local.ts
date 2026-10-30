@@ -404,6 +404,7 @@ async function wipe(): Promise<number> {
     "DELETE FROM org_entitlements WHERE org_id LIKE 'seed-%'",
     "DELETE FROM org_members WHERE org_id LIKE 'seed-%'",
     "DELETE FROM orgs WHERE id LIKE 'seed-%'",
+    "DELETE FROM admin_actions WHERE id LIKE 'seed-plan-%'",
     "DELETE FROM session WHERE user_id LIKE 'seed-%'",
     "DELETE FROM account WHERE user_id LIKE 'seed-%'",
     "DELETE FROM user WHERE id LIKE 'seed-%'",
@@ -419,6 +420,45 @@ async function wipe(): Promise<number> {
  * raw rows, so a seeded org never shows charts that disagree with its clicks.
  */
 async function buildRollups(): Promise<void> {
+  await sqlBatch(await rollupBackfill("org_id LIKE 'seed-%'"));
+
+  // Four counts, one request each and retried once: a single request
+  // scanning all four tables after the backfill was long enough for the
+  // local D1 to answer 500, which failed the whole seed at its last step.
+  const total = async (query: string): Promise<number> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const [r] = await sql<{ n: number }>(query);
+        return Number(r?.n ?? 0);
+      } catch (error) {
+        if (attempt === 1) throw error;
+        await Bun.sleep(2_000);
+      }
+    }
+  };
+  const row = {
+    raw: await total("select count(*) as n from clicks where org_id like 'seed-%'"),
+    daily: await total(
+      "select coalesce(sum(clicks), 0) as n from click_daily where org_id like 'seed-%'",
+    ),
+    hourly: await total(
+      "select coalesce(sum(clicks), 0) as n from click_hourly where org_id like 'seed-%'",
+    ),
+    dims: await total(
+      "select coalesce(sum(clicks), 0) as n from click_daily_dims where org_id like 'seed-%' and dim = 'country'",
+    ),
+  };
+  if (new Set(Object.values(row)).size !== 1) {
+    throw new Error(
+      `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Restart bun run dev (it applies the migrations) and seed again.`,
+    );
+  }
+  console.log(`  rollups built, matching ${row.raw} raw clicks`);
+}
+
+/** Migration 0042's three backfills, reading only the raw clicks `where`
+ * picks (its first `WHERE true` is the one that reads `clicks`). */
+async function rollupBackfill(where: string): Promise<string[]> {
   const migration = await Bun.file(
     new URL("../migrations/0042_click_rollups.sql", import.meta.url),
   ).text();
@@ -426,23 +466,9 @@ async function buildRollups(): Promise<void> {
     .replace(/^\s*--.*$/gm, "")
     .split(";")
     .filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q))
-    .map((q) => q.replace("WHERE true", "WHERE org_id LIKE 'seed-%'"));
+    .map((q) => q.replace("WHERE true", `WHERE ${where}`));
   if (backfill.length !== 3) throw new Error("migration 0042 no longer has its three backfills");
-  await sqlBatch(backfill);
-
-  const [row] = await sql<Record<string, number>>(
-    `select (select count(*) from clicks where org_id like 'seed-%') as raw,
-            (select coalesce(sum(clicks), 0) from click_daily where org_id like 'seed-%') as daily,
-            (select coalesce(sum(clicks), 0) from click_hourly where org_id like 'seed-%') as hourly,
-            (select coalesce(sum(clicks), 0) from click_daily_dims
-              where org_id like 'seed-%' and dim = 'country') as dims`,
-  );
-  if (!row || new Set(Object.values(row).map(Number)).size !== 1) {
-    throw new Error(
-      `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Restart bun run dev (it applies the migrations) and seed again.`,
-    );
-  }
-  console.log(`  rollups built, matching ${row.raw} raw clicks`);
+  return backfill;
 }
 
 /* ---------------- seed ---------------- */
@@ -527,7 +553,10 @@ async function seed() {
       sub ? q(u.plan) : "NULL"
     }, ${sub ? "'active'" : "NULL"}, ${sub ? q(`sub_seed_${u.id.slice(5)}`) : "NULL"}, ${
       sub ? q(`cus_seed_${u.id.slice(5)}`) : "NULL"
-    }, ${leaving ? 1 : 0}, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
+    }, ${leaving ? 1 : 0}, ${
+      // The period end Polar's webhook writes, so /billing can say "renews Nov 14".
+      sub ? now + randInt(3, 28) * day : "NULL"
+    }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
       comp ? u.createdAt : "NULL"
     }, ${u.createdAt}, ${u.createdAt})`;
   });
@@ -538,7 +567,7 @@ async function seed() {
   await sqlBatch([
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
        subscription_status, polar_subscription_id, polar_customer_id,
-       polar_subscription_cancel_at_period_end,
+       polar_subscription_cancel_at_period_end, polar_subscription_current_period_end,
        comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
@@ -872,8 +901,12 @@ async function seed() {
   await seedDowngrades(orgs, now, day);
 
   await seedClickUsage();
+  await seedLinkQrLooks();
+  await seedLastSeen(now, day);
 
   await seedScenarioAccounts(passwordHash, now, day);
+  await seedPlanHistory(now, day);
+  await seedEdgeCases(now);
 
   /* summary */
   console.log("\nSeeded:");
@@ -886,6 +919,257 @@ async function seed() {
     console.log(
       `  ${org.name.padEnd(16)} ${org.plan.padEnd(6)} ${owners[orgs.indexOf(org)].email}`,
     );
+}
+
+/**
+ * Links the random seed never produces, to push the Links table and the link
+ * page to their limits: no title, very long titles and destinations, a very
+ * long custom domain and an IDN one, ten aliases on one link, a temporary
+ * alias beside permanent ones, seven-figure and zero click counts, emoji, RTL
+ * text and one unbroken word.
+ *
+ * They go in the org the `pro-owner` scenario opens (same query as
+ * src/worker/dev-scenarios.ts), dated in the last day so they fill the top of
+ * its first page, newest first. Runs after buildRollups: the seven-figure
+ * counts are written straight into the rollups, as seedClickUsage writes its
+ * counter, rather than as millions of raw clicks.
+ */
+async function seedEdgeCases(now: number): Promise<void> {
+  const [org] = await sql<{ id: string; owner: string }>(
+    `SELECT o.id, u.id AS owner FROM orgs o
+     JOIN org_members m ON m.org_id = o.id AND m.role = 'owner'
+     JOIN user u ON u.id = m.user_id
+     WHERE u.email LIKE '%@seed.test' AND u.plan = 'pro'
+       AND o.id NOT IN (SELECT org_id FROM org_entitlements) AND o.locked_at IS NULL
+     ORDER BY (SELECT count(*) FROM links l WHERE l.org_id = o.id) DESC LIMIT 1`,
+  );
+  if (!org) return;
+  const hour = 3_600_000;
+  const day = 24 * hour;
+
+  // Two more custom domains: one as long as a hostname reasonably gets, and
+  // an IDN, stored the way the app stores one (punycode, from URL).
+  const longHost =
+    "go.the-very-long-and-entirely-unnecessary-name-of-our-agency.campaigns-and-partnerships-europe.test";
+  const idnHost = new URL("https://kürzer.bäckerei-müller-straße.test").hostname;
+  const domains = [
+    { id: uid(), hostname: longHost },
+    { id: uid(), hostname: idnHost },
+  ];
+  await sqlBatch(
+    domains.map(
+      (d) =>
+        `INSERT INTO domains (id, org_id, hostname, status, created_at) VALUES (${q(d.id)}, ${q(org.id)}, ${q(d.hostname)}, 'active', ${now - 40 * day})`,
+    ),
+  );
+  for (const d of domains)
+    await kvPut(`domain:${d.hostname}`, { domainId: d.id, orgId: org.id, rootRedirect: "" });
+  const [long, idn] = domains;
+
+  type Alias = { slug: string; temp?: boolean; clicks?: number };
+  type Edge = {
+    title: string;
+    destination: string;
+    slug?: string;
+    domain?: { id: string; hostname: string };
+    /** Total clicks written straight into the rollups. */
+    clicks?: number;
+    /** Raw clicks on the primary address, rolled up like the rest. */
+    rawClicks?: number;
+    aliases?: Alias[];
+  };
+  const shared = () => randomSlug();
+  // Newest first: the first entry is the top row.
+  const edges: Edge[] = [
+    {
+      title: "",
+      destination: "https://example.com",
+    },
+    {
+      title:
+        "Spring 2026 regional launch campaign for the printed flyers we are handing out in every northern store, the trade fair booth and the partner newsletter, second revision after legal review",
+      destination:
+        "https://shop.example.com/collections/spring-2026/limited-edition/outdoor-furniture-and-garden-accessories/teak-folding-chairs-with-cushions?utm_source=print&utm_medium=flyer&utm_campaign=spring-2026-northern-region-launch&utm_content=back-cover-qr-code-variant-b&ref=partner-newsletter-april&lang=en-GB",
+      domain: long,
+      // 64 characters, the most a slug may have.
+      slug: "spring-2026-printed-flyer-for-the-northern-region-store-v2-final",
+      rawClicks: 214,
+      aliases: Array.from({ length: 10 }, (_, i): Alias => ({
+        slug: `flyer-${["north", "south", "east", "west", "booth", "partner", "newsletter", "poster", "receipt", "packaging"][i]}-${i + 1}`,
+        clicks: [1_204, 312, 48, 7, 0, 0, 1, 0, 95, 0][i],
+      })),
+    },
+    {
+      title: "Renamed: summer menu",
+      destination: "https://restaurant.example.com/menu/summer",
+      domain: long,
+      slug: "summer-menu-2026",
+      rawClicks: 38,
+      aliases: [
+        { slug: "menu-summer", temp: true, clicks: 21 },
+        { slug: "menu", clicks: 4 },
+        { slug: "carte-ete", clicks: 0 },
+      ],
+    },
+    {
+      title: "Homepage",
+      destination: "https://www.example.com/",
+      clicks: 9_874_312,
+    },
+    {
+      title: "Bäckerei Müller: Brötchen vorbestellen",
+      destination: "https://bücher-und-brötchen.example/straße/bestellung",
+      domain: idn,
+      slug: "broetchen-bestellen",
+      clicks: 1_204_887,
+      aliases: [{ slug: "fruehstueck", clicks: 3 }],
+    },
+    {
+      title: "🎉 Summer sale ☀️ 50% off: café crème, piñatas & 日本語のテキスト 🇮🇹🚀",
+      destination: "https://example.com/sale?emoji=%F0%9F%8E%89",
+      rawClicks: 57,
+    },
+    {
+      title: "تخفيضات الصيف: خصم ٥٠٪ على جميع المنتجات حتى نهاية الشهر",
+      destination: "https://example.com/ar/summer-sale",
+      rawClicks: 12,
+    },
+    {
+      title: "עברית ו-English באותה שורה: מבצע 2026",
+      destination: "https://example.com/he/sale",
+    },
+    {
+      title:
+        "Donaudampfschifffahrtselektrizitätenhauptbetriebswerkbauunterbeamtengesellschaftsausweisnummer",
+      destination: "https://example.com/de/verein",
+      rawClicks: 3,
+    },
+    {
+      title: "",
+      destination:
+        "https://very-long-subdomain-for-tracking.marketing.example-corporation-international.com/landing/2026/q3/a-really-long-path-segment-that-keeps-going/and-another-one?a=1&b=2&c=3&session=8f14e45fceea167a5a36dedd4bea2543",
+      domain: long,
+      slug: "x",
+    },
+    {
+      title: "Never clicked",
+      destination: "https://example.com/quiet",
+    },
+  ];
+
+  const linkRows: string[] = [];
+  const addressRows: string[] = [];
+  const clickRows: string[] = [];
+  const rollupRows: string[] = [];
+  const kv: [string, JsonValue][] = [];
+  const rawLinkIds: string[] = [];
+  const countries = ["US", "DE", "GB", "IT", "JP", "BR", "IN", ""];
+  const referrers = ["", "google.com", "t.co", "linkedin.com"];
+  const devices = ["mobile", "desktop", "tablet"];
+
+  for (const [i, edge] of edges.entries()) {
+    const linkId = uid();
+    const createdAt = now - (i + 1) * 80 * 60_000;
+    const slug = edge.slug ?? shared();
+    const domainId = edge.domain?.id ?? null;
+    const host = edge.domain?.hostname ?? null;
+    linkRows.push(
+      `(${q(linkId)}, ${q(org.id)}, ${domainId ? q(domainId) : "NULL"}, ${q(slug)}, ${q(edge.destination)}, ${q(edge.title)}, ${q(org.owner)}, ${createdAt})`,
+    );
+    const addresses: { id: string; slug: string; alias?: Alias }[] = [
+      { id: uid(), slug },
+      ...(edge.aliases ?? []).map((alias) => ({ id: uid(), slug: alias.slug, alias })),
+    ];
+    for (const a of addresses) {
+      const kind = !a.alias ? "primary" : a.alias.temp ? "temp_alias" : "permanent_alias";
+      const expiresAt = a.alias?.temp ? now + 30 * hour : null;
+      addressRows.push(
+        `(${q(a.id)}, ${q(linkId)}, ${q(org.id)}, ${domainId ? q(domainId) : "NULL"}, ${q(a.slug)}, ${q(kind)}, ${q(
+          !a.alias ? "" : a.alias.temp ? "renamed" : "created",
+        )}, ${expiresAt ?? "NULL"}, NULL, ${createdAt + 60_000})`,
+      );
+      kv.push([
+        host ? `slug:${host}:${a.slug}` : `slug:${a.slug}`,
+        { linkId, addressId: a.id, orgId: org.id, url: edge.destination, expiresAt },
+      ]);
+      // Raw clicks, inside the last 7 days so an alias's count shows.
+      const n = a.alias ? (a.alias.clicks ?? 0) : (edge.rawClicks ?? 0);
+      for (let c = 0; c < n; c++) {
+        const ts = now - randInt(0, 6 * day);
+        clickRows.push(
+          `(${q(linkId)}, ${q(org.id)}, ${ts}, ${q(pick(countries))}, ${q(pick(referrers))}, ${q(pick(devices))}, ${a.alias ? q(a.id) : "NULL"})`,
+        );
+      }
+      if (n) rawLinkIds.push(linkId);
+    }
+
+    // Seven figures, spread over the last 90 days, growing toward today.
+    // Added to the rollups rather than inserted: an alias's raw clicks may
+    // already have rolled up into the same days.
+    if (edge.clicks) {
+      const days = 90;
+      const weights = Array.from({ length: days }, (_, d) => (days - d) ** 1.5 * (0.6 + rand()));
+      const sum = weights.reduce((s, w) => s + w, 0);
+      const perDay = weights.map((w) => Math.floor((w / sum) * edge.clicks!));
+      perDay[0] += edge.clicks - perDay.reduce((s, n) => s + n, 0);
+      for (const [d, n] of perDay.entries()) {
+        const date = new Date(now - d * day).toISOString().slice(0, 10);
+        const split = (values: string[]) => {
+          let left = n;
+          return values.map((v, k) => {
+            const share = k === values.length - 1 ? left : Math.floor(left * (0.4 + rand() * 0.3));
+            left -= share;
+            return [v, share] as const;
+          });
+        };
+        rollupRows.push(
+          `INSERT INTO click_daily (org_id, day, link_id, clicks) VALUES (${q(org.id)}, ${q(date)}, ${q(linkId)}, ${n}) ON CONFLICT DO UPDATE SET clicks = clicks + excluded.clicks`,
+        );
+        const dims = [
+          ...split(["US", "DE", "GB", "JP", "BR"]).map(([v, c]) => ["country", v, c] as const),
+          ...split(["google.com", "", "t.co", "linkedin.com"]).map(
+            ([v, c]) => ["referrer", v, c] as const,
+          ),
+          ...split(devices).map(([v, c]) => ["device", v, c] as const),
+        ].filter(([, , c]) => c > 0);
+        rollupRows.push(
+          `INSERT INTO click_daily_dims (org_id, dim, day, value, link_id, clicks) VALUES ${dims
+            .map(
+              ([dim, v, c]) => `(${q(org.id)}, ${q(dim)}, ${q(date)}, ${q(v)}, ${q(linkId)}, ${c})`,
+            )
+            .join(",")} ON CONFLICT DO UPDATE SET clicks = clicks + excluded.clicks`,
+        );
+        if (d === 0) {
+          // Today's clicks across the hours so far, for the 24-hour chart.
+          const start = now - (now % day);
+          const hours = Math.max(1, Math.floor((now - start) / hour) + 1);
+          for (let h = 0; h < hours; h++) {
+            const share =
+              h === hours - 1 ? n - Math.floor(n / hours) * (hours - 1) : Math.floor(n / hours);
+            rollupRows.push(
+              `INSERT INTO click_hourly (org_id, hour, link_id, clicks) VALUES (${q(org.id)}, ${start + h * hour}, ${q(linkId)}, ${share}) ON CONFLICT DO UPDATE SET clicks = clicks + excluded.clicks`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  await sqlBatch([
+    `INSERT INTO links (id, org_id, domain_id, slug, destination, title, created_by, created_at) VALUES ${linkRows.join(",")}`,
+    `INSERT INTO link_addresses (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at) VALUES ${addressRows.join(",")}`,
+  ]);
+  for (let i = 0; i < clickRows.length; i += 500)
+    await sqlBatch([
+      `INSERT INTO clicks (link_id, org_id, ts, country, referrer, device, address_id) VALUES ${clickRows.slice(i, i + 500).join(",")}`,
+    ]);
+  const ids = [...new Set(rawLinkIds)].map(q).join(",");
+  if (ids) await sqlBatch(await rollupBackfill(`link_id IN (${ids})`));
+  for (let i = 0; i < rollupRows.length; i += 50) await sqlBatch(rollupRows.slice(i, i + 50));
+  for (const [key, value] of kv) await kvPut(key, value);
+  console.log(
+    `  edge cases: ${edges.length} links (${kv.length - edges.length} aliases) in ${org.id}, domains ${domains.map((d) => d.hostname).join(", ")}`,
+  );
 }
 
 /**
@@ -1028,7 +1312,113 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
   );
 
   await sqlBatch(statements);
-  console.log(`  downgraded: ${candidates.length} orgs, 1 locked org`);
+  const moved = await moveLinksToOrg(candidates[0].id, extraOrgId, 24);
+  console.log(`  downgraded: ${candidates.length} orgs, 1 locked org with ${moved} links`);
+}
+
+/**
+ * Hands up to `limit` of one org's shared-domain links, with their clicks
+ * and rollups, to another org. The locked org exists only after the links
+ * are seeded, and a read-only org with nothing in it shows the empty state,
+ * not the read-only table it is there to show. Custom-domain links stay put:
+ * their domain belongs to the first org.
+ */
+async function moveLinksToOrg(from: string, to: string, limit: number): Promise<number> {
+  const rows = await sql<{ id: string }>(
+    `SELECT id FROM links WHERE org_id = ${q(from)} AND domain_id IS NULL ORDER BY created_at DESC LIMIT ${limit}`,
+  );
+  if (!rows.length) return 0;
+  const ids = rows.map((r) => q(r.id)).join(",");
+  await sqlBatch(
+    ["links", "link_addresses", "clicks", "click_daily", "click_hourly", "click_daily_dims"].map(
+      (table) =>
+        `UPDATE ${table} SET org_id = ${q(to)} WHERE ${table === "links" ? "id" : "link_id"} IN (${ids})`,
+    ),
+  );
+  // The redirect's KV value names the org too.
+  const addresses = await sql<{
+    id: string;
+    link_id: string;
+    slug: string;
+    expires_at: string | null;
+    destination: string;
+  }>(
+    `SELECT a.id, a.link_id, a.slug, a.expires_at, l.destination FROM link_addresses a JOIN links l ON l.id = a.link_id
+      WHERE a.link_id IN (${ids}) AND a.retired_at IS NULL`,
+  );
+  await Promise.all(
+    addresses.map((a) =>
+      kvPut(`slug:${a.slug}`, {
+        linkId: a.link_id,
+        addressId: a.id,
+        orgId: to,
+        url: a.destination,
+        expiresAt: a.expires_at === null ? null : Number(a.expires_at),
+      }),
+    ),
+  );
+  return rows.length;
+}
+
+/**
+ * A few links with their own QR look, so the Links table's QR thumbnails
+ * and the link page's QR card have something other than the default to draw.
+ */
+async function seedLinkQrLooks(): Promise<void> {
+  const looks = [
+    "qr_style = 'dots', qr_corner = 'dot', qr_color = '#1f6f5c'",
+    "qr_style = 'classy', qr_corner = 'square', qr_color = '#7c3a1d', qr_bg = '#fff7ec'",
+    "qr_color = '#2f1f5e', qr_eye_color = '#7c5cff'",
+  ];
+  const rows = await sql<{ id: string }>(
+    `SELECT l.id FROM links l JOIN orgs o ON o.id = l.org_id
+      WHERE l.org_id LIKE 'seed-%' AND o.locked_at IS NULL
+      ORDER BY (SELECT count(*) FROM clicks c WHERE c.link_id = l.id) DESC LIMIT 60`,
+  );
+  // Every fourth of the busiest links, so most orgs with any traffic get one.
+  const statements = rows
+    .filter((_, i) => i % 4 === 0)
+    .map((r, i) => `UPDATE links SET ${looks[i % looks.length]} WHERE id = ${q(r.id)}`);
+  await sqlBatch(statements);
+  console.log(`  QR looks: ${statements.length} links`);
+}
+
+/**
+ * Polar's plan changes on the Audit page (migration 0050). Every account's
+ * audited plan is set level with its plan, so the first reconcile after
+ * seeding logs nothing it did not see happen, and a few accounts get the
+ * upgrade (and one the cancellation) that would have put them where they
+ * are.
+ */
+async function seedPlanHistory(now: number, day: number): Promise<void> {
+  const entry = (from: string, to: string, ago: string) =>
+    `INSERT INTO admin_actions (id, actor_user_id, action, target_type, target_id, detail, created_at)
+     SELECT 'seed-plan-' || id, 'polar', 'plan.change', 'user', id,
+            json_object('from', ${q(from)}, 'to', ${q(to)}, 'email', email),
+            ${now} - ${ago}
+     FROM user`;
+  await sqlBatch([
+    `UPDATE user SET audited_plan = plan`,
+    `${entry("free", "pro", `(abs(random()) % ${20 * day})`)}
+     WHERE id LIKE 'seed-%' AND plan = 'pro' AND comp_plan IS NULL LIMIT 3`,
+    `${entry("free", "hobby", `(abs(random()) % ${20 * day})`)}
+     WHERE id LIKE 'seed-%' AND plan = 'hobby' AND comp_plan IS NULL LIMIT 3`,
+    `${entry("pro", "free", `(abs(random()) % ${10 * day})`)}
+     WHERE id LIKE 'seed-%' AND plan = 'free' LIMIT 1`,
+  ]);
+}
+
+/**
+ * When each seeded account was last here (migration 0048): most within the
+ * last month, a few never, so Members' "Last active" shows its range. Seeded
+ * accounts have no sessions, so without this every one of them read "Never".
+ */
+async function seedLastSeen(now: number, day: number): Promise<void> {
+  await sqlBatch([
+    `UPDATE user SET last_seen_at = CASE WHEN abs(random()) % 8 = 0 THEN NULL
+       ELSE ${now} - abs(random()) % ${30 * day} END
+     WHERE id LIKE 'seed-%'`,
+  ]);
 }
 
 /**

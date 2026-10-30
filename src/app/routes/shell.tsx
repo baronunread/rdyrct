@@ -1,9 +1,26 @@
-import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ComponentType,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Layers, ChevronsUpDown, Plus, LogOut, Settings } from "@/app/ui/icons";
+import {
+  ChevronsUpDown,
+  Plus,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings,
+} from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
@@ -12,24 +29,40 @@ import { claimPendingLinks, storedAnonLinks } from "../lib/anon-links";
 import { api, ApiError } from "../lib/api";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
-import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
+import { Menu, MenuHeader, MenuItem, MenuSeparator } from "../ui/menu";
 import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
+import { BusyContent } from "../ui/spinner";
 
 import { AdminPlatformSkeleton, AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
 import { UserAvatar } from "../components/user-avatar";
 import { CommandMenu } from "../components/command-menu";
+import { openCommandMenu } from "../lib/shortcut";
+import { NewLinkHost } from "../components/new-link-host";
 import { OrgMenuItems } from "../components/org-menu-items";
+import { AppNotFound } from "../components/app-not-found";
+import { InShell } from "../lib/in-shell";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
-import { NotFound } from "./not-found";
-import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
+import { PLAN_LIMITS, type OrgPlan, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
-import { Logo } from "../ui/logo";
+import { Logo, LogoMark } from "../ui/logo";
+import { LayersIcon } from "../ui/nav-icons";
+import { Tooltip, TooltipGroup } from "../ui/tooltip";
+import { Shortcut } from "../ui/kbd";
+import { MOD_KEY } from "../lib/shortcut";
+import { cn } from "../ui/cn";
+import {
+  shellLayout,
+  toggleSidebar,
+  useSidebarCollapsed,
+  useSidebarShortcut,
+} from "../lib/sidebar";
+import { useGoShortcuts } from "../lib/go-shortcuts";
 
 const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
 
@@ -76,15 +109,61 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
   if (currentUser.isLoading) return <AdminPlatformSkeleton />;
-  if (!currentUser.data?.user.isAdmin) return <NotFound />;
+  if (!currentUser.data?.user.isAdmin) return <AppNotFound />;
   return children;
 }
 
+// The current page is lifted onto the surface, like the sheet beside it, with
+// its icon in the accent: one raised thing in the sidebar, not a tinted well.
 const navLinkProps = {
-  className: "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-  activeProps: { className: "bg-surface-2 text-accent" },
-  inactiveProps: { className: "text-muted hover:bg-surface-2/60 hover:text-text" },
+  className:
+    "flex h-9 min-w-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-[background-color,color] [&_svg]:shrink-0",
+  activeProps: {
+    className: "bg-surface font-medium text-text smooth-shadow-ring-xs [&_svg]:text-accent",
+  },
+  inactiveProps: {
+    className:
+      "text-muted [@media(hover:hover)]:hover:bg-surface/50 [@media(hover:hover)]:hover:text-text",
+  },
 };
+
+/** The switcher's face: the org's initial, so a glance tells two orgs
+ * apart, then its name. Folded, only the initial shows. */
+function OrgTrigger({
+  org,
+  collapsed,
+  phone,
+}: {
+  org: UserOrg | null;
+  collapsed: boolean;
+  phone?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex w-full min-w-9 items-center gap-2.5 rounded-lg px-1.5 text-sm select-none",
+        // In the drawer the switcher is lifted, as the mock draws it, so it
+        // reads as a control and not as a heading over the nav.
+        phone
+          ? "h-11 rounded-[10px] bg-surface px-2 smooth-shadow-ring-xs"
+          : "h-10 [@media(hover:hover)]:hover:bg-surface-2",
+      )}
+    >
+      {org && (
+        <span
+          aria-hidden
+          className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
+        >
+          {org.name.trim().charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className={cn("min-w-0 flex-1 truncate font-semibold", fade(collapsed))}>
+        {org ? org.name : "No organization"}
+      </span>
+      <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
+    </div>
+  );
+}
 
 function OrgSwitcherMenu({
   org,
@@ -92,7 +171,11 @@ function OrgSwitcherMenu({
   onSwitchOrg,
   canCreateOrg,
   onNewOrg,
+  collapsed,
+  phone,
 }: {
+  collapsed: boolean;
+  phone?: boolean;
   org: UserOrg | null;
   orgs: UserOrg[];
   onSwitchOrg: (id: string) => void;
@@ -101,19 +184,18 @@ function OrgSwitcherMenu({
 }) {
   return (
     <Menu
-      trigger={
-        <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm select-none hover:border-accent">
-          <span className="truncate">{org ? org.name : "No organization"}</span>
-          <ChevronsUpDown size={14} className="shrink-0 text-muted" />
-        </div>
-      }
+      trigger={<OrgTrigger org={org} collapsed={collapsed} phone={phone} />}
       label="Switch organization"
     >
       <OrgMenuItems orgs={orgs} currentId={org?.id} onPick={onSwitchOrg} />
       <MenuSeparator />
       <MenuItem onClick={onNewOrg}>
-        <Plus size={14} className="text-muted" /> New organization
-        {!canCreateOrg && <span className="ml-auto text-xs text-accent">Pro</span>}
+        <span className="grid size-5 shrink-0 place-items-center text-muted">
+          <Plus size={15} />
+        </span>
+        New organization
+        {/* Only Pro holds more than one, so say so before the click. */}
+        {!canCreateOrg && <span className="ml-auto text-xs text-muted">Pro</span>}
       </MenuItem>
     </Menu>
   );
@@ -124,17 +206,175 @@ function OrgSwitcherMenu({
  * sidebar items they sat directly under the organization's own nav, where
  * "Links" appeared twice meaning two different things.
  */
-function PlatformNav({ visible }: { visible: boolean }) {
+function PlatformNav({
+  visible,
+  collapsed,
+  phone,
+}: {
+  visible: boolean;
+  collapsed: boolean;
+  phone?: boolean;
+}) {
   if (!visible) return null;
   return (
     <div className="mt-2 px-3">
-      <p className="px-2.5 pb-1 text-xs font-medium text-muted">Admin</p>
+      <p className={cn("px-2.5 pb-1 text-xs font-medium text-muted", fade(collapsed))}>Admin</p>
       <nav className="flex flex-col gap-0.5">
-        <Link to="/admin" {...navLinkProps}>
-          <Layers size={15} /> Platform
-        </Link>
+        <NavItem
+          to="/admin"
+          icon={LayersIcon}
+          label="Platform"
+          collapsed={collapsed}
+          phone={phone}
+        />
       </nav>
     </div>
+  );
+}
+
+/** Hidden in the rail but still laid out, so nothing beside it moves while
+ * the sidebar folds: the rail only clips. */
+const fade = (collapsed: boolean) =>
+  cn("whitespace-nowrap transition-opacity duration-150", collapsed && "opacity-0");
+
+function NavItem({
+  to,
+  icon: Icon,
+  label,
+  collapsed,
+  phone,
+}: {
+  to: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  collapsed: boolean;
+  /** The drawer's rows: 42px tall and 15px type, for a thumb. */
+  phone?: boolean;
+}) {
+  const link = (
+    <Link
+      to={to}
+      {...navLinkProps}
+      className={cn(navLinkProps.className, phone && "h-[42px] gap-3 text-[15px]")}
+    >
+      <Icon size={phone ? 18 : 16} /> <span className={fade(collapsed)}>{label}</span>
+    </Link>
+  );
+  // In the rail the icon is all that shows, so its name comes up beside it.
+  return collapsed ? (
+    <Tooltip grouped side="right" content={label}>
+      {link}
+    </Tooltip>
+  ) : (
+    link
+  );
+}
+
+/** "[" as a key, for the fold tooltips. */
+const foldKey = <Shortcut keys={["["]} tone="tooltip" />;
+
+/**
+ * The top of the sidebar, as ChatGPT has it. Open: the mark goes to the
+ * dashboard, the convention people bring with them, and the fold button sits
+ * on the right. Folded: the mark is all that is left, and pointing at it
+ * turns it into the unfold button (the icon swap from the interfaces.dev
+ * cheat sheet: scale, blur, fade).
+ */
+function SidebarTop({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div className="hidden h-14 items-center gap-1 px-3 md:flex">
+      {collapsed ? (
+        <Tooltip
+          grouped
+          side="right"
+          content={<span className="flex items-center gap-2">Expand sidebar {foldKey}</span>}
+        >
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Expand sidebar"
+            className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
+          >
+            <LogoMark className="h-[18px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-25 group-hover/mark:opacity-0 group-hover/mark:blur-[4px] group-focus-visible/mark:scale-25 group-focus-visible/mark:opacity-0" />
+            <PanelLeftOpen
+              size={18}
+              className="absolute scale-25 text-muted opacity-0 blur-[4px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-100 group-hover/mark:opacity-100 group-hover/mark:blur-none group-focus-visible/mark:scale-100 group-focus-visible/mark:opacity-100 group-focus-visible/mark:blur-none"
+            />
+          </button>
+        </Tooltip>
+      ) : (
+        <Link
+          to="/dashboard"
+          aria-label="rdyrct, dashboard"
+          className="grid size-9 shrink-0 place-items-center rounded-lg"
+        >
+          <LogoMark className="h-[18px]" />
+        </Link>
+      )}
+      <div inert={collapsed} className={cn("ml-auto", fade(collapsed))}>
+        <Tooltip
+          grouped
+          side="right"
+          content={<span className="flex items-center gap-2">Collapse sidebar {foldKey}</span>}
+        >
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Collapse sidebar"
+            className="grid size-8 cursor-pointer place-items-center rounded-md text-muted transition-[background-color,color,scale] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+/** Who is signed in, and what they can do about it. The header names the
+ * account (name over email, for anybody with two); search sits here too so a
+ * phone, which has no ⌘K, still lists it. */
+function AccountMenu({
+  user,
+  theme,
+  onToggleTheme,
+  onSignOut,
+  signOutPending,
+  trigger,
+}: {
+  user: User;
+  theme: ReturnType<typeof useTheme>[0];
+  onToggleTheme: () => void;
+  onSignOut: () => void;
+  signOutPending: boolean;
+  trigger: ReactNode;
+}) {
+  const navigate = useNavigate();
+  return (
+    <Menu label="Account menu" trigger={trigger}>
+      <MenuHeader title={user.name} detail={user.email} />
+      <MenuSeparator />
+      <MenuItem onClick={() => void navigate({ to: "/settings" })}>
+        <Settings size={15} className="text-muted" /> Settings
+      </MenuItem>
+      <MenuItem closeOnClick={false} onClick={onToggleTheme}>
+        <MorphIcon
+          icon={theme === "dark" ? sun : moon}
+          size={15}
+          spring="snappy"
+          className="text-muted"
+        />
+        {theme === "dark" ? "Light theme" : "Dark theme"}
+      </MenuItem>
+      <MenuItem onClick={openCommandMenu}>
+        <Search size={15} className="text-muted" /> Search and commands
+        <Shortcut keys={[MOD_KEY, "K"]} className="ml-auto gap-0.5 max-md:hidden" />
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
+        <LogOut size={15} /> Sign out
+      </MenuItem>
+    </Menu>
   );
 }
 
@@ -149,7 +389,14 @@ function AppSidebar({
   onToggleTheme,
   onSignOut,
   signOutPending,
+  collapsed = false,
+  phone = false,
 }: {
+  /** Folded to the icon rail. Desktop only: the phone drawer is always open. */
+  collapsed?: boolean;
+  /** Drawn in the phone drawer: the logo on top, bigger rows, and the
+   * account row with its email and no ⌘K, since a phone has no keyboard. */
+  phone?: boolean;
   org: UserOrg | null;
   orgs: UserOrg[];
   onSwitchOrg: (id: string) => void;
@@ -161,69 +408,115 @@ function AppSidebar({
   onSignOut: () => void;
   signOutPending: boolean;
 }) {
-  const navigate = useNavigate();
+  const account = { user, theme, onToggleTheme, onSignOut, signOutPending };
   return (
-    <div className="flex h-full flex-col">
-      {/* brand — desktop only; on mobile the top bar already shows it */}
-      <div className="hidden px-3 pt-4 pb-2 md:block">
-        <Logo className="px-1.5 text-sm" />
-      </div>
-
-      {/* org switcher */}
-      <div className="px-3 py-2">
-        <OrgSwitcherMenu
-          org={org}
-          orgs={orgs}
-          onSwitchOrg={onSwitchOrg}
-          canCreateOrg={canCreateOrg}
-          onNewOrg={onNewOrg}
-        />
-      </div>
-
-      {/* nav — always visible: org-scoped pages render their own empty state
-          when no org exists yet, and billing is per-user */}
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {appNavItems
-          .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
-          .map(({ to, icon: Icon, label }) => (
-            <Link key={to} to={to} {...navLinkProps}>
-              <Icon size={15} /> {label}
+    <TooltipGroup>
+      <div className={cn("flex h-full flex-col overflow-hidden", phone && "overflow-y-auto")}>
+        {phone ? (
+          <div className="flex h-12 shrink-0 items-center px-5 pt-1">
+            <Link to="/dashboard" aria-label="rdyrct, dashboard" className="text-base">
+              <Logo />
             </Link>
-          ))}
-      </nav>
+          </div>
+        ) : (
+          <SidebarTop collapsed={collapsed} />
+        )}
 
-      <PlatformNav visible={user.isAdmin} />
+        {/* org switcher */}
+        <div className="px-3 py-2">
+          <OrgSwitcherMenu
+            org={org}
+            orgs={orgs}
+            onSwitchOrg={onSwitchOrg}
+            canCreateOrg={canCreateOrg}
+            onNewOrg={onNewOrg}
+            collapsed={collapsed}
+            phone={phone}
+          />
+        </div>
 
-      {/* user footer — py-2.5 makes this block exactly as tall as the main
-          Footer, so both border-t lines form one continuous bottom rule */}
-      <div className="mt-auto border-t border-border px-3 py-2.5">
-        <Menu
-          label="Account menu"
-          trigger={
-            <div className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-2">
-              <UserAvatar user={user} size={32} />
-              <p className="min-w-0 flex-1 truncate text-sm">{user.name}</p>
-              <ChevronsUpDown size={14} className="shrink-0 text-muted" />
+        {/* nav — always visible: org-scoped pages render their own empty state
+          when no org exists yet, and billing is per-user */}
+        <nav className="flex flex-col gap-0.5 px-3 py-2">
+          {appNavItems
+            .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
+            .map(({ to, icon, label }) => (
+              <NavItem
+                key={to}
+                to={to}
+                icon={icon}
+                label={label}
+                collapsed={collapsed}
+                phone={phone}
+              />
+            ))}
+        </nav>
+
+        <PlatformNav visible={user.isAdmin} collapsed={collapsed} phone={phone} />
+
+        {phone ? (
+          <div className="mt-auto px-3 py-3">
+            <AccountMenu
+              {...account}
+              trigger={
+                <div className="flex min-h-12 items-center gap-2.5 rounded-[10px] px-2 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+                  <UserAvatar user={user} size={28} />
+                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                    <span className="truncate text-sm font-semibold">{user.name}</span>
+                    <span className="truncate text-xs text-muted">{user.email}</span>
+                  </span>
+                  <ChevronsUpDown size={14} className="shrink-0 text-muted" />
+                </div>
+              }
+            />
+          </div>
+        ) : (
+          /* You: avatar, name, and the ⌘K key, which opens search (its one
+            home now the top row only folds). The email heads the menu. */
+          <div className="mt-auto flex items-center gap-0.5 px-3 py-3">
+            <div className="min-w-0 flex-1">
+              <AccountMenu
+                {...account}
+                trigger={
+                  <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-1 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+                    <UserAvatar user={user} size={28} />
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-sm font-semibold",
+                        fade(collapsed),
+                      )}
+                    >
+                      {user.name}
+                    </span>
+                  </div>
+                }
+              />
             </div>
-          }
-        >
-          <MenuItem onClick={() => void navigate({ to: "/settings" })}>
-            <Settings size={15} /> Settings
-          </MenuItem>
-          <MenuItem closeOnClick={false} onClick={onToggleTheme}>
-            <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
-            {theme === "dark" ? "Light theme" : "Dark theme"}
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
-            <LogOut size={15} /> Sign out
-          </MenuItem>
-        </Menu>
+            <button
+              type="button"
+              inert={collapsed}
+              onClick={openCommandMenu}
+              aria-label="Search and commands"
+              title="Search and commands"
+              className={cn(
+                "shrink-0 cursor-pointer rounded-md p-0.5 transition-[scale,opacity] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:[&_kbd]:text-text",
+                fade(collapsed),
+              )}
+            >
+              <Shortcut keys={[MOD_KEY, "K"]} className="gap-0.5" />
+            </button>
+          </div>
+        )}
       </div>
-    </div>
+    </TooltipGroup>
   );
 }
 
+/**
+ * The phone's sidebar: a full-height sheet floating over the dimmed page,
+ * the logo at its top, as the mock draws it. It sits above the top bar, so
+ * the dimmed strip to its right (and Escape) is how it closes.
+ */
 function MobileDrawer({
   open,
   onClose,
@@ -233,25 +526,38 @@ function MobileDrawer({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // A menu open inside the drawer takes its own Escape first.
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key === "Escape" && !e.defaultPrevented) onClose();
+  });
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
   return (
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion="user">
         <AnimatePresence>
           {open && (
-            <div className="fixed inset-0 z-20 md:hidden">
-              {/* click-outside backdrop as a real button: keyboard-focusable and
-                labeled, while drawer clicks (sibling, not child) never reach it */}
-              <button
+            <div data-app-drawer className="fixed inset-0 z-40 md:hidden">
+              {/* A dimmed page behind the drawer says it is on top and that a
+                  tap outside closes it. A real button, so it is reachable. */}
+              <m.button
                 type="button"
                 aria-label="Close menu"
-                className="absolute inset-0 cursor-default"
+                className="absolute inset-0 cursor-default bg-[rgb(23_21_31/0.32)] dark:bg-black/50"
                 onClick={onClose}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               />
               <m.div
-                className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg"
+                className="absolute top-1.5 bottom-1.5 left-1.5 w-[min(300px,calc(100vw-3.5rem))] overflow-hidden rounded-[26px] bg-bg pt-2 smooth-shadow-ring-xl"
                 initial={{ opacity: 0, x: -24 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12, transition: { duration: 0.15 } }}
+                exit={{ opacity: 0, x: -12, filter: "blur(4px)", transition: { duration: 0.15 } }}
                 transition={{ duration: 0.2 }}
               >
                 {children}
@@ -264,40 +570,91 @@ function MobileDrawer({
   );
 }
 
+const PLAN_NAME = {
+  free: "Free",
+  hobby: "Hobby",
+  pro: "Pro",
+  unlimited: "this instance",
+} satisfies Record<OrgPlan, string>;
+
+/** "You own 1 of 3 organizations on Pro." Nothing to count on a self-hosted
+ * copy, where the cap is a number nobody reaches. */
+function ownedLine(owned: number, plan: OrgPlan): string | null {
+  if (plan === "unlimited") return null;
+  const limit = PLAN_LIMITS[plan].orgs;
+  return `You own ${owned} of ${limit} ${limit === 1 ? "organization" : "organizations"} on ${PLAN_NAME[plan]}.`;
+}
+
 function NewOrgDialog({
   open,
   onOpenChange,
   name,
   onNameChange,
   onCreate,
+  pending,
+  owned,
+  plan,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   name: string;
   onNameChange: (name: string) => void;
   onCreate: () => void;
+  pending: boolean;
+  owned: number;
+  plan: OrgPlan;
 }) {
+  const [error, setError] = useState<string | undefined>();
+  const input = useRef<HTMLInputElement>(null);
+  const line = ownedLine(owned, plan);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    // Submit stays enabled; an empty name marks the field and says why.
+    if (!name.trim()) {
+      setError("Required");
+      input.current?.focus();
+      return;
+    }
+    onCreate();
+  };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="New organization">
-      <div className="flex flex-col gap-4">
-        <Field label="Name">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setError(undefined);
+        onOpenChange(next);
+      }}
+      title="New organization"
+    >
+      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        <Field
+          label="Name"
+          error={error}
+          hint="Its own links, domains and members. Your plan covers it."
+        >
           <Input
+            ref={input}
             value={name}
-            onChange={(e) => onNameChange(e.target.value)}
-            placeholder="acme inc"
+            onChange={(e) => {
+              onNameChange(e.target.value);
+              if (error) setError(undefined);
+            }}
+            placeholder="Orbit Studio"
+            autoComplete="organization"
             autoFocus
-            onKeyDown={(e) => e.key === "Enter" && onCreate()}
+            className="h-10"
           />
         </Field>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+        {line && <p className="text-xs text-muted tabular-nums">{line}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onCreate}>
-            Create
+          <Button type="submit" variant="primary" disabled={pending}>
+            <BusyContent busy={pending}>Create organization</BusyContent>
           </Button>
         </div>
-      </div>
+      </form>
     </Dialog>
   );
 }
@@ -333,15 +690,18 @@ function useClaimAnonLinks(orgId: string | undefined) {
       // The claim just added links, and billing's first-link hand-off asks
       // whether the count is still zero.
       await qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
-      // The one moment in the app worth sounding pleased about: they made
-      // something before they had an account, and it survived. A sentence
-      // that reads like a receipt wastes it.
-      toast("Welcome. Your link is already here.");
+      // They made a link before they had an account: say it carried over.
+      toast("Your link is saved to your account.");
     })();
   }, [orgId, qc, toast]);
 }
 
-export function AppShell() {
+/**
+ * The signed-in app: sidebar, phone top bar and drawer, ⌘K, and the sheet
+ * the page sits on. `children` stands in for the route's outlet, for the
+ * in-app 404, which the router renders outside any app route.
+ */
+export function AppShell({ children }: { children?: ReactNode }) {
   const shell = useShellUser();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -350,7 +710,22 @@ export function AppShell() {
   const [theme, toggleTheme] = useTheme();
   const [newOrgOpen, setNewOrgOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
+  const [creatingOrg, setCreatingOrg] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const collapsed = useSidebarCollapsed();
+  const layout = shellLayout(collapsed);
+  useSidebarShortcut();
+  useGoShortcuts();
+
+  // A tap on a row in the drawer goes somewhere, and the drawer has done
+  // its job: close it with the page change rather than leave it over the
+  // page that just loaded.
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const [drawerPath, setDrawerPath] = useState(pathname);
+  if (drawerPath !== pathname) {
+    setDrawerPath(pathname);
+    if (mobileOpen) setMobileOpen(false);
+  }
 
   const { org, orgs, setOrg } = useShellOrgs();
   useClaimAnonLinks(org?.id);
@@ -374,6 +749,7 @@ export function AppShell() {
   const createOrg = async () => {
     const name = newOrgName.trim();
     if (!name) return;
+    setCreatingOrg(true);
     try {
       const created = await api<{ id: string }>("/orgs", {
         method: "POST",
@@ -391,6 +767,8 @@ export function AppShell() {
       navigate({ to: "/dashboard" });
     } catch (e) {
       toast(orgCreateErrorMessage(e), "error");
+    } finally {
+      setCreatingOrg(false);
     }
   };
 
@@ -404,67 +782,91 @@ export function AppShell() {
       onError: (error) => toast(error.message, "error"),
     });
 
-  const sidebar = (
-    <AppSidebar
-      org={org}
-      orgs={orgs}
-      onSwitchOrg={switchOrg}
-      canCreateOrg={canCreateOrg}
-      onNewOrg={onNewOrg}
-      user={user}
-      theme={theme}
-      onToggleTheme={toggleTheme}
-      onSignOut={onSignOut}
-      signOutPending={logout.isPending}
-    />
-  );
+  const closeDrawer = () => setMobileOpen(false);
+  const sidebarProps = {
+    org,
+    orgs,
+    onSwitchOrg: switchOrg,
+    canCreateOrg,
+    onNewOrg,
+    user,
+    theme,
+    onToggleTheme: toggleTheme,
+    onSignOut,
+    signOutPending: logout.isPending,
+  };
 
   return (
-    <div className="flex min-h-dvh">
-      <CommandMenu />
-      <WebMcpLinkTools />
-      <WebMcpAnalyticsTool />
-      {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
-      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
-        {sidebar}
-      </aside>
+    <NewLinkHost>
+      <div className="flex min-h-dvh">
+        <CommandMenu />
+        <WebMcpLinkTools />
+        <WebMcpAnalyticsTool />
+        {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
+        <aside className={layout.aside}>
+          <AppSidebar {...sidebarProps} collapsed={collapsed} />
+        </aside>
 
-      {/* mobile top bar + drawer */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label="Menu"
-          className="cursor-pointer rounded-md p-1.5 text-muted hover:text-text"
+        {/* mobile top bar + drawer */}
+        <div
+          data-app-bar
+          className="fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-1.5 bg-bg/90 px-3 backdrop-blur md:hidden"
         >
-          <MorphIcon icon={mobileOpen ? x : menu2} size={18} spring="snappy" />
-        </button>
-        <Logo className="text-sm" />
-      </div>
-      <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)}>
-        {sidebar}
-      </MobileDrawer>
-
-      <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
-        <div className="mx-auto w-full max-w-5xl flex-1">
-          {/* Above the route, not inside each one: the state belongs to the
-              org, so it says the same thing on every page (#163). */}
-          <OverLimitBanner />
-          {/* pages are lazy chunks: keep the shell in place while one loads,
-              behind the shape that chunk is about to render */}
-          <Suspense fallback={<RouteSkeleton />}>
-            <Outlet />
-          </Suspense>
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Menu"
+            aria-expanded={mobileOpen}
+            className="grid size-10 cursor-pointer place-items-center rounded-lg text-text transition-[scale] duration-200 ease-out active:scale-[0.96]"
+          >
+            <MorphIcon icon={mobileOpen ? x : menu2} size={20} spring="snappy" />
+          </button>
+          <Link to="/dashboard" aria-label="rdyrct, dashboard" className="text-base">
+            <Logo />
+          </Link>
+          {/* A phone has no ⌘K, so search gets a button of its own. */}
+          <button
+            type="button"
+            onClick={openCommandMenu}
+            aria-label="Search and commands"
+            className="ml-auto grid size-10 cursor-pointer place-items-center rounded-lg text-muted transition-[scale] duration-200 ease-out active:scale-[0.96]"
+          >
+            <Search size={20} />
+          </button>
         </div>
-      </main>
+        <MobileDrawer open={mobileOpen} onClose={closeDrawer}>
+          <AppSidebar {...sidebarProps} phone />
+        </MobileDrawer>
 
-      <NewOrgDialog
-        open={newOrgOpen}
-        onOpenChange={setNewOrgOpen}
-        name={newOrgName}
-        onNameChange={setNewOrgName}
-        onCreate={createOrg}
-      />
-    </div>
+        {/* One raised sheet for the page; the sidebar and the phone bar sit on
+          the paper behind it (rdyrct-design, "The app's surfaces"). */}
+        <main className={layout.main}>
+          <div data-app-sheet className={layout.scroller}>
+            <div className="mx-auto w-full max-w-5xl flex-1">
+              {/* Above the route, not inside each one: the state belongs to the
+              org, so it says the same thing on every page (#163). */}
+              <OverLimitBanner />
+              {/* The router loads a page before it swaps to it and draws a
+              slow one's skeleton itself (main.tsx), so this is only met by
+              the shell's own first render. */}
+              <Suspense fallback={<RouteSkeleton />}>
+                <InShell.Provider value>{children ?? <Outlet />}</InShell.Provider>
+              </Suspense>
+            </div>
+          </div>
+        </main>
+
+        <NewOrgDialog
+          open={newOrgOpen}
+          onOpenChange={setNewOrgOpen}
+          name={newOrgName}
+          onNameChange={setNewOrgName}
+          onCreate={createOrg}
+          pending={creatingOrg}
+          owned={ownedCount}
+          plan={user.plan}
+        />
+      </div>
+    </NewLinkHost>
   );
 }

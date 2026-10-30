@@ -1,7 +1,7 @@
 import type { DomainDTO } from "@/shared/types";
 
 export function addDomainMessage(status: DomainDTO["status"]): string {
-  if (status === "active") return "Domain added successfully";
+  if (status === "active") return "Domain added";
   if (status === "issuing_tls") return "Domain added, DNS resolved, issuing certificate…";
   return "Domain added, checking DNS…";
 }
@@ -19,8 +19,8 @@ export function recheckMessage(
       return "Certificate still being issued, usually takes a few minutes";
     return null;
   }
-  if (newStatus === "active") return "Domain is live!";
+  if (newStatus === "active") return "Domain is active";
   if (oldStatus === "checking_dns" && newStatus === "issuing_tls")
-    return "DNS resolved! Issuing TLS certificate…";
+    return "DNS resolved. Issuing TLS certificate…";
   return null;
 }

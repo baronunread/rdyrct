@@ -38,6 +38,7 @@ export type AdminAction =
   | "user.delete"
   | "user.comp_grant"
   | "user.comp_revoke"
+  | "plan.change"
   | "anon_link.delete";
 
 export async function recordAdminAction(

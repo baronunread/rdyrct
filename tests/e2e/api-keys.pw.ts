@@ -12,8 +12,10 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
   await expect(page.getByRole("heading", { name: "API" })).toBeVisible();
   // "API keys" is the default tab, so no click needed to land on it.
 
-  await page.getByPlaceholder("Key name, e.g. Claude").fill("Playwright key");
   await page.getByRole("button", { name: "Create key" }).click();
+  const dialog = page.getByRole("dialog", { name: "New API key" });
+  await dialog.getByPlaceholder("Key name, e.g. Claude").fill("Playwright key");
+  await dialog.getByRole("button", { name: "Create key" }).click();
 
   await expect(page.getByText("Playwright key is ready")).toBeVisible();
   const keyText = await page.locator("code", { hasText: "rdyrct_live_" }).textContent();
@@ -26,6 +28,8 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
 
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("row", { name: /Playwright key/ })).toBeVisible();
+  // The reference opens beside the app, from the tab row.
+  await expect(page.getByRole("link", { name: /Docs/ })).toHaveAttribute("target", "_blank");
 
   const mcpHeaders = (bearer: string) => ({
     authorization: `Bearer ${bearer}`,

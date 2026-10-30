@@ -2,14 +2,29 @@ import { useState, useEffect, useRef } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUser } from "../lib/hooks";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  linkQuotaUsageQuery,
+  useCurrentUser,
+  useDomainMutations,
+  useLinkHost,
+  useLinkQuotaUsage,
+} from "../lib/hooks";
+import { canAdminOrg, preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
+import { settle, type PageContext } from "../lib/route-preload";
+import { HrefLink } from "../lib/router-search";
+import { Check, ChevronsUpDown } from "@/app/ui/icons";
+import { Menu, MenuItem } from "../ui/menu";
+import { buttonClass } from "../ui/button-class";
+import { withErrorToast } from "../lib/mutation-toast";
 import { useCurrentOrg } from "../lib/current-org";
 import { api } from "../lib/api";
+import { displayHost } from "../lib/display-url";
 import type { OrgRole, UserOrg } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
-import { Card, PageHeader } from "../ui/misc";
+import { Input } from "../ui/field";
+import { PageHeader } from "../ui/misc";
+import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
@@ -107,9 +122,80 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
   return { open, setOpen, close, confirmName, setConfirmName, pending, deleteOrg };
 }
 
-function OrgNameCard({
+/**
+ * Which domain new links start on (#69), chosen where the organization's
+ * other settings live. Only domains that are serving are offered, the same
+ * list the link editor reads, so the choice can never point at one that
+ * resolves nowhere. Admins choose; everyone else reads it.
+ */
+function DefaultDomainRow({ orgId, canChange }: { orgId: string; canChange: boolean }) {
+  const toast = useToast();
+  const linkHost = useLinkHost();
+  const { activeDomains, defaultDomainId, limits, canListDomains } = useOrgLimits();
+  const { setDefault } = useDomainMutations(orgId);
+  const options = [
+    { id: "", host: linkHost, note: "shared" },
+    ...activeDomains.map((d) => ({ id: d.id, host: displayHost(d.hostname), note: "" })),
+  ];
+  const current = options.find((o) => o.id === (defaultDomainId ?? "")) ?? options[0];
+  const choose = (id: string) => {
+    if (id === (defaultDomainId ?? "")) return;
+    const next = options.find((o) => o.id === id);
+    setDefault.mutate(id || null, {
+      onSuccess: () => {
+        posthog.capture("domain_default_set", { cleared: !id });
+        toast(`New links will use ${next?.host ?? linkHost}`);
+      },
+      onError: withErrorToast(toast),
+    });
+  };
+  const face = (
+    <>
+      <span className="truncate font-mono text-[13px]">{current.host}</span>
+      <ChevronsUpDown size={14} className="shrink-0 text-muted" aria-hidden />
+    </>
+  );
+  return (
+    <SettingsRow label="Default domain" hint="Where new links start. Each link can change it.">
+      {canChange && activeDomains.length > 0 ? (
+        <div className="w-full sm:w-80">
+          <Menu
+            label="Default domain"
+            trigger={
+              <span className="flex h-9 w-full items-center justify-between gap-2 rounded-lg bg-surface px-3 smooth-shadow-ring-xs transition-[box-shadow] duration-150 [@media(hover:hover)]:hover:shadow-[0_0_0_1px_var(--accent)]">
+                {face}
+              </span>
+            }
+          >
+            {options.map((o) => (
+              <MenuItem key={o.id || "shared"} onClick={() => choose(o.id)}>
+                <span className="w-4">
+                  {o.id === current.id && <Check size={13} className="text-accent" />}
+                </span>
+                <span className="truncate font-mono text-[13px]">{o.host}</span>
+                {o.note && <span className="ml-auto pl-3 text-xs text-muted">{o.note}</span>}
+              </MenuItem>
+            ))}
+          </Menu>
+        </div>
+      ) : (
+        <>
+          <span className="font-mono text-[13px]">{current.host}</span>
+          {canChange && canListDomains && limits.domains > 0 && (
+            <HrefLink href="/domains" className={buttonClass({ variant: "ghost", size: "sm" })}>
+              Add a domain
+            </HrefLink>
+          )}
+        </>
+      )}
+    </SettingsRow>
+  );
+}
+
+function OrgRows({
   orgId,
   isOwner,
+  canAdmin,
   register,
   rename,
   currentName,
@@ -117,54 +203,69 @@ function OrgNameCard({
 }: {
   orgId: string;
   isOwner: boolean;
+  canAdmin: boolean;
   register: ReturnType<typeof useOrgRenameForm>["register"];
   rename: () => void;
   currentName: string | undefined;
   isSubmitting: boolean;
 }) {
+  const toast = useToast();
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-4">
-        <Field label="Organization name">
-          <Input {...register("name")} disabled={!isOwner} />
-        </Field>
-        <Field label="Organization id">
-          <Input value={orgId} disabled readOnly />
-        </Field>
-        {isOwner ? (
-          <div>
-            <Button
-              variant="primary"
-              onClick={rename}
-              disabled={!currentName?.trim() || isSubmitting}
-            >
+    <SettingsGroup>
+      <SettingsRow label="Name" hint={isOwner ? undefined : "Only the owner can rename it."}>
+        <form
+          className="flex w-full items-center gap-2 sm:w-auto"
+          onSubmit={(e) => {
+            e.preventDefault();
+            rename();
+          }}
+        >
+          <Input
+            {...register("name")}
+            aria-label="Organization name"
+            disabled={!isOwner}
+            className="min-w-0 flex-1 sm:w-60 sm:flex-none"
+          />
+          {isOwner && (
+            <Button type="submit" disabled={!currentName?.trim() || isSubmitting}>
               <BusyContent busy={isSubmitting}>Save</BusyContent>
             </Button>
-          </div>
-        ) : (
-          <p className="text-xs text-muted">Only the owner can change these settings.</p>
-        )}
-      </div>
-    </Card>
+          )}
+        </form>
+      </SettingsRow>
+      <DefaultDomainRow orgId={orgId} canChange={canAdmin} />
+      <SettingsRow label="Organization ID" hint="For the API.">
+        <span className="font-mono text-[13px]">{orgId}</span>
+        <CopyButton
+          text={orgId}
+          label="Copy organization ID"
+          onCopy={(text) => copyToClipboard(text, toast)}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
-function DeleteOrgCard({ orgName, onDelete }: { orgName: string; onDelete: () => void }) {
+/** "Its 199 links and 2 domains stop working at once." Counted when the
+ * counts are in, and said without them until then. */
+function deleteHint(links: number | undefined, domains: number): string {
+  if (links === undefined) return "Its links and domains stop working at once.";
+  const linkPart = links === 1 ? "1 link" : `${links.toLocaleString("en-US")} links`;
+  if (domains === 0) return `Its ${linkPart} stop working at once.`;
+  return `Its ${linkPart} and ${domains === 1 ? "1 domain" : `${domains} domains`} stop working at once.`;
+}
+
+function DeleteOrgGroup({ orgId, onDelete }: { orgId: string; onDelete: () => void }) {
+  const links = useLinkQuotaUsage(orgId).data?.count;
+  const domains = useOrgLimits().domains.data?.length ?? 0;
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium text-danger">Danger zone</p>
-        <p className="text-sm text-muted">
-          Permanently delete <span className="text-text">{orgName}</span> with every link, custom
-          domain, and all click history. Short links stop working immediately.
-        </p>
-        <div>
-          <Button variant="danger" onClick={onDelete}>
-            Delete organization
-          </Button>
-        </div>
-      </div>
-    </Card>
+    <SettingsGroup danger>
+      <SettingsRow label="Delete organization" hint={deleteHint(links, domains)}>
+        <Button variant="danger" onClick={onDelete} aria-label="Delete organization">
+          Delete
+        </Button>
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -216,6 +317,18 @@ function DeleteOrgDialog({
   );
 }
 
+/** Everything the organization page's first frame reads (see
+ * lib/route-preload.ts): the default-domain choices, and for the owner the
+ * counts the delete row quotes. */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return settle([
+    preloadOrgDomains(qc, org, user),
+    isOrgOwner(user.user.isAdmin, org.role)
+      ? qc.ensureQueryData(linkQuotaUsageQuery(orgId))
+      : undefined,
+  ]);
+}
+
 export function OrganizationPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
@@ -230,21 +343,23 @@ export function OrganizationPage() {
   if (!org) return <NoOrgState />;
 
   return (
-    <div>
-      <PageHeader title="Organization" sub="Settings for the current organization" />
-      <div className="flex flex-col gap-4">
-        <OrgNameCard
+    <div className="mx-auto w-full max-w-[760px]">
+      <PageHeader title="Organization" />
+      <div className="flex max-w-[760px] flex-col gap-8">
+        <OrgRows
           orgId={orgId}
           isOwner={isOwner}
+          canAdmin={canAdminOrg(currentUser.data?.user.isAdmin, org.role, org.locked)}
           register={register}
           rename={rename}
           currentName={currentName}
           isSubmitting={isSubmitting}
         />
-        <QrDefaultsCard key={org.id} />
-        {isOwner && (
-          <DeleteOrgCard orgName={org.name} onDelete={() => deleteOrgFlow.setOpen(true)} />
-        )}
+        {/* Keyed by plan too: a style tried on Free and saved after checkout
+            (lib/pending-qr-style.ts) lands with the plan change, and the
+            card starts again from what is now saved. */}
+        <QrDefaultsCard key={`${org.id}:${org.plan}:${org.qrStyle}:${org.qrColor}:${org.qrLogo}`} />
+        {isOwner && <DeleteOrgGroup orgId={orgId} onDelete={() => deleteOrgFlow.setOpen(true)} />}
       </div>
 
       <DeleteOrgDialog org={org} flow={deleteOrgFlow} />

@@ -6,13 +6,22 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  fetchWorker,
+  freeOwnerCookie,
+  jsonBody,
+  signInCookie,
+  TEST_PASSWORD,
+} from "./support";
+import { hashPassword } from "../../src/worker/password";
 import type { ImportVerdict } from "../../src/shared/link-import";
 import { PLAN_LIMITS } from "../../src/shared/types";
 import { enqueueStorage, syncDomainMsg } from "../../src/worker/storage";
 import { finishImport, importNextChunk, stopImport } from "../../src/worker/routes/link-import";
 import type { JsonValue } from "../../src/shared/types";
-import type { LinkImportDTO } from "../../src/shared/link-import";
+import type { LinkImportDTO, LinkImportHistory } from "../../src/shared/link-import";
 
 const HOST = "short.example";
 let cookie: string;
@@ -367,5 +376,71 @@ describe("an import runs on the server", () => {
         import: null,
       },
     );
+  });
+});
+
+describe("past imports", () => {
+  const history = async () => {
+    const res = await call("GET", "/history");
+    expect(res.status).toBe(200);
+    return (await jsonBody<LinkImportHistory>(res)).imports;
+  };
+
+  it("lists finished imports newest first, a put-away one included", async () => {
+    await runImport([row(2, "a", "https://example.com/a"), row(3, "x/y", "https://example.com/b")]);
+    const { import: first } = await jsonBody<{ import: LinkImportDTO }>(
+      await call("GET", "/current"),
+    );
+    // Starting another puts the first away: it stays in the history.
+    await runImport([row(2, "a", "https://example.com/a")]);
+    const { import: second } = await jsonBody<{ import: LinkImportDTO }>(
+      await call("GET", "/current"),
+    );
+    // finished_at has millisecond resolution: make the order certain.
+    await env.DB.prepare("update link_imports set finished_at = finished_at - 1000 where id = ?")
+      .bind(first.id)
+      .run();
+    expect((await call("POST", `/${second.id}/dismiss`)).status).toBe(200);
+
+    const imports = await history();
+    expect(imports.map((i) => i.id)).toEqual([second.id, first.id]);
+    expect(imports[0]).toMatchObject({ service: "shortio", imported: 0, exists: 1, failed: 0 });
+    expect(imports[1]).toMatchObject({ service: "shortio", imported: 1, exists: 0, failed: 1 });
+    expect(imports[0].finishedAt).toBeGreaterThan(0);
+  });
+
+  it("leaves out an import that never finished", async () => {
+    await uploaded();
+    expect(await history()).toEqual([]);
+  });
+
+  it("shows only this organization's imports", async () => {
+    await runImport([row(2, "a", "https://example.com/a")]);
+    await env.DB.batch([
+      env.DB.prepare("insert into orgs (id, name, created_at) values ('org-other', 'Other', 0)"),
+      env.DB.prepare("update link_imports set org_id = 'org-other'"),
+    ]);
+    expect(await history()).toEqual([]);
+  });
+
+  it("is for members, not viewers", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('viewer-1', 'Viewer', 'viewer@example.com', 1, 0, 'free', 0, 0)",
+      ),
+      env.DB.prepare(
+        "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-viewer-1', 'viewer-1', 'credential', 'viewer-1', ?, 0, 0)",
+      ).bind(await hashPassword(TEST_PASSWORD)),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'viewer-1', 'viewer', 0)",
+      ),
+    ]);
+    const viewer = await signInCookie("viewer@example.com", TEST_PASSWORD);
+    const res = await fetchWorker(
+      new Request("http://localhost/api/orgs/org-1/link-import/history", {
+        headers: { cookie: viewer },
+      }),
+    );
+    expect(res.status).toBe(403);
   });
 });

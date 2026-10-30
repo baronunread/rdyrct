@@ -87,9 +87,10 @@ test("Links keeps its full route shape until the current user arrives", async ()
   );
 });
 
-test("sidebar navigation keeps the Links table usable after its data arrives", async () => {
+test("a slow page keeps the old one up, then shows its skeleton, then the page whole", async () => {
   const page = sharedPage;
   await warmShell(page, sharedEmail);
+  // Hold the links page's rows: the router waits for them before it swaps.
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -102,12 +103,22 @@ test("sidebar navigation keeps the Links table usable after its data arrives", a
     },
   );
 
+  // A new account's dashboard asks for its first link, so read what it says
+  // rather than assume a title.
+  const oldHeading = await page.locator("[data-app-sheet] h1").first().textContent();
   await page.getByRole("link", { name: "Links" }).click();
-  await expect(page).toHaveURL(/\/links$/);
-  await expect(page.getByRole("textbox", { name: "Search links" })).toBeVisible();
-  await expect(page.getByTestId("links-table-skeleton")).toBeVisible();
-  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
+  // Within the pending delay the dashboard is still the page on screen, with
+  // no skeleton over it.
+  await expect(page.locator("[data-app-sheet] h1").first()).toHaveText(oldHeading ?? "");
+  await expect(page.getByTestId("links-page-skeleton")).toHaveCount(0);
+  // Past it (defaultPendingMs), the skeleton of the page being opened.
+  await expect(page.getByTestId("links-page-skeleton")).toBeVisible();
   release();
+  await expect(page).toHaveURL(/\/links$/);
+  await expect(
+    page.locator("[data-app-sheet]").getByRole("heading", { name: "Links", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByTestId("links-page-skeleton")).toHaveCount(0);
   await expect(page.getByTestId("links-table-skeleton")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 });
@@ -119,7 +130,7 @@ test("Members keeps invite controls out until the current user arrives", async (
     page,
     "/members",
     "members-page-skeleton",
-    page.getByRole("button", { name: "Invite link" }),
+    page.getByRole("button", { name: "Invite", exact: true }),
   );
 });
 
@@ -156,14 +167,15 @@ test("Organization waits for fresh ownership before showing destructive controls
   );
 });
 
-test("Domains keeps its paid upgrade path out until the current user arrives", async () => {
+test("Domains keeps its plan answer out until the current user arrives", async () => {
   const page = sharedPage;
   await warmShell(page, sharedEmail);
+  // A free account: what settles is the locked state with its way to the plans.
   await expectFreshUserSkeleton(
     page,
     "/domains",
     "domains-page-skeleton",
-    page.getByRole("link", { name: "Upgrade to add a domain" }),
+    page.getByTestId("feature-locked"),
   );
 });
 
@@ -182,7 +194,9 @@ test("Admin routes show their own skeletons while their data is delayed", async 
   );
 
   for (const route of [
-    { path: "/admin", api: "/api/admin/usage", heading: "Platform usage" },
+    // One visible title, "Platform", over the tabs; each section names
+    // itself in a heading for screen readers.
+    { path: "/admin", api: "/api/admin/usage", heading: "Usage" },
     { path: "/admin/links", api: "/api/admin/links", heading: "Links" },
     { path: "/admin/orgs", api: "/api/admin/orgs", heading: "Organizations" },
     { path: "/admin/users", api: "/api/admin/users", heading: "Users" },
@@ -211,7 +225,6 @@ test("Admin routes show their own skeletons while their data is delayed", async 
     await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
     await expect(page.getByRole("status")).toHaveCount(0);
     // Calls to Google Web Risk, against the site-wide daily cap.
-    if (route.path === "/admin")
-      await expect(page.getByText("Google lookups · today")).toBeVisible();
+    if (route.path === "/admin") await expect(page.getByText("Lookups today")).toBeVisible();
   }
 });

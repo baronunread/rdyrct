@@ -73,6 +73,7 @@ export function assertNotShortener(destination: string): void {
   if (isShortenerDestination(destination))
     throw new HTTPException(422, {
       message: "That destination is another link shortener. Point the link at the final URL.",
+      cause: { code: "shortener_destination" },
     });
 }
 

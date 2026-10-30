@@ -2,40 +2,20 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Webhook } from "standardwebhooks";
-import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
-import type { JsonValue } from "../../shared/types";
+import { createError } from "evlog";
+import type { BillingDetails, JsonValue } from "../../shared/types";
+import { billingDetails, invoicePdfUrl, NO_BILLING_DETAILS } from "../billing-details";
 import { requireUser } from "../guards";
 import { captureAlert } from "../sentry";
 import { effectivePlanSql } from "../entitlement";
 import { reconcileUser } from "../reconcile";
 import { billingEnabled } from "../plan";
 import { jsonBodyLimit } from "../body-limit";
-import type { BillingProvider } from "../billing-provider";
+import { planForProduct, polarFor, polarRefusal, type BillingProvider } from "../billing-provider";
 import { logFailure } from "../log-failure";
-
-// Imported on first use: the SDK is 130 KB that every cold start would
-// otherwise parse, for the three routes below that call it.
-const polarFor = async (env: Env): Promise<BillingProvider> => {
-  if (env.BILLING) return env.BILLING;
-  const { createPolar } = await import("@polar-sh/sdk/2026-04");
-  return createPolar({
-    // Unset only when billing is off, and the routes below answer 404 first.
-    accessToken: env.POLAR_ACCESS_TOKEN ?? "",
-    environment: env.POLAR_SERVER ?? "sandbox",
-  });
-};
-
-/**
- * What the Polar SDK throws for an HTTP error it knows: the parsed body, whose
- * `error` names the case. Matched on that name, not the status: the SDK maps
- * every 403 from this endpoint to "already canceled", and a token missing the
- * `subscriptions:write` scope is a 403 too. Reading that as "nothing to
- * revoke" would delete the account and keep billing it.
- */
-const PolarRefusal = v.object({ error: v.object({ error: v.string() }) });
 
 /** The refusals that mean nothing is left to revoke. */
 const NOTHING_TO_REVOKE = new Set(["AlreadyCanceledSubscription", "ResourceNotFound"]);
@@ -92,8 +72,8 @@ async function revoke(polar: BillingProvider, id: string): Promise<void> {
   try {
     await polar.subscriptions.revoke(id);
   } catch (error) {
-    const refusal = v.safeParse(PolarRefusal, error);
-    if (!refusal.success || !NOTHING_TO_REVOKE.has(refusal.output.error.error)) throw error;
+    // Matched on the refusal's name, not its status: see polarRefusal.
+    if (!NOTHING_TO_REVOKE.has(polarRefusal(error) ?? "")) throw error;
   }
 }
 
@@ -102,6 +82,51 @@ async function revoke(polar: BillingProvider, id: string): Promise<void> {
 // its body limit — see handlePolarWebhook below and index.ts.)
 export const billingRoutes = new Hono<AppEnv>();
 billingRoutes.use("*", jsonBodyLimit());
+
+/** The user's Polar customer id, or null for somebody Polar has never
+ * charged: free, comped, or a checkout whose webhook has not landed. */
+async function polarCustomerOf(db: Db, userId: string): Promise<string | null> {
+  const rows = await db
+    .select({ customerId: schema.user.polarCustomerId })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId));
+  return rows[0]?.customerId ?? null;
+}
+
+/**
+ * The signed-in user's card and invoices (`BillingDetails`).
+ *
+ * Registered before the gate below, because a copy that sells nothing has a
+ * true answer here: nothing, and no reason to call anybody to say so. The
+ * same goes for a user with no Polar customer.
+ *
+ * When Polar fails this answers 502, and the page keeps the portal buttons
+ * it shows anyway, which still reach the same card and invoices.
+ */
+billingRoutes.get("/details", requireUser, async (c) => {
+  const log = c.get("log");
+  const user = c.var.user!;
+  log.set({ userId: user.id });
+  const customerId = billingEnabled() ? await polarCustomerOf(c.var.db, user.id) : null;
+  if (!customerId) return c.json(NO_BILLING_DETAILS);
+  let details: BillingDetails;
+  try {
+    details = await billingDetails(await polarFor(c.env), c.env, customerId);
+  } catch (cause) {
+    throw createError({
+      status: 502,
+      message: "Could not load the card and invoices from Polar",
+      why: `Polar refused or did not answer (${polarRefusal(cause) ?? "no refusal name"}).`,
+      fix: "The subscription portal shows both. If this persists, check the Polar token can still create customer sessions.",
+      cause: cause instanceof Error ? cause : undefined,
+    });
+  }
+  log.set({ billing: { card: details.card !== null, invoices: details.invoices.length } });
+  // A minute, in this browser only: the card and the list change rarely.
+  c.header("cache-control", "private, max-age=60");
+  return c.json(details);
+});
+
 // A deployment without Polar sells nothing: there is no billing to reach.
 billingRoutes.use("*", async (c, next) => {
   if (!billingEnabled()) throw new HTTPException(404, { message: "Billing is not enabled" });
@@ -109,21 +134,38 @@ billingRoutes.use("*", async (c, next) => {
 });
 
 /**
- * Which plan a Polar product grants: an explicit allowlist that fails
- * closed. Both the monthly and yearly product for a plan map to the same
- * plan. An unrecognized product id (a misconfigured env var, a new Polar
- * product nobody wired up, a stale id from a deleted product) must never
- * grant a plan by falling through to the highest tier — that's how a mapping
- * mistake used to hand out Pro for free (see issue #17).
+ * One invoice's PDF: redirects to the URL Polar hands out, for the user's own
+ * orders only. Anybody else's order id, real or not, is a 404: the lookup
+ * runs as the user's own Polar customer, which cannot see anybody else's.
+ *
+ * A GET that can ask Polar to generate the invoice, which the comment on
+ * /portal below warns against. Here it is the point: the page links to it
+ * with a plain anchor (nothing prefetches one), and generating an invoice
+ * for an order its owner already paid changes nothing they did not ask for.
  */
-function planForProduct(env: Env, productId: string | undefined): "hobby" | "pro" | null {
-  if (!productId) return null;
-  if (productId === env.POLAR_HOBBY_PRODUCT_ID) return "hobby";
-  if (productId === env.POLAR_PRO_PRODUCT_ID) return "pro";
-  if (productId === env.POLAR_HOBBY_YEARLY_PRODUCT_ID) return "hobby";
-  if (productId === env.POLAR_PRO_YEARLY_PRODUCT_ID) return "pro";
-  return null;
-}
+billingRoutes.get("/invoices/:orderId", requireUser, async (c) => {
+  const log = c.get("log");
+  const user = c.var.user!;
+  const orderId = c.req.param("orderId");
+  log.set({ userId: user.id, billing: { orderId } });
+  const customerId = await polarCustomerOf(c.var.db, user.id);
+  if (!customerId) throw new HTTPException(404, { message: "No such invoice" });
+  let url: string | null;
+  try {
+    url = await invoicePdfUrl(await polarFor(c.env), customerId, orderId);
+  } catch (cause) {
+    throw createError({
+      status: 502,
+      message:
+        "Polar could not produce this invoice. Try again in a minute, or open it from the subscription portal.",
+      why: `Polar refused or did not answer (${polarRefusal(cause) ?? "no refusal name"}).`,
+      fix: "Try again shortly; a new invoice takes Polar a few seconds to generate.",
+      cause: cause instanceof Error ? cause : undefined,
+    });
+  }
+  if (!url) throw new HTTPException(404, { message: "No such invoice" });
+  return c.redirect(url, 302);
+});
 
 /** The Polar product to check out for a plan at a billing interval. Yearly is
  * a separate product priced 10% below twelve months. */
@@ -281,11 +323,7 @@ billingRoutes.post("/checkout/:id/confirm", requireUser, async (c) => {
 billingRoutes.post("/portal", requireUser, async (c) => {
   const log = c.get("log");
   log.set({ userId: c.var.user!.id });
-  const rows = await c.var.db
-    .select({ customerId: schema.user.polarCustomerId })
-    .from(schema.user)
-    .where(eq(schema.user.id, c.var.user!.id));
-  const customerId = rows[0]?.customerId;
+  const customerId = await polarCustomerOf(c.var.db, c.var.user!.id);
   if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
   const session = await (
     await polarFor(c.env)

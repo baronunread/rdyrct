@@ -965,10 +965,10 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
       />
       <div className="flex flex-col items-center gap-6 text-center">
         <h2 className="text-metal max-w-3xl pb-1 text-4xl font-bold tracking-tight text-balance sm:text-6xl">
-          Your next link, one hop away.
+          Make your first short link.
         </h2>
         <p className="max-w-lg text-pretty text-muted">
-          Your first short link takes a minute on the free plan. No credit card.
+          It takes a minute on the free plan. No credit card.
         </p>
         <HrefLink
           href={ctaTo}
@@ -1095,11 +1095,9 @@ function PricingTeaser() {
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
       <div className="mb-8 text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Simple pricing
-        </h2>
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Pricing</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
-          Start free. Upgrade when you outgrow the plan, or self-host and never pay us a cent.
+          Start free. Upgrade when you outgrow the plan, or self-host and pay us nothing.
         </p>
       </div>
 
@@ -1120,9 +1118,6 @@ function PricingTeaser() {
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function LandingPage() {
   const { authed, ready, name, ctaTo, ctaLabel } = useAudience();
 

@@ -120,7 +120,9 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
     const absolute = (source: string) =>
       [...source.matchAll(/path:\s*"(\/[^"]*)"/g)].map((m) => m[1]);
     const adminChildren = [
-      ...main.matchAll(/getParentRoute:\s*\(\)\s*=>\s*adminRoute,\s*path:\s*"([^"/][^"]*)"/g),
+      ...main.matchAll(
+        /(?:getParentRoute:\s*\(\)\s*=>\s*adminRoute|\.\.\.adminPage),\s*path:\s*"([^"/][^"]*)"/g,
+      ),
     ].map((m) => `/admin/${m[1]}`);
     const appRoutes = [...absolute(main).filter((p) => p !== "/"), ...adminChildren];
     const marketing = absolute(readSource("src/app/marketing-routes.tsx"));

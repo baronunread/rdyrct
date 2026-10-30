@@ -501,6 +501,22 @@ export function avatarUrl(version?: string | number): string {
     : `${AVATAR_SERVING_PATH}?v=${encodeURIComponent(String(version))}`;
 }
 
+/**
+ * Where another member of an org sees a user's picture: the same object and
+ * the same `?v=` stamp as `user.image`, through a route that checks the
+ * viewer shares the org. Null when the user has no stored picture (none, or
+ * a Google URL not copied into R2 yet, which the CSP would block anyway).
+ */
+export function memberAvatarUrl(
+  orgId: string,
+  userId: string,
+  image: string | null,
+): string | null {
+  if (!image?.startsWith(AVATAR_SERVING_PATH)) return null;
+  const stamp = image.slice(AVATAR_SERVING_PATH.length);
+  return `/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}/avatar${stamp}`;
+}
+
 function tryUrl(value: string): URL | null {
   try {
     return new URL(value);

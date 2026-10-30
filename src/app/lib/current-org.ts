@@ -37,6 +37,13 @@ function subscribeToOrg(l: () => void) {
   return () => listeners.delete(l);
 }
 
+/** The org a list resolves to: the stored one while it is still in the
+ * list, otherwise the first. One rule for the hook below and for the route
+ * loaders, which pick the org before any component has mounted. */
+export function pickOrg(orgs: UserOrg[], storedId: string | null = getCurrentOrgId()) {
+  return orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
+}
+
 /**
  * Which of these is the current one, and remember it.
  *
@@ -47,7 +54,7 @@ function subscribeToOrg(l: () => void) {
  */
 function usePickOrg(orgs: UserOrg[]) {
   const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId, () => null);
-  const org = orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
+  const org = pickOrg(orgs, storedId);
 
   const orgId = org?.id ?? null;
   useEffect(() => {

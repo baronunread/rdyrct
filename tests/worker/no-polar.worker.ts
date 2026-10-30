@@ -59,5 +59,10 @@ it("has no caps and no billing without Polar", async () => {
   }
 
   expect((await call("/api/billing/portal", { method: "POST", headers })).status).toBe(404);
+  // The card and invoices have a true answer here: none.
+  const details = await call("/api/billing/details", { headers });
+  expect(details.status).toBe(200);
+  expect(await details.json()).toEqual({ card: null, invoices: [] });
+  expect((await call("/api/billing/invoices/ord_1", { headers })).status).toBe(404);
   expect((await call("/api/webhooks/polar", { method: "POST", body: "{}" })).status).toBe(404);
 });

@@ -98,6 +98,10 @@ test.describe("Google sign-in", () => {
     await requireGoogle(page);
     await signInWithGoogle(page);
 
+    // Settings names the linked Google account, not just "Connected".
+    await page.goto("/settings");
+    await expect(page.getByTestId("google-account")).toHaveText("testuser@gmail.com");
+
     // Sign out, and the login page now leads with a one-click row for that
     // account instead of the plain button.
     await signOut(page);

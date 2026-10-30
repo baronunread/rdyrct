@@ -83,8 +83,22 @@ export function MenuNote({ children }: { children: ReactNode }) {
   );
 }
 
+/** A hairline across the whole menu, edge to edge. */
 export function MenuSeparator() {
-  return <BaseMenu.Separator className="my-1 h-px bg-border" />;
+  return <BaseMenu.Separator className="-mx-1 my-1 h-px bg-border" />;
+}
+
+/** Who a menu belongs to, at its top: a name over an identifier (the account
+ * menu's name and email). Not an item, so arrow keys skip it. */
+export function MenuHeader({ title, detail }: { title: ReactNode; detail?: ReactNode }) {
+  return (
+    <BaseMenu.Group>
+      <BaseMenu.GroupLabel className="flex max-w-64 min-w-0 flex-col px-2 pt-2 pb-1.5">
+        <span className="truncate text-sm font-semibold text-text">{title}</span>
+        {detail && <span className="truncate font-mono text-xs text-muted">{detail}</span>}
+      </BaseMenu.GroupLabel>
+    </BaseMenu.Group>
+  );
 }
 
 /**

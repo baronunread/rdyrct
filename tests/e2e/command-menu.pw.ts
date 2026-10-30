@@ -3,7 +3,7 @@ import { signUpAndVerify } from "./resend";
 import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
-const ALL = "Search pages and actions…";
+const ALL = "Search links, pages and actions";
 const LINKS = "Search your links";
 
 /** A fresh verified account on the empty dashboard, with ⌘K already open. */
@@ -37,24 +37,36 @@ test("the command menu navigates and toggles the theme", async ({ page }) => {
   await expect(page.getByPlaceholder(ALL)).toBeHidden();
 });
 
-test("the link scope searches the org's links, and Backspace pops the pill", async ({ page }) => {
+test("the palette finds links as you type, and Backspace pops the link pill", async ({ page }) => {
   await signUpAndVerify(page, `cmdk-links-${Date.now()}@gmail.com`, password);
   await createQuickLink(page, "https://example.com/palette-target");
   await page.getByRole("button", { name: /Close/i }).click();
 
+  // Opened empty, it lists the newest links first.
   await page.keyboard.press("ControlOrMeta+KeyK");
-  // The "Search links" action drops into link scope, same as typing `link:`.
-  await page.getByRole("option", { name: "Search links" }).click();
+  const palette = page.getByRole("dialog", { name: "Search and commands" });
+  await expect(palette.getByText("Recent links")).toBeVisible();
+  await expect(palette.getByRole("option").first()).toContainText("clicks");
+
+  // Typing searches links, pages and actions at once, counts what it found,
+  // and marks the match.
+  await page.getByPlaceholder(ALL).fill("palette");
+  await expect(palette.getByText("Links", { exact: true })).toBeVisible();
+  await expect(palette.locator("mark").first()).toHaveText(/palette/i);
+  await expect(palette.getByText(/^\d+ results?$/)).toBeVisible();
+
+  // The last row widens it to every link, the same scope `link:` opens.
+  await palette.getByRole("option", { name: /Search all links for/ }).click();
   await expect(page.getByPlaceholder(LINKS)).toBeVisible();
   await expect(page.getByRole("button", { name: "Clear link filter" })).toBeVisible();
 
   await page.getByPlaceholder(LINKS).fill("palette-target");
-  // In link scope every option is a short URL; the host varies by env.
-  const result = page
+  const result = palette
     .getByRole("option")
-    .filter({ hasText: /https?:\/\// })
+    .filter({ has: page.getByRole("button", { name: /^Copy https?:\/\// }) })
     .first();
   await expect(result).toBeVisible();
+  await result.hover();
 
   // The per-row Copy button does not select the row (no navigation).
   await result.getByRole("button", { name: /^Copy https?:\/\// }).click();
@@ -126,10 +138,40 @@ test("the palette's contextual create and invite actions", async ({ page }) => {
   await page.getByRole("option", { name: `Invite ${invitee}` }).click();
   await expect(page.getByText(`Invite sent to ${invitee}`)).toBeVisible();
 
-  // "Create link" lands on the links page with the editor already open.
+  // "Create link" opens the New link dialog where you are, without leaving
+  // the page.
+  const here = page.url();
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByPlaceholder(ALL).fill("create link");
-  await page.getByRole("option", { name: "Create link" }).click();
-  await expect(page).toHaveURL(/\/links$/);
+  await page.getByRole("option", { name: "Create link", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "New link" })).toBeVisible();
+  expect(page.url()).toBe(here);
+});
+
+test("G then a letter goes to a page, and ⌘K shows the keys", async ({ page }) => {
+  await freshPalette(page, "cmdk-go");
+  // The hint on the row names the keys that work outside the palette.
+  await page.getByPlaceholder(ALL).fill("links");
+  await expect(page.getByRole("option", { name: "Links", exact: true })).toContainText("GL");
+  await page.keyboard.press("Escape");
+
+  // From a page with no field waiting for input.
+  await page.goto("/analytics");
+  await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
+  await page.keyboard.press("g");
+  await page.keyboard.press("l");
+  await expect(page).toHaveURL(/\/links$/);
+  await page.keyboard.press("g");
+  await page.keyboard.press("a");
+  await expect(page).toHaveURL(/\/analytics$/);
+  await page.keyboard.press("g");
+  await page.keyboard.press("d");
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // The first-run dashboard sends every keystroke to its one field, so G
+  // is a letter there, not a shortcut.
+  await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
+  await page.keyboard.press("g");
+  await page.keyboard.press("l");
+  await expect(page).toHaveURL(/\/dashboard$/);
 });

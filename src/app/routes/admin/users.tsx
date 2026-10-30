@@ -1,13 +1,26 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Check, Ellipsis, Trash2 } from "@/app/ui/icons";
+import { settle } from "../../lib/route-preload";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { Ban, Check, Trash2 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
-import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
+import { useCurrentUser } from "../../lib/hooks";
+import { adminUsersQuery, useAdminUsersData } from "../../lib/admin-data";
+import { UserAvatar } from "../../components/user-avatar";
 import { api } from "../../lib/api";
 import type { AdminUserRow, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
-import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
+import { Badge, Table, Td, Th } from "../../ui/misc";
+import {
+  FilterBar,
+  FilterRow,
+  PHONE,
+  RowMenuTrigger,
+  SectionHeading,
+  StateLabel,
+  TwoLine,
+  fullNumber,
+} from "./admin-kit";
 import { Tooltip } from "../../ui/tooltip";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
@@ -42,9 +55,9 @@ const userActionMeta = {
     danger: true,
     body: (u) => (
       <>
-        Delete <span className="font-bold text-accent">{u.name}</span>? Their account, sessions and
-        memberships are removed, and so is every organization they own, with its links, members and
-        click history. Those short links stop working. Links they made in organizations owned by
+        Delete <span className="font-semibold text-text">{u.name}</span>? Their account, sessions
+        and memberships are removed, and so is every organization they own, with its links, members
+        and click history. Those short links stop working. Links they made in organizations owned by
         others stay, unattributed. This cannot be undone.
       </>
     ),
@@ -55,9 +68,9 @@ const userActionMeta = {
     danger: false,
     body: (u) => (
       <>
-        Unban <span className="font-bold text-accent">{u.name}</span>? They can sign in again right
-        away, and the organizations they own that are not deleted yet work again. Hosts blocked with
-        the ban stay blocked.
+        Unban <span className="font-semibold text-text">{u.name}</span>? They can sign in again
+        right away, and the organizations they own that are not deleted yet work again. Hosts
+        blocked with the ban stay blocked.
       </>
     ),
   },
@@ -67,8 +80,8 @@ const userActionMeta = {
     danger: false,
     body: (u) => (
       <>
-        Make <span className="font-bold text-accent">{u.name}</span> a platform admin? They get full
-        access to this admin area: every user, organization, and link on the instance.
+        Make <span className="font-semibold text-text">{u.name}</span> a platform admin? They get
+        full access to this admin area: every user, organization, and link on the instance.
       </>
     ),
   },
@@ -78,7 +91,7 @@ const userActionMeta = {
     danger: true,
     body: (u) => (
       <>
-        Remove <span className="font-bold text-accent">{u.name}</span>'s platform admin? They keep
+        Remove <span className="font-semibold text-text">{u.name}</span>'s platform admin? They keep
         their organizations and links but lose access to this admin area.
       </>
     ),
@@ -101,9 +114,7 @@ function PlanNote({ user }: { user: AdminUserRow }) {
     return (
       <Tooltip content={detail}>
         <span className="inline-flex">
-          <Badge color="butter" className="mt-1">
-            comped
-          </Badge>
+          <Badge color="butter">comped</Badge>
         </span>
       </Tooltip>
     );
@@ -116,7 +127,7 @@ function PlanNote({ user }: { user: AdminUserRow }) {
     );
   if (user.cancelAtPeriodEnd && user.plan !== "free")
     return (
-      <Badge color="butter" className="mt-1 whitespace-nowrap">
+      <Badge color="butter" className="whitespace-nowrap">
         {user.currentPeriodEnd ? `cancels ${shortDate(user.currentPeriodEnd)}` : "cancels"}
       </Badge>
     );
@@ -199,6 +210,19 @@ function DangerMenuItems({
   );
 }
 
+/** Marks on the person that change what an admin does next. Each is a
+ * state, so each keeps its pill; "banned" is said in the Last active column,
+ * where it replaces the date. */
+function PersonMarks({ user }: { user: AdminUserRow }) {
+  return (
+    <>
+      {user.isAdmin && <Badge color="butter">admin</Badge>}
+      {!user.emailVerified && <Badge color="muted">unverified</Badge>}
+      {user.disposable && <Badge color="accent">disposable</Badge>}
+    </>
+  );
+}
+
 function UserRow({
   user,
   isSelf,
@@ -213,38 +237,59 @@ function UserRow({
   onConfirm: (kind: UserAction) => void;
 }) {
   return (
-    <tr>
-      <Td>
-        <span className="mr-1.5 block truncate" title={user.name}>
-          {user.name}
+    <tr className={PHONE.row}>
+      {/* Two lines (rdyrct-design, "Tables earn two lines"): the name over
+          the address, beside the picture. Both truncate, with the whole
+          value on hover. */}
+      <Td className={PHONE.main}>
+        <span className="flex min-w-0 items-center gap-3">
+          <UserAvatar
+            user={{ id: user.id, image: user.image, name: user.name, email: user.email }}
+            size={32}
+          />
+          <span className="min-w-0">
+            <TwoLine
+              title={user.name}
+              titleHint={user.name}
+              sub={user.email}
+              subHint={user.email}
+            />
+          </span>
+          <span className="flex shrink-0 gap-1">
+            <PersonMarks user={user} />
+          </span>
         </span>
-        {user.isAdmin && <Badge color="butter">admin</Badge>}{" "}
-        {user.banned && <Badge color="pink">banned</Badge>}{" "}
-        {!user.emailVerified && <Badge color="muted">unverified</Badge>}{" "}
-        {user.disposable && <Badge color="accent">disposable</Badge>}
       </Td>
-      <Td className="truncate font-mono text-xs text-muted" title={user.email}>
-        {user.email}
+      {/* The plan is an attribute, so it is text; what it adds (a comp, a
+          failing payment, an end date) is a state, so it is a pill. */}
+      <Td className={PHONE.meta} data-label="Plan">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={user.plan === "free" ? "text-muted capitalize" : "capitalize"}>
+            {user.plan}
+          </span>
+          <PlanNote user={user} />
+        </span>
       </Td>
-      <Td className="tnum text-right">{user.orgCount}</Td>
-      <Td>
-        <span className="block">{user.plan}</span>
-        <PlanNote user={user} />
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Orgs">
+        {fullNumber(user.orgCount)}
       </Td>
-      <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
-      <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
-      <Td>
-        <Menu
-          align="end"
-          label={`Actions for ${user.name}`}
-          trigger={
-            <div className="flex justify-end">
-              <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
-                <Ellipsis size={15} />
-              </span>
-            </div>
-          }
-        >
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Links">
+        {fullNumber(user.links)}
+      </Td>
+      <Td className={`whitespace-nowrap ${PHONE.meta}`} data-label="Seen">
+        {user.banned ? (
+          <StateLabel tone="bad">banned</StateLabel>
+        ) : (
+          <span className="inline-block text-sm text-muted first-letter:uppercase">
+            {lastSeenLabel(user.lastSeen)}
+          </span>
+        )}
+      </Td>
+      <Td className={`tnum text-sm whitespace-nowrap text-muted ${PHONE.meta}`} data-label="Joined">
+        {shortDate(user.createdAt)}
+      </Td>
+      <Td className={`px-2 ${PHONE.menu}`}>
+        <Menu align="end" label={`Actions for ${user.name}`} trigger={<RowMenuTrigger />}>
           <AdminToggleMenuItem user={user} isSelf={isSelf} onConfirm={onConfirm} />
           <CompMenuItems user={user} onGrant={onGrantComp} onRevoke={onRevokeComp} />
           <DangerMenuItems user={user} isSelf={isSelf} onConfirm={onConfirm} />
@@ -262,7 +307,7 @@ function UsersTable({
   onGrantComp,
   onRevokeComp,
   onConfirm,
-  searchTerm,
+  emptyText,
 }: {
   rows: AdminUserRow[];
   meId: string | undefined;
@@ -271,40 +316,42 @@ function UsersTable({
   onGrantComp: (user: AdminUserRow) => void;
   onRevokeComp: (user: AdminUserRow) => void;
   onConfirm: (kind: UserAction, user: AdminUserRow) => void;
-  searchTerm: string;
+  emptyText: string;
 }) {
   return (
-    <Table fixed minWidth="min-w-[56rem]">
-      <thead>
+    <Table fixed minWidth={`sm:min-w-[52rem] ${PHONE.table}`}>
+      <thead className={PHONE.head}>
         <tr>
-          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-[22%]" />
-          <Th className="w-[22%]">Email</Th>
+          <SortTh label="Person" sortKey="name" sort={sort} onSort={setSort} />
+          <Th className="w-[18%]">Plan</Th>
           <SortTh
             label="Orgs"
             sortKey="orgs"
             sort={sort}
             onSort={setSort}
-            className="w-[8%] text-right"
+            className="w-20 text-right"
           />
-          <Th className="w-[14%]">Plan</Th>
           <SortTh
-            label="Joined"
-            sortKey="joined"
+            label="Links"
+            sortKey="links"
             sort={sort}
             onSort={setSort}
-            className="w-[13%]"
+            className="w-20 text-right"
           />
           <SortTh
-            label="Last seen"
+            label="Last active"
             sortKey="lastSeen"
             sort={sort}
             onSort={setSort}
-            className="w-[13%]"
+            className="w-32"
           />
-          <Th className="w-[8%] text-right">Actions</Th>
+          <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} className="w-32" />
+          <Th className="w-12 px-2">
+            <span className="sr-only">Actions</span>
+          </Th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className={PHONE.body}>
         {rows.map((u) => (
           <UserRow
             key={u.id}
@@ -317,8 +364,8 @@ function UsersTable({
         ))}
         {rows.length === 0 && (
           <tr>
-            <Td colSpan={7} className="py-8 text-center text-muted">
-              No users match “{searchTerm}”.
+            <Td colSpan={7} className="block py-8 text-center text-muted sm:table-cell">
+              {emptyText}
             </Td>
           </tr>
         )}
@@ -353,6 +400,26 @@ function UserActionConfirmDialog({
       {meta.body(confirm.user)}
     </ConfirmDialog>
   );
+}
+
+/** The filters above the table. "Paid" is somebody paying: a comp grants
+ * the same access and is counted on its own (#82). */
+const FILTERS = [
+  { id: "all", label: "All", test: () => true },
+  { id: "paid", label: "Paid", test: (u) => u.plan !== "free" && !u.compPlan },
+  { id: "comped", label: "Comped", test: (u) => !!u.compPlan },
+  { id: "banned", label: "Banned", test: (u) => u.banned },
+  { id: "admins", label: "Admins", test: (u) => u.isAdmin },
+] as const satisfies readonly { id: string; label: string; test: (u: AdminUserRow) => boolean }[];
+type UserFilter = (typeof FILTERS)[number]["id"];
+
+const filterTest = (id: UserFilter) => FILTERS.find((f) => f.id === id)?.test ?? (() => true);
+
+/** What an empty table says: the search it found nothing for, or the filter. */
+function emptyMessage(filter: UserFilter, term: string): string {
+  if (term) return `No users match “${term}”.`;
+  const label = FILTERS.find((f) => f.id === filter)?.label.toLowerCase();
+  return filter === "all" ? "No users yet." : `No ${label} users.`;
 }
 
 /**
@@ -459,8 +526,11 @@ function useAdminUserActions() {
   };
 }
 
+/** The users page's first frame (see lib/route-preload.ts). */
+export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminUsersQuery)]);
+
 export function AdminUsersPage() {
-  const users = useAdminUsers();
+  const users = useAdminUsersData();
   const currentUser = useCurrentUser();
   const {
     confirm,
@@ -473,38 +543,65 @@ export function AdminUsersPage() {
     actionPending,
   } = useAdminUserActions();
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<UserFilter>("all");
   const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
   const [page, setPage] = useState(0);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    const pass = filterTest(filter);
     const matches = (users.data ?? []).filter(
       (u) =>
-        !needle || u.name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle),
+        pass(u) &&
+        (!needle ||
+          u.name.toLowerCase().includes(needle) ||
+          u.email.toLowerCase().includes(needle)),
     );
     return sortRows(matches, sort, {
       name: (u) => u.name.toLowerCase(),
       orgs: (u) => u.orgCount,
+      links: (u) => u.links,
       joined: (u) => u.createdAt,
       lastSeen: (u) => u.lastSeen,
     });
-  }, [users.data, q, sort]);
+  }, [users.data, q, filter, sort]);
+  const counts = useMemo(
+    () =>
+      FILTERS.map((f) => ({
+        id: f.id,
+        label: f.label,
+        count: (users.data ?? []).filter((u) => f.test(u)).length,
+      })),
+    [users.data],
+  );
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
 
   return (
     <div>
-      <PageHeader title="Users" sub="All accounts on this instance" />
-      <SearchInput
-        value={q}
-        onChange={(v) => {
-          setQ(v);
-          setPage(0);
-        }}
-        placeholder="Search name or email…"
-        label="Search users"
-        className="mb-4"
-      />
+      <SectionHeading>Users</SectionHeading>
+      <div className="mb-4">
+        <FilterBar>
+          <FilterRow
+            label="Filter users"
+            items={counts}
+            value={filter}
+            onChange={(next) => {
+              setFilter(next);
+              setPage(0);
+            }}
+          />
+          <SearchInput
+            value={q}
+            onChange={(v) => {
+              setQ(v);
+              setPage(0);
+            }}
+            placeholder="Search email or name"
+            label="Search users"
+          />
+        </FilterBar>
+      </div>
       {/* Rows only: the header and search box above are real, so the
           page-level skeleton would draw a second one of each. */}
       {users.isLoading ? (
@@ -518,7 +615,7 @@ export function AdminUsersPage() {
           onGrantComp={(u) => setCompFor(u)}
           onRevokeComp={(u) => revokeComp.mutate(u.id)}
           onConfirm={(kind, u) => setConfirm({ kind, user: u })}
-          searchTerm={q.trim()}
+          emptyText={emptyMessage(filter, q.trim())}
         />
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />

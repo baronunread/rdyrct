@@ -1,4 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { IconArrowDown, IconArrowUp } from "@tabler/icons-react";
+import { HrefLink } from "../lib/router-search";
+import { Flag } from "./source-tile";
 import type { ReactNode } from "react";
 import { areaY, barY, defineChart, lineY } from "@tanstack/charts";
 import { d3Curve } from "@tanstack/charts/d3/shape";
@@ -9,13 +12,17 @@ import { curveMonotoneX } from "d3-shape";
 import { crosshair } from "@tanstack/charts/crosshair";
 import { focusNearestX } from "@tanstack/charts/focus";
 import { motion } from "@tanstack/charts/motion";
+import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
-import { followSpring, pointerTooltip } from "./chart-tooltip";
+import { pointerTooltip } from "./chart-tooltip";
+import { ClicksTip } from "./clicks-tip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
-import { formatNumber } from "../lib/numbers";
-import { Card, SlugLink } from "../ui/misc";
 import { CountryMap } from "./country-map";
+import { PanelTabs } from "../ui/tabs";
+import { countryName } from "../lib/places";
+import { linkPagePath } from "../lib/link-display";
+import { formatNumber } from "../lib/numbers";
 
 // Monotone rather than a cubic that overshoots: it never draws a peak or a
 // trough the data doesn't have, so the smoothing stays a reading aid.
@@ -23,10 +30,28 @@ const smoothCurve = d3Curve(curveMonotoneX);
 
 // One motion renderer per chart type: it holds no per-instance state, so a
 // module-level instance avoids reallocating it on every render.
-const areaChartMotion = motion<SeriesPoint, string, number>();
-const hourBarMotion = motion<{ hour: number; clicks: number }, number, number>();
+const areaChartMotion = motion<SeriesPoint, string, number>(chartMotion);
+const hourBarMotion = motion<{ hour: number; clicks: number }, number, number>(chartMotion);
 
 const defaultTickFormat = (day: string) => day.slice(5);
+
+/** Every value up to eight; past that, five evenly spaced, ends included. */
+function evenTicks<T>(values: T[]): T[] {
+  if (values.length <= 8) return values;
+  const last = values.length - 1;
+  return [0, 1, 2, 3, 4].flatMap((i) => {
+    const v = values[Math.round((i * last) / 4)];
+    return v === undefined ? [] : [v];
+  });
+}
+
+/** The top of the y scale: the max rounded up to a nice even number, so the
+ * half-way hairline lands on a whole click count too. */
+function yTop(max: number): number {
+  const nice = scaleLinear().domain([0, max]).nice(4).domain()[1];
+  const top = Math.max(2, Math.ceil(nice));
+  return top % 2 === 0 ? top : top + 1;
+}
 
 /**
  * Single-series area chart (clicks over time). One hue (--chart), recessive
@@ -46,7 +71,7 @@ export function AreaChart({
   // data or formatter actually change, so hover-driven re-renders don't
   // read as a changed chart to the runtime.
   const definition = useMemo(() => {
-    const max = Math.max(1, ...data.map((d) => d.clicks));
+    const top = yTop(Math.max(1, ...data.map((d) => d.clicks)));
     return defineChart({
       marks: [
         areaY(data, {
@@ -96,13 +121,25 @@ export function AreaChart({
           // quietly went back to printing whole ISO strings ("2026-07-17"
           // instead of "07-17", and every timestamp in full on the hourly
           // range).
-          // Stubs off: a point scale offers every day as a candidate, so
-          // 90 days would draw 90 stubs. Labels thin themselves.
-          axis: { ticks: { format: tickFormat, size: 0 } },
+          // Stubs off. A week labels every day; anything longer labels five
+          // evenly spaced days, first and last included, rather than letting
+          // the renderer thin a crowd of labels into an uneven row.
+          axis: {
+            line: false,
+            ticks: { format: tickFormat, size: 0, values: evenTicks(data.map((d) => d.day)) },
+          },
         },
+        // Three hairlines (zero, half, top) labelled on the right, where the
+        // line ends and the eye already is. No axis line: the zero hairline
+        // is the baseline.
         y: {
-          scale: scaleLinear().domain([0, max]).nice(),
+          scale: scaleLinear().domain([0, top]),
+          side: "right",
           grid: true,
+          axis: {
+            line: false,
+            ticks: { values: [0, top / 2, top], size: 0, format: (v: number) => formatNumber(v) },
+          },
         },
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
@@ -113,8 +150,6 @@ export function AreaChart({
       // The crosshair mark draws the marker; the built-in ring would double up.
       focusRing: false,
       tooltip: pointerTooltip,
-      // Spring settle on range changes (7d/30d/90d) instead of a hard jump.
-      motion: { transition: followSpring },
     });
   }, [data, tickFormat]);
 
@@ -129,12 +164,7 @@ export function AreaChart({
       renderTooltipBody={({ points }) => {
         const datum = points[0]?.datum;
         if (!datum) return null;
-        return (
-          <>
-            <span className="text-muted">{datum.day}</span>{" "}
-            <span className="tnum font-bold">{datum.clicks}</span>
-          </>
-        );
+        return <ClicksTip label={tickFormat(datum.day)} clicks={datum.clicks} />;
       }}
     />
   );
@@ -150,107 +180,145 @@ export function AreaChart({
 export function BarList({
   items,
   formatKey = (k) => k,
+  lead,
   empty = "Nothing recorded in this period yet.",
   head,
+  limit,
 }: {
   items: { key: string; clicks: number }[];
   formatKey?: (key: string) => string | ReactNode;
+  /** A flag or a site's letter tile ahead of each label. */
+  lead?: (key: string) => ReactNode;
   /** What will appear here, said in the caller's own words. "No data" tells
    *  somebody nothing; naming the thing that fills the list explains the
    *  feature and points at the next step in the same sentence. */
   empty?: string;
   /** Column headings, e.g. ["Country", "Clicks"]. */
   head?: [string, string];
+  /** Rows shown before "Show all N". Unset shows every row. */
+  limit?: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const max = Math.max(1, ...items.map((i) => i.clicks));
   const total = items.reduce((sum, i) => sum + i.clicks, 0) || 1;
   if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
+  const cut = limit !== undefined && items.length > limit;
+  const shown = cut && !expanded ? items.slice(0, limit) : items;
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5 text-sm">
-      {head && (
-        <>
-          <span className="pb-1 text-xs text-muted">{head[0]}</span>
-          <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
-          <span />
-        </>
-      )}
-      {items.map((item) => (
-        <div key={item.key} className="group contents">
-          <div className="relative flex h-[30px] min-w-0 items-center px-2">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors [@media(hover:hover)]:group-hover:bg-chart/20"
-              style={{ width: `${Math.max(2, (item.clicks / max) * 100)}%` }}
-            />
-            <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
+    <div className="flex flex-col">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5 text-sm">
+        {head && (
+          <>
+            <span className="pb-1 text-xs text-muted">{head[0]}</span>
+            <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
+            <span />
+          </>
+        )}
+        {shown.map((item) => (
+          <div key={item.key} className="group contents">
+            <div className="relative flex h-[30px] min-w-0 items-center gap-2 px-2">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors duration-150 ease-out [@media(hover:hover)]:group-hover:bg-chart/20"
+                style={{ width: `${Math.max(2, (item.clicks / max) * 100)}%` }}
+              />
+              {lead && <span className="relative flex shrink-0">{lead(item.key)}</span>}
+              <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
+            </div>
+            <span className="tnum text-right">{formatNumber(item.clicks)}</span>
+            <span className="tnum text-right text-xs text-muted">
+              {Math.round((item.clicks / total) * 100)}%
+            </span>
           </div>
-          <span className="tnum text-right">{formatNumber(item.clicks)}</span>
-          <span className="tnum text-right text-xs text-muted">
-            {Math.round((item.clicks / total) * 100)}%
-          </span>
-        </div>
-      ))}
+        ))}
+      </div>
+      {cut && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="mx-auto mt-2 -mb-1 flex h-7 cursor-pointer items-center rounded-md px-2 text-xs text-muted transition-colors duration-150 ease-out [@media(hover:hover)]:hover:text-text"
+        >
+          {expanded ? "Show fewer" : `Show all ${items.length}`}
+        </button>
+      )}
     </div>
   );
 }
 
-/** A card of top links by clicks, rendered as a BarList (which carries its
- * own empty line for an empty list). */
-export function TopLinksCard({
-  topLinks,
-  limit,
+/** A link in a bar list: its slug, which is what people search for and
+ * type, then its title in the muted voice (rdyrct-design, mono only on the
+ * identifier). */
+
+export function LinkBarLabel({
+  slug,
+  title,
+  domain,
 }: {
-  topLinks: { id: string; slug: string; title: string; clicks: number }[];
-  limit?: number;
+  slug: string;
+  title?: string;
+  domain?: string | null;
 }) {
-  const rows = limit ? topLinks.slice(0, limit) : topLinks;
   return (
-    <Card>
-      <p className="mb-3 text-xs font-medium text-muted">Top links</p>
-      <BarList
-        items={rows.map((l) => ({
-          key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
-          clicks: l.clicks,
-        }))}
-      />
-    </Card>
+    <HrefLink
+      href={linkPagePath({ slug, domain })}
+      title={title ? `/${slug} · ${title}` : `/${slug}`}
+      className="[@media(hover:hover)]:hover:underline"
+    >
+      <span className="font-mono text-[13px]">/{slug}</span>
+      {title && <span className="text-muted"> {title}</span>}
+    </HrefLink>
   );
 }
 
-export function StatCard({
-  label,
-  value,
-  delta,
-  prefix,
-  suffix,
-}: {
+/** One figure in a StatsChart strip. */
+export interface ChartFigure {
   label: string;
-  value: number;
+  value: ReactNode;
   delta?: DeltaValue | null;
-  prefix?: string;
-  suffix?: string;
-}) {
+}
+
+/**
+ * The figures and the chart in one card (rdyrct-design, "Stats and the chart
+ * share a card"): a strip of figures above the chart, clicks first,
+ * right above the line that plots them, each with its change beside it. No
+ * figure is marked: only clicks has a series, so a marker would look like a
+ * tab that never switches.
+ */
+export function StatsChart({ figures, children }: { figures: ChartFigure[]; children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <p className="truncate text-xs font-medium text-muted">{label}</p>
-      <p className="tnum mt-1 text-2xl font-bold">
-        {prefix}
-        {formatNumber(value)}
-        {suffix}
-      </p>
-      {delta && delta.pct !== null && <DeltaBadge pct={delta.pct} />}
+    <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
+      <dl className="flex flex-wrap gap-1 p-1.5">
+        {figures.map((f) => (
+          <div
+            key={f.label}
+            className="flex min-w-[40%] flex-1 flex-col gap-0.5 px-2.5 py-2 sm:min-w-0"
+          >
+            <dt className="truncate text-xs text-muted">{f.label}</dt>
+            <dd className="tnum flex min-w-0 items-baseline gap-2 text-xl leading-tight font-semibold tracking-tight">
+              <span className="truncate">{f.value}</span>
+              {f.delta && f.delta.pct !== null && <DeltaBadge pct={f.delta.pct} />}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="px-4 pt-1 pb-3">{children}</div>
     </div>
   );
 }
 
+/** The change beside a figure: an arrow and the size of the move. The arrow
+ * carries the direction, so the colour never has to on its own. */
 function DeltaBadge({ pct }: { pct: number }) {
   const up = pct > 0;
   const flat = pct === 0;
   const color = flat ? "text-muted" : up ? "text-accent-2" : "text-danger";
+  const Arrow = up ? IconArrowUp : IconArrowDown;
   return (
-    <span className={`tnum mt-1 inline-flex items-center gap-0.5 text-xs ${color}`}>
-      {up ? "+" : ""}
-      {pct}%
+    <span className={`tnum inline-flex items-center gap-0.5 text-xs font-medium ${color}`}>
+      {!flat && <Arrow aria-hidden size={12} stroke={2.25} />}
+      <span className="sr-only">{flat ? "No change" : up ? "Up" : "Down"}</span>
+      {Math.abs(pct)}%
     </span>
   );
 }
@@ -270,7 +338,7 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
   const hours = useMemo(() => clicksByHour(data), [data]);
 
   const definition = useMemo(() => {
-    const max = Math.max(1, ...hours.map((h) => h.clicks));
+    const top = yTop(Math.max(1, ...hours.map((h) => h.clicks)));
     return defineChart({
       marks: [
         barY(hours, {
@@ -289,9 +357,19 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
         x: {
           scale: scaleBand<number>().domain(HOURS),
           grid: false,
-          axis: { tickLabels: { thin: true } },
+          axis: { line: false, ticks: { size: 0 }, tickLabels: { thin: true } },
         },
-        y: { scale: scaleLinear().domain([0, max]).nice(), grid: true },
+        // Same y axis as the clicks chart: three hairlines, labelled on the
+        // right, no axis line.
+        y: {
+          scale: scaleLinear().domain([0, top]),
+          side: "right",
+          grid: true,
+          axis: {
+            line: false,
+            ticks: { values: [0, top / 2, top], size: 0, format: (v: number) => formatNumber(v) },
+          },
+        },
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
       focusRing: false,
@@ -310,126 +388,46 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
       renderTooltipBody={({ points }) => {
         const datum = points[0]?.datum;
         if (!datum) return null;
-        return (
-          <>
-            <span className="text-muted">{datum.hour}:00</span>{" "}
-            <span className="tnum font-bold">{datum.clicks}</span>
-          </>
-        );
+        return <ClicksTip label={`${datum.hour}:00`} clicks={datum.clicks} />;
       }}
     />
   );
 }
 
-/**
- * Compact link card used in the analytics dead/decaying link lists.
- */
-export function LinkListCard({
-  title,
-  links,
-}: {
-  title: string;
-  links: { id: string; slug: string; title: string; suffix?: string; domain?: string | null }[];
-}) {
-  return (
-    <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <p className="mb-2 text-xs font-medium text-muted">{title}</p>
-      {links.length === 0 ? (
-        <p className="py-2 text-sm text-muted">
-          Your busiest links appear here once they start collecting clicks.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {links.map((l) => (
-            <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
-              <SlugLink
-                to={
-                  l.domain
-                    ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}`
-                    : `/links/${l.slug}`
-                }
-                slug={l.slug}
-                title={l.title}
-              />
-              {l.suffix && <span className="tnum shrink-0 text-muted">{l.suffix}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+/** "Italy" from "IT"; a click the edge could not place says so. */
+const placeName = (code: string) => (code === "unknown" ? "Unknown" : countryName(code));
 
-const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
-const fmtCountry = (key: string) => {
-  try {
-    return COUNTRY_NAMES.of(key) ?? key;
-  } catch {
-    return key;
-  }
-};
-
-/**
- * A card's label. `period` names the stretch of time the card counts, set
- * only where it differs from the range the page heading names: the 24-hour
- * view's breakdowns count today's UTC day, since they are kept per day.
- */
-export function CardLabel({ children, period }: { children: ReactNode; period?: string }) {
-  return (
-    <p className="mb-3 flex items-baseline justify-between gap-3 text-xs font-medium text-muted">
-      <span>{children}</span>
-      {period && <span className="shrink-0">{period}</span>}
-    </p>
-  );
-}
-
-export function ClickBreakdown({
+/** Countries as bars, with the map one tab away. */
+export function PlacesPanel({
   countries,
-  referrers,
-  devices,
   period,
+  limit,
 }: {
   countries: TopEntry[];
-  referrers: TopEntry[];
-  devices: TopEntry[];
-  /** See CardLabel. */
   period?: string;
+  /** Rows before "Show all N". */
+  limit?: number;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardLabel period={period}>Countries</CardLabel>
-        {/* The map holds a 960:500 frame whatever width it gets, while the
-            list grows a row per country, so side by side the map's column
-            runs out of map long before the list runs out of rows. It only
-            splits once the column is wide enough for that gap to be small,
-            and the map sits centred in whatever is left. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="self-center lg:col-span-2">
-            <CountryMap countries={countries} />
-          </div>
-          <BarList
-            items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))}
-            empty="The country each click came from appears here. Never the address it came from."
-          />
-        </div>
-      </Card>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardLabel period={period}>Referrers</CardLabel>
-          <BarList
-            items={referrers}
-            empty="Where people were when they followed a link appears here."
-          />
-        </Card>
-        <Card>
-          <CardLabel period={period}>Devices</CardLabel>
-          <BarList
-            items={devices}
-            empty="Phone, desktop or tablet, counted here once clicks arrive."
-          />
-        </Card>
-      </div>
-    </div>
+    <PanelTabs
+      end={period}
+      tabs={[
+        {
+          value: "countries",
+          label: "Countries",
+          panel: (
+            <BarList
+              head={["Country", "Clicks"]}
+              items={countries}
+              formatKey={placeName}
+              lead={(code) => <Flag code={code} />}
+              limit={limit}
+              empty="The country each click came from appears here. No IP address is stored."
+            />
+          ),
+        },
+        { value: "map", label: "Map", panel: <CountryMap countries={countries} /> },
+      ]}
+    />
   );
 }

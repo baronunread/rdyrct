@@ -24,6 +24,8 @@ export const user = sqliteTable("user", {
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   // Suspended by a platform admin: sessions are wiped and sign-in is refused.
   banned: integer("banned", { mode: "boolean" }).notNull().default(false),
+  // Last signed-in request, to the hour (migration 0048).
+  lastSeenAt: integer("last_seen_at"),
   // Billing lives on the user, not the org: one Free/Hobby/Pro subscription
   // per person. An org's effective limits are its owner's plan (see plan.ts).
   //
@@ -33,6 +35,11 @@ export const user = sqliteTable("user", {
   // Anything that sets it by hand puts entitlement out of step with billing,
   // which is the bug #81 fixed.
   plan: text("plan", { enum: ["free", "hobby", "pro"] })
+    .notNull()
+    .default("free"),
+  // The plan the admin audit log last recorded (migration 0050). Differing
+  // from `plan` means a change nobody has logged yet: reconcileUser logs it.
+  auditedPlan: text("audited_plan", { enum: ["free", "hobby", "pro"] })
     .notNull()
     .default("free"),
   // What Polar says: written by the webhook, never by an admin. Null means no
@@ -111,6 +118,8 @@ export const account = sqliteTable(
     }),
     scope: text("scope"),
     password: text("password"),
+    /** A Google account's address, from its id token (migration 0049). */
+    email: text("email"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
