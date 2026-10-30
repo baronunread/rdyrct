@@ -17,7 +17,8 @@ import {
   useId,
 } from "react";
 import { Button } from "../ui/button";
-import { FieldReason, invalidAria } from "../ui/field";
+import { FieldReason } from "../ui/field";
+import { invalidAria } from "../ui/invalid-aria";
 import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
