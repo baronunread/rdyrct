@@ -19,6 +19,7 @@
     "e2e:install": "playwright install chromium",
     "e2e:smoke": "playwright test",
     "e2e:production": "playwright test --config playwright.production.config.ts",
+    "e2e:shard-times": "bun scripts/e2e-shard-times.ts",
     "e2e:self-host": "playwright test --config playwright.self-host.config.ts",
     "verify": "bun run format:check && bun run lint && bun run check && bun run test && bun run test:worker && bun run test:worker:self-host",
     "verify:e2e": "bun run verify && bun run e2e:smoke && bun run e2e:production",

@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 import { appUrl, BUILD_ENV, playwrightPort } from "./tests/e2e/environment";
+import { shardFiles } from "./tests/e2e/shards";
+
+// CI runs one shard per job, balanced on each file's duration rather than
+// Playwright's equal test counts: see tests/e2e/shards.ts.
+const shard = process.env.E2E_SHARD;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -21,7 +26,10 @@ export default defineConfig({
   timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+  // The JSON report is the per-file durations the shards are balanced on.
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never" }], ["json", { outputFile: "e2e-timings/report.json" }]]
+    : "list",
   use: {
     baseURL: appUrl,
     screenshot: "only-on-failure",
@@ -33,6 +41,9 @@ export default defineConfig({
       // The production and self-host suites have their own configs, each
       // with a build of its own; everything here runs against `vite dev`.
       testIgnore: ["**/production/**", "**/self-host/**"],
+      testMatch: shard
+        ? shardFiles("tests/e2e", shard).map((name) => `**/tests/e2e/${name}`)
+        : "**/*.pw.ts",
       use: {
         ...devices["Desktop Chrome"],
         // CI runners ship Google Chrome preinstalled: launch that instead of
