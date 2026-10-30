@@ -14,6 +14,19 @@ import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
+/**
+ * The admin's PATCH to a link, answered. The row's badge is not the moment
+ * the request finished: any refetch of the list between the request's D1
+ * write and its KV write already shows the new state, and on a loaded dev
+ * server that gap was long enough for the redirect check to land in it and
+ * read the old KV value (a 403 where a restored link should 302).
+ */
+const linkPatch = (page: import("@playwright/test").Page) =>
+  page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" && /\/api\/admin\/links\/[^/]+$/.test(response.url()),
+  );
+
 test("an admin can find a link by destination and suspend it", async ({ page }) => {
   // A normal account with a link to be reported.
   const ownerEmail = `owner-${Date.now()}@gmail.com`;
@@ -71,12 +84,15 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   // A suspension with no reason is not answerable later, so it is refused.
   await expect(dialog.getByRole("button", { name: "Suspend link" })).toBeDisabled();
   await dialog.getByLabel("Reason").fill("phishing report, ticket 412");
+  const suspended = linkPatch(page);
   await dialog.getByRole("button", { name: "Suspend link" }).click();
+  expect((await suspended).ok()).toBe(true);
 
   await expect(row.getByText("suspended")).toBeVisible({ timeout: 10_000 });
 
   // The redirect is gone, and the row and its clicks are not. Not polled:
-  // the suspend writes KV in its own request, not through the queue (#101).
+  // the suspend writes KV in its own request, not through the queue (#101),
+  // so once that request has answered, the redirect has stopped.
   expect((await page.request.get(`/${slug}`, { maxRedirects: 0 })).status()).not.toBe(302);
 
   const rows = await queryRows<{ n: number }>(
@@ -91,7 +107,9 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   await page.getByRole("menuitem", { name: "Restore link" }).click();
   const restore = page.getByRole("dialog", { name: "Restore this link?" });
   await expect(restore.getByText(/again within a minute/)).toBeVisible();
+  const restored = linkPatch(page);
   await restore.getByRole("button", { name: "Restore link" }).click();
+  expect((await restored).ok()).toBe(true);
   await expect(row.getByText("suspended")).toBeHidden({ timeout: 10_000 });
   expect((await page.request.get(`/${slug}`, { maxRedirects: 0 })).status()).toBe(302);
 
@@ -235,7 +253,10 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   await expect(row.getByText("asks for a card number")).toBeVisible();
 
   await row.getByRole("button", { name: "Dismiss" }).click();
-  await expect(page.getByText("No open reports.")).toBeVisible({ timeout: 10_000 });
+  // This report leaves the list. Not "No open reports.": the reports table is
+  // the whole platform's, and admin-triage.pw.ts files reports of its own in
+  // the same run.
+  await expect(row).toHaveCount(0, { timeout: 10_000 });
   // Dismissing the only report lifts the warning it set.
   await expect.poll(warnReason).toBeNull();
 });
