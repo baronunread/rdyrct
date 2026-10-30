@@ -54,11 +54,15 @@ test("the colours card plays through without drawing its code again", async ({ p
   });
 
   const seen = new Set<string | null>();
-  for (let i = 0; i < 24 && seen.size < 7; i++) {
-    seen.add(await scene.getAttribute("data-step"));
-    await page.waitForTimeout(250);
-  }
-  expect(seen.size).toBeGreaterThan(4);
+  await expect
+    .poll(
+      async () => {
+        seen.add(await scene.getAttribute("data-step"));
+        return seen.size;
+      },
+      { intervals: [250], timeout: 6_000 },
+    )
+    .toBeGreaterThan(4);
   await expect(scene).toHaveAttribute("data-redraws", "0");
 });
 
@@ -78,9 +82,16 @@ test("the landing sections name no competitor", async ({ page }) => {
 
 // A card plays its loop while it is on screen, from the finished state the
 // page arrives in; under reduced motion it stays finished.
-const steps = async (page: Page) => {
+const linkScene = async (page: Page) => {
   const scene = section(page, "Links that look like you.").locator("[data-scene]").nth(1);
   await scene.scrollIntoViewIfNeeded();
+  return scene;
+};
+
+// Holding still has no moment to wait for, so the card is watched for two
+// seconds, longer than a playing card takes to change step.
+const steps = async (page: Page) => {
+  const scene = await linkScene(page);
   const seen = new Set<string | null>();
   for (let i = 0; i < 8; i++) {
     seen.add(await scene.getAttribute("data-step"));
@@ -91,7 +102,10 @@ const steps = async (page: Page) => {
 
 test("the cards play while they are on screen", async ({ page }) => {
   await page.goto("/");
-  expect((await steps(page)).size).toBeGreaterThan(1);
+  const scene = await linkScene(page);
+  const first = await scene.getAttribute("data-step");
+  expect(first).not.toBeNull();
+  await expect(scene).not.toHaveAttribute("data-step", first!, { timeout: 2_000 });
 });
 
 test("under reduced motion the cards hold their finished state", async ({ page }) => {

@@ -4,7 +4,7 @@ import { selfHostPort, selfHostUrl } from "./tests/e2e/environment";
 /**
  * The build a fork deploys: no landing page, no pricing, no rdyrct.com
  * analytics. Its own config because it needs its own build, and that build
- * writes to the same dist/ as playwright.config.ts's production preview, so
+ * writes to the same dist/ as playwright.production.config.ts's, so
  * the two never run at once.
  *
  *   bun run e2e:self-host

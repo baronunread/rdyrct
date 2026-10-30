@@ -113,9 +113,15 @@ test("QR previews render under the production CSP without violations", async ({ 
   // The landing mockup mounts real QRPreview components, one of them with an
   // embedded logo, so qr-code-styling's rendering path is exercised here
   // without needing an account. It draws through image and canvas APIs, which
-  // is exactly what img-src governs.
-  await expect(page.locator("svg:visible").first()).toBeVisible();
-  await page.waitForTimeout(1500);
+  // is exactly what img-src governs. The cards draw their codes only once
+  // they are on screen, so the QR section is scrolled to: a test that only
+  // waited on the first screen drew no code at all. The logo goes in only
+  // once its image has loaded, so the drawn logo is the sign the previews'
+  // images have been fetched or refused.
+  await page
+    .getByRole("heading", { name: "Print once. Change it later." })
+    .scrollIntoViewIfNeeded();
+  await expect(page.locator("svg image").first()).toBeAttached();
 
   const violations = await cspViolations(page);
   expect(violations.filter((v) => v.directive.startsWith("img-src"))).toEqual([]);

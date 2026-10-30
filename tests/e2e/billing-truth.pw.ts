@@ -1,16 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { makePlatformAdmin, seedSubscriber } from "./db";
+import { makePlatformAdmin, queryRows, seedSubscriber } from "./db";
+import { SUBSCRIPTION_ACCESS } from "../../src/worker/entitlement";
+
+/** The subscription statuses that entitle, as the Worker decides it. */
+const ENTITLING = Object.entries(SUBSCRIPTION_ACCESS)
+  .filter(([, grants]) => grants)
+  .map(([status]) => `'${status}'`)
+  .join(", ");
 
 const password = "test-password-123";
 
-/**
- * The number on one /admin stat card.
- *
- * Read as a delta rather than asserted outright: the local database keeps
- * whatever earlier runs left in it, so "there are 3 subscribers" would depend
- * on test order. "Comping someone adds no subscriber" does not.
- */
+/** The number on one /admin stat card. */
 async function stat(page: Page, label: string): Promise<number> {
   const card = page.getByText(label, { exact: true }).locator("..");
   const text = (await card.textContent()) ?? "";
@@ -23,6 +24,34 @@ async function stat(page: Page, label: string): Promise<number> {
 async function compedCount(page: Page): Promise<number> {
   const line = await page.getByText(/\d+ comped/).textContent();
   return Number(/(\d+) comped/.exec(line ?? "")?.[1] ?? NaN);
+}
+
+/**
+ * The three /admin counts a comp could wrongly move, each against the rows it
+ * stands for, written here from the definitions rather than the Worker's
+ * formula: somebody pays when they are on a paid plan that no comp gave them.
+ *
+ * Neither a fixed number nor a before/after delta holds: every other worker
+ * in the run gives itself a paying subscription (setPlan) whenever it needs a
+ * paid feature, at moments this test cannot predict. So the page and the rows
+ * are read together, and read again until no other test wrote in between.
+ */
+async function expectCountsMatchRows(page: Page) {
+  await expect(async () => {
+    await page.goto("/admin");
+    await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
+    const [rows] = await queryRows<{ paying: number; subscribers: number; comped: number }>(
+      page,
+      `select
+         (select count(*) from user where plan != 'free' and comp_plan is null) as paying,
+         (select count(*) from user where subscription_plan is not null
+            and subscription_status in (${ENTITLING})) as subscribers,
+         (select count(*) from user where comp_plan is not null) as comped`,
+    );
+    expect(await stat(page, "Paid users")).toBe(Number(rows.paying));
+    expect(await stat(page, "Subscribers")).toBe(Number(rows.subscribers));
+    expect(await compedCount(page)).toBe(Number(rows.comped));
+  }).toPass({ timeout: 30_000 });
 }
 
 /**
@@ -41,21 +70,15 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
 
   await page.goto("/admin/users");
   const subscriberRow = page.getByRole("row", { name: new RegExp(subscriber) });
-  await expect(subscriberRow).toContainText("pro");
+  // The whole platform's user list: slower to come back than one org's page.
+  await expect(subscriberRow).toContainText("pro", { timeout: 10_000 });
 
   // The admin's own row: free, and not comped.
   const adminRow = page.getByRole("row", { name: new RegExp(admin) });
   await expect(adminRow).toContainText("free");
   await expect(adminRow).not.toContainText("comped");
 
-  await page.goto("/admin");
-  await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
-  const before = {
-    paidUsers: await stat(page, "Paid users"),
-    subscribers: await stat(page, "Subscribers"),
-    comped: await compedCount(page),
-  };
-  expect(before.subscribers).toBeGreaterThanOrEqual(1);
+  await expectCountsMatchRows(page);
 
   // Comp the admin's own account. The reason is required, so the button
   // stays disabled until it is filled in.
@@ -80,17 +103,17 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await adminRow.getByText("comped").hover();
   await expect(reason).toBeVisible();
 
-  // A comp grants access but is not a paying customer: it moves the comped
-  // count and the plan-mix bars, but neither the paid-users total nor the
-  // subscriber total. Stated against the captured `before` values rather
-  // than absolutes: other tests in this run give themselves a paying
-  // subscription (setPlan) whenever they need a paid feature, and each of
-  // those adds to both totals at a moment this test cannot predict.
-  await page.goto("/admin");
-  await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
-  expect(await compedCount(page)).toBe(before.comped + 1);
-  expect(await stat(page, "Paid users")).toBe(before.paidUsers);
-  expect(await stat(page, "Subscribers")).toBe(before.subscribers);
+  // A comp grants access but is not a paying customer: it is in the comped
+  // count, and in neither the paid-users total nor the subscriber total. The
+  // counts alone cannot say so: a comp that wrote a subscription would move a
+  // card and the rows behind it together. So the admin's own row is read too.
+  await expectCountsMatchRows(page);
+  const [own] = await queryRows<{ plan: string | null; status: string | null }>(
+    page,
+    "select subscription_plan as plan, subscription_status as status from user where email = ?",
+    [admin],
+  );
+  expect(own).toEqual({ plan: null, status: null });
 
   // Revoking it takes the access away again, and leaves the subscriber alone.
   await page.goto("/admin/users");

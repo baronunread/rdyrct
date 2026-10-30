@@ -128,9 +128,10 @@ bun run check                          # app + shared, worker, worker tests (thr
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); bring their own env, whatever your .dev.vars and .env say
-bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
+bun run e2e:production                 # browser tests against the built worker, where the real CSP applies (builds dist/)
+bun run e2e:self-host                  # browser tests against a self-hosted build (builds dist/, so not alongside e2e:production)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
-bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs
+bun run verify:e2e                     # verify + e2e:smoke + e2e:production: what CI runs
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
 bun run fallow                         # fallow gate: what this branch adds over main
 ```
@@ -171,13 +172,18 @@ Workers globals in one directory, so they need untangling first.
 files, because that is the one job that repairs instead of complaining.
 Everything that reports runs in CI, where nobody can pass `--no-verify`:
 `.github/workflows/test.yml` runs the same checks as `bun run verify:e2e`,
-split across parallel jobs (static checks, unit/worker tests, and a 3-way
-sharded e2e run) to cut wall-clock time, and
+split across parallel jobs (static checks, unit/worker tests, the
+production and self-host builds, and a 6-way sharded e2e run) to cut
+wall-clock time, and
 `.github/workflows/react-doctor.yml` blocks on any new react-doctor finding
 (changed files, against the merge base) for PRs and main. On a PR the e2e
 run goes through [leanest](https://github.com/baronunread/leanest), which
 runs only the specs the diff could affect, and every spec when it is unsure.
-A push to main always runs the full suite.
+A push to main always runs the full suite. The shards split the spec
+files by duration (`tests/e2e/shards.ts`, `E2E_SHARD=2/6`), not by test
+count; when one shard runs well past the others, refresh
+`tests/e2e/shard-times.json` from a run's `e2e-timings-*` artifacts with
+`bun scripts/e2e-shard-times.ts`.
 
 Lint and format take no path list: `.` plus the ignores in `.gitignore` and
 `.oxfmtrc.json`. One scope, so the hook and CI cannot check different files.

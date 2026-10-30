@@ -1,19 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
-import { appUrl, playwrightPort, previewPort, previewUrl } from "./tests/e2e/environment";
+import { appUrl, BUILD_ENV, playwrightPort } from "./tests/e2e/environment";
+import { shardFiles } from "./tests/e2e/shards";
 
-/**
- * The build-time values every browser run uses, whatever the developer's own
- * `.env` says (Vite prefers the process environment). The project token is
- * .env.build.example's placeholder, so the analytics path runs and nothing
- * reaches a real project; the dev token keeps localhost out of both.
- */
-const BUILD_ENV = {
-  PLAYWRIGHT_TEST: "1",
-  VITE_RDYRCT_SITE: "1",
-  VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: "your_posthog_project_token",
-  VITE_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
-  VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
-};
+// CI runs one shard per job, balanced on each file's duration rather than
+// Playwright's equal test counts: see tests/e2e/shards.ts.
+const shard = process.env.E2E_SHARD;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -22,20 +13,24 @@ export default defineConfig({
   fullyParallel: true,
   // Playwright defaults to half the machine's cores, which is 2 on a CI runner
   // and 4 or more on a dev machine. Every worker talks to the same single
-  // Miniflare dev server, so the extra ones only queue behind each other:
-  // tests that pass in CI time out locally, and the whole suite runs slower
-  // (1.6m at 4 workers, 1.3m at 2). Pinned so both match.
+  // `vite dev` server, which is the bottleneck: on an 8-core Mac, 4 workers
+  // took the full suite from 7.8m to 6.9m but made each test about 1.75x
+  // slower and let races through that 2 workers never hit. Pinned so a local
+  // run and a CI shard match. CI gets its speed from shards instead.
   workers: 2,
-  // Playwright's default is 30s, which was set for tests that click around a
-  // page. Nearly every test here starts by creating a real account: a Turnstile
-  // challenge, an account write, a mail send and a six-digit code
-  // read back out of the emulator. That is most of 30s before the test has
-  // begun, and it is why failures kept landing on the first assertion after
-  // sign-up rather than on anything the test was written to check.
+  // Playwright's default is 30s. Most tests start from a ready account
+  // (`signUpAndVerify`, one request), and the slowest take about 25s on an
+  // idle machine: multi-account flows like downgrade, link import, domains.
+  // A loaded machine or a dev server still compiling a route on its first
+  // request can double that, and a timeout there says nothing about the
+  // feature, so the limit leaves room for it.
   timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+  // The JSON report is the per-file durations the shards are balanced on.
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never" }], ["json", { outputFile: "e2e-timings/report.json" }]]
+    : "list",
   use: {
     baseURL: appUrl,
     screenshot: "only-on-failure",
@@ -44,26 +39,18 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      // The production suite has its own base URL and server; everything else
-      // runs against `vite dev`.
+      // The production and self-host suites have their own configs, each
+      // with a build of its own; everything here runs against `vite dev`.
       testIgnore: ["**/production/**", "**/self-host/**"],
+      testMatch: shard
+        ? shardFiles("tests/e2e", shard).map((name) => `**/tests/e2e/${name}`)
+        : "**/*.pw.ts",
       use: {
         ...devices["Desktop Chrome"],
         // CI runners ship Google Chrome preinstalled: launch that instead of
         // downloading Playwright's own Chromium build. Local dev keeps using
         // the bundled build from `bun run e2e:install`.
         channel: process.env.CI ? "chrome" : undefined,
-      },
-    },
-    {
-      // Runs against the built worker and assets, where the real
-      // Content-Security-Policy applies. See tests/e2e/production/csp.pw.ts.
-      name: "production",
-      testDir: "./tests/e2e/production",
-      use: {
-        ...devices["Desktop Chrome"],
-        channel: process.env.CI ? "chrome" : undefined,
-        baseURL: previewUrl,
       },
     },
   ],
@@ -82,25 +69,6 @@ export default defineConfig({
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
       env: { ...BUILD_ENV, CLOUDFLARE_ENV: "playwright" },
-    },
-    {
-      // Built output, not the dev server: `vite dev` relaxes script-src for
-      // Vite's inline React Refresh preamble, so only this one serves the
-      // policy that actually ships. The build is part of the command so the
-      // suite can never assert against a stale dist/.
-      // The build copies whatever .dev.vars it finds into dist/rdyrct/, and
-      // that copy is the one `vite preview` reads, so it is replaced with
-      // the test values. APP_HOST is then pinned to the preview's own host
-      // (a later line wins): the CSP only allows Turnstile on APP_HOST.
-      command: `bun run build && cp .dev.vars.playwright dist/rdyrct/.dev.vars && printf '\\nAPP_HOST=localhost:${previewPort}\\nAPP_URL=${previewUrl}\\n' >> dist/rdyrct/.dev.vars && bunx vite preview --port ${previewPort} --strictPort`,
-      url: previewUrl,
-      reuseExistingServer: false,
-      timeout: 180_000,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-      // No CLOUDFLARE_ENV here: the built wrangler.json carries no
-      // `playwright` environment, so setting it only produces a warning.
-      // These tests are about response headers and need no backend state.
-      env: BUILD_ENV,
     },
   ],
 });

@@ -17,3 +17,17 @@ export const previewUrl = `http://localhost:${previewPort}`;
 // preview above: see playwright.self-host.config.ts.
 export const selfHostPort = 4184;
 export const selfHostUrl = `http://localhost:${selfHostPort}`;
+
+/**
+ * The build-time values every browser run uses, whatever the developer's own
+ * `.env` says (Vite prefers the process environment). The project token is
+ * .env.build.example's placeholder, so the analytics path runs and nothing
+ * reaches a real project; the dev token keeps localhost out of both.
+ */
+export const BUILD_ENV = {
+  PLAYWRIGHT_TEST: "1",
+  VITE_RDYRCT_SITE: "1",
+  VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: "your_posthog_project_token",
+  VITE_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
+  VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
+};
