@@ -82,10 +82,6 @@ const SOURCES = [
     "Google for Developers, “Google URL Shortener links will no longer be available”, July 18, 2024",
   ],
 ] as const;
-
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function GoogleUrlShortenerPage() {
   return (
     <MarketingPage

@@ -389,10 +389,6 @@ export function QrFaq({
     </div>
   );
 }
-
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function QrGeneratorPage() {
   // The header has to know: hardcoding "signed out" showed somebody with a
   // session the Log in and Sign up buttons, which then dropped them on the

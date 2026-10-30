@@ -102,10 +102,6 @@ const WIFI_SECURITY: { value: WifiSecurity; label: string }[] = [
   { value: "WEP", label: "WEP" },
   { value: "nopass", label: "None (open network)" },
 ];
-
-// main.tsx names these exports as strings, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function WifiQrPage() {
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
   const [ssid, setSsid] = useState("");
@@ -209,8 +205,6 @@ const CONTACT_FIELDS: [key: keyof Contact, label: string, type: string, autoComp
   ["jobTitle", "Job title", "text", "organization-title"],
   ["website", "Website", "url", "url"],
 ];
-
-// fallow-ignore-next-line unused-export
 export function VcardQrPage() {
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
   const [contact, setContact] = useState<Contact>(EMPTY_CONTACT);
@@ -287,8 +281,6 @@ export function VcardQrPage() {
     />
   );
 }
-
-// fallow-ignore-next-line unused-export
 export function WhatsappQrPage() {
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
   const [phone, setPhone] = useState("");

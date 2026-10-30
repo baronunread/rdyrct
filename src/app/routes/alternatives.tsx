@@ -787,34 +787,24 @@ function CompareIndex() {
     </MarketingPage>
   );
 }
-
-// main.tsx names these exports as strings, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function ComparePage() {
   return <CompareIndex />;
 }
-// fallow-ignore-next-line unused-export
 export function BitlyAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.bitly} />;
 }
-// fallow-ignore-next-line unused-export
 export function RebrandlyAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.rebrandly} />;
 }
-// fallow-ignore-next-line unused-export
 export function DubAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.dub} />;
 }
-// fallow-ignore-next-line unused-export
 export function ShortIoAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.shortio} />;
 }
-// fallow-ignore-next-line unused-export
 export function TinyUrlAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.tinyurl} />;
 }
-// fallow-ignore-next-line unused-export
 export function QrCodeMonkeyAlternativePage() {
   return <QrAlternativePage />;
 }
