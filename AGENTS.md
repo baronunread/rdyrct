@@ -128,9 +128,10 @@ bun run check                          # app + shared, worker, worker tests (thr
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); bring their own env, whatever your .dev.vars and .env say
-bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
+bun run e2e:production                 # browser tests against the built worker, where the real CSP applies (builds dist/)
+bun run e2e:self-host                  # browser tests against a self-hosted build (builds dist/, so not alongside e2e:production)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
-bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs
+bun run verify:e2e                     # verify + e2e:smoke + e2e:production: what CI runs
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
 bun run fallow                         # fallow gate: what this branch adds over main
 ```

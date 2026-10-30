@@ -1,19 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { appUrl, playwrightPort, previewPort, previewUrl } from "./tests/e2e/environment";
-
-/**
- * The build-time values every browser run uses, whatever the developer's own
- * `.env` says (Vite prefers the process environment). The project token is
- * .env.build.example's placeholder, so the analytics path runs and nothing
- * reaches a real project; the dev token keeps localhost out of both.
- */
-const BUILD_ENV = {
-  PLAYWRIGHT_TEST: "1",
-  VITE_RDYRCT_SITE: "1",
-  VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: "your_posthog_project_token",
-  VITE_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
-  VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
-};
+import { appUrl, BUILD_ENV, playwrightPort } from "./tests/e2e/environment";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -44,8 +30,8 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      // The production suite has its own base URL and server; everything else
-      // runs against `vite dev`.
+      // The production and self-host suites have their own configs, each
+      // with a build of its own; everything here runs against `vite dev`.
       testIgnore: ["**/production/**", "**/self-host/**"],
       use: {
         ...devices["Desktop Chrome"],
@@ -53,17 +39,6 @@ export default defineConfig({
         // downloading Playwright's own Chromium build. Local dev keeps using
         // the bundled build from `bun run e2e:install`.
         channel: process.env.CI ? "chrome" : undefined,
-      },
-    },
-    {
-      // Runs against the built worker and assets, where the real
-      // Content-Security-Policy applies. See tests/e2e/production/csp.pw.ts.
-      name: "production",
-      testDir: "./tests/e2e/production",
-      use: {
-        ...devices["Desktop Chrome"],
-        channel: process.env.CI ? "chrome" : undefined,
-        baseURL: previewUrl,
       },
     },
   ],
@@ -82,25 +57,6 @@ export default defineConfig({
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
       env: { ...BUILD_ENV, CLOUDFLARE_ENV: "playwright" },
-    },
-    {
-      // Built output, not the dev server: `vite dev` relaxes script-src for
-      // Vite's inline React Refresh preamble, so only this one serves the
-      // policy that actually ships. The build is part of the command so the
-      // suite can never assert against a stale dist/.
-      // The build copies whatever .dev.vars it finds into dist/rdyrct/, and
-      // that copy is the one `vite preview` reads, so it is replaced with
-      // the test values. APP_HOST is then pinned to the preview's own host
-      // (a later line wins): the CSP only allows Turnstile on APP_HOST.
-      command: `bun run build && cp .dev.vars.playwright dist/rdyrct/.dev.vars && printf '\\nAPP_HOST=localhost:${previewPort}\\nAPP_URL=${previewUrl}\\n' >> dist/rdyrct/.dev.vars && bunx vite preview --port ${previewPort} --strictPort`,
-      url: previewUrl,
-      reuseExistingServer: false,
-      timeout: 180_000,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-      // No CLOUDFLARE_ENV here: the built wrangler.json carries no
-      // `playwright` environment, so setting it only produces a warning.
-      // These tests are about response headers and need no backend state.
-      env: BUILD_ENV,
     },
   ],
 });
