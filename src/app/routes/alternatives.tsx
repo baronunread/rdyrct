@@ -1,6 +1,6 @@
 /**
- * The "alternative" pages: /bitly-alternative, /rebrandly-alternative and
- * /short-io-alternative.
+ * The "alternative" pages: /bitly-alternative, /rebrandly-alternative,
+ * /dub-alternative, /short-io-alternative and /tinyurl-alternative.
  *
  * "X alternative" is how people search once they have outgrown, or been
  * priced out of, X, so each page answers that one question and nothing wider:
@@ -294,6 +294,66 @@ const ALTERNATIVES = {
     ],
     blog: { href: "/blog/short-io-alternatives", label: "More on Short.io alternatives" },
   },
+  tinyurl: {
+    name: "TinyURL",
+    path: "/tinyurl-alternative",
+    pricingUrl: "tinyurl.com/app/pricing",
+    blurb: "The oldest free shortener, with paid branded domains",
+    theirPrice: "Free, or $9 a month with a branded domain",
+    title: "TinyURL alternative: rdyrct vs TinyURL",
+    intro:
+      "TinyURL is free until you want your own domain or your numbers. Here is what each costs then.",
+    answer: `TinyURL shortens a link for free, with no account. Its branded domains and analytics start on Pro at $9 a month, with 125 new links a month. rdyrct includes a custom domain and 30 days of click analytics from ${PLAN_PRICES.hobby} a month. If you only ever need a short link and nothing about who clicked it, TinyURL's free tool is enough.`,
+    theirs: {
+      entry: "Pro, $9 a month ($108 a year)",
+      links: "125 new links a month on Pro, $1.50 for each 10 more",
+      domains: "3 branded domains on Pro",
+      history: "Not stated on the pricing page",
+      free: "Short links with no account; branded domains and analytics need a paid plan",
+    },
+    theyWin: [
+      "Shorten as many links as you like with no account at all. rdyrct's home page makes one link without an account, then asks you to sign up.",
+      "3 branded domains on Pro at $9 a month, where our Hobby has 1 (Pro has 5, for the same $9).",
+      "Unlimited tracked clicks on Pro, and Bulk 50K at $69 a month for 50,000 new links a month.",
+      "Link expiry dates you can set, and an Enterprise plan with a 99.9% uptime guarantee.",
+    ],
+    weWin: [
+      `A custom domain from ${PLAN_PRICES.hobby} a month instead of $9.`,
+      `A cap on links you hold, not links you make: ${formatNumber(PLAN_LIMITS.hobby.links)} on Hobby, with no charge for each 10 more.`,
+      `Teammates on every plan (${PLAN_LIMITS.free.members} on Free, ${PLAN_LIMITS.pro.members} on Pro).`,
+      "Click analytics that never store a visitor's IP address, the API and MCP connector on every plan, and public code you can host yourself.",
+    ],
+    plans: [
+      ["Free", "$0", "Short links with no account, no branded domain or analytics"],
+      [
+        "Pro",
+        "$9 a month ($108 a year)",
+        "125 links a month (+$1.50 per 10), unlimited tracked clicks, 3 branded domains",
+      ],
+      [
+        "Bulk 50K",
+        "$69 a month ($828 a year)",
+        "50,000 links and 50,000 tracked clicks a month, 3 branded domains",
+      ],
+      ["Enterprise", "From $3,999 a year", "Custom limits, 99.9% uptime guarantee"],
+    ],
+    planNote:
+      "TinyURL's page lists each paid plan with a monthly and a yearly figure, before tax. Its Free column shows its limits as icons rather than numbers, so check there for the detail.",
+    faq: [
+      [
+        "Is TinyURL free?",
+        "Making a short link is free, with no account. Branded domains, link analytics and editing come with its paid plans, from $9 a month.",
+      ],
+      [
+        "Will my old TinyURL links keep working if I move?",
+        "Links on tinyurl.com stay with TinyURL, so leave them where they are. Make new links on your own domain from now on, and those move with you.",
+      ],
+      [
+        "Bitly or TinyURL?",
+        `Bitly's first plan with a custom domain costs $29 a month, TinyURL's $9 and rdyrct's ${PLAN_PRICES.hobby}. Our Bitly page has the detail.`,
+      ],
+    ],
+  },
 } satisfies Record<string, Alternative>;
 
 function BulletList({ items }: { items: string[] }) {
@@ -501,4 +561,8 @@ export function DubAlternativePage() {
 // fallow-ignore-next-line unused-export
 export function ShortIoAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.shortio} />;
+}
+// fallow-ignore-next-line unused-export
+export function TinyUrlAlternativePage() {
+  return <AlternativePage data={ALTERNATIVES.tinyurl} />;
 }

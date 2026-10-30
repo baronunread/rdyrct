@@ -480,7 +480,7 @@ test("the compare index lists each tool and opens its comparison", async ({ page
   await page.goto("/");
   await page.locator("footer").getByRole("link", { name: "All comparisons" }).click();
   await expect(page).toHaveURL(/\/compare$/);
-  for (const name of ["Bitly", "Rebrandly", "Dub", "Short.io"]) {
+  for (const name of ["Bitly", "Rebrandly", "Dub", "Short.io", "TinyURL"]) {
     await expect(page.getByRole("heading", { name: `vs ${name}` })).toBeVisible();
   }
   await page.getByRole("link", { name: /vs Dub/ }).click();
@@ -495,6 +495,7 @@ for (const { path, name } of [
   { path: "/rebrandly-alternative", name: "Rebrandly" },
   { path: "/dub-alternative", name: "Dub" },
   { path: "/short-io-alternative", name: "Short.io" },
+  { path: "/tinyurl-alternative", name: "TinyURL" },
 ]) {
   test(`${path} compares rdyrct with ${name}, including where ${name} wins`, async ({ page }) => {
     await page.goto(path);

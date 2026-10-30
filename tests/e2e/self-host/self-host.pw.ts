@@ -19,6 +19,7 @@ test("rdyrct.com's pages are not there", async ({ page }) => {
     "/bitly-alternative",
     "/utm-builder",
     "/branded-link-shortener",
+    "/tinyurl-alternative",
   ]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(404);

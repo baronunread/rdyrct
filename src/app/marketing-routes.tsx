@@ -138,6 +138,11 @@ export function marketingRoutes() {
     }),
     createRoute({
       ...child,
+      path: "/tinyurl-alternative",
+      component: lazyRouteComponent(alternatives, "TinyUrlAlternativePage"),
+    }),
+    createRoute({
+      ...child,
       path: "/docs",
       component: lazyRouteComponent(() => import("./routes/docs"), "DocsPage"),
     }),

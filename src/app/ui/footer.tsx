@@ -282,6 +282,11 @@ export function Footer({ featured = false }: { featured?: boolean }) {
               </MarketingLink>
             </li>
             <li>
+              <MarketingLink to="/tinyurl-alternative" className={linkClass}>
+                TinyURL alternative
+              </MarketingLink>
+            </li>
+            <li>
               <MarketingLink to="/compare" className={linkClass}>
                 All comparisons
               </MarketingLink>

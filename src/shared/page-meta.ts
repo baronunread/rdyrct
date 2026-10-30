@@ -33,6 +33,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/tinyurl-alternative",
   "/privacy",
   "/terms",
   "/report",
@@ -260,15 +261,16 @@ Accept: application/json, text/event-stream
 What changed in each release. The full text is [CHANGELOG.md](https://github.com/baronunread/rdyrct/blob/main/CHANGELOG.md) in the repository, and every change is a [merged pull request](https://github.com/baronunread/rdyrct/pulls?q=is%3Apr+is%3Amerged).`,
   },
   "/compare": {
-    title: "Compare rdyrct with Bitly, Rebrandly, Dub and Short.io",
+    title: "Compare rdyrct with Bitly, Rebrandly, Dub, Short.io and TinyURL",
     description:
-      "How rdyrct compares with Bitly, Rebrandly, Dub and Short.io on price, custom domains, link limits and analytics, and when each other tool is the better pick.",
+      "How rdyrct compares with Bitly, Rebrandly, Dub, Short.io and TinyURL on price, custom domains, link limits and analytics, and when each is the better pick.",
     markdown: `# Compare rdyrct with other link shorteners
 
 - [rdyrct vs Bitly](/bitly-alternative)
 - [rdyrct vs Rebrandly](/rebrandly-alternative)
 - [rdyrct vs Dub](/dub-alternative)
 - [rdyrct vs Short.io](/short-io-alternative)
+- [rdyrct vs TinyURL](/tinyurl-alternative)
 
 Each page compares price, custom domains, link limits and analytics history, and says where the other tool is the better choice.`,
   },
@@ -311,6 +313,16 @@ Dub's pricing page lists no free plan, and its plans start at $90 a month. rdyrc
 Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick when click analytics must never store an IP address, or when you want to host the code yourself.
 
 [Compare in full](/short-io-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/tinyurl-alternative": {
+    title: "TinyURL alternative: rdyrct vs TinyURL pricing and limits",
+    description:
+      "rdyrct against TinyURL: what a branded domain costs at each, link and click limits, and when TinyURL's free tool is all you need. Start free, no card.",
+    markdown: `# TinyURL alternative: rdyrct vs TinyURL
+
+TinyURL shortens a link for free, with no account. Its branded domains and analytics start on Pro at $9 a month, with 125 new links a month. rdyrct includes a custom domain and 30 days of click analytics from $4 a month.
+
+[Compare in full](/tinyurl-alternative) or [see rdyrct pricing](/pricing).`,
   },
   "/roadmap": {
     title: "URL shortener roadmap - what rdyrct is building next",

@@ -50,6 +50,7 @@ export const RESERVED_SLUGS = new Set([
   "rebrandly-alternative",
   "dub-alternative",
   "short-io-alternative",
+  "tinyurl-alternative",
   "docs",
   // authenticated app tabs
   "dashboard",

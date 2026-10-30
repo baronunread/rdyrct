@@ -28,6 +28,7 @@ const PRODUCT_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/tinyurl-alternative",
 ]);
 
 /** The nav item for the page you are on, or null where none applies (the home page). */
