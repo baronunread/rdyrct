@@ -4,14 +4,15 @@
  *
  *   bun run e2e:shard-times report.json [more.json ...]
  *
- * Pass every shard's report from one full-suite CI run: a push to main (the
- * e2e job uploads them as the `e2e-timings-*` artifacts). Not a PR run,
- * which only holds the specs leanest picked: the table is rewritten whole,
- * and every file missing from it falls back to the median. A full local run
- * works too, with `--reporter=json` (local runs default to `list`). Only the
+ * Pass every shard's report from one CI run (the e2e job uploads them as
+ * the `e2e-timings-*` artifacts); a full-suite run on main refreshes every
+ * file, a PR run only the specs leanest picked. A local run works too, with
+ * `--reporter=json` (local runs default to `list`). Only the
  * chromium project counts, and only the first attempt of each test, so a
  * retry does not make a file look slower than it is.
  */
+import { existsSync } from "node:fs";
+
 type Suite = {
   file?: string;
   suites?: Suite[];
@@ -33,6 +34,10 @@ const specsOf = (suite: Suite): Spec[] => [
   ...(suite.suites ?? []).flatMap(specsOf),
 ];
 
+// Merged into the table already there, so a report that covers some files
+// (a PR run, one spec) refreshes those and keeps the rest. Files that no
+// longer exist drop out.
+const previous: Record<string, number> = await Bun.file(out).json();
 const seconds: Record<string, number> = {};
 for (const path of reports) {
   const report: Report = await Bun.file(path).json();
@@ -47,7 +52,8 @@ for (const path of reports) {
 }
 
 const sorted = Object.fromEntries(
-  Object.entries(seconds)
+  Object.entries({ ...previous, ...seconds })
+    .filter(([file]) => existsSync(`tests/e2e/${file}`))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([file, s]) => [file, Math.round(s * 10) / 10]),
 );

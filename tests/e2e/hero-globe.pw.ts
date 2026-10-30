@@ -42,6 +42,18 @@ test("the globe turns, unless the visitor asked for less motion", async ({ page 
       timeout: 20_000,
     });
     await expect(canvas).toBeVisible();
+    // Visible is not drawn: a frame read before the first draw is blank, and
+    // a blank baseline would let "it turns" pass on that first draw alone.
+    await expect
+      .poll(() =>
+        canvas.evaluate((c: HTMLCanvasElement) => {
+          const blank = document.createElement("canvas");
+          blank.width = c.width;
+          blank.height = c.height;
+          return c.toDataURL() !== blank.toDataURL();
+        }),
+      )
+      .toBe(true);
     return frame();
   };
 
