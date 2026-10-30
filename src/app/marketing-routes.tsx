@@ -62,6 +62,7 @@ function PublicPagePending() {
 export function marketingRoutes() {
   const page = { pendingComponent: PublicPagePending, pendingMs: 0 };
   const alternatives = () => import("./routes/alternatives");
+  const qrTypes = () => import("./routes/qr-types");
 
   // Pathless layout: adds the marketing header/scroll-reset wrapper without
   // an extra URL segment.
@@ -135,6 +136,21 @@ export function marketingRoutes() {
       ...child,
       path: "/short-io-alternative",
       component: lazyRouteComponent(alternatives, "ShortIoAlternativePage"),
+    }),
+    createRoute({
+      ...child,
+      path: "/whatsapp-qr-code",
+      component: lazyRouteComponent(qrTypes, "WhatsappQrPage"),
+    }),
+    createRoute({
+      ...child,
+      path: "/vcard-qr-code",
+      component: lazyRouteComponent(qrTypes, "VcardQrPage"),
+    }),
+    createRoute({
+      ...child,
+      path: "/wifi-qr-code",
+      component: lazyRouteComponent(qrTypes, "WifiQrPage"),
     }),
     createRoute({
       ...child,

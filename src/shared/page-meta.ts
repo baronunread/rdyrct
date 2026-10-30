@@ -33,6 +33,9 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/whatsapp-qr-code",
+  "/vcard-qr-code",
+  "/wifi-qr-code",
   "/qr-code-monkey-alternative",
   "/tinyurl-alternative",
   "/privacy",
@@ -98,6 +101,40 @@ This generator makes static QR codes: the link or text is stored in the pattern 
 The QR code and optional logo are processed in your browser. rdyrct does not receive or store the value you enter or the logo you choose.
 
 [Open the QR code generator](/qr-code-generator)`,
+  },
+  "/wifi-qr-code": {
+    title: "WiFi QR code generator - share your WiFi password, free",
+    description:
+      "Make a WiFi QR code that joins your network when a guest scans it: name, password and security, with your logo and colors. Free, no account, made in your browser.",
+    markdown: `# WiFi QR code generator
+
+Make a QR code that joins your WiFi network when a guest points a phone camera at it. Enter the network name, the password and the kind of security (WPA, WEP or none), then download a PNG or SVG. No account, and the password never leaves your browser.
+
+The code holds a line such as \`WIFI:T:WPA;S:Cafe guests;P:password;;\`, which iPhone and Android cameras read and offer to join. Change the password and you need a new code.
+
+[Open the WiFi QR code generator](/wifi-qr-code)`,
+  },
+  "/vcard-qr-code": {
+    title: "vCard QR code generator - QR code for business cards, free",
+    description:
+      "Put your contact details in a vCard QR code for a business card or badge: one scan saves you to a phone's contacts. Free, no account, PNG or SVG, made in your browser.",
+    markdown: `# vCard QR code generator for business cards
+
+Put your name, phone, email, company and website in a QR code. One scan offers to save you as a contact on iPhone and Android. The code holds a vCard 3.0 and is made in your browser. No account, no watermark, no expiry.
+
+[Open the vCard QR code generator](/vcard-qr-code)`,
+  },
+  "/whatsapp-qr-code": {
+    title: "WhatsApp QR code generator - open a chat with one scan",
+    description:
+      "Make a WhatsApp QR code that opens a chat with your number, with a message already typed. Free, no account, your logo and colors, PNG or SVG download.",
+    markdown: `# WhatsApp QR code generator
+
+Make a QR code that opens a WhatsApp chat with your number, with an optional message already typed. The code holds a wa.me link, so the person scanning does not need your number saved. Free, no account.
+
+To count scans or change the number later, make a short link to the wa.me address in rdyrct and a QR code for that.
+
+[Open the WhatsApp QR code generator](/whatsapp-qr-code)`,
   },
   "/branded-link-shortener": {
     title: "Branded link shortener - short links on your own domain",

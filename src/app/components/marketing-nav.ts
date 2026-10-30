@@ -28,6 +28,9 @@ const PRODUCT_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/whatsapp-qr-code",
+  "/vcard-qr-code",
+  "/wifi-qr-code",
   "/qr-code-monkey-alternative",
   "/tinyurl-alternative",
 ]);
