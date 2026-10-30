@@ -20,6 +20,8 @@ export default defineConfig({
   fullyParallel: true,
   // Header and page checks against one server, no sign-ups.
   workers: 2,
+  // As playwright.config.ts: a loaded machine can push a page past 30s.
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",

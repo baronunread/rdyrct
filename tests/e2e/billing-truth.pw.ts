@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows, seedSubscriber } from "./db";
+import { SUBSCRIPTION_ACCESS } from "../../src/worker/entitlement";
+
+/** The subscription statuses that entitle, as the Worker decides it. */
+const ENTITLING = Object.entries(SUBSCRIPTION_ACCESS)
+  .filter(([, grants]) => grants)
+  .map(([status]) => `'${status}'`)
+  .join(", ");
 
 const password = "test-password-123";
 
@@ -38,7 +45,7 @@ async function expectCountsMatchRows(page: Page) {
       `select
          (select count(*) from user where plan != 'free' and comp_plan is null) as paying,
          (select count(*) from user where subscription_plan is not null
-            and subscription_status in ('active', 'trialing', 'past_due')) as subscribers,
+            and subscription_status in (${ENTITLING})) as subscribers,
          (select count(*) from user where comp_plan is not null) as comped`,
     );
     expect(await stat(page, "Paid users")).toBe(Number(rows.paying));
@@ -97,8 +104,16 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await expect(reason).toBeVisible();
 
   // A comp grants access but is not a paying customer: it is in the comped
-  // count, and in neither the paid-users total nor the subscriber total.
+  // count, and in neither the paid-users total nor the subscriber total. The
+  // counts alone cannot say so: a comp that wrote a subscription would move a
+  // card and the rows behind it together. So the admin's own row is read too.
   await expectCountsMatchRows(page);
+  const [own] = await queryRows<{ plan: string | null; status: string | null }>(
+    page,
+    "select subscription_plan as plan, subscription_status as status from user where email = ?",
+    [admin],
+  );
+  expect(own).toEqual({ plan: null, status: null });
 
   // Revoking it takes the access away again, and leaves the subscriber alone.
   await page.goto("/admin/users");

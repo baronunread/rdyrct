@@ -4,8 +4,11 @@
  *
  *   bun run e2e:shard-times report.json [more.json ...]
  *
- * Pass every shard's report from one CI run (the e2e job uploads them as the
- * `e2e-timings-*` artifacts), or one report from a full local run. Only the
+ * Pass every shard's report from one full-suite CI run: a push to main (the
+ * e2e job uploads them as the `e2e-timings-*` artifacts). Not a PR run,
+ * which only holds the specs leanest picked: the table is rewritten whole,
+ * and every file missing from it falls back to the median. A full local run
+ * works too, with `--reporter=json` (local runs default to `list`). Only the
  * chromium project counts, and only the first attempt of each test, so a
  * retry does not make a file look slower than it is.
  */
@@ -17,6 +20,7 @@ type Suite = {
 type Report = { suites: Suite[] };
 
 const out = "tests/e2e/shard-times.json";
+const OWN_CONFIG = /^(production|self-host)\//;
 const reports = process.argv.slice(2);
 if (reports.length === 0) {
   console.error("usage: bun scripts/e2e-shard-times.ts report.json [more.json ...]");
@@ -32,8 +36,8 @@ const specsOf = (suite: Suite): Spec[] => [
 const seconds: Record<string, number> = {};
 for (const path of reports) {
   const report: Report = await Bun.file(path).json();
-  // Top-level files only: production/ and self-host/ have configs of their own.
-  const specs = report.suites.flatMap(specsOf).filter((spec) => !spec.file.includes("/"));
+  // production/ and self-host/ have configs of their own.
+  const specs = report.suites.flatMap(specsOf).filter((spec) => !OWN_CONFIG.test(spec.file));
   for (const spec of specs) {
     const firsts = spec.tests
       .filter((test) => test.projectName === "chromium")

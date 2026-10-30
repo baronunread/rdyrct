@@ -32,8 +32,12 @@ export function shardFiles(dir: string, shard: string): string[] {
   );
   const known = Object.values(times).sort((a, b) => a - b);
   const fallback = known[Math.floor(known.length / 2)] ?? 1;
-  const files = readdirSync(dir)
-    .filter((name) => name.endsWith(".pw.ts"))
+  // Every spec the chromium project runs, subfolders included, so a spec
+  // filed under a new folder still lands in a shard. production/ and
+  // self-host/ have configs of their own.
+  const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .map((name) => name.split(path.sep).join("/"))
+    .filter((name) => name.endsWith(".pw.ts") && !/^(production|self-host)\//.test(name))
     .map((name) => ({ name, seconds: times[name] ?? fallback }))
     .sort((a, b) => b.seconds - a.seconds || a.name.localeCompare(b.name));
 

@@ -176,7 +176,8 @@ jobs:
       # slip through on a PR; main runs the full suite to catch it.
       # E2E_SHARD, not --shard: the config narrows to this shard's files, and
       # leanest's selection narrows within them. A shard none of the selected
-      # specs live in has nothing to run, which is a pass. Only shard 1 posts
+      # specs live in has nothing to run, which is a pass on a PR; the full
+      # run on main never passes that flag, so an empty shard fails there. Only shard 1 posts
       # leanest's comment: without --shard in args, every shard would.
       - name: Browser smoke test, affected specs (shard ${{ matrix.shard }}/6)
         if: github.event_name == 'pull_request'
@@ -191,7 +192,7 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           E2E_SHARD: ${{ matrix.shard }}/6
-        run: bunx playwright test --pass-with-no-tests
+        run: bunx playwright test
       # A red run is debugged from its traces (trace: retain-on-failure) and
       # the HTML report, which otherwise die with the runner.
       - name: Upload traces and report

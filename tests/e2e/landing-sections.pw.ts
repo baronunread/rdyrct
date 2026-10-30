@@ -104,7 +104,8 @@ test("the cards play while they are on screen", async ({ page }) => {
   await page.goto("/");
   const scene = await linkScene(page);
   const first = await scene.getAttribute("data-step");
-  await expect(scene).not.toHaveAttribute("data-step", first ?? "", { timeout: 2_000 });
+  expect(first).not.toBeNull();
+  await expect(scene).not.toHaveAttribute("data-step", first!, { timeout: 2_000 });
 });
 
 test("under reduced motion the cards hold their finished state", async ({ page }) => {
