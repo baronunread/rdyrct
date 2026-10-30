@@ -173,12 +173,10 @@ test("one link is the ceiling without an account", async ({ page }) => {
   const destination = `https://example.com/cap-${Date.now()}`;
   await shorten(page, destination);
 
-  // The button goes dead and says why, rather than failing on submit.
+  // The button goes dead rather than failing on submit, and the one ask
+  // under the link is the way forward.
   const button = page.getByRole("button", { name: "Shorten it" });
   await expect(button).toBeDisabled();
-  await expect(page.getByText(/most this browser can make without an account/i)).toBeVisible();
-
-  // One ask, under the one link.
   await expect(page.getByRole("link", { name: "Keep this link" })).toHaveCount(1);
   await expect(page.getByText(`from ${destination}`)).toBeVisible();
 

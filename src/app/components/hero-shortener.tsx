@@ -234,14 +234,6 @@ export function HeroShortener() {
         error={refused}
       />
 
-      {/* Says why the button is dead, rather than leaving somebody to work
-          it out. The footer below already carries the way forward. */}
-      {atCap && (
-        <p className="px-2 pt-2 text-xs text-muted">
-          That is one link, the most this browser can make without an account.
-        </p>
-      )}
-
       <MadeLinks made={made} />
     </form>
   );
