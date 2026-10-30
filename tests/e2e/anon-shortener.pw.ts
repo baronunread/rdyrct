@@ -61,7 +61,12 @@ test("an anonymous link shows its click total but records no click details", asy
   const slug = shortUrl.split("/").pop()!;
 
   await page.request.get(`/${slug}`, { maxRedirects: 0 });
-  await page.waitForTimeout(1000);
+
+  // The stored link comes back on reload, and its count with it. The count
+  // lands after the redirect is sent, so it is also the sign the click has
+  // been handled.
+  await page.reload();
+  await expect(page.getByText("1 click so far.")).toBeVisible({ timeout: 15_000 });
 
   // Scoped to clicks belonging to no real link, which is the only shape an
   // anonymous click could take. Counting every row in the table made this
@@ -72,10 +77,6 @@ test("an anonymous link shows its click total but records no click details", asy
     "select count(*) as n from clicks where link_id not in (select id from links)",
   );
   expect(Number(clicks[0].n)).toBe(0);
-
-  // The stored link comes back on reload, and its count with it.
-  await page.reload();
-  await expect(page.getByText("1 click so far.")).toBeVisible({ timeout: 15_000 });
 });
 
 test("signing up keeps the link that was made before the account (#65)", async ({ page }) => {
@@ -220,7 +221,8 @@ test("a failed QR load still leaves the new link on the page", async ({ page }) 
 
   // Only once the QR load has failed: before that the link shows either way.
   await qrAborted;
-  await page.waitForTimeout(500);
+  // The QR's placeholder goes once the failed load has settled into no QR.
+  await expect(page.getByLabel("Preparing QR code")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Your short link" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: /PNG/ })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.dataset.stayed)).toBe("yes");

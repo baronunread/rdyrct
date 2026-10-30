@@ -33,24 +33,27 @@ test("the globe arrives hidden from assistive tech and shifts nothing", async ({
 });
 
 test("the globe turns, unless the visitor asked for less motion", async ({ page }) => {
-  const frames = async () => {
+  const canvas = page.locator("[data-hero] [data-globe-overlay]");
+  const frame = () => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  const firstFrame = async () => {
     // The page first: on a dev server that has just started, the landing
     // compiles on this request, and the globe can only come after it.
     await expect(page.getByRole("heading", { level: 1, name: HEADING })).toBeVisible({
       timeout: 20_000,
     });
-    const canvas = page.locator("[data-hero] [data-globe-overlay]");
     await expect(canvas).toBeVisible();
-    const first = await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
-    await page.waitForTimeout(600);
-    const second = await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
-    return first === second;
+    return frame();
   };
 
   await page.goto("/");
-  expect(await frames()).toBe(false);
+  const turning = await firstFrame();
+  await expect.poll(frame).not.toBe(turning);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
-  expect(await frames()).toBe(true);
+  const still = await firstFrame();
+  // Standing still has no moment to wait for: the globe is watched for as
+  // long as a turning one takes to move.
+  await page.waitForTimeout(600);
+  expect(await frame()).toBe(still);
 });
