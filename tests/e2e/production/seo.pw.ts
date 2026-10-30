@@ -23,6 +23,7 @@ const PAGES = [
   { path: "/rebrandly-alternative", title: /Rebrandly alternative/ },
   { path: "/dub-alternative", title: /Dub alternative/ },
   { path: "/short-io-alternative", title: /Short\.io alternative/ },
+  { path: "/qr-code-monkey-alternative", title: /QR Code Monkey alternative/ },
   { path: "/tinyurl-alternative", title: /TinyURL alternative/ },
   { path: "/signup", title: /Sign up/ },
   { path: "/privacy", title: /Privacy policy/ },

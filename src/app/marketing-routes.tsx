@@ -138,6 +138,11 @@ export function marketingRoutes() {
     }),
     createRoute({
       ...child,
+      path: "/qr-code-monkey-alternative",
+      component: lazyRouteComponent(alternatives, "QrCodeMonkeyAlternativePage"),
+    }),
+    createRoute({
+      ...child,
       path: "/tinyurl-alternative",
       component: lazyRouteComponent(alternatives, "TinyUrlAlternativePage"),
     }),

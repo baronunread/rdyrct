@@ -16,6 +16,7 @@ const PRERENDERED_PAGES = [
   { path: "/rebrandly-alternative", heading: "Rebrandly alternative: rdyrct vs Rebrandly" },
   { path: "/dub-alternative", heading: "Dub alternative: rdyrct vs Dub" },
   { path: "/short-io-alternative", heading: "Short.io alternative: rdyrct vs Short.io" },
+  { path: "/qr-code-monkey-alternative", heading: "QR Code Monkey alternative" },
   { path: "/tinyurl-alternative", heading: "TinyURL alternative: rdyrct vs TinyURL" },
 ] as const;
 

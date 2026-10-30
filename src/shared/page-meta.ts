@@ -33,6 +33,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/qr-code-monkey-alternative",
   "/tinyurl-alternative",
   "/privacy",
   "/terms",
@@ -271,6 +272,7 @@ What changed in each release. The full text is [CHANGELOG.md](https://github.com
 - [rdyrct vs Dub](/dub-alternative)
 - [rdyrct vs Short.io](/short-io-alternative)
 - [rdyrct vs TinyURL](/tinyurl-alternative)
+- [rdyrct vs QR Code Monkey, QR.io and QR Code Generator Pro](/qr-code-monkey-alternative)
 
 Each page compares price, custom domains, link limits and analytics history, and says where the other tool is the better choice.`,
   },
@@ -313,6 +315,16 @@ Dub's pricing page lists no free plan, and its plans start at $90 a month. rdyrc
 Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick when click analytics must never store an IP address, or when you want to host the code yourself.
 
 [Compare in full](/short-io-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/qr-code-monkey-alternative": {
+    title: "QR Code Monkey alternative: rdyrct vs QR.io and QR Code Generator Pro",
+    description:
+      "QR Code Monkey, QR.io and QR Code Generator Pro against rdyrct: prices, downloads, logo codes, and what it costs to count scans. Free generator, no account.",
+    markdown: `# QR Code Monkey alternative
+
+For a static code with your logo, QR Code Monkey and rdyrct's [QR code generator](/qr-code-generator) are both free and need no account. rdyrct's has no ads and sends nothing you type to a server. To count scans or change a code after printing, QR.io charges $39.99 a month ($350 a year) for its one plan, and QR Code Generator Pro has a 14-day trial, then 2 to 250 dynamic codes by plan. rdyrct does it with a short link, free for 30 links, with logo codes from $4 a month.
+
+[Compare in full](/qr-code-monkey-alternative) or [see rdyrct pricing](/pricing).`,
   },
   "/tinyurl-alternative": {
     title: "TinyURL alternative: rdyrct vs TinyURL pricing and limits",

@@ -15,6 +15,7 @@ describe("currentNavKey", () => {
       "/compare",
       "/roadmap",
       "/bitly-alternative",
+      "/qr-code-monkey-alternative",
       "/tinyurl-alternative",
     ]) {
       expect(currentNavKey(path)).toBe("product");

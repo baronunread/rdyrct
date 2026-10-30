@@ -480,7 +480,7 @@ test("the compare index lists each tool and opens its comparison", async ({ page
   await page.goto("/");
   await page.locator("footer").getByRole("link", { name: "All comparisons" }).click();
   await expect(page).toHaveURL(/\/compare$/);
-  for (const name of ["Bitly", "Rebrandly", "Dub", "Short.io", "TinyURL"]) {
+  for (const name of ["Bitly", "Rebrandly", "Dub", "Short.io", "TinyURL", "QR Code Monkey"]) {
     await expect(page.getByRole("heading", { name: `vs ${name}` })).toBeVisible();
   }
   await page.getByRole("link", { name: /vs Dub/ }).click();

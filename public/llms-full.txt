@@ -106,6 +106,7 @@ storage along with the link.
 - [rdyrct vs Rebrandly](https://rdyrct.com/rebrandly-alternative)
 - [rdyrct vs Dub](https://rdyrct.com/dub-alternative)
 - [rdyrct vs Short.io](https://rdyrct.com/short-io-alternative)
+- [rdyrct vs QR Code Monkey, QR.io and QR Code Generator Pro](https://rdyrct.com/qr-code-monkey-alternative)
 - [rdyrct vs TinyURL](https://rdyrct.com/tinyurl-alternative)
 - [Privacy policy](https://rdyrct.com/privacy)
 - [Terms of service](https://rdyrct.com/terms)
