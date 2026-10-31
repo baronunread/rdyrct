@@ -24,9 +24,10 @@ test("a new account arrives with an organization and one question", async ({ pag
   await expect(switcher).toBeVisible();
   await expect(currentOrgName(page)).not.toHaveText("No organization");
 
-  // One question, and none of the empty furniture: three zeroed stat cards
-  // and a flat chart teach a new account that the product is empty.
-  await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
+  // One list, and none of the empty furniture: three zeroed stat cards
+  // and a flat chart teach a new account that the product is empty. The
+  // list itself is onboarding.pw.ts.
+  await expect(page.getByRole("heading", { name: /^Welcome to / })).toBeVisible();
   await expect(page.getByRole("term").getByText("Clicks", { exact: true })).toHaveCount(0);
 
   await page.getByPlaceholder("https://example.com/launch").first().fill("example.com/first-run");
@@ -37,7 +38,8 @@ test("a new account arrives with an organization and one question", async ({ pag
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: /Close/i }).click();
 
-  // And with a link in it, the dashboard becomes a dashboard.
+  // And with a link in it, the dashboard becomes a dashboard, the rest of
+  // the list riding above it.
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("term").getByText("Clicks", { exact: true })).toBeVisible();
   await expect(
@@ -52,13 +54,13 @@ test("typing or pasting anywhere on the dashboard goes into the link field", asy
   await expect(field).toBeVisible();
 
   // Move focus off the field, then type: it should catch the keystrokes.
-  await page.getByRole("heading", { name: "Shorten your first link" }).click();
+  await page.getByRole("heading", { name: /^Welcome to / }).click();
   await page.keyboard.type("example.com/typed");
   await expect(field).toHaveValue("example.com/typed");
   await expect(field).toBeFocused();
 
   // A paste while the field is not focused fills it without submitting.
-  await page.getByRole("heading", { name: "Shorten your first link" }).click();
+  await page.getByRole("heading", { name: /^Welcome to / }).click();
   await page.evaluate(() => {
     const data = new DataTransfer();
     data.setData("text", "  https://pasted.example/launch  ");

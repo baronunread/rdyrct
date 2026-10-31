@@ -147,8 +147,9 @@ function NoCell({ tier }: { tier?: Tier }) {
 
 /**
  * Where a paid-plan CTA sends people: logged-in users go straight to checkout
- * (/billing?plan=…), everyone else signs up first with that destination as
- * `next`, so the intent survives OTP verification.
+ * (/billing?plan=…). Everyone else signs up first, with /welcome?plan=… as
+ * `next` so the intent survives OTP verification: /welcome opens checkout
+ * before the app ever draws, and Polar sends them back there either way.
  */
 export function usePaidPlanTo() {
   // Through useAudience rather than useCurrentUser directly: this asks the
@@ -159,8 +160,8 @@ export function usePaidPlanTo() {
   // falls back to what this browser was last time instead of "no".
   const { authed } = useAudience();
   return (plan: "hobby" | "pro", interval: "month" | "year" = "month") => {
-    const dest = `/billing?plan=${plan}${interval === "year" ? "&interval=year" : ""}`;
-    return authed ? dest : `/signup?next=${encodeURIComponent(dest)}`;
+    const query = `plan=${plan}${interval === "year" ? "&interval=year" : ""}`;
+    return authed ? `/billing?${query}` : `/signup?next=${encodeURIComponent(`/welcome?${query}`)}`;
   };
 }
 

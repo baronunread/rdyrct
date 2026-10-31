@@ -1,4 +1,11 @@
 import { StrictMode, Suspense, lazy } from "react";
+// The shell through one loader, so a sign-in that fetched it ahead of time
+// (routes/auth.tsx) draws it at once instead of its skeleton.
+import {
+  AppShellPart as AppShell,
+  RequireAdminPart as RequireAdmin,
+  RequireAuthPart as RequireAuth,
+} from "./lib/shell-loader";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import {
   createMemoryHistory,
@@ -57,11 +64,6 @@ const ResetPasswordPage = lazy(() =>
 const InvitePage = lazy(() => import("./routes/invite").then((m) => ({ default: m.InvitePage })));
 const ConsentPage = lazy(() =>
   import("./routes/consent").then((m) => ({ default: m.ConsentPage })),
-);
-const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
-const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
-const RequireAdmin = lazy(() =>
-  import("./routes/shell").then((m) => ({ default: m.RequireAdmin })),
 );
 
 // The app's pages are router-managed (lazyRouteComponent) rather than
@@ -123,6 +125,23 @@ const consentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/consent",
   component: ConsentPage,
+});
+
+// Between a pricing link (or Polar) and the app: routes/welcome.tsx. Signed
+// in, but outside the shell, so its card can become the org switcher.
+const WelcomePage = lazy(() =>
+  import("./routes/welcome").then((m) => ({ default: m.WelcomePage })),
+);
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/welcome",
+  component: () => (
+    <Suspense fallback={null}>
+      <RequireAuth>
+        <WelcomePage />
+      </RequireAuth>
+    </Suspense>
+  ),
 });
 
 // onboarding is gone: the app renders a create-org empty state instead;
@@ -310,6 +329,7 @@ const routeTree = rootRoute.addChildren([
   inviteRoute,
   consentRoute,
   onboardingRoute,
+  welcomeRoute,
   appShellRoute.addChildren([
     dashboardRoute,
     analyticsRoute,

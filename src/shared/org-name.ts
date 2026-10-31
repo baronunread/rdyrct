@@ -40,6 +40,18 @@ const CONSUMER_EMAIL_DOMAINS = new Set([
   "duck.com",
 ]);
 
+/** The organization domain an address belongs to, or null for a consumer
+ * provider (or no domain at all), which says nothing about who they work for. */
+export function workDomain(email: string): string | null {
+  const domain = email
+    .slice(email.lastIndexOf("@") + 1)
+    .trim()
+    .toLowerCase();
+  return email.includes("@") && domain.includes(".") && !CONSUMER_EMAIL_DOMAINS.has(domain)
+    ? domain
+    : null;
+}
+
 const MAX_LENGTH = 100;
 
 /** "acme-supply" and "acme_supply" read as one word; a name should not. */

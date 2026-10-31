@@ -32,6 +32,7 @@ export const RESERVED_SLUGS = new Set([
   "login",
   "signup",
   "onboarding",
+  "welcome",
   "reset-password",
   "invite",
   "consent",
