@@ -15,13 +15,17 @@ import type { InvitePreview, OrgRole } from "@/shared/types";
 export function AuthPanel({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="grid min-h-dvh place-items-center px-3 py-10 sm:px-6 sm:py-20">
+      {/* The card and its logo are what travel into the app (setup-arrive in
+          styles.css): the card becomes the org switcher, the logo the
+          sidebar's. */}
       <div
+        data-setup-card
         className={cn(
           "flex w-full max-w-[380px] flex-col gap-4 sm:rounded-2xl sm:bg-surface sm:p-7 sm:smooth-shadow-ring-xl",
           className,
         )}
       >
-        <Link to="/" aria-label="rdyrct home" className="self-center text-base">
+        <Link to="/" aria-label="rdyrct home" data-setup-logo className="self-center text-base">
           <Logo />
         </Link>
         {children}

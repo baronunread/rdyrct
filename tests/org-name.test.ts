@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defaultOrgName } from "../src/shared/org-name";
+import { defaultOrgName, workDomain } from "../src/shared/org-name";
 
 /**
  * Naming somebody's first organization for them (#65).
@@ -58,5 +58,18 @@ describe("never empty, never absurd", () => {
   test("stays inside the name column's limit", () => {
     const long = `${"a".repeat(200)}@${"b".repeat(200)}.com`;
     expect(defaultOrgName(long).length).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("workDomain", () => {
+  test("names the organization's domain", () => {
+    expect(workDomain("maya@acme.com")).toBe("acme.com");
+    expect(workDomain("Maya@Acme.CO.UK")).toBe("acme.co.uk");
+  });
+
+  test("says nothing for a consumer address or no domain", () => {
+    expect(workDomain("maya@gmail.com")).toBeNull();
+    expect(workDomain("maya")).toBeNull();
+    expect(workDomain("maya@localhost")).toBeNull();
   });
 });

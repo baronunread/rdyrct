@@ -268,12 +268,20 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   can't be squatted. Every account gets an org at
   sign-up (#65), named from the email domain (`src/shared/org-name.ts`) and
   renameable in Settings, so nobody meets a dead app behind a form asking
-  for a company name. The dashboard asks for a **link** until one exists,
-  then goes back to being a dashboard. `NoOrgState`
+  for a company name. A new org's owner meets **one setup list**
+  (`components/setup-list.tsx`): the first link, a domain of their own, the
+  team, and the plan for somebody who came from a pricing link. It starts
+  only on a dashboard with no links, reads "done" from live data, keeps only
+  what Later and the plan intent need per browser (`lib/setup.ts`), and is
+  gone for good once every step is done or put off. The sign-in card hands
+  over to it by becoming the org switcher (`lib/setup-arrive.ts`). A
+  signed-out pricing CTA signs up with `next=/welcome?plan=…`; `/welcome`
+  (`routes/welcome.tsx`) opens checkout before the app draws, and Polar
+  returns there paid or not. `NoOrgState`
   (`src/app/components/no-org.tsx`) is still there for the account that has
   no org left (it deleted the only one), and `/billing` still works org-less,
-  so landing paid CTAs (`/signup?next=/billing?plan=…`) can check out before
-  the first org exists (`/onboarding` redirects to `/dashboard`).
+  so an older pricing link (`/signup?next=/billing?plan=…`) can check out
+  before the first org exists (`/onboarding` redirects to `/dashboard`).
 - **A downgrade never deletes** (#29). Every plan change runs
   `reconcileUser()` (`src/worker/reconcile.ts`): from the Polar webhook, from
   an admin comp grant or revoke, and by hand from

@@ -42,7 +42,7 @@ test("a paid plan card leads to sign-up, then checkout", async ({ page }) => {
   await page.goto("/pricing");
   await expect(
     page.locator('[data-plan="hobby"]').getByRole("link", { name: "Start Hobby" }),
-  ).toHaveAttribute("href", /\/signup\?next=%2Fbilling%3Fplan%3Dhobby/);
+  ).toHaveAttribute("href", /\/signup\?next=%2Fwelcome%3Fplan%3Dhobby/);
 });
 
 // The HTML before any JavaScript runs is what a crawler, a link preview or an

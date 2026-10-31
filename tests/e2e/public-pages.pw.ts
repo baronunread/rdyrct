@@ -426,6 +426,9 @@ test("signup carries context across the door", async ({ page }) => {
   await page.goto("/signup");
   await expect(page.getByText(/then check out/i)).toBeHidden();
 
+  await page.goto("/signup?next=%2Fwelcome%3Fplan%3Dpro");
+  await expect(page.getByText(/then check out/i)).toBeVisible();
+  // A pricing link from before /welcome still says so.
   await page.goto("/signup?next=%2Fbilling%3Fplan%3Dpro");
   await expect(page.getByText(/then check out/i)).toBeVisible();
 });

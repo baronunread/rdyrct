@@ -20,6 +20,7 @@ export const APP_ROUTES: readonly string[] = [
   "/invite/$token",
   "/consent",
   "/onboarding",
+  "/welcome",
   "/dashboard",
   "/analytics",
   "/links",
