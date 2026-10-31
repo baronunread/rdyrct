@@ -228,7 +228,7 @@
         "count": 2
       },
       "crap_moderate": {
-        "count": 2
+        "count": 3
       }
     },
     "src/app/lib/setup.ts": {
@@ -444,7 +444,7 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 4
+        "count": 5
       }
     },
     "src/app/ui/dialog.tsx": {
@@ -536,12 +536,10 @@
     "src/worker/routes/links.ts:hidden coupling",
     "src/app/components/link-editor.tsx:complexity",
     "src/app/lib/setup.ts:high impact",
-    "src/app/routes/dashboard.tsx:hidden coupling",
     "src/app/routes/admin/orgs.tsx:hidden coupling",
     "src/app/routes/link-import.tsx:complexity",
     "src/app/routes/admin/users.tsx:hidden coupling",
     "src/app/lib/account-security.ts:complexity",
-    "src/app/routes/links.tsx:hidden coupling",
     "src/app/components/command-menu.tsx:complexity",
     "src/worker/routes/billing.ts:hidden coupling",
     "src/app/routes/admin/links.tsx:hidden coupling",

@@ -17,7 +17,14 @@ let loaded: Shell | undefined;
 let loading: Promise<Shell> | undefined;
 
 export function loadShell(): Promise<Shell> {
-  loading ??= import("../routes/shell").then((m) => (loaded = m));
+  // A failed chunk is not remembered: the next caller tries again.
+  loading ??= import("../routes/shell").then(
+    (m) => (loaded = m),
+    (error: Error) => {
+      loading = undefined;
+      throw error;
+    },
+  );
   return loading;
 }
 

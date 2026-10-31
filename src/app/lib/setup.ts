@@ -113,10 +113,10 @@ export function finishSetup(orgId: string) {
 /** Reads `plan` and `interval` off a URL's search, as the pricing links and
  * the checkout return write them. Null when it names no paid plan. */
 export function planIntentFrom(search: URLSearchParams): PlanIntent | null {
-  const parsed = v.safeParse(PlanIntent, {
-    target: search.get("plan"),
-    interval: search.get("interval") ?? "month",
-  });
+  // A plan worth keeping with a cycle nobody can read is still that plan,
+  // monthly: dropping it would skip checkout without a word.
+  const interval = search.get("interval") === "year" ? "year" : "month";
+  const parsed = v.safeParse(PlanIntent, { target: search.get("plan"), interval });
   return parsed.success ? parsed.output : null;
 }
 

@@ -711,6 +711,13 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
  * green checkmark so acceptance registers, then the card fades before the
  * page changes. Out here because none of it is state, it is a sequence, and
  * it was the bulk of what made runVerify hard to read. */
+/** Where to go when the preload never answered: the same href, worked out
+ * from whatever user the cache holds by then. */
+function fallbackHref(qc: ReturnType<typeof useQueryClient>, next: string): string {
+  const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+  return sanitizeNext(next, isAdmin);
+}
+
 async function finishVerifiedSignIn(deps: {
   next: string;
   qc: ReturnType<typeof useQueryClient>;
@@ -731,7 +738,15 @@ async function finishVerifiedSignIn(deps: {
       .catch(() => {})
       .then(() => href);
   });
-  const [href] = await Promise.all([ready, new Promise((resolve) => setTimeout(resolve, 900))]);
+  // Never longer than a few seconds: a stalled preload only costs the
+  // hand-over its drawn page, not the sign-in.
+  const bounded = Promise.race([
+    ready,
+    new Promise<string>((resolve) =>
+      setTimeout(() => resolve(fallbackHref(deps.qc, deps.next)), 3000),
+    ),
+  ]);
+  const [href] = await Promise.all([bounded, new Promise((resolve) => setTimeout(resolve, 900))]);
   clearPending();
   // Into the app the card itself travels, so it stays put; anywhere else it
   // fades before the page changes.

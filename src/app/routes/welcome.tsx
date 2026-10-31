@@ -9,7 +9,8 @@ import { useCurrentOrg } from "../lib/current-org";
 import { useCheckout, useConfirmCheckout, useCurrentUser } from "../lib/hooks";
 import { PLAN_NAME, planIntentFrom, priceLine, startSetup, type PlanIntent } from "../lib/setup";
 import { SETUP_ARRIVE } from "../lib/setup-arrive";
-import { HrefLink, useSearchParams } from "../lib/router-search";
+import { useWelcomeList } from "../lib/setup-steps";
+import { useSearchParams } from "../lib/router-search";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Spinner } from "../ui/spinner";
@@ -38,19 +39,33 @@ function readArrival(search: URLSearchParams) {
   return { intent: planIntentFrom(search), checkoutId, phase };
 }
 
-/** Into the app, once: the card becomes the org switcher (SETUP_ARRIVE), and
- * the list opens with the plan row when somebody came for one. */
+/**
+ * Into the app, once: the card becomes the org switcher (SETUP_ARRIVE).
+ * The list opens, with the plan row when somebody came for one, only where
+ * the dashboard would open it too (useWelcomeList): an existing account
+ * that comes through a pricing link keeps its dashboard as it was. An
+ * account with no org left just goes to the dashboard, which asks for one.
+ */
 function useEnterApp(intent: PlanIntent | null) {
   const navigate = useNavigate();
+  const user = useCurrentUser();
   const { org } = useCurrentOrg();
+  const list = useWelcomeList();
+  const [delay, setDelay] = useState<number | null>(null);
   const entered = useRef(false);
-  return (delay: number) => {
-    if (entered.current || !org) return;
+  const ready = delay !== null && !!user.data && list.known;
+  useEffect(() => {
+    if (!ready || entered.current) return;
     entered.current = true;
     window.setTimeout(() => {
-      startSetup(org.id, intent ?? undefined);
-      void navigate({ to: "/dashboard", replace: true, viewTransition: SETUP_ARRIVE });
+      if (org && list.listed) startSetup(org.id, intent ?? undefined);
+      if (org) void navigate({ to: "/dashboard", replace: true, viewTransition: SETUP_ARRIVE });
+      else void navigate({ to: "/dashboard", replace: true });
     }, delay);
+  });
+  return {
+    enterApp: (wait: number) => setDelay((current) => current ?? wait),
+    listed: list.listed,
   };
 }
 
@@ -104,6 +119,21 @@ function useConfirmPayment(
   });
 }
 
+/** Polar answered after the card gave up waiting: keep asking, slowly, and
+ * say so the moment the plan turns paid. */
+function useLateWebhook(phase: Phase, plan: OrgPlan | undefined, setPhase: (p: Phase) => void) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (phase !== "slow") return;
+    if (plan && plan !== "free") {
+      setPhase("on");
+      return;
+    }
+    const id = window.setInterval(() => void qc.refetchQueries({ queryKey: ["user"] }), 5000);
+    return () => window.clearInterval(id);
+  }, [phase, plan, qc, setPhase]);
+}
+
 /** How long each closing card stays up before the app takes over. */
 const HOLD = { on: 1100, cancelled: 1400 } satisfies Partial<Record<Phase, number>>;
 const holdFor = (phase: Phase): number | undefined =>
@@ -116,7 +146,8 @@ export function WelcomePage() {
   const [phase, setPhase] = useState<Phase>(arrival.phase);
   const plan = useCurrentUser().data?.user.plan;
   const { org } = useCurrentOrg();
-  const enterApp = useEnterApp(intent);
+  const { enterApp, listed } = useEnterApp(intent);
+  useLateWebhook(phase, plan, setPhase);
   const retry = useOpenCheckout(phase, intent, plan, () => setPhase("failed"), enterApp);
   useConfirmPayment(phase, checkoutId, plan, setPhase);
 
@@ -129,7 +160,7 @@ export function WelcomePage() {
   });
 
   const name = intent ? PLAN_NAME[intent.target] : "Your plan";
-  const words = copyFor(phase, name, intent, org?.name ?? "Your organization");
+  const words = copyFor(phase, name, intent, org?.name ?? "Your organization", listed);
   return (
     <AuthPanel>
       <div className="flex flex-col items-center gap-3 text-center" aria-live="polite">
@@ -153,12 +184,9 @@ export function WelcomePage() {
           </div>
         )}
         {phase === "slow" && (
-          <HrefLink
-            href="/dashboard"
-            className="mt-1 text-sm font-medium text-accent underline-offset-4 hover:underline"
-          >
+          <Button variant="outline" className="mt-1" onClick={() => enterApp(0)}>
             Go to your dashboard
-          </HrefLink>
+          </Button>
         )}
       </div>
     </AuthPanel>
@@ -176,6 +204,7 @@ function copyFor(
   name: string,
   intent: PlanIntent | null,
   orgName: string,
+  listed: boolean,
 ): WelcomeCopy {
   switch (phase) {
     case "opening":
@@ -200,10 +229,16 @@ function copyFor(
     case "cancelled":
       return {
         heading: "No charge made",
-        body: `You are on Free. ${name} waits at the top of your list.`,
+        body: cancelledBody(name, listed),
       };
   }
 }
+
+/** Only promise the list when there will be one (useWelcomeList). */
+const cancelledBody = (name: string, listed: boolean) =>
+  listed
+    ? `You are on Free. ${name} waits at the top of your list.`
+    : "You are on Free. Upgrade any time from Billing.";
 
 /** The round mark above the heading: a spinner while waiting, a check once
  * the plan is on, nothing when there is nothing to wait for. */
