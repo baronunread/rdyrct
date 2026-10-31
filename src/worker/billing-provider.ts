@@ -15,6 +15,8 @@ export interface BillingProvider {
     create(options: {
       products: string[];
       success_url: string;
+      /** Polar shows a back button to this URL in the checkout. */
+      return_url?: string;
       customer_email: string;
       metadata: { userId: string };
     }): Promise<{ url: string }>;

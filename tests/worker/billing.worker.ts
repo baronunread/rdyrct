@@ -232,6 +232,39 @@ describe("POST /api/billing/checkout", () => {
     );
   });
 
+  it("returns a /billing checkout to /billing, with no back button", async () => {
+    const cookie = await adminCookie();
+    await checkout(cookie, { plan: "pro" });
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        success_url: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
+      }),
+    );
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ return_url: expect.anything() }),
+    );
+  });
+
+  it("returns a sign-up checkout to /welcome both ways, carrying the plan", async () => {
+    const cookie = await adminCookie();
+    const res = await checkout(cookie, { plan: "hobby", interval: "year", from: "welcome" });
+    expect(res.status).toBe(200);
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        products: [POLAR_HOBBY_YEARLY_PRODUCT_ID],
+        success_url: "http://localhost/welcome?checkout_id={CHECKOUT_ID}&plan=hobby&interval=year",
+        return_url: "http://localhost/welcome?checkout=cancelled&plan=hobby&interval=year",
+      }),
+    );
+  });
+
+  it("rejects a return it does not know", async () => {
+    const cookie = await adminCookie();
+    const res = await checkout(cookie, { plan: "pro", from: "https://evil.example" });
+    expect(res.status).toBe(400);
+    expect(checkoutsCreate).not.toHaveBeenCalled();
+  });
+
   it("rejects a plan that isn't hobby or pro", async () => {
     const cookie = await adminCookie();
     const res = await checkout(cookie, { plan: "diamond" });
