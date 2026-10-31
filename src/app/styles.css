@@ -718,6 +718,60 @@ html:active-view-transition-type(setup-arrive) {
   }
 }
 
+/* The first-run page settling into the dashboard (settleSetup in
+   lib/setup-arrive.ts), once the first link's dialog has closed: the list
+   slides from the middle of the page to the top of the dashboard on the
+   house curve, and the header and the numbers rise in after it. */
+html:active-view-transition-type(setup-settle) {
+  [data-setup-list] {
+    view-transition-name: setup-list;
+  }
+  [data-setup-head] {
+    view-transition-name: setup-head;
+  }
+  [data-setup-body] {
+    view-transition-name: setup-body;
+  }
+}
+
+::view-transition-group(setup-list) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Both pages draw the list at the same width, so it only moves: one image,
+   no blend of two that would double every line in flight. */
+::view-transition-old(setup-list) {
+  display: none;
+}
+
+::view-transition-new(setup-list) {
+  animation: none;
+}
+
+::view-transition-new(setup-head) {
+  animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) 140ms both setup-rise;
+}
+
+::view-transition-new(setup-body) {
+  animation: 520ms cubic-bezier(0.32, 0.72, 0, 1) 220ms both setup-rise;
+}
+
+@keyframes setup-rise {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(setup-list),
+  ::view-transition-new(setup-head),
+  ::view-transition-new(setup-body) {
+    animation: none;
+  }
+}
+
 /* The setup list (components/setup-list.tsx): a step's body opens and
    closes by its height, which interpolate-size lets CSS animate to auto. */
 .setup-body {

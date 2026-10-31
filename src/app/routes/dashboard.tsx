@@ -67,6 +67,7 @@ import {
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { SetupList } from "../components/setup-list";
+import { settleSetup } from "../lib/setup-arrive";
 import { useSetup, useStartSetup, type SetupView } from "../lib/setup-steps";
 import { workDomain, defaultOrgName } from "@/shared/org-name";
 
@@ -336,7 +337,10 @@ function DashboardScreen({
   // until there is something to count leaves one question on screen. Only
   // for somebody who can make that link: a read-only org or a viewer gets
   // the dashboard as it is.
-  const firstRun = s.totalLinks === 0 && canWrite;
+  const firstRun = useHeldFirstRun(
+    s.totalLinks === 0 && canWrite,
+    created !== null || sameDestination !== null || data.create.isPending,
+  );
   // An owner's first run is the setup list, which stays (as a card over the
   // dashboard) until every step is done or put off.
   useStartSetup(org, s.totalLinks);
@@ -361,23 +365,25 @@ function DashboardScreen({
   return (
     <div>
       {firstRun ? null : (
-        <PageHeader
-          title="Dashboard"
-          action={
-            // The range sits left of New link on a desktop, where the eye
-            // ends on the primary action; on a phone New link comes first.
-            <div className="flex flex-wrap items-center gap-2">
-              <NewLinkAction canCreate={canCreate} locked={!!org?.locked} onOpen={openNewLink} />
-              <RangeControl
-                presets={DASHBOARD_RANGES}
-                maxDays={limits.analyticsDays}
-                days={range.days}
-                bucket={range.bucket ?? "day"}
-                onChange={onRangeChange}
-              />
-            </div>
-          }
-        />
+        <div data-setup-head>
+          <PageHeader
+            title="Dashboard"
+            action={
+              // The range sits left of New link on a desktop, where the eye
+              // ends on the primary action; on a phone New link comes first.
+              <div className="flex flex-wrap items-center gap-2">
+                <NewLinkAction canCreate={canCreate} locked={!!org?.locked} onOpen={openNewLink} />
+                <RangeControl
+                  presets={DASHBOARD_RANGES}
+                  maxDays={limits.analyticsDays}
+                  days={range.days}
+                  bucket={range.bucket ?? "day"}
+                  onChange={onRangeChange}
+                />
+              </div>
+            }
+          />
+        </div>
       )}
 
       <ClickCapBanner />
@@ -420,6 +426,24 @@ function DashboardScreen({
 }
 
 /**
+ * Whether the page still shows the first run. Held while the first link is
+ * being made and its "Link created" dialog is open, so the layout never
+ * changes under the dialog; then it settles into the dashboard in one
+ * transition (settleSetup). Going back to empty swaps the same way.
+ */
+function useHeldFirstRun(firstRun: boolean, holding: boolean): boolean {
+  const [shown, setShown] = useState(firstRun);
+  useEffect(() => {
+    if (shown === firstRun || holding) return;
+    // After the dialog's own exit, so the transition never freezes it
+    // half faded into its first frame.
+    const id = window.setTimeout(() => settleSetup(() => setShown(firstRun)), 220);
+    return () => window.clearTimeout(id);
+  }, [shown, firstRun, holding]);
+  return shown;
+}
+
+/**
  * Under the header: the setup list while there is one, the first-link screen
  * for anybody else who can write to an empty org, the dashboard otherwise.
  * The list is the whole page on a brand-new org (the sign-in card hands over
@@ -440,24 +464,23 @@ function DashboardMain({
   data: DashboardData;
   quickCreate: QuickCreateProps;
 }) {
-  if (!setup) {
-    return firstRun ? (
-      <FirstRun plan={plan} {...quickCreate} />
-    ) : (
+  const body = (
+    <div data-setup-body>
       <DashboardBody stats={stats} data={data} />
-    );
-  }
+    </div>
+  );
+  if (!setup) return firstRun ? <FirstRun plan={plan} {...quickCreate} /> : body;
   const list = <SetupListFor setup={setup} linkField={<QuickCreateCard {...quickCreate} />} />;
   if (firstRun) return <SetupWelcome>{list}</SetupWelcome>;
   return (
     <>
-      <section aria-labelledby="setup-heading" className="mb-6 flex max-w-[640px] flex-col gap-3">
+      <section aria-labelledby="setup-heading" className="mb-6 flex max-w-[560px] flex-col gap-3">
         <h2 id="setup-heading" className="text-sm font-semibold">
           Get set up
         </h2>
         {list}
       </section>
-      <DashboardBody stats={stats} data={data} />
+      {body}
     </>
   );
 }
