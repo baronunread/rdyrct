@@ -85,7 +85,11 @@ function linkStep({ state, firstLink, linkField }: StepContext): StepContent {
   const made = state === "done" && firstLink;
   return {
     title: "Shorten a link",
-    summary: made ? <span className="font-mono">{shortUrl(firstLink)}</span> : null,
+    summary: made ? (
+      <span className="font-mono" title={shortUrl(firstLink)}>
+        {shortUrl(firstLink)}
+      </span>
+    ) : null,
     body: linkField,
   };
 }
@@ -157,7 +161,7 @@ function Step({
         >
           {done && <Check size={12} stroke={3} className="setup-check" />}
         </span>
-        <h3 className="text-sm font-semibold">
+        <h3 className="shrink-0 text-sm font-semibold">
           {title}
           {done && <span className="sr-only">, done</span>}
         </h3>
@@ -308,7 +312,9 @@ function Comparison({
       <QRPreview url={url} size={44} sizeClass="size-11" />
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="text-xs text-muted">{label}</span>
-        <span className="truncate font-mono text-[13px] font-bold">{address}</span>
+        <span className="truncate font-mono text-[13px] font-bold" title={address}>
+          {address}
+        </span>
       </span>
       <span className="ml-auto shrink-0 text-xs text-muted max-sm:hidden">{note}</span>
     </div>
