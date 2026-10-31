@@ -117,9 +117,10 @@ function build(
   const order: SetupStep[] = intent
     ? ["plan", "link", "domain", "team"]
     : ["link", "domain", "team"];
+  const putOff = new Set(later);
   const steps = order.map((step) => ({
     step,
-    state: done[step] ? "done" : later.includes(step) ? "later" : "todo",
+    state: done[step] ? "done" : putOff.has(step) ? "later" : "todo",
   })) satisfies SetupStepView[];
   return {
     orgId: org.id,
