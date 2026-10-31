@@ -183,6 +183,38 @@ function productIdFor(
 interface CheckoutBody {
   plan?: string;
   interval?: string;
+  /** "welcome" when the checkout starts from a pricing link at sign-up: both
+   * ways out of Polar then land on /welcome, which plays the new account in
+   * whether they paid or went back. Absent, it returns to /billing. */
+  from?: string;
+}
+
+/** Where Polar sends somebody after paying, and where its back button goes. */
+function checkoutReturn(
+  appUrl: string,
+  from: "welcome" | "billing",
+  plan: string,
+  interval: string,
+) {
+  if (from === "billing") return { success_url: `${appUrl}/billing?checkout_id={CHECKOUT_ID}` };
+  const intent = `plan=${plan}&interval=${interval}`;
+  return {
+    success_url: `${appUrl}/welcome?checkout_id={CHECKOUT_ID}&${intent}`,
+    return_url: `${appUrl}/welcome?checkout=cancelled&${intent}`,
+  };
+}
+
+/** One field of the checkout body: its default when absent, a 400 naming the
+ * choices when it is anything else. */
+function checkoutField<T extends string>(
+  value: string | undefined,
+  choices: readonly [T, T],
+  name: string,
+): T {
+  const picked = value ?? choices[0];
+  const known = choices.find((choice) => choice === picked);
+  if (!known) throw new HTTPException(400, { message: `${name} must be ${choices.join(" or ")}` });
+  return known;
 }
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
@@ -191,13 +223,10 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   // SAFETY: an unparseable body stands in for an empty one, and `plan` is
   // optional, so reading it finds the same absence.
   const body = await c.req.json<CheckoutBody>().catch(() => ({}) as CheckoutBody);
-  const plan = body.plan ?? "pro";
-  const interval = body.interval ?? "month";
-  log.set({ userId: user.id, plan, interval });
-  if (plan !== "hobby" && plan !== "pro")
-    throw new HTTPException(400, { message: "plan must be hobby or pro" });
-  if (interval !== "month" && interval !== "year")
-    throw new HTTPException(400, { message: "interval must be month or year" });
+  log.set({ userId: user.id, plan: body.plan, interval: body.interval, from: body.from });
+  const plan = checkoutField(body.plan, ["pro", "hobby"], "plan");
+  const interval = checkoutField(body.interval, ["month", "year"], "interval");
+  const from = checkoutField(body.from, ["billing", "welcome"], "from");
   const productId = productIdFor(c.env, plan, interval);
   if (!productId) {
     throw new HTTPException(503, { message: `No Polar product is set for ${plan} (${interval})` });
@@ -210,7 +239,7 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     // upgrade before celebrating. The webhook is the primary entitlement
     // source; POST /checkout/:id/confirm below is the fallback for when it
     // never lands.
-    success_url: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
+    ...checkoutReturn(c.env.APP_URL, from, plan, interval),
     customer_email: user.email,
     metadata: { userId: user.id },
   });
