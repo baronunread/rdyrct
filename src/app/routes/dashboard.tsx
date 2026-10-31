@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { IconChartLine, IconLink, IconPlus, IconQrcode, IconUsers } from "@tabler/icons-react";
 import { dashboardView } from "./dashboard-view";
@@ -69,10 +69,7 @@ import {
 import { InsightsRow } from "../components/dashboard-insights";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
-import { SetupList } from "../components/setup-list";
 import { settleSetup } from "../lib/setup-arrive";
-import { useSetup, useStartSetup, type SetupView } from "../lib/setup-steps";
-import { workDomain, defaultOrgName } from "@/shared/org-name";
 
 /** The dashboard's ranges: a glance, not a report. Analytics adds 365d. */
 const DASHBOARD_RANGES = [PRESET_24H, PRESET_7D, PRESET_30D] as const;
@@ -349,10 +346,6 @@ function DashboardScreen({
     s.totalLinks === 0 && canWrite,
     created !== null || sameDestination !== null || data.create.isPending,
   );
-  // An owner's first run is the setup list, which stays (as a card over the
-  // dashboard) until every step is done or put off.
-  useStartSetup(org, s.totalLinks);
-  const setup = useSetup({ newOrg: s.totalLinks === 0 });
 
   /** Both answers to "this destination already has a link" submit the same
    * input with one extra field, and land on the same created-link dialog. */
@@ -399,7 +392,6 @@ function DashboardScreen({
       {/* The field only asks for the first link. After that, New link opens
           the same dialog everywhere (header, C, ⌘K). */}
       <DashboardMain
-        setup={setup}
         firstRun={firstRun}
         plan={org?.plan ?? "free"}
         stats={s}
@@ -452,14 +444,9 @@ function useHeldFirstRun(firstRun: boolean, holding: boolean): boolean {
   return shown;
 }
 
-/**
- * Under the header: the setup list while there is one, the first-link screen
- * for anybody else who can write to an empty org, the dashboard otherwise.
- * The list is the whole page on a brand-new org (the sign-in card hands over
- * to it) and a card over the dashboard once the org has a link.
- */
+/** Under the header: the first-link screen for somebody who can write to an
+ * empty org, the dashboard otherwise. */
 function DashboardMain({
-  setup,
   firstRun,
   plan,
   stats,
@@ -467,7 +454,6 @@ function DashboardMain({
   days,
   quickCreate,
 }: {
-  setup: SetupView | null;
   firstRun: boolean;
   plan: OrgPlan;
   stats: NonNullable<DashboardData["stats"]>;
@@ -476,63 +462,10 @@ function DashboardMain({
   days: number;
   quickCreate: QuickCreateProps;
 }) {
-  const body = (
+  if (firstRun) return <FirstRun plan={plan} {...quickCreate} />;
+  return (
     <div data-setup-body>
       <DashboardBody stats={stats} data={data} days={days} />
-    </div>
-  );
-  if (!setup) return firstRun ? <FirstRun plan={plan} {...quickCreate} /> : body;
-  const list = <SetupListFor setup={setup} linkField={<QuickCreateCard {...quickCreate} />} />;
-  if (firstRun) return <SetupWelcome>{list}</SetupWelcome>;
-  return (
-    <>
-      <section aria-labelledby="setup-heading" className="mb-6 flex max-w-[560px] flex-col gap-3">
-        <h2 id="setup-heading" className="text-sm font-semibold">
-          Get set up
-        </h2>
-        {list}
-      </section>
-      {body}
-    </>
-  );
-}
-
-/** The list, with the org's first link once there is one: the link step's
- * summary and the domain step's before and after. */
-function SetupListFor({ setup, linkField }: { setup: SetupView; linkField: ReactNode }) {
-  const linkDone = setup.steps.some((st) => st.step === "link" && st.state === "done");
-  const firstLink = useLinks(linkDone ? setup.orgId : "", FIRST_LINK).data?.items[0];
-  return <SetupList setup={setup} firstLink={firstLink} linkField={linkField} />;
-}
-
-const FIRST_LINK = { limit: 1, sort: "created", dir: "asc" } as const;
-
-/** The domain an org was named after at sign-up (org-name.ts), while it
- * still carries that name; null once renamed or for a consumer address. */
-function namedAfter(
-  orgName: string | undefined,
-  user: { email: string; name: string } | undefined,
-) {
-  if (!user || !orgName) return null;
-  const domain = workDomain(user.email);
-  return domain && orgName === defaultOrgName(user.email, user.name) ? domain : null;
-}
-
-/** A brand-new org's dashboard: who it is, and the list. */
-function SetupWelcome({ children }: { children: ReactNode }) {
-  const { org, currentUser } = useOrgLimits();
-  const domain = namedAfter(org?.name, currentUser.data?.user);
-  return (
-    <div className="mx-auto flex max-w-[560px] flex-col gap-[22px] pt-4 sm:pt-14">
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance">
-          Welcome to {org?.name ?? "your organization"}
-        </h1>
-        <p className="text-sm text-pretty text-muted">
-          {domain ? `Named after ${domain}. ` : ""}Rename it any time in Settings.
-        </p>
-      </div>
-      {children}
     </div>
   );
 }

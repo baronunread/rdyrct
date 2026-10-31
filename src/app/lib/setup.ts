@@ -3,18 +3,18 @@ import * as v from "valibot";
 import { PLAN_PRICES, PLAN_PRICES_YEARLY } from "@/shared/types";
 
 /**
- * A new organization's setup list: plan, first link, own domain, team.
+ * A new organization's setup flow (components/setup-flow.tsx): its name, its
+ * first link, a domain of its own, its team.
  *
- * What each step needs is read from live data (a link exists, a domain
- * exists, somebody else is in the org), so the only thing kept here is what
- * the data cannot say: that this browser started the list for this org, which
- * steps the owner put off, the plan they came in for, and that the list is
- * over. Kept per browser on purpose: it is a welcome, not a record, and an
- * account that already has links never starts one (see `useStartSetup`).
+ * Kept per browser, and only what the server cannot say: that this browser
+ * started the flow for this org, the step it was on (a checkout from the
+ * domain step comes back to it), the plan somebody came in for, and that the
+ * flow is over. It is a welcome, not a record: an account that already has
+ * links never starts one (see useWelcomeList).
  */
 
-const SETUP_STEPS = ["plan", "link", "domain", "team"] as const;
-export type SetupStep = (typeof SETUP_STEPS)[number];
+const FLOW_STEPS = ["name", "link", "domain", "team"] as const;
+export type FlowStep = (typeof FLOW_STEPS)[number];
 
 const PlanIntent = v.object({
   target: v.picklist(["hobby", "pro"]),
@@ -23,7 +23,7 @@ const PlanIntent = v.object({
 export type PlanIntent = v.InferOutput<typeof PlanIntent>;
 
 const OrgSetup = v.object({
-  later: v.array(v.picklist(SETUP_STEPS)),
+  at: v.optional(v.picklist(FLOW_STEPS)),
   plan: v.optional(PlanIntent),
   finished: v.optional(v.boolean()),
 });
@@ -31,7 +31,7 @@ export type OrgSetup = v.InferOutput<typeof OrgSetup>;
 
 const Stored = v.record(v.string(), OrgSetup);
 
-const KEY = "rdyrct:setup:v1";
+const KEY = "rdyrct:setup:v2";
 const EVENT = "rdyrct:setup";
 
 let cache: { raw: string | null; value: Record<string, OrgSetup> } | null = null;
@@ -89,25 +89,25 @@ export function useOrgSetup(orgId: string): OrgSetup | undefined {
   );
 }
 
-/** Starts the list for an org, once. A plan intent, when given, is kept even
- * if the list already started: the welcome screen hands it over after a
- * checkout. */
+/** Starts the flow for an org, once. A plan intent, when given, is kept even
+ * if it already started: the welcome screen hands it over after a checkout. */
 export function startSetup(orgId: string, plan?: PlanIntent) {
   const current = read()[orgId];
   if (current && (!plan || current.plan)) return;
-  write(orgId, (s) => ({ later: s?.later ?? [], finished: s?.finished, plan: plan ?? s?.plan }));
+  write(orgId, (s) => ({ ...s, plan: plan ?? s?.plan }));
 }
 
-export function putOff(orgId: string, step: SetupStep) {
-  write(orgId, (s) => ({
-    later: [...new Set([...(s?.later ?? []), step])],
-    plan: s?.plan,
-    finished: s?.finished,
-  }));
+/** The step the flow is on, so a trip to checkout comes back to it. */
+export function setupAt(orgId: string, at: FlowStep) {
+  // Only a flow that started: the page draws the flow before it knows the
+  // org gets one, and drawing it must not be what starts it.
+  const current = read()[orgId];
+  if (!current || current.at === at) return;
+  write(orgId, (s) => ({ ...s, at }));
 }
 
 export function finishSetup(orgId: string) {
-  write(orgId, (s) => ({ later: s?.later ?? [], plan: s?.plan, finished: true }));
+  write(orgId, (s) => ({ ...s, finished: true }));
 }
 
 /** Reads `plan` and `interval` off a URL's search, as the pricing links and

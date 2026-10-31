@@ -1,120 +1,102 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
-import { setPlan } from "./db";
+import { enterCode, signUpAndVerify, submitSignup } from "./resend";
+import { queryRows, setPlan } from "./db";
 import { createQuickLink } from "./orgs";
 
 /**
- * A new organization's setup list (components/setup-list.tsx): the first
- * link, a domain of their own, the team, and the plan for somebody who came
- * in through a pricing link. The welcome screen between a pricing link and
- * the app is routes/welcome.tsx; Polar's side is stubbed at the browser, the
- * way the billing specs do it.
+ * A new organization's setup flow (components/setup-flow.tsx, on
+ * /welcome): its name, its first link, a domain of its own, its team, with
+ * the organization card filling in beside the questions. Polar's side is
+ * stubbed at the browser, the way the billing specs do it; Google's return
+ * is the URL it comes back to.
  */
 
 const password = "test-password-123";
 
-const list = (page: Page) =>
-  page.getByRole("list").filter({ has: page.getByText("Invite your team") });
-const step = (page: Page, title: string) =>
-  list(page)
-    .getByRole("listitem")
-    .filter({ has: page.getByRole("heading", { name: title }) });
-const progress = (page: Page) => page.getByRole("progressbar", { name: "Setup" });
+const card = (page: Page) => page.getByRole("complementary", { name: "Your organization" });
+const heading = (page: Page, name: string) => page.getByRole("heading", { name });
 
-/** A signed-in account whose browser has not started a list yet, as one
- * arriving at /welcome from a pricing link would be. */
-async function arrivingAccount(page: Page, prefix: string) {
-  const email = `${prefix}-${Date.now()}@example.org`;
-  await signUpAndVerify(page, email, password);
-  await page.evaluate(() => localStorage.removeItem("rdyrct:setup:v1"));
-  return email;
-}
-
-test("a new account is set up from one list, and the list stays gone once done", async ({
+test("an email sign-up names its organization, makes a link, and arrives in the app", async ({
   page,
 }) => {
   const email = `onboard-${Date.now()}@example.org`;
-  await signUpAndVerify(page, email, password);
+  await submitSignup(page, email, password);
+  await expect(heading(page, "Check your email")).toBeVisible({ timeout: 30_000 });
+  await enterCode(page, email);
 
-  // The welcome, named after the address's domain, with the link step open.
-  await expect(page.getByRole("heading", { name: "Welcome to Example" })).toBeVisible();
-  await expect(page.getByText("Named after example.org.")).toBeVisible();
-  await expect(progress(page)).toHaveAttribute("aria-valuenow", "0");
-  await expect(progress(page)).toHaveAttribute("aria-valuemax", "3");
-  await expect(step(page, "Use your own domain")).toContainText("Paid");
+  // The flow, with the organization card beside it, named from the domain.
+  await expect(heading(page, "What should we call your organization?")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page).toHaveURL(/\/welcome$/);
+  await expect(card(page)).toContainText("Example");
+  await expect(card(page)).toContainText("go.example.org");
 
-  await createQuickLink(page, "https://example.org/spring-menu");
-  await page.keyboard.press("Escape");
+  // The card renames as the name is typed, and the name is saved.
+  const name = page.getByRole("textbox", { name: "Name" });
+  await name.fill("Acme Coffee");
+  await expect(card(page)).toContainText("Acme Coffee");
+  await page.getByRole("button", { name: "Continue" }).click();
 
-  // Free: the domain step shows their own link next to the same link on a
-  // domain of their own, with the slug they would choose.
-  const domain = step(page, "Use your own domain");
-  await expect(step(page, "Shorten a link").locator(".font-mono").first()).toHaveText(
-    /\/[A-Za-z0-9]+$/,
-  );
-  await expect(domain.getByText("Now")).toBeVisible();
-  await expect(domain.getByText("go.example.org/spring-menu")).toBeVisible();
-  await expect(domain.getByRole("button", { name: "Upgrade" })).toBeVisible();
-  await expect(progress(page)).toHaveAttribute("aria-valuenow", "1");
-
-  // Put off, it closes on "Later" and the team step opens.
-  await domain.getByRole("button", { name: "Later" }).click();
-  await expect(domain).toContainText("Later");
-  const team = step(page, "Invite your team");
-  await expect(team.getByRole("textbox", { name: "Email" })).toBeVisible();
-
-  // A wrong address marks the field instead of sending.
-  await team.getByRole("button", { name: "Invite" }).click();
-  await expect(team.getByRole("textbox", { name: "Email" })).toHaveAttribute(
+  // The first link lands in the card, with its QR code.
+  await expect(heading(page, "Shorten your first link")).toBeVisible();
+  await page.getByRole("button", { name: "Create link" }).click();
+  await expect(page.getByRole("textbox", { name: "Long link" })).toHaveAttribute(
     "aria-invalid",
     "true",
   );
-  await team.getByRole("textbox", { name: "Email" }).fill(`sam-${Date.now()}@example.org`);
-  await team.getByRole("button", { name: "Invite" }).click();
+  await page.getByRole("textbox", { name: "Long link" }).fill("https://example.org/spring-menu");
+  await page.getByRole("button", { name: "Create link" }).click();
+  await expect(card(page)).not.toContainText("Shows here once made");
+  await expect(card(page)).toContainText("example.org/spring-menu");
+  await page.getByRole("button", { name: "Continue" }).click();
 
-  // Every step done or put off: the list and its count leave, and a reload
-  // does not bring them back.
-  await expect(list(page)).toHaveCount(0);
-  await expect(progress(page)).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(list(page)).toHaveCount(0);
+  // Free: the domain step shows the link on a domain of their own.
+  await expect(heading(page, "Use your own domain")).toBeVisible();
+  await expect(page.getByText("go.example.org/spring-menu")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Hobby, \$4 a month/ })).toBeVisible();
+  await page.getByRole("button", { name: "Not now" }).click();
+
+  // The team step marks a wrong address instead of sending.
+  await expect(heading(page, "Invite your team")).toBeVisible();
+  await page.getByRole("button", { name: "Invite" }).click();
+  await expect(page.getByRole("textbox", { name: "Email" })).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await page.getByRole("button", { name: "Not now" }).click();
+
+  // Into the app, as a dashboard, under the new name.
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(heading(page, "Dashboard")).toBeVisible();
+  await expect(page.getByTitle("Switch organization")).toContainText("Acme Coffee");
+  const [org] = await queryRows<{ name: string }>(
+    page,
+    "select o.name from orgs o join org_members m on m.org_id = o.id join user u on u.id = m.user_id where u.email = ?",
+    [email],
+  );
+  expect(org.name).toBe("Acme Coffee");
+
+  // Done is done: /welcome moves straight on.
+  await page.goto("/welcome");
+  await expect(page).toHaveURL(/\/dashboard$/);
 });
 
-test("an account that already has links never gets the list", async ({ page }) => {
-  const email = `onboard-old-${Date.now()}@example.org`;
-  await signUpAndVerify(page, email, password);
+test("an account that already has links never gets the flow", async ({ page }) => {
+  await signUpAndVerify(page, `onboard-old-${Date.now()}@example.org`, password);
   await createQuickLink(page, "https://example.org/before");
   await page.keyboard.press("Escape");
 
-  // As this browser would be for somebody who signed up before the list.
-  await page.evaluate(() => localStorage.removeItem("rdyrct:setup:v1"));
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(progress(page)).toHaveCount(0);
-  await expect(page.getByText("Get set up")).toHaveCount(0);
-});
-
-test("an existing account coming back through /welcome keeps its dashboard", async ({ page }) => {
-  await arrivingAccount(page, "onboard-existing");
-  await createQuickLink(page, "https://example.org/already");
-  await page.keyboard.press("Escape");
-  await page.evaluate(() => localStorage.removeItem("rdyrct:setup:v1"));
-
-  // A pricing link followed by somebody who already had links, then a
-  // cancelled checkout: no list, and the card does not promise one.
-  await page.goto("/welcome?checkout=cancelled&plan=pro");
-  await expect(page.getByText("Upgrade any time from Billing.")).toBeVisible();
+  await page.goto("/welcome?via=email&next=%2Fdashboard");
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(progress(page)).toHaveCount(0);
-  await expect(page.getByText("Get set up")).toHaveCount(0);
+  await expect(heading(page, "Dashboard")).toBeVisible();
+  await expect(heading(page, "What should we call your organization?")).toHaveCount(0);
 });
 
-test("a pricing link goes to checkout, and going back leaves the upgrade as the first step", async ({
+test("a pricing link goes to checkout, and going back still sets the organization up", async ({
   page,
 }) => {
-  await arrivingAccount(page, "onboard-cancel");
+  await signUpAndVerify(page, `onboard-cancel-${Date.now()}@example.org`, password);
 
   // Polar stands in: its back button lands on the URL the worker gave it.
   const asked: unknown[] = [];
@@ -124,36 +106,47 @@ test("a pricing link goes to checkout, and going back leaves the upgrade as the 
   });
 
   await page.goto("/welcome?plan=pro&interval=year");
-  await expect(page.getByRole("heading", { name: "No charge made" })).toBeVisible();
+  // Two full page loads: to checkout and back.
+  await expect(heading(page, "No charge made")).toBeVisible({ timeout: 15_000 });
   expect(asked).toEqual([{ plan: "pro", interval: "year", from: "welcome" }]);
 
-  await expect(page).toHaveURL(/\/dashboard$/);
-  const upgrade = step(page, "Finish upgrading to Pro");
-  await expect(upgrade).toContainText("$8.10 a month, billed yearly");
-  await expect(upgrade.getByRole("button", { name: "Continue to checkout" })).toBeVisible();
-  await expect(progress(page)).toHaveAttribute("aria-valuemax", "4");
-
-  await upgrade.getByRole("button", { name: "Later" }).click();
-  await expect(upgrade).toContainText("Later");
-  await expect(
-    step(page, "Shorten a link").getByPlaceholder("https://example.com/launch"),
-  ).toBeVisible();
+  // The flow follows, and its domain step offers the plan they picked.
+  await expect(heading(page, "What should we call your organization?")).toBeVisible();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await expect(page.getByRole("button", { name: /Pro, \$9 a month/ })).toBeVisible();
 });
 
-test("back from a paid checkout, the plan is the first step, already done", async ({ page }) => {
-  const email = await arrivingAccount(page, "onboard-paid");
+test("back from a paid checkout, the domain step asks for the domain", async ({ page }) => {
+  const email = `onboard-paid-${Date.now()}@example.org`;
+  await signUpAndVerify(page, email, password);
   // The webhook, landed: what Polar's success URL comes back to.
   await setPlan(page, email, "pro");
 
   await page.goto("/welcome?checkout_id=test&plan=pro");
-  await expect(page.getByRole("heading", { name: "Pro is on" })).toBeVisible();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(heading(page, "Pro is on")).toBeVisible({ timeout: 15_000 });
+  await expect(heading(page, "What should we call your organization?")).toBeVisible();
+  await expect(card(page)).toContainText("Pro");
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await expect(page.getByRole("textbox", { name: "Domain" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add domain" })).toBeVisible();
+});
 
-  await expect(step(page, "Pro is on")).toContainText("$9 a month");
-  await expect(progress(page)).toHaveAttribute("aria-valuenow", "1");
-  await expect(progress(page)).toHaveAttribute("aria-valuemax", "4");
-  // Paid, so the domain step asks for the domain instead of selling one.
-  await expect(step(page, "Use your own domain")).not.toContainText("Paid");
+test("back from Google: a new account gets the flow, a returning one goes in", async ({ page }) => {
+  await signUpAndVerify(page, `onboard-google-${Date.now()}@gmail.com`, password);
+
+  // Where Google sends a new account (routes/auth.tsx, newUserCallbackURL).
+  await page.goto("/welcome?via=google&signup=google&next=%2Fdashboard");
+  await expect(heading(page, "Account created")).toBeVisible();
+  await expect(heading(page, "What should we call your organization?")).toBeVisible();
+  // A Gmail address names no company: the example domain stays generic.
+  await expect(card(page)).toContainText("go.yourbrand.com");
+
+  // A returning sign-in only says so, and goes on into the app.
+  await page.goto("/welcome?via=google&next=%2Fdashboard");
+  await expect(heading(page, "Signed in with Google")).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
 });
 
 test("a signed-out pricing link signs up through /welcome", async ({ page }) => {

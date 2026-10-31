@@ -3,9 +3,11 @@ import { StrictMode, Suspense, lazy } from "react";
 // (routes/auth.tsx) draws it at once instead of its skeleton.
 import {
   AppShellPart as AppShell,
+  loadShell,
   RequireAdminPart as RequireAdmin,
   RequireAuthPart as RequireAuth,
 } from "./lib/shell-loader";
+import { loadWelcome, WelcomePagePart } from "./lib/welcome-loader";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import {
   createMemoryHistory,
@@ -129,16 +131,16 @@ const consentRoute = createRoute({
 
 // Between a pricing link (or Polar) and the app: routes/welcome.tsx. Signed
 // in, but outside the shell, so its card can become the org switcher.
-const WelcomePage = lazy(() =>
-  import("./routes/welcome").then((m) => ({ default: m.WelcomePage })),
-);
 const welcomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/welcome",
+  // Loaded before the route commits (lib/shell-loader.ts), so the sign-in
+  // card hands over to the page itself and never to a fallback.
+  loader: () => Promise.all([loadWelcome(), loadShell()]),
   component: () => (
     <Suspense fallback={null}>
       <RequireAuth>
-        <WelcomePage />
+        <WelcomePagePart />
       </RequireAuth>
     </Suspense>
   ),

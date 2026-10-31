@@ -41,6 +41,7 @@ import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schem
 import type { CurrentUser } from "@/shared/types";
 import { isAppPage, SETUP_ARRIVE } from "../lib/setup-arrive";
 import { loadShell } from "../lib/shell-loader";
+import { loadWelcome } from "../lib/welcome-loader";
 
 /** Admin routes 404 in-app for non-admins, so a stale `next` pointed at
  * `/admin` (e.g. someone bookmarked it while logged out) shouldn't strand a
@@ -746,7 +747,11 @@ async function finishVerifiedSignIn(deps: {
       setTimeout(() => resolve(fallbackHref(deps.qc, deps.next)), 3000),
     ),
   ]);
-  const [href] = await Promise.all([bounded, new Promise((resolve) => setTimeout(resolve, 900))]);
+  const [dest] = await Promise.all([bounded, new Promise((resolve) => setTimeout(resolve, 900))]);
+  // A new account bound for the app goes by /welcome, where its card
+  // becomes the organization card of the setup flow; the page decides
+  // whether the org gets one.
+  const href = isAppPage(dest) ? `/welcome?via=email&next=${encodeURIComponent(dest)}` : dest;
   clearPending();
   // Into the app the card itself travels, so it stays put; anywhere else it
   // fades before the page changes.
@@ -975,6 +980,7 @@ function useAuthFlow(mode: "login" | "signup") {
         preload: async (href) => {
           await Promise.all([
             loadShell(),
+            loadWelcome(),
             href === "/dashboard" ? router.preloadRoute({ to: "/dashboard" }) : null,
           ]);
         },

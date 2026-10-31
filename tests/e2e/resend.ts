@@ -84,11 +84,34 @@ export async function submitSignup(page: Page, email: string, password: string) 
   await page.getByRole("button", { name: "Sign up" }).click();
 }
 
-export async function verifySignup(page: Page, email: string) {
+/** Types the emailed code into the code screen. */
+export async function enterCode(page: Page, email: string) {
   const otp = await latestOtp(page, email);
   await page.locator("input").first().focus();
   await page.keyboard.insertText(otp);
+}
+
+export async function verifySignup(page: Page, email: string) {
+  await enterCode(page, email);
+  await skipSetup(page);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+}
+
+/**
+ * Past the new organization's setup flow (/welcome) by its skip buttons,
+ * for the specs that sign up through the form but are about something else.
+ * The flow itself is tests/e2e/onboarding.pw.ts.
+ */
+export async function skipSetup(page: Page) {
+  await expect(
+    page.getByRole("heading", { name: "What should we call your organization?" }),
+  ).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Not now" }).click();
+  await page.getByRole("button", { name: "Not now" }).click();
 }
 
 /**

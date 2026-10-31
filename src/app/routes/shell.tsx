@@ -51,7 +51,6 @@ import { PLAN_LIMITS, type OrgPlan, type User, type UserOrg } from "@/shared/typ
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
-import { SetupProgress } from "../components/setup-progress";
 import { LayersIcon } from "../ui/nav-icons";
 import { Tooltip, TooltipGroup } from "../ui/tooltip";
 import { Shortcut } from "../ui/kbd";
@@ -460,7 +459,6 @@ function AppSidebar({
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} phone={phone} />
 
         <div className="mt-auto">
-          <SetupProgress collapsed={collapsed} />
           {phone ? (
             <div className="px-3 py-3">
               <AccountMenu

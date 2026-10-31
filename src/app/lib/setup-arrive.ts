@@ -13,19 +13,23 @@ export const SETUP_ARRIVE = globalThis.CSS?.supports?.("selector(:active-view-tr
   ? { types: ["setup-arrive"] }
   : false;
 
-/**
- * The first-run page becoming the dashboard (`setup-settle` in styles.css):
- * the setup list slides from the middle of the page to the top of the
- * dashboard while the header and the numbers rise in around it, instead of
- * the page swapping its layout in one frame. Plain where types are not
- * supported, and under reduced motion.
- */
-export function settleSetup(update: () => void) {
+/** A state change on the same page, played as a view transition of one
+ * type; plain where types are not supported, and under reduced motion. */
+function transition(type: string, update: () => void) {
   const run = () => flushSync(update);
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!SETUP_ARRIVE || still || !document.startViewTransition) return run();
-  document.startViewTransition({ update: run, types: ["setup-settle"] });
+  document.startViewTransition({ update: run, types: [type] });
 }
+
+/** The first-run page becoming the dashboard (`setup-settle` in
+ * styles.css): the header and the numbers rise in, instead of the page
+ * swapping its layout in one frame. */
+export const settleSetup = (update: () => void) => transition("setup-settle", update);
+
+/** A /welcome card becoming the organization card of the setup flow: the
+ * same parts and timing as the hand-over into the app. */
+export const arriveInFlow = (update: () => void) => transition("setup-arrive", update);
 
 /** The app pages a sign-in card can hand over to by becoming the org
  * switcher. Anything else (an invite, /welcome) has no switcher to become. */

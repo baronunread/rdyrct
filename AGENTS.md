@@ -268,16 +268,17 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   can't be squatted. Every account gets an org at
   sign-up (#65), named from the email domain (`src/shared/org-name.ts`) and
   renameable in Settings, so nobody meets a dead app behind a form asking
-  for a company name. A new org's owner meets **one setup list**
-  (`components/setup-list.tsx`): the first link, a domain of their own, the
-  team, and the plan for somebody who came from a pricing link. It starts
-  only on a dashboard with no links, reads "done" from live data, keeps only
-  what Later and the plan intent need per browser (`lib/setup.ts`), and is
-  gone for good once every step is done or put off. The sign-in card hands
-  over to it by becoming the org switcher (`lib/setup-arrive.ts`). A
-  signed-out pricing CTA signs up with `next=/welcome?plan=…`; `/welcome`
-  (`routes/welcome.tsx`) opens checkout before the app draws, and Polar
-  returns there paid or not. `NoOrgState`
+  for a company name. A new org's owner goes through a **setup flow**
+  on a screen of its own (`/welcome`, `components/setup-flow.tsx`): its
+  name, its first link, a domain of its own, its team, each with a way
+  past it, beside an organization card that fills in as they answer. The
+  sign-in card (email code, Google, or Polar's return) becomes that card,
+  and at the end it becomes the org switcher as the app builds around it
+  (`lib/setup-arrive.ts`). Only an owner whose org has no links gets it,
+  and only after a sign-up; what it remembers is per browser
+  (`lib/setup.ts`). A signed-out pricing CTA signs up with
+  `next=/welcome?plan=…`; `/welcome` opens checkout before the app draws,
+  and Polar returns there paid or not. `NoOrgState`
   (`src/app/components/no-org.tsx`) is still there for the account that has
   no org left (it deleted the only one), and `/billing` still works org-less,
   so an older pricing link (`/signup?next=/billing?plan=…`) can check out
