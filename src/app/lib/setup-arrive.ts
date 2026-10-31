@@ -26,3 +26,9 @@ export function settleSetup(update: () => void) {
   if (!SETUP_ARRIVE || still || !document.startViewTransition) return run();
   document.startViewTransition({ update: run, types: ["setup-settle"] });
 }
+
+/** The app pages a sign-in card can hand over to by becoming the org
+ * switcher. Anything else (an invite, /welcome) has no switcher to become. */
+const APP_PAGE =
+  /^\/(dashboard|analytics|links|import|members|billing|domains|settings|admin)(\/|\?|$)/;
+export const isAppPage = (href: string) => APP_PAGE.test(href);
