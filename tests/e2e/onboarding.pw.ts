@@ -95,6 +95,22 @@ test("an account that already has links never gets the list", async ({ page }) =
   await expect(page.getByText("Get set up")).toHaveCount(0);
 });
 
+test("an existing account coming back through /welcome keeps its dashboard", async ({ page }) => {
+  await arrivingAccount(page, "onboard-existing");
+  await createQuickLink(page, "https://example.org/already");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => localStorage.removeItem("rdyrct:setup:v1"));
+
+  // A pricing link followed by somebody who already had links, then a
+  // cancelled checkout: no list, and the card does not promise one.
+  await page.goto("/welcome?checkout=cancelled&plan=pro");
+  await expect(page.getByText("Upgrade any time from Billing.")).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(progress(page)).toHaveCount(0);
+  await expect(page.getByText("Get set up")).toHaveCount(0);
+});
+
 test("a pricing link goes to checkout, and going back leaves the upgrade as the first step", async ({
   page,
 }) => {

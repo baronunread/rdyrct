@@ -133,6 +133,31 @@ function build(
   };
 }
 
+/**
+ * Whether arriving through /welcome should open the list: only for an
+ * owner whose org has no links and whose list never finished, the same rule
+ * the dashboard starts it by. `known` stays false until the count is in.
+ */
+/** Whether /welcome may open the list, once that is known. */
+interface WelcomeList {
+  known: boolean;
+  listed: boolean;
+}
+
+export function useWelcomeList(): WelcomeList {
+  const { org } = useCurrentOrg();
+  const orgId = setsUp(org) ? org.id : "";
+  const setup = useOrgSetup(orgId);
+  const links = useLinkQuotaUsage(orgId);
+  return welcomeList(orgId, links.data?.count, setup);
+}
+
+function welcomeList(orgId: string, links: number | undefined, setup: OrgSetup | undefined) {
+  if (!orgId) return { known: true, listed: false } satisfies WelcomeList;
+  if (links === undefined) return { known: false, listed: false } satisfies WelcomeList;
+  return { known: true, listed: links === 0 && !setup?.finished } satisfies WelcomeList;
+}
+
 /** Starts the list the first time an owner's dashboard has no links: the
  * moment the old first-run screen used to appear. An account that already
  * has links never gets one. */
