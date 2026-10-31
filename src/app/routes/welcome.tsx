@@ -198,7 +198,7 @@ export function WelcomePage() {
       <div className="flex flex-col items-center gap-3 text-center" aria-live="polite">
         <Mark phase={phase} />
         <AuthHeading>{words.heading}</AuthHeading>
-        <p className="text-sm text-pretty text-muted">{words.body}</p>
+        {words.body && <p className="text-sm text-pretty text-muted">{words.body}</p>}
         {phase === "failed" && (
           <div className="mt-1 flex gap-2">
             <Button
@@ -272,7 +272,7 @@ function copyFor(
 /** Back from Google, before the card becomes the org switcher. */
 const googleCopy = (newAccount: boolean): WelcomeCopy => ({
   heading: "Signed in with Google",
-  body: newAccount ? "Your account is ready." : "Welcome back.",
+  body: newAccount ? "Your account is ready." : "",
 });
 
 /** Only promise the list when there will be one (useWelcomeList). */
