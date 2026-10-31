@@ -27,9 +27,14 @@ function transition(type: string, update: () => void) {
  * swapping its layout in one frame. */
 export const settleSetup = (update: () => void) => transition("setup-settle", update);
 
-/** A /welcome card becoming the organization card of the setup flow: the
- * same parts and timing as the hand-over into the app. */
-export const arriveInFlow = (update: () => void) => transition("setup-arrive", update);
+/** A /welcome card becoming the organization card of the setup flow
+ * (`setup-flow` in styles.css): the same parts as the hand-over into the
+ * app, but the two cards cross-fade while it moves, since it grows into a
+ * card rather than shrinking into a button. */
+export const arriveInFlow = (update: () => void) => transition("setup-flow", update);
+
+/** The same, as a navigation: the email code's card into /welcome. */
+export const SETUP_FLOW = SETUP_ARRIVE ? { types: ["setup-flow"] } : false;
 
 /** The app pages a sign-in card can hand over to by becoming the org
  * switcher. Anything else (an invite, /welcome) has no switcher to become. */

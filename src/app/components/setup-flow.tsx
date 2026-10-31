@@ -14,6 +14,7 @@ import { api, ApiError } from "../lib/api";
 import { useCheckout, useCurrentUser, useDomainMutations, useLinkMutations } from "../lib/hooks";
 import { orgNameSchema } from "../lib/schemas";
 import { PLAN_NAME, setupAt, type PlanIntent, type FlowStep } from "../lib/setup";
+import { Check } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Field, Input } from "../ui/field";
@@ -235,6 +236,9 @@ function NameStep({
   );
 }
 
+/** How long the made link stays in view before the next question. */
+const LINK_BEAT = 1300;
+
 function LinkStep({
   orgId,
   link,
@@ -251,7 +255,7 @@ function LinkStep({
   const [error, setError] = useState<string | undefined>();
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (link) return onNext();
+    if (link || create.isPending) return;
     const value = destination.trim();
     if (!value) {
       setError("Paste a link first");
@@ -260,7 +264,11 @@ function LinkStep({
     create.mutate(
       { destination: value, domainId: null },
       {
-        onSuccess: onLink,
+        // The link lands in the card; a beat to see it, then on by itself.
+        onSuccess: (made) => {
+          onLink(made);
+          window.setTimeout(onNext, LINK_BEAT);
+        },
         onError: (err) => setError(reasonFrom(err, "Could not shorten it")),
       },
     );
@@ -285,8 +293,20 @@ function LinkStep({
         </Field>
       </div>
       <Actions>
-        <Button type="submit" variant="primary" disabled={create.isPending}>
-          <BusyContent busy={create.isPending}>{link ? "Continue" : "Create link"}</BusyContent>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={create.isPending || !!link}
+          className={cn(link && "!bg-accent-2 disabled:opacity-100")}
+        >
+          {link ? (
+            <span className="flex items-center gap-1.5">
+              <Check size={15} stroke={2.6} className="welcome-check" />
+              Link created
+            </span>
+          ) : (
+            <BusyContent busy={create.isPending}>Create link</BusyContent>
+          )}
         </Button>
         {!link && <SkipButton onClick={onNext} />}
       </Actions>

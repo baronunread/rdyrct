@@ -753,6 +753,44 @@ html:active-view-transition-type(setup-settle) {
   }
 }
 
+/* A sign-in card becoming the setup flow's organization card (arriveInFlow
+   and SETUP_FLOW in lib/setup-arrive.ts): it moves and grows on the house
+   curve while the two cards cross-fade, so there is always a card on
+   screen; the logo moves to the corner the same way. */
+html:active-view-transition-type(setup-flow) {
+  [data-setup-card] {
+    view-transition-name: setup-card;
+  }
+  [data-setup-logo] {
+    view-transition-name: setup-logo;
+  }
+  &::view-transition-old(setup-card) {
+    animation: 280ms ease-out both setup-part-out;
+  }
+  &::view-transition-new(setup-card) {
+    animation: 320ms ease-out 120ms both link-part-in;
+  }
+  &::view-transition-old(setup-logo) {
+    animation: 240ms ease-out both setup-part-out;
+  }
+  &::view-transition-new(setup-logo) {
+    animation: 280ms ease-out 200ms both link-part-in;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:active-view-transition-type(setup-flow) {
+    &::view-transition-group(setup-card),
+    &::view-transition-group(setup-logo),
+    &::view-transition-old(setup-card),
+    &::view-transition-new(setup-card),
+    &::view-transition-old(setup-logo),
+    &::view-transition-new(setup-logo) {
+      animation: none;
+    }
+  }
+}
+
 /* A /welcome card on a full page load (back from Google or Polar): it rises
    into the place the sign-in card had, and its check pops in after it, so
    the step lands instead of appearing. */
@@ -760,7 +798,7 @@ html:active-view-transition-type(setup-settle) {
   animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) both welcome-enter;
 }
 
-.welcome-enter .welcome-check {
+.welcome-check {
   animation: 320ms cubic-bezier(0.32, 0.72, 0, 1) 220ms both welcome-check;
 }
 
@@ -782,7 +820,7 @@ html:active-view-transition-type(setup-settle) {
 
 @media (prefers-reduced-motion: reduce) {
   .welcome-enter,
-  .welcome-enter .welcome-check {
+  .welcome-check {
     animation: none;
   }
 }

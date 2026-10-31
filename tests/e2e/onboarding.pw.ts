@@ -49,7 +49,8 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(card(page)).not.toContainText("Shows here once made");
   await expect(card(page)).toContainText("example.org/spring-menu");
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Made, it moves on by itself once the card has it.
+  await expect(page.getByRole("button", { name: "Link created" })).toBeDisabled();
 
   // Free: the domain step shows the link on a domain of their own.
   await expect(heading(page, "Use your own domain")).toBeVisible();

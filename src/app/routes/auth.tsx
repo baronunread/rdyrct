@@ -39,7 +39,7 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 import type { CurrentUser } from "@/shared/types";
-import { isAppPage, SETUP_ARRIVE } from "../lib/setup-arrive";
+import { isAppPage, SETUP_ARRIVE, SETUP_FLOW } from "../lib/setup-arrive";
 import { loadShell } from "../lib/shell-loader";
 import { loadWelcome } from "../lib/welcome-loader";
 
@@ -610,11 +610,13 @@ function clearPending() {
 }
 
 const morphsInto = (href: string) => !!SETUP_ARRIVE && isAppPage(href);
+const intoFlow = (href: string) => !!SETUP_FLOW && href.startsWith("/welcome?via=email");
 
 /** Leaves the sign-in card for where it was going: into the app as the card
  * becoming the org switcher (lib/setup-arrive.ts), anywhere else plainly. */
 function arriveAt(navigate: ReturnType<typeof useNavigate>, href: string) {
-  if (morphsInto(href)) void navigate({ href, replace: true, viewTransition: SETUP_ARRIVE });
+  if (intoFlow(href)) void navigate({ href, replace: true, viewTransition: SETUP_FLOW });
+  else if (morphsInto(href)) void navigate({ href, replace: true, viewTransition: SETUP_ARRIVE });
   else void navigate({ href, replace: true });
 }
 
@@ -755,7 +757,7 @@ async function finishVerifiedSignIn(deps: {
   clearPending();
   // Into the app the card itself travels, so it stays put; anywhere else it
   // fades before the page changes.
-  if (!morphsInto(href)) {
+  if (!morphsInto(href) && !intoFlow(href)) {
     deps.setVerifyPhase("leaving");
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
