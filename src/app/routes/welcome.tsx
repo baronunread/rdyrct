@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "@/app/ui/icons";
 import type { OrgPlan } from "@/shared/types";
@@ -8,7 +8,8 @@ import { useAwaitWebhook } from "../lib/await-webhook";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCheckout, useConfirmCheckout, useCurrentUser } from "../lib/hooks";
 import { PLAN_NAME, planIntentFrom, priceLine, startSetup, type PlanIntent } from "../lib/setup";
-import { SETUP_ARRIVE } from "../lib/setup-arrive";
+import { isAppPage, SETUP_ARRIVE } from "../lib/setup-arrive";
+import { loadShell } from "../lib/shell-loader";
 import { useWelcomeList } from "../lib/setup-steps";
 import { useSearchParams } from "../lib/router-search";
 import { Button } from "../ui/button";
@@ -27,7 +28,7 @@ import { Spinner } from "../ui/spinner";
  * opens with the plan as its first row.
  */
 
-type Phase = "opening" | "failed" | "confirming" | "slow" | "on" | "cancelled";
+type Phase = "opening" | "failed" | "confirming" | "slow" | "on" | "cancelled" | "google";
 
 /** What the URL asks for. Pure, because render may run it twice; the page
  * strips the URL in an effect, so a reload is a plain visit that moves on to
@@ -35,8 +36,24 @@ type Phase = "opening" | "failed" | "confirming" | "slow" | "on" | "cancelled";
 function readArrival(search: URLSearchParams) {
   const checkoutId = search.get("checkout_id");
   const cancelled = search.get("checkout") === "cancelled";
-  const phase: Phase = checkoutId ? "confirming" : cancelled ? "cancelled" : "opening";
-  return { intent: planIntentFrom(search), checkoutId, phase };
+  const google = search.get("via") === "google";
+  const phase: Phase = google
+    ? "google"
+    : checkoutId
+      ? "confirming"
+      : cancelled
+        ? "cancelled"
+        : "opening";
+  const next = search.get("next") ?? "";
+  return {
+    intent: planIntentFrom(search),
+    checkoutId,
+    phase,
+    // Back from Google (routes/auth.tsx): where the sign-in was going, if it
+    // is a page of the app; the dashboard otherwise.
+    target: google && isAppPage(next) ? next : "/dashboard",
+    newAccount: search.get("signup") === "google",
+  };
 }
 
 /**
@@ -46,7 +63,7 @@ function readArrival(search: URLSearchParams) {
  * that comes through a pricing link keeps its dashboard as it was. An
  * account with no org left just goes to the dashboard, which asks for one.
  */
-function useEnterApp(intent: PlanIntent | null) {
+function useEnterApp(intent: PlanIntent | null, target: string) {
   const navigate = useNavigate();
   const user = useCurrentUser();
   const { org } = useCurrentOrg();
@@ -59,8 +76,8 @@ function useEnterApp(intent: PlanIntent | null) {
     entered.current = true;
     window.setTimeout(() => {
       if (org && list.listed) startSetup(org.id, intent ?? undefined);
-      if (org) void navigate({ to: "/dashboard", replace: true, viewTransition: SETUP_ARRIVE });
-      else void navigate({ to: "/dashboard", replace: true });
+      if (org) void navigate({ href: target, replace: true, viewTransition: SETUP_ARRIVE });
+      else void navigate({ href: "/dashboard", replace: true });
     }, delay);
   });
   return {
@@ -135,18 +152,30 @@ function useLateWebhook(phase: Phase, plan: OrgPlan | undefined, setPhase: (p: P
 }
 
 /** How long each closing card stays up before the app takes over. */
-const HOLD = { on: 1100, cancelled: 1400 } satisfies Partial<Record<Phase, number>>;
+const HOLD = { on: 1100, cancelled: 1400, google: 900 } satisfies Partial<Record<Phase, number>>;
 const holdFor = (phase: Phase): number | undefined =>
-  phase === "on" || phase === "cancelled" ? HOLD[phase] : undefined;
+  phase === "on" || phase === "cancelled" || phase === "google" ? HOLD[phase] : undefined;
+
+/** Back from Google: the shell's code and the dashboard's data load while
+ * the card says so, the way the email code's green check does. */
+function usePreloadApp(phase: Phase, target: string) {
+  const router = useRouter();
+  useEffect(() => {
+    if (phase !== "google") return;
+    void loadShell();
+    if (target === "/dashboard") void router.preloadRoute({ to: "/dashboard" });
+  }, [phase, target, router]);
+}
 
 export function WelcomePage() {
   const [params] = useSearchParams();
   const [arrival] = useState(() => readArrival(params));
-  const { intent, checkoutId } = arrival;
+  const { intent, checkoutId, target, newAccount } = arrival;
   const [phase, setPhase] = useState<Phase>(arrival.phase);
   const plan = useCurrentUser().data?.user.plan;
   const { org } = useCurrentOrg();
-  const { enterApp, listed } = useEnterApp(intent);
+  const { enterApp, listed } = useEnterApp(intent, target);
+  usePreloadApp(phase, target);
   useLateWebhook(phase, plan, setPhase);
   const retry = useOpenCheckout(phase, intent, plan, () => setPhase("failed"), enterApp);
   useConfirmPayment(phase, checkoutId, plan, setPhase);
@@ -160,7 +189,10 @@ export function WelcomePage() {
   });
 
   const name = intent ? PLAN_NAME[intent.target] : "Your plan";
-  const words = copyFor(phase, name, intent, org?.name ?? "Your organization", listed);
+  const words =
+    phase === "google"
+      ? googleCopy(newAccount)
+      : copyFor(phase, name, intent, org?.name ?? "Your organization", listed);
   return (
     <AuthPanel>
       <div className="flex flex-col items-center gap-3 text-center" aria-live="polite">
@@ -231,8 +263,17 @@ function copyFor(
         heading: "No charge made",
         body: cancelledBody(name, listed),
       };
+    case "google":
+      // The page asks googleCopy, which knows whether the account is new.
+      return googleCopy(false);
   }
 }
+
+/** Back from Google, before the card becomes the org switcher. */
+const googleCopy = (newAccount: boolean): WelcomeCopy => ({
+  heading: "Signed in with Google",
+  body: newAccount ? "Your account is ready." : "Welcome back.",
+});
 
 /** Only promise the list when there will be one (useWelcomeList). */
 const cancelledBody = (name: string, listed: boolean) =>
@@ -243,8 +284,9 @@ const cancelledBody = (name: string, listed: boolean) =>
 /** The round mark above the heading: a spinner while waiting, a check once
  * the plan is on, nothing when there is nothing to wait for. */
 function Mark({ phase }: { phase: Phase }) {
-  if (phase !== "opening" && phase !== "confirming" && phase !== "on") return null;
-  const on = phase === "on";
+  if (phase !== "opening" && phase !== "confirming" && phase !== "on" && phase !== "google")
+    return null;
+  const on = phase === "on" || phase === "google";
   return (
     <span
       aria-hidden

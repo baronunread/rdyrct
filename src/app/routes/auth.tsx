@@ -39,7 +39,7 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 import type { CurrentUser } from "@/shared/types";
-import { SETUP_ARRIVE } from "../lib/setup-arrive";
+import { isAppPage, SETUP_ARRIVE } from "../lib/setup-arrive";
 import { loadShell } from "../lib/shell-loader";
 
 /** Admin routes 404 in-app for non-admins, so a stale `next` pointed at
@@ -501,11 +501,15 @@ function AuthFormView({
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
     // to `next`. Same flow on login and signup (account linking handles an
-    // existing email/password account).
+    // existing email/password account). Bound for an app page, it comes back
+    // through /welcome, which draws this card again and hands it over to the
+    // app the way the email code does; the trip through Google is a full
+    // page load, so there is no card left to carry across otherwise.
+    const back = isAppPage(next) ? `/welcome?via=google&next=${encodeURIComponent(next)}` : next;
     void authClient.signIn.social({
       provider: "google",
-      callbackURL: next,
-      newUserCallbackURL: googleSignupUrl(next),
+      callbackURL: back,
+      newUserCallbackURL: googleSignupUrl(back),
     });
   };
 
@@ -604,11 +608,7 @@ function clearPending() {
   }
 }
 
-/** The app pages a sign-in card can hand over to by becoming the org
- * switcher. Anything else (an invite, /welcome) has no switcher to become. */
-const APP_PAGE =
-  /^\/(dashboard|analytics|links|import|members|billing|domains|settings|admin)(\/|\?|$)/;
-const morphsInto = (href: string) => !!SETUP_ARRIVE && APP_PAGE.test(href);
+const morphsInto = (href: string) => !!SETUP_ARRIVE && isAppPage(href);
 
 /** Leaves the sign-in card for where it was going: into the app as the card
  * becoming the org switcher (lib/setup-arrive.ts), anywhere else plainly. */
