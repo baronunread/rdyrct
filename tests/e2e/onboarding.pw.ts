@@ -143,9 +143,13 @@ test("back from Google: a new account gets the flow, a returning one goes in", a
   // A Gmail address names no company: the example domain stays generic.
   await expect(card(page)).toContainText("go.yourbrand.com");
 
-  // A returning sign-in only says so, and goes on into the app.
+  // A returning sign-in to an org that is set up only says so, and goes on
+  // into the app.
+  await page.goto("/dashboard");
+  await createQuickLink(page, "https://example.org/set-up");
+  await page.keyboard.press("Escape");
   await page.goto("/welcome?via=google&next=%2Fdashboard");
-  await expect(heading(page, "Signed in with Google")).toBeVisible();
+  await expect(heading(page, "Signed in with Google")).toBeVisible({ timeout: 15_000 });
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 

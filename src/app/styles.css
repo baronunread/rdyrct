@@ -753,6 +753,40 @@ html:active-view-transition-type(setup-settle) {
   }
 }
 
+/* A /welcome card on a full page load (back from Google or Polar): it rises
+   into the place the sign-in card had, and its check pops in after it, so
+   the step lands instead of appearing. */
+.welcome-enter {
+  animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) both welcome-enter;
+}
+
+.welcome-enter .welcome-check {
+  animation: 320ms cubic-bezier(0.32, 0.72, 0, 1) 220ms both welcome-check;
+}
+
+@keyframes welcome-enter {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+    scale: 0.98;
+  }
+}
+
+@keyframes welcome-check {
+  from {
+    opacity: 0;
+    scale: 0.4;
+    filter: blur(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-enter,
+  .welcome-enter .welcome-check {
+    animation: none;
+  }
+}
+
 /* The setup flow (components/setup-flow.tsx): each screen comes in from the
    right, the way the next question arrives. */
 .setup-screen {

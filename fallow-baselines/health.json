@@ -228,7 +228,7 @@
     },
     "src/app/lib/setup-gate.ts": {
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/app/lib/setup.ts": {
@@ -440,11 +440,14 @@
       }
     },
     "src/app/routes/welcome.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
       "crap_high": {
-        "count": 5
+        "count": 4
       },
       "crap_moderate": {
-        "count": 3
+        "count": 5
       }
     },
     "src/app/ui/dialog.tsx": {

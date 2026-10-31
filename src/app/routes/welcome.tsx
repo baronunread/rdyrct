@@ -167,26 +167,25 @@ function usePreloadApp(target: string) {
 const ORG_DATA = new Set(["stats", "links", "linkQuotaUsage", "user"]);
 
 /** How long each card stays up before it moves on. */
-const HOLD = { on: 1100, cancelled: 1400, google: 1000 } satisfies Partial<Record<Phase, number>>;
+const HOLD = { on: 1400, cancelled: 1600, google: 1600 } satisfies Partial<Record<Phase, number>>;
 const holdFor = (phase: Phase): number | undefined =>
   phase === "on" || phase === "cancelled" || phase === "google" ? HOLD[phase] : undefined;
 
 /**
- * After a card: the flow for a new organization, the app for anybody else.
- * A returning Google sign-in is never a new organization, whatever this
- * browser remembers.
+ * After a card: the flow for an organization not set up yet (no links, no
+ * finished flow), the app for anybody else, however they signed in.
  */
 function useMoveOn(
-  returning: boolean,
   intent: PlanIntent | null,
+  fromCheckout: boolean,
   enterApp: (wait: number) => void,
   setPhase: (phase: Phase) => void,
 ) {
   const { org } = useCurrentOrg();
-  const list = useWelcomeList();
+  const list = useWelcomeList(fromCheckout);
   const moveOn = (hold: number) => {
     if (!list.known) return;
-    if (returning || !list.listed || !org) return enterApp(hold);
+    if (!list.listed || !org) return enterApp(hold);
     window.setTimeout(() => {
       startSetup(org.id, intent ?? undefined);
       arriveInFlow(() => setPhase("flow"));
@@ -206,23 +205,36 @@ function useHold(phase: Phase, known: boolean, moveOn: (hold: number) => void) {
   });
 }
 
+/** Signed out (an old tab, an expired session): to sign-in, and back here. */
+function useSignedIn() {
+  const navigate = useNavigate();
+  const current = useCurrentUser();
+  const signedOut = !current.isLoading && !current.data;
+  useEffect(() => {
+    if (!signedOut) return;
+    const here = window.location.pathname + window.location.search;
+    void navigate({ href: `/login?next=${encodeURIComponent(here)}`, replace: true });
+  }, [signedOut, navigate]);
+}
+
 export function WelcomePage() {
+  useSignedIn();
   const [params] = useSearchParams();
   const [arrival] = useState(() => readArrival(params));
   const { intent, checkoutId, target, newAccount } = arrival;
+  // Polar's way back, where a flow the domain step left resumes.
+  const fromCheckout = !!checkoutId || arrival.phase === "cancelled";
   const [phase, setPhase] = useState<Phase>(arrival.phase);
   const user = useCurrentUser().data?.user;
   const { org } = useCurrentOrg();
   const enterApp = useEnterApp(target);
+  // A card that arrives on a full page load (Google, Polar) rises in; from
+  // the email code it is already on screen, carried over by the transition.
+  const [entering] = useState(() => arrival.phase !== "flow");
   usePreloadApp(target);
   useLateWebhook(phase, user?.plan, setPhase);
   useConfirmPayment(phase, checkoutId, user?.plan, setPhase);
-  const { moveOn, known } = useMoveOn(
-    phase === "google" && !newAccount,
-    intent,
-    enterApp,
-    setPhase,
-  );
+  const { moveOn, known } = useMoveOn(intent, fromCheckout, enterApp, setPhase);
   const retry = useOpenCheckout(
     phase,
     intent,
@@ -236,10 +248,12 @@ export function WelcomePage() {
     if (window.location.search) window.history.replaceState({}, "", "/welcome");
   }, []);
 
-  if (phase === "flow") return <WelcomeFlow intent={intent} enterApp={enterApp} />;
+  if (phase === "flow")
+    return <WelcomeFlow intent={intent} fromCheckout={fromCheckout} enterApp={enterApp} />;
   return (
     <WelcomeCard
       phase={phase}
+      entering={entering}
       words={cardWords(phase, intent, newAccount, user?.email, org?.name)}
       onRetry={() => {
         retry();
@@ -265,17 +279,19 @@ function cardWords(
 /** The card itself, between signing in and what comes next. */
 function WelcomeCard({
   phase,
+  entering,
   words,
   onRetry,
   onMoveOn,
 }: {
   phase: Phase;
+  entering: boolean;
   words: WelcomeCopy;
   onRetry: () => void;
   onMoveOn: () => void;
 }) {
   return (
-    <AuthPanel>
+    <AuthPanel className={entering ? "welcome-enter" : undefined}>
       <div className="flex flex-col items-center gap-3 text-center" aria-live="polite">
         <Mark phase={phase} />
         <AuthHeading>{words.heading}</AuthHeading>
@@ -300,18 +316,36 @@ function WelcomeCard({
   );
 }
 
+/** Once in, the flow runs to its end: its own link step gives the org the
+ * link that would otherwise say it is set up. */
+function useAdmitted(fromCheckout: boolean) {
+  const list = useWelcomeList(fromCheckout);
+  const [admitted, setAdmitted] = useState(false);
+  if (list.listed && !admitted) setAdmitted(true);
+  return { admitted, skip: list.known && !list.listed && !admitted };
+}
+
+/** Where a flow picks up: the step and plan this browser kept, if any. */
+function useResume(orgId: string, intent: PlanIntent | null) {
+  const setup = useOrgSetup(orgId);
+  return { intent: setup?.plan ?? intent, at: setup?.at ?? ("name" as const) };
+}
+
 /** Whether this org gets the flow, and where it picks up. An org that
  * does not moves on into the app; one that does has its flow started. */
-function useFlowGate(intent: PlanIntent | null, enterApp: (wait: number) => void) {
+function useFlowGate(
+  intent: PlanIntent | null,
+  fromCheckout: boolean,
+  enterApp: (wait: number) => void,
+) {
   const { org } = useCurrentOrg();
-  const list = useWelcomeList();
-  const setup = useOrgSetup(org?.id ?? "");
-  const skip = list.known && !list.listed;
+  const { admitted, skip } = useAdmitted(fromCheckout);
+  const resume = useResume(org?.id ?? "", intent);
   useEffect(() => {
     if (skip) enterApp(0);
-    else if (list.listed && org) startSetup(org.id, intent ?? undefined);
+    else if (admitted && org) startSetup(org.id, intent ?? undefined);
   });
-  return { org, skip, resume: { intent: setup?.plan ?? intent, at: setup?.at ?? "name" } };
+  return { org, skip, resume };
 }
 
 /**
@@ -321,13 +355,15 @@ function useFlowGate(intent: PlanIntent | null, enterApp: (wait: number) => void
  */
 function WelcomeFlow({
   intent,
+  fromCheckout,
   enterApp,
 }: {
   intent: PlanIntent | null;
+  fromCheckout: boolean;
   enterApp: (wait: number) => void;
 }) {
   const qc = useQueryClient();
-  const { org, skip, resume } = useFlowGate(intent, enterApp);
+  const { org, skip, resume } = useFlowGate(intent, fromCheckout, enterApp);
   if (!org || skip) return <AuthPanel>{null}</AuthPanel>;
   return (
     <SetupFlow
@@ -417,7 +453,7 @@ function Mark({ phase }: { phase: Phase }) {
         on ? "bg-accent-2 text-bg" : "text-accent shadow-[inset_0_0_0_1.5px_var(--border)]",
       )}
     >
-      {on ? <Check size={18} stroke={2.6} /> : <Spinner />}
+      {on ? <Check size={18} stroke={2.6} className="welcome-check" /> : <Spinner />}
     </span>
   );
 }

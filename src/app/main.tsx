@@ -3,7 +3,6 @@ import { StrictMode, Suspense, lazy } from "react";
 // (routes/auth.tsx) draws it at once instead of its skeleton.
 import {
   AppShellPart as AppShell,
-  loadShell,
   RequireAdminPart as RequireAdmin,
   RequireAuthPart as RequireAuth,
 } from "./lib/shell-loader";
@@ -134,14 +133,14 @@ const consentRoute = createRoute({
 const welcomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/welcome",
-  // Loaded before the route commits (lib/shell-loader.ts), so the sign-in
-  // card hands over to the page itself and never to a fallback.
-  loader: () => Promise.all([loadWelcome(), loadShell()]),
+  // Loaded before the route commits (lib/welcome-loader.ts), so the sign-in
+  // card hands over to the page itself and never to a fallback. Only its
+  // own code: it checks sign-in itself, so a full page load (back from
+  // Google or Polar) draws the card without waiting for the app shell.
+  loader: () => loadWelcome(),
   component: () => (
     <Suspense fallback={null}>
-      <RequireAuth>
-        <WelcomePagePart />
-      </RequireAuth>
+      <WelcomePagePart />
     </Suspense>
   ),
 });
