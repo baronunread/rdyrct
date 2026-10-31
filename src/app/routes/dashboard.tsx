@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { IconChartLine, IconLink, IconPlus, IconQrcode, IconUsers } from "@tabler/icons-react";
 import { dashboardView } from "./dashboard-view";
@@ -66,6 +66,9 @@ import {
 } from "../lib/insights-data";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
+import { SetupList } from "../components/setup-list";
+import { useSetup, useStartSetup, type SetupView } from "../lib/setup-steps";
+import { workDomain, defaultOrgName } from "@/shared/org-name";
 
 /** The dashboard's ranges: a glance, not a report. Analytics adds 365d. */
 const DASHBOARD_RANGES = [PRESET_24H, PRESET_7D, PRESET_30D] as const;
@@ -266,6 +269,25 @@ export function Dashboard() {
   }
 }
 
+/** The header's New link: live, greyed out for a read-only org, or absent
+ * for somebody who could never make one. */
+function NewLinkAction({
+  canCreate,
+  locked,
+  onOpen,
+}: {
+  canCreate: boolean;
+  locked: boolean;
+  onOpen: () => void;
+}) {
+  if (!canCreate && !locked) return null;
+  return (
+    <div className="flex sm:order-last">
+      {canCreate ? <NewLinkButton onClick={onOpen} /> : <ReadOnlyNewLinkButton />}
+    </div>
+  );
+}
+
 /** New link, greyed out, for an organization nobody can write to: the
  * button stays where people look for it and says why it does nothing. */
 function ReadOnlyNewLinkButton() {
@@ -315,6 +337,10 @@ function DashboardScreen({
   // for somebody who can make that link: a read-only org or a viewer gets
   // the dashboard as it is.
   const firstRun = s.totalLinks === 0 && canWrite;
+  // An owner's first run is the setup list, which stays (as a card over the
+  // dashboard) until every step is done or put off.
+  useStartSetup(org, s.totalLinks);
+  const setup = useSetup({ newOrg: s.totalLinks === 0 });
 
   /** Both answers to "this destination already has a link" submit the same
    * input with one extra field, and land on the same created-link dialog. */
@@ -332,12 +358,6 @@ function DashboardScreen({
     );
   };
 
-  const newLink = canCreate ? (
-    <NewLinkButton onClick={openNewLink} />
-  ) : org?.locked ? (
-    <ReadOnlyNewLinkButton />
-  ) : null;
-
   return (
     <div>
       {firstRun ? null : (
@@ -347,7 +367,7 @@ function DashboardScreen({
             // The range sits left of New link on a desktop, where the eye
             // ends on the primary action; on a phone New link comes first.
             <div className="flex flex-wrap items-center gap-2">
-              {newLink && <div className="flex sm:order-last">{newLink}</div>}
+              <NewLinkAction canCreate={canCreate} locked={!!org?.locked} onOpen={openNewLink} />
               <RangeControl
                 presets={DASHBOARD_RANGES}
                 maxDays={limits.analyticsDays}
@@ -364,21 +384,22 @@ function DashboardScreen({
 
       {/* The field only asks for the first link. After that, New link opens
           the same dialog everywhere (header, C, ⌘K). */}
-      {firstRun ? (
-        <FirstRun
-          plan={org?.plan ?? "free"}
-          create={data.create}
-          activeDomains={activeDomains}
-          defaultDomainId={defaultDomainId}
-          atLimit={s.totalLinks >= limits.links}
-          onCreated={setCreated}
-          onSameDestinationMatch={(input, matchedLinks) =>
-            setSameDestination({ input, matchedLinks })
-          }
-        />
-      ) : (
-        <DashboardBody stats={s} data={data} />
-      )}
+      <DashboardMain
+        setup={setup}
+        firstRun={firstRun}
+        plan={org?.plan ?? "free"}
+        stats={s}
+        data={data}
+        quickCreate={{
+          create: data.create,
+          activeDomains,
+          defaultDomainId,
+          atLimit: s.totalLinks >= limits.links,
+          onCreated: setCreated,
+          onSameDestinationMatch: (input, matchedLinks) =>
+            setSameDestination({ input, matchedLinks }),
+        }}
+      />
 
       <LinkPreviewDialog
         title="Link created"
@@ -394,6 +415,89 @@ function DashboardScreen({
         onAddToExisting={(matchedLink) => resolveMatch({ mergeIntoLinkId: matchedLink.id })}
         onCreateSeparate={() => resolveMatch({ forceSeparateLink: true })}
       />
+    </div>
+  );
+}
+
+/**
+ * Under the header: the setup list while there is one, the first-link screen
+ * for anybody else who can write to an empty org, the dashboard otherwise.
+ * The list is the whole page on a brand-new org (the sign-in card hands over
+ * to it) and a card over the dashboard once the org has a link.
+ */
+function DashboardMain({
+  setup,
+  firstRun,
+  plan,
+  stats,
+  data,
+  quickCreate,
+}: {
+  setup: SetupView | null;
+  firstRun: boolean;
+  plan: OrgPlan;
+  stats: NonNullable<DashboardData["stats"]>;
+  data: DashboardData;
+  quickCreate: QuickCreateProps;
+}) {
+  if (!setup) {
+    return firstRun ? (
+      <FirstRun plan={plan} {...quickCreate} />
+    ) : (
+      <DashboardBody stats={stats} data={data} />
+    );
+  }
+  const list = <SetupListFor setup={setup} linkField={<QuickCreateCard {...quickCreate} />} />;
+  if (firstRun) return <SetupWelcome>{list}</SetupWelcome>;
+  return (
+    <>
+      <section aria-labelledby="setup-heading" className="mb-6 flex max-w-[640px] flex-col gap-3">
+        <h2 id="setup-heading" className="text-sm font-semibold">
+          Get set up
+        </h2>
+        {list}
+      </section>
+      <DashboardBody stats={stats} data={data} />
+    </>
+  );
+}
+
+/** The list, with the org's first link once there is one: the link step's
+ * summary and the domain step's before and after. */
+function SetupListFor({ setup, linkField }: { setup: SetupView; linkField: ReactNode }) {
+  const linkDone = setup.steps.some((st) => st.step === "link" && st.state === "done");
+  const firstLink = useLinks(linkDone ? setup.orgId : "", FIRST_LINK).data?.items[0];
+  return <SetupList setup={setup} firstLink={firstLink} linkField={linkField} />;
+}
+
+const FIRST_LINK = { limit: 1, sort: "created", dir: "asc" } as const;
+
+/** The domain an org was named after at sign-up (org-name.ts), while it
+ * still carries that name; null once renamed or for a consumer address. */
+function namedAfter(
+  orgName: string | undefined,
+  user: { email: string; name: string } | undefined,
+) {
+  if (!user || !orgName) return null;
+  const domain = workDomain(user.email);
+  return domain && orgName === defaultOrgName(user.email, user.name) ? domain : null;
+}
+
+/** A brand-new org's dashboard: who it is, and the list. */
+function SetupWelcome({ children }: { children: ReactNode }) {
+  const { org, currentUser } = useOrgLimits();
+  const domain = namedAfter(org?.name, currentUser.data?.user);
+  return (
+    <div className="mx-auto flex max-w-[560px] flex-col gap-[22px] pt-4 sm:pt-14">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+          Welcome to {org?.name ?? "your organization"}
+        </h1>
+        <p className="text-sm text-pretty text-muted">
+          {domain ? `Named after ${domain}. ` : ""}Rename it any time in Settings.
+        </p>
+      </div>
+      {children}
     </div>
   );
 }

@@ -633,6 +633,106 @@ html:active-view-transition-type(link-morph) {
   }
 }
 
+/* From a sign-in card into the app (lib/setup-arrive.ts): the card shrinks
+   into the org switcher and its logo moves to the sidebar's corner, on the
+   house curve, while the card's contents blur away and the switcher's
+   arrive as it lands. The navigation fades in and the sheet rises into the
+   space around them, so the app reads as assembling around the one object
+   that never left. Named only for this transition. */
+html:active-view-transition-type(setup-arrive) {
+  [data-setup-card] {
+    view-transition-name: setup-card;
+  }
+  [data-setup-logo] {
+    view-transition-name: setup-logo;
+  }
+  [data-setup-nav] {
+    view-transition-name: setup-nav;
+  }
+  [data-app-sheet] {
+    view-transition-name: setup-sheet;
+  }
+}
+
+::view-transition-group(setup-card),
+::view-transition-group(setup-logo) {
+  animation-duration: 640ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+::view-transition-old(setup-card) {
+  animation: 160ms ease-out both setup-part-out;
+}
+
+::view-transition-new(setup-card) {
+  animation: 220ms ease-out 420ms both link-part-in;
+}
+
+::view-transition-old(setup-logo) {
+  animation: 200ms ease-out both setup-part-out;
+}
+
+::view-transition-new(setup-logo) {
+  animation: 260ms ease-out 380ms both link-part-in;
+}
+
+::view-transition-new(setup-nav) {
+  animation: 360ms cubic-bezier(0.32, 0.72, 0, 1) 120ms both setup-nav-in;
+}
+
+::view-transition-new(setup-sheet) {
+  animation: 560ms cubic-bezier(0.32, 0.72, 0, 1) 60ms both setup-sheet-in;
+}
+
+@keyframes setup-part-out {
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@keyframes setup-nav-in {
+  from {
+    opacity: 0;
+    translate: -8px 0;
+  }
+}
+
+@keyframes setup-sheet-in {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(setup-card),
+  ::view-transition-group(setup-logo),
+  ::view-transition-old(setup-card),
+  ::view-transition-new(setup-card),
+  ::view-transition-old(setup-logo),
+  ::view-transition-new(setup-logo),
+  ::view-transition-new(setup-nav),
+  ::view-transition-new(setup-sheet) {
+    animation: none;
+  }
+}
+
+/* The setup list (components/setup-list.tsx): a step's body opens and
+   closes by its height, which interpolate-size lets CSS animate to auto. */
+.setup-body {
+  interpolate-size: allow-keywords;
+  transition:
+    height 320ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-body {
+    transition: none;
+  }
+}
+
 /* One Platform tab to another: the title and the tab bar hold still (the
    underline slides in the live new image) and only the tab's content
    crossfades. The old image is hidden so the two underlines never show. */

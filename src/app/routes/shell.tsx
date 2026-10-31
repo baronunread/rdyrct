@@ -51,6 +51,7 @@ import { PLAN_LIMITS, type OrgPlan, type User, type UserOrg } from "@/shared/typ
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
+import { SetupProgress } from "../components/setup-progress";
 import { LayersIcon } from "../ui/nav-icons";
 import { Tooltip, TooltipGroup } from "../ui/tooltip";
 import { Shortcut } from "../ui/kbd";
@@ -140,6 +141,8 @@ function OrgTrigger({
 }) {
   return (
     <div
+      // What a sign-in card becomes on the way in (setup-arrive in styles.css).
+      data-setup-card={phone ? undefined : ""}
       className={cn(
         "flex w-full min-w-9 items-center gap-2.5 rounded-lg px-1.5 text-sm select-none",
         // In the drawer the switcher is lifted, as the mock draws it, so it
@@ -291,6 +294,7 @@ function SidebarTop({ collapsed }: { collapsed: boolean }) {
         >
           <button
             type="button"
+            data-setup-logo
             onClick={toggleSidebar}
             aria-label="Expand sidebar"
             className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
@@ -306,6 +310,7 @@ function SidebarTop({ collapsed }: { collapsed: boolean }) {
         <Link
           to="/dashboard"
           aria-label="rdyrct, dashboard"
+          data-setup-logo
           className="grid size-9 shrink-0 place-items-center rounded-lg"
         >
           <LogoMark className="h-[18px]" />
@@ -437,7 +442,7 @@ function AppSidebar({
 
         {/* nav — always visible: org-scoped pages render their own empty state
           when no org exists yet, and billing is per-user */}
-        <nav className="flex flex-col gap-0.5 px-3 py-2">
+        <nav data-setup-nav={phone ? undefined : ""} className="flex flex-col gap-0.5 px-3 py-2">
           {appNavItems
             .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
             .map(({ to, icon, label }) => (
@@ -454,59 +459,62 @@ function AppSidebar({
 
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} phone={phone} />
 
-        {phone ? (
-          <div className="mt-auto px-3 py-3">
-            <AccountMenu
-              {...account}
-              trigger={
-                <div className="flex min-h-12 items-center gap-2.5 rounded-[10px] px-2 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
-                  <UserAvatar user={user} size={28} />
-                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                    <span className="truncate text-sm font-semibold">{user.name}</span>
-                    <span className="truncate text-xs text-muted">{user.email}</span>
-                  </span>
-                  <ChevronsUpDown size={14} className="shrink-0 text-muted" />
-                </div>
-              }
-            />
-          </div>
-        ) : (
-          /* You: avatar, name, and the ⌘K key, which opens search (its one
-            home now the top row only folds). The email heads the menu. */
-          <div className="mt-auto flex items-center gap-0.5 px-3 py-3">
-            <div className="min-w-0 flex-1">
+        <div className="mt-auto">
+          <SetupProgress collapsed={collapsed} />
+          {phone ? (
+            <div className="px-3 py-3">
               <AccountMenu
                 {...account}
                 trigger={
-                  <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-1 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+                  <div className="flex min-h-12 items-center gap-2.5 rounded-[10px] px-2 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
                     <UserAvatar user={user} size={28} />
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 truncate text-sm font-semibold",
-                        fade(collapsed),
-                      )}
-                    >
-                      {user.name}
+                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                      <span className="truncate text-sm font-semibold">{user.name}</span>
+                      <span className="truncate text-xs text-muted">{user.email}</span>
                     </span>
+                    <ChevronsUpDown size={14} className="shrink-0 text-muted" />
                   </div>
                 }
               />
             </div>
-            <button
-              type="button"
-              inert={collapsed}
-              onClick={openCommandMenu}
-              aria-label="Search and commands"
-              title="Search and commands"
-              className={cn(
-                "shrink-0 cursor-pointer rounded-md p-0.5 transition-[scale,opacity] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:[&_kbd]:text-text",
-                fade(collapsed),
-              )}
-            >
-              <Shortcut keys={[MOD_KEY, "K"]} className="gap-0.5" />
-            </button>
-          </div>
-        )}
+          ) : (
+            /* You: avatar, name, and the ⌘K key, which opens search (its one
+            home now the top row only folds). The email heads the menu. */
+            <div className="flex items-center gap-0.5 px-3 py-3">
+              <div className="min-w-0 flex-1">
+                <AccountMenu
+                  {...account}
+                  trigger={
+                    <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-1 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+                      <UserAvatar user={user} size={28} />
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-sm font-semibold",
+                          fade(collapsed),
+                        )}
+                      >
+                        {user.name}
+                      </span>
+                    </div>
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                inert={collapsed}
+                onClick={openCommandMenu}
+                aria-label="Search and commands"
+                title="Search and commands"
+                className={cn(
+                  "shrink-0 cursor-pointer rounded-md p-0.5 transition-[scale,opacity] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:[&_kbd]:text-text",
+                  fade(collapsed),
+                )}
+              >
+                <Shortcut keys={[MOD_KEY, "K"]} className="gap-0.5" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </TooltipGroup>
   );

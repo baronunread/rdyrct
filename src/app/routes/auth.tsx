@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useForm, Controller, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useSearchParams, HrefLink } from "../lib/router-search";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check } from "@/app/ui/icons";
@@ -39,6 +39,8 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 import type { CurrentUser } from "@/shared/types";
+import { SETUP_ARRIVE } from "../lib/setup-arrive";
+import { loadShell } from "../lib/shell-loader";
 
 /** Admin routes 404 in-app for non-admins, so a stale `next` pointed at
  * `/admin` (e.g. someone bookmarked it while logged out) shouldn't strand a
@@ -245,7 +247,7 @@ const AUTH_MODE_COPY = {
 function SignupSubtitle({ next }: { next: string }) {
   const body = storedAnonLinks().length
     ? "Sign up to keep your link and its clicks."
-    : next.startsWith("/billing")
+    : next.startsWith("/billing") || next.startsWith("/welcome")
       ? "Create your account, then check out. No card needed to create the account."
       : null;
   if (!body) return null;
@@ -602,6 +604,19 @@ function clearPending() {
   }
 }
 
+/** The app pages a sign-in card can hand over to by becoming the org
+ * switcher. Anything else (an invite, /welcome) has no switcher to become. */
+const APP_PAGE =
+  /^\/(dashboard|analytics|links|import|members|billing|domains|settings|admin)(\/|\?|$)/;
+const morphsInto = (href: string) => !!SETUP_ARRIVE && APP_PAGE.test(href);
+
+/** Leaves the sign-in card for where it was going: into the app as the card
+ * becoming the org switcher (lib/setup-arrive.ts), anywhere else plainly. */
+function arriveAt(navigate: ReturnType<typeof useNavigate>, href: string) {
+  if (morphsInto(href)) void navigate({ href, replace: true, viewTransition: SETUP_ARRIVE });
+  else void navigate({ href, replace: true });
+}
+
 interface SubmitDeps {
   goVerify: (email: string) => Promise<void>;
   failSubmit: (message: string) => void;
@@ -619,7 +634,7 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     posthog.capture("user_signed_in");
-    deps.navigate({ href: sanitizeNext(deps.next, isAdmin), replace: true });
+    arriveAt(deps.navigate, sanitizeNext(deps.next, isAdmin));
     return;
   }
   if (signInError.code === "EMAIL_NOT_VERIFIED") {
@@ -700,16 +715,31 @@ async function finishVerifiedSignIn(deps: {
   next: string;
   qc: ReturnType<typeof useQueryClient>;
   navigate: ReturnType<typeof useNavigate>;
+  /** Loads a page's data ahead of going there (the route's own loader). */
+  preload: (href: string) => Promise<void>;
   setVerifyPhase: (phase: "idle" | "success" | "leaving") => void;
 }) {
   deps.setVerifyPhase("success");
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  // The beat on the checkmark doubles as the wait for the page behind it:
+  // the user, then that page's data, so the card hands over to a page
+  // already drawn rather than to its skeleton.
+  const ready = deps.qc.refetchQueries({ queryKey: ["user"] }).then(() => {
+    const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+    const href = sanitizeNext(deps.next, isAdmin);
+    return deps
+      .preload(href)
+      .catch(() => {})
+      .then(() => href);
+  });
+  const [href] = await Promise.all([ready, new Promise((resolve) => setTimeout(resolve, 900))]);
   clearPending();
-  await deps.qc.refetchQueries({ queryKey: ["user"] });
-  const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
-  deps.setVerifyPhase("leaving");
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  deps.navigate({ href: sanitizeNext(deps.next, isAdmin), replace: true });
+  // Into the app the card itself travels, so it stays put; anywhere else it
+  // fades before the page changes.
+  if (!morphsInto(href)) {
+    deps.setVerifyPhase("leaving");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  arriveAt(deps.navigate, href);
 }
 
 /** The password-reset flow, which shares nothing with the rest of the page
@@ -775,6 +805,7 @@ function useRedirectWhenSignedIn(deps: {
  * flows, and the post-auth redirect. Everything AuthPage's views need. */
 function useAuthFlow(mode: "login" | "signup") {
   const navigate = useNavigate();
+  const router = useRouter();
   const [params] = useSearchParams();
   const qc = useQueryClient();
   const toast = useToast();
@@ -919,7 +950,21 @@ function useAuthFlow(mode: "login" | "signup") {
         toast,
       });
       if (!established) return false;
-      await finishVerifiedSignIn({ next, qc, navigate, setVerifyPhase });
+      await finishVerifiedSignIn({
+        next,
+        qc,
+        navigate,
+        // The shell's code (main.tsx loads it lazily), and the dashboard's
+        // data: where nearly everybody lands, and the page the card hands
+        // over to with the setup list on it.
+        preload: async (href) => {
+          await Promise.all([
+            loadShell(),
+            href === "/dashboard" ? router.preloadRoute({ to: "/dashboard" }) : null,
+          ]);
+        },
+        setVerifyPhase,
+      });
       return true;
     } finally {
       setBusy(false);

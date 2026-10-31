@@ -507,11 +507,21 @@ export function useRevokeConnectedApp() {
 export function useCheckout() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
-    mutationFn: ({ plan, interval }: { plan: "hobby" | "pro"; interval: "month" | "year" }) =>
-      api<{ url: string }>(`/billing/checkout`, {
-        method: "POST",
-        body: { plan, interval },
-      }),
+    mutationFn: ({
+      plan,
+      interval,
+      from = "billing",
+    }: {
+      plan: "hobby" | "pro";
+      interval: "month" | "year";
+      /** "welcome" returns both ways out of Polar to /welcome (sign-up and
+       * the setup list); "billing", the default, to the billing page. */
+      from?: "billing" | "welcome";
+    }) => {
+      // The billing page's request stays as it was; only /welcome says so.
+      const body = from === "welcome" ? { plan, interval, from } : { plan, interval };
+      return api<{ url: string }>(`/billing/checkout`, { method: "POST", body });
+    },
   });
 }
 
