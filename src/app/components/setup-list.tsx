@@ -36,7 +36,10 @@ export function SetupList({
   linkField: ReactNode;
 }) {
   return (
-    <ol className="flex flex-col overflow-hidden rounded-[14px] smooth-shadow-ring-xs">
+    <ol
+      data-setup-list
+      className="flex flex-col overflow-hidden rounded-[14px] smooth-shadow-ring-xs"
+    >
       {setup.steps.map(({ step, state }, i) => (
         <Step
           key={step}
