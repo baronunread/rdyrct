@@ -20,9 +20,20 @@
 import * as v from "valibot";
 import { ORG_PLANS, ORG_ROLES, type CurrentUser } from "@/shared/types";
 
-const KEY = "rdyrct:user:v1";
+const KEY = "rdyrct:user:v2";
+
+const limitsSchema = v.object({
+  orgs: v.number(),
+  links: v.number(),
+  members: v.number(),
+  domains: v.number(),
+  qrCustom: v.boolean(),
+  analyticsDays: v.number(),
+  trackedClicks: v.number(),
+});
 
 const planField = v.picklist(ORG_PLANS);
+const tierField = v.picklist([...ORG_PLANS, "enterprise"]);
 
 const userSchema = v.object({
   id: v.string(),
@@ -31,6 +42,8 @@ const userSchema = v.object({
   isAdmin: v.boolean(),
   emailVerified: v.boolean(),
   plan: planField,
+  tier: tierField,
+  limits: limitsSchema,
   polarSubscriptionCancelAtPeriodEnd: v.boolean(),
   polarSubscriptionCurrentPeriodEnd: v.nullable(v.number()),
   polarSubscriptionInterval: v.nullable(v.picklist(["month", "year"])),
@@ -44,6 +57,8 @@ const orgSchema = v.object({
   name: v.string(),
   role: v.picklist(ORG_ROLES),
   plan: planField,
+  tier: tierField,
+  limits: limitsSchema,
   defaultDomainId: v.nullable(v.string()),
   qrLogo: v.string(),
   qrStyle: v.string(),

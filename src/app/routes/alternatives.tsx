@@ -147,7 +147,7 @@ const ALTERNATIVES = {
       "QR codes counted next to links, with 1,500 of each a month on Professional.",
     ],
     weWin: [
-      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains per organization and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 or more.`,
+      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 or more.`,
       `${PLAN_LIMITS.pro.analyticsDays} days of click history on Pro.`,
       "No watermark on QR codes, and no IP address stored on any click.",
       "Teammates on every plan, from 3 on Free. Rebrandly's Free plan has none.",
@@ -180,7 +180,7 @@ const ALTERNATIVES = {
       ],
       [
         "Can I use more than one organization?",
-        `Pro includes ${PLAN_LIMITS.pro.orgs} organizations on one subscription. Only the owner pays.`,
+        `Each plan covers one organization, and only its owner pays. For several organizations, email us about Enterprise.`,
       ],
     ],
     blog: { href: "/blog/rebrandly-alternatives", label: "More on Rebrandly alternatives" },

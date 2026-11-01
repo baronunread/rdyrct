@@ -94,9 +94,8 @@ function planFacts(plan: PaidPlan, reason: Reason): string[] {
   const n = (count: number) => count.toLocaleString("en-US");
   const domains = `${l.domains} custom domain${l.domains === 1 ? "" : "s"}`;
   const qr = "QR style on every code";
-  const orgs = `${l.orgs} organization${l.orgs === 1 ? "" : "s"}`;
   const [lead, next] = reason === "qr" ? [qr, domains] : [domains, qr];
-  return [lead, next, `${n(l.links)} links`, orgs];
+  return [lead, next, `${n(l.links)} links`, `${l.members} members`];
 }
 
 /**

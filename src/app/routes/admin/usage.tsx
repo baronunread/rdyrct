@@ -196,6 +196,7 @@ function PlanMix({ s }: { s: AdminUsageData }) {
                   { key: "Free", clicks: s.planCounts.free },
                   { key: "Hobby", clicks: s.planCounts.hobby },
                   { key: "Pro", clicks: s.planCounts.pro },
+                  { key: "Enterprise", clicks: s.planCounts.enterprise },
                 ]}
               />
               {/* Comped belongs here rather than in a bar of its own: a comp is

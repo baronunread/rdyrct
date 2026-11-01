@@ -9,7 +9,6 @@ import { invitesQuery, membersQuery, useCurrentUser, useMembers, useInvites } fr
 import { settle, type PageContext } from "../lib/route-preload";
 import { api } from "../lib/api";
 import {
-  PLAN_LIMITS,
   type InviteDTO,
   type InvitesCreated,
   type MemberDTO,
@@ -491,7 +490,7 @@ function rowCount(rows: readonly object[] | undefined): number {
 }
 
 function seatSummary(org: UserOrg, management: MemberManagement): SeatSummary {
-  const limit = org ? PLAN_LIMITS[org.plan].members : 0;
+  const limit = org ? org.limits.members : 0;
   // An org at or over its cap cannot take another member: the server refuses
   // the invite with a 402, so offering the form is offering an error (#161).
   // Counted from the same figure the server uses, members plus open invites.
@@ -698,8 +697,8 @@ function SeatsFullNotice({
   return (
     <p className="-mt-3 mb-4 max-w-prose text-xs text-pretty text-muted">
       {over
-        ? `This organization has more people or open invites than the ${org.plan} plan allows (${memberLimit}). Nobody was removed. Remove a member or revoke an invite to make room, or upgrade to keep everyone. `
-        : `Every seat on the ${org.plan} plan is taken (${memberLimit}, counting open invites). Remove someone, or upgrade to invite more. `}
+        ? `This organization has more people or open invites than the ${org.tier} plan allows (${memberLimit}). Nobody was removed. Remove a member or revoke an invite to make room, or upgrade to keep everyone. `
+        : `Every seat on the ${org.tier} plan is taken (${memberLimit}, counting open invites). Remove someone, or upgrade to invite more. `}
       <HrefLink href="/billing" className="text-accent underline-offset-2 hover:underline">
         See plans
       </HrefLink>
@@ -709,5 +708,5 @@ function SeatsFullNotice({
 
 /** The tooltip on a disabled invite control. */
 function fullSeatsHint(org: UserOrg, memberLimit: number): string {
-  return `The ${org.plan} plan allows ${memberLimit} members, counting open invites`;
+  return `The ${org.tier} plan allows ${memberLimit} members, counting open invites`;
 }

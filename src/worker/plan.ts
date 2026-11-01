@@ -1,7 +1,9 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { INVITABLE_ROLES, PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
+import { INVITABLE_ROLES, type AccountTier, type OrgPlan, type PlanLimits } from "@/shared/types";
+import { effectiveLimits, tierOf } from "@/shared/limits";
+import { loadLimitOverrides } from "./limit-overrides";
 
 // Whether this deployment sells plans: Polar is configured. Unset, nobody is
 // capped. Held here, set once per request or job by configureBilling(), because
@@ -421,9 +423,9 @@ export async function setMemberRoleWithinLimit(
 async function ownerUser(
   db: DB,
   orgId: string,
-): Promise<{ plan: OrgPlan; email: string } | undefined> {
+): Promise<{ id: string; plan: OrgPlan; email: string } | undefined> {
   const rows = await db
-    .select({ plan: schema.user.plan, email: schema.user.email })
+    .select({ id: schema.user.id, plan: schema.user.plan, email: schema.user.email })
     .from(schema.orgMembers)
     .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
     .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
@@ -434,8 +436,10 @@ export async function orgPlan(
   db: DB,
   orgId: string,
 ): Promise<{ plan: OrgPlan; limits: PlanLimits }> {
-  const plan = planNow((await ownerUser(db, orgId))?.plan ?? "free");
-  return { plan, limits: PLAN_LIMITS[plan] };
+  const owner = await ownerUser(db, orgId);
+  const plan = planNow(owner?.plan ?? "free");
+  const overrides = owner ? (await loadLimitOverrides(db, [owner.id])).get(owner.id) : undefined;
+  return { plan, limits: effectiveLimits(plan, overrides) };
 }
 
 /** The email address to write to about an org: its owner's. Null if the org
@@ -465,15 +469,16 @@ export async function countActiveAddresses(db: DB, orgId: string): Promise<numbe
   return rows[0]?.n ?? 0;
 }
 
-/** A user's own subscription: gates multi-org creation and the billing tab. */
+/** A user's own subscription and custom limits: gates multi-org creation and the billing tab. */
 export async function userPlan(
   db: DB,
   userId: string,
-): Promise<{ plan: OrgPlan; limits: PlanLimits }> {
+): Promise<{ plan: OrgPlan; tier: AccountTier; limits: PlanLimits }> {
   const rows = await db
     .select({ plan: schema.user.plan })
     .from(schema.user)
     .where(eq(schema.user.id, userId));
   const plan = planNow(rows[0]?.plan ?? "free");
-  return { plan, limits: PLAN_LIMITS[plan] };
+  const overrides = rows[0] ? (await loadLimitOverrides(db, [userId])).get(userId) : undefined;
+  return { plan, tier: tierOf(plan, overrides), limits: effectiveLimits(plan, overrides) };
 }

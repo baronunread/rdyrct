@@ -13,7 +13,6 @@
 import { useEffect } from "react";
 import * as v from "valibot";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PLAN_LIMITS } from "@/shared/types";
 import { api, uploadQrLogo } from "./api";
 import { useCurrentUser } from "./hooks";
 import type { QrValues } from "./qr-look";
@@ -113,7 +112,7 @@ export function useSavePendingQrStyle(): void {
 
   useEffect(() => {
     const org = orgs?.find(
-      (o) => PLAN_LIMITS[o.plan].qrCustom && !o.locked && readPendingQrStyle(o.id) !== null,
+      (o) => o.limits.qrCustom && !o.locked && readPendingQrStyle(o.id) !== null,
     );
     const values = org && readPendingQrStyle(org.id);
     if (!org || !values) return;

@@ -74,7 +74,8 @@ export function useOrgLimits() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const currentUser = useCurrentUser();
-  const limits = PLAN_LIMITS[org?.plan ?? "free"];
+  // The server's answer for this org: its owner's plan with any custom limits.
+  const limits = org?.limits ?? PLAN_LIMITS.free;
   const canListDomains = canListOrgDomains(!!currentUser.data?.user.isAdmin, org?.role);
   const domains = useDomains(orgId, canListDomains);
   // `lockedAt` as well as `status`: a downgrade leaves a domain `active` and

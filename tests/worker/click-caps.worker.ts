@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { insertClicks, type ClickMessage } from "../../src/worker/clicks";
+import { saveLimitOverrides } from "../../src/worker/limit-overrides";
 import { clickUsageEmail, sweepClickUsageEmails } from "../../src/worker/click-caps";
 import { redirectsByOrg, sweepOldOverflow } from "../../src/worker/click-overflow";
 import { sweepAbusiveOrgs } from "../../src/worker/abuse";
@@ -151,6 +152,38 @@ describe("the monthly cap at flush time", () => {
     expect(await usage()).toBe(PLAN_LIMITS.free.trackedClicks);
   });
 
+  it("holds an org to its owner's custom count when it is above the plan's", async () => {
+    await seedOwnedLink("hobby");
+    await saveLimitOverrides(drizzle(env.DB, { schema }), "owner-1", { trackedClicks: 60_000 });
+    await setUsage(PLAN_LIMITS.hobby.trackedClicks);
+
+    await insertClicks(testEnv, clicks(20_000, "custom"));
+
+    // 10,000 of the 20,000 fit under 60,000: the plan's 50,000 alone would record none.
+    expect((await recorded()).raw).toBe(10_000);
+    expect(await usage()).toBe(60_000);
+  });
+
+  it("never lets a custom count lower the plan's", async () => {
+    await seedOwnedLink("hobby");
+    await saveLimitOverrides(drizzle(env.DB, { schema }), "owner-1", { trackedClicks: 100 });
+    await setUsage(PLAN_LIMITS.hobby.trackedClicks - 1);
+
+    await insertClicks(testEnv, clicks(3, "lower"));
+
+    expect((await recorded()).raw).toBe(1);
+  });
+
+  it("ignores a custom count on Free", async () => {
+    await seedOwnedLink("free");
+    await saveLimitOverrides(drizzle(env.DB, { schema }), "owner-1", { trackedClicks: 60_000 });
+    await setUsage(PLAN_LIMITS.free.trackedClicks);
+
+    await insertClicks(testEnv, clicks(3, "free"));
+
+    expect((await recorded()).raw).toBe(0);
+  });
+
   it.each([
     ["hobby", PLAN_LIMITS.hobby.trackedClicks],
     ["pro", PLAN_LIMITS.pro.trackedClicks],
@@ -279,6 +312,20 @@ describe("the 80% and 100% emails", () => {
       mail.restore();
     }
   }
+
+  it("waits for a custom count before sending the 100% email", async () => {
+    await seedOwnedLink("hobby");
+    await saveLimitOverrides(drizzle(env.DB, { schema }), "owner-1", { trackedClicks: 100_000 });
+
+    // The plan's cap, but nowhere near 80% of the account's.
+    await setUsage(PLAN_LIMITS.hobby.trackedClicks);
+    expect(await sweep()).toEqual([]);
+
+    await setUsage(80_000);
+    const near = await sweep();
+    expect(near).toHaveLength(1);
+    expect(near[0]!.subject).toContain("80%");
+  });
 
   it("sends the 80% email once, then the 100% email once", async () => {
     await seedOwnedLink("free");

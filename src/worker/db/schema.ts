@@ -81,6 +81,35 @@ export const user = sqliteTable("user", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+// Custom limits an admin set for one account (the Enterprise arrangement): one
+// row per limit that differs from the plan. Read and written only through
+// worker/limit-overrides.ts; effectiveLimits applies them.
+export const limitOverrides = sqliteTable(
+  "limit_overrides",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    limitKey: text("limit_key", {
+      enum: [
+        "orgs",
+        "links",
+        "members",
+        "domains",
+        "qr_custom",
+        "analytics_days",
+        "tracked_clicks",
+      ],
+    }).notNull(),
+    // qr_custom is 0 or 1.
+    value: integer("value").notNull(),
+    note: text("note"),
+    setBy: text("set_by"),
+    setAt: integer("set_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.limitKey] })],
+);
+
 export const session = sqliteTable(
   "session",
   {

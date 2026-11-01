@@ -26,6 +26,22 @@ async function adminAccount(page: Page, prefix: string) {
   return email;
 }
 
+/** Sets this account's own custom limit on organizations owned through
+ * /admin/users, or clears it with null. The extra orgs lock or unlock in the
+ * same request. */
+async function setOrgsLimit(page: Page, email: string, limit: number | null) {
+  await page.goto("/admin/users");
+  const row = page.getByRole("row", { name: new RegExp(email) });
+  await row.getByRole("button", { name: "Actions for" }).click();
+  await page.getByRole("menuitem", { name: /^(Set custom limits|Custom limits)/ }).click();
+  const dialog = page.getByRole("dialog", { name: /^Custom limits for / });
+  await dialog.getByLabel("Organizations owned").fill(limit === null ? "" : String(limit));
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(
+    page.getByText(limit === null ? "Custom limits cleared" : "Custom limits set"),
+  ).toBeVisible();
+}
+
 /** Grants or revokes this account's own comp through /admin/users, which is
  * what triggers the reconciliation pass. */
 async function setComp(page: Page, email: string, action: "grant" | "revoke") {
@@ -44,14 +60,25 @@ async function setComp(page: Page, email: string, action: "grant" | "revoke") {
   }
 }
 
-test("losing Pro locks the extra org, says why, and lets the owner pick which one stays", async ({
+test("losing the custom organization limit locks the extra org, says why, and lets the owner pick which one stays", async ({
   page,
 }) => {
   test.slow();
   const email = await adminAccount(page, "downgrade-orgs");
 
-  // Pro allows three owned orgs, so a second one can exist to be locked.
+  // Pro covers one org. The admin's custom limit is what lets a second exist,
+  // and the user's row says so once it is set.
   await setComp(page, email, "grant");
+  await setOrgsLimit(page, email, 2);
+  await page.goto("/admin/users");
+  await expect(page.getByRole("row", { name: new RegExp(email) })).toContainText("enterprise");
+
+  // The account is Enterprise now, not Pro: billing says so, lists the limits,
+  // and offers nothing to buy.
+  await page.goto("/billing");
+  await expect(page.getByText("Enterprise", { exact: true })).toBeVisible();
+  await expect(page.getByText("Change your limits")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Upgrade/ })).toBeHidden();
   await page.goto("/dashboard");
   await createQuickLink(page, "example.com/keeps-redirecting");
   // The confirmation dialog owns the screen until it is dismissed, and the
@@ -60,7 +87,11 @@ test("losing Pro locks the extra org, says why, and lets the owner pick which on
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeHidden();
   await createAdditionalOrg(page, "Second org");
 
-  await setComp(page, email, "revoke");
+  // Clearing the custom limits puts the cap back at the plan's one.
+  await setOrgsLimit(page, email, null);
+  await page.goto("/billing");
+  await expect(page.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(page.getByText("Enterprise", { exact: true })).toBeHidden();
   await page.goto("/dashboard");
 
   // The newest org is the one that gives way, so the app lands on a locked

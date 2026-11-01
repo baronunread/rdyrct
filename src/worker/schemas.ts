@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { INVITABLE_ROLES, type JsonValue } from "../shared/types";
+import { limitOverridesSchema } from "../shared/limits";
 import { HTTPException } from "hono/http-exception";
 
 /**
@@ -54,6 +55,21 @@ export const optionalText = v.optional(v.fallback(v.string(), ""), "");
 
 /** The same for a flag, where anything that is not a boolean is not an answer. */
 export const optionalFlag = v.optional(v.fallback(v.nullable(v.boolean()), null));
+
+/**
+ * An admin sets a user's custom limits, or clears them all with null. The
+ * same schema the column is read with, but strict: a key it does not know is
+ * a typo, and dropping it quietly would leave the admin thinking it took.
+ */
+export const limitsBodySchema = v.object({
+  note: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200, "note is too long"))),
+  overrides: v.nullable(
+    v.pipe(
+      v.strictObject(limitOverridesSchema.entries),
+      v.check((o) => !Array.isArray(o), "overrides must be an object"),
+    ),
+  ),
+});
 
 // A bulk-invite request pasting far more than this is almost certainly a
 // mistake or abuse, not a real team roster; the org's member-cap check

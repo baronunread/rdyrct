@@ -4,6 +4,7 @@ import { reset } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
 import { reconcileUser, sweepGraceWarnings } from "../../src/worker/reconcile";
+import { saveLimitOverrides } from "../../src/worker/limit-overrides";
 import type { StorageMessage } from "../../src/worker/storage";
 import { GRACE_PERIOD_MS } from "../../src/shared/types";
 import {
@@ -33,7 +34,15 @@ async function seed({
   orgs = 1,
   members = 0,
   domains = 0,
-}: { plan?: string; orgs?: number; members?: number; domains?: number } = {}) {
+  orgLimit = null,
+}: {
+  plan?: string;
+  orgs?: number;
+  members?: number;
+  domains?: number;
+  /** The admin's custom `orgs` limit. Null: the plan's own cap, which is one. */
+  orgLimit?: number | null;
+} = {}) {
   const statements = [
     env.DB.prepare(
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('owner-1', 'Owner', 'owner@example.com', 1, 0, ?, 0, 0)",
@@ -72,6 +81,12 @@ async function seed({
     );
   }
   await env.DB.batch(statements);
+  await setOrgs(orgLimit);
+}
+
+/** Sets (or clears) the owner's custom `orgs` limit. */
+async function setOrgs(limit: number | null) {
+  await saveLimitOverrides(testDb(), "owner-1", limit === null ? null : { orgs: limit });
 }
 
 async function setPlan(plan: string) {
@@ -220,6 +235,28 @@ describe("entitlement reconciliation", () => {
     expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, NOW, NOW]);
   });
 
+  it("counts the admin's org allowance when it is higher than the plan's", async () => {
+    await seed({ plan: "pro", orgs: 3, orgLimit: 2 });
+    const { env: e } = quietEnv();
+    await reconcileUser(e, testDb(), "owner-1", NOW);
+    expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, null, NOW]);
+
+    // Raising it unlocks, lowering it locks again, clearing it leaves the plan's one.
+    await setOrgs(3);
+    await reconcileUser(e, testDb(), "owner-1", NOW + 1);
+    expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, null, null]);
+    await setOrgs(null);
+    await reconcileUser(e, testDb(), "owner-1", NOW + 2);
+    expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, NOW + 2, NOW + 2]);
+  });
+
+  it("ignores an allowance lower than the plan's cap", async () => {
+    await seed({ plan: "pro", orgs: 1, orgLimit: 1 });
+    const { env: e } = quietEnv();
+    await reconcileUser(e, testDb(), "owner-1", NOW);
+    expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null]);
+  });
+
   it("changes nothing when run twice for the same plan", async () => {
     const { env: e } = await downgrade({ plan: "pro", orgs: 3, members: 4, domains: 3 }, "free");
     const first = await entitlement();
@@ -243,7 +280,10 @@ describe("entitlement reconciliation", () => {
   it("restores everything on upgrade, with no manual step", async () => {
     const { env: e } = await downgrade({ plan: "pro", orgs: 3, members: 4, domains: 3 }, "free");
 
+    // Pro alone covers one org now, so getting all three back takes the
+    // admin's allowance as well as the plan.
     await setPlan("pro");
+    await setOrgs(3);
     await reconcileUser(e, testDb(), "owner-1", NOW + 1000);
 
     expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, null, null]);

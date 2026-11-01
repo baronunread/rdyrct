@@ -57,6 +57,7 @@ import {
   topLinkRows,
   utmRows,
 } from "../rollups";
+import { ORG_LIMIT_MESSAGE } from "../../shared/support";
 
 export const orgRoutes = new Hono<AppEnv>();
 orgRoutes.use("*", jsonBodyLimit());
@@ -69,7 +70,7 @@ orgRoutes.post("/", requireUser, async (c) => {
   const name = requireOrgName(body.name ?? "");
   log.set({ orgName: name, userId: c.var.user!.id });
 
-  const { limits } = await userPlan(c.var.db, c.var.user!.id);
+  const { plan, tier, limits } = await userPlan(c.var.db, c.var.user!.id);
 
   const orgId = uid();
   const ts = Date.now();
@@ -84,7 +85,7 @@ orgRoutes.post("/", requireUser, async (c) => {
   });
   if (!created)
     throw new HTTPException(402, {
-      message: "Upgrade to Pro to create more organizations",
+      message: ORG_LIMIT_MESSAGE,
       cause: { code: "org_limit" },
     });
   return c.json(
@@ -92,7 +93,9 @@ orgRoutes.post("/", requireUser, async (c) => {
       id: orgId,
       name,
       role: "owner",
-      plan: "free",
+      plan,
+      tier,
+      limits,
       qrLogo: "",
       qrStyle: "",
       qrColor: "",

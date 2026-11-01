@@ -185,10 +185,14 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 500,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 5 custom domains, with any slug you choose
-- 3 organizations
+- 1 organization
 - Direct email support
 
 [Start Pro](/signup?next=%2Fbilling%3Fplan%3Dpro)
+
+## Enterprise
+
+Several organizations, custom limits and higher caps, set up by hand. Email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com?subject=Enterprise).
 
 ## Self-hosting
 

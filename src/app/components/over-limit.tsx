@@ -34,13 +34,7 @@ import { useClickUsage, useDomains } from "../lib/hooks";
 import { clickCapNotice } from "@/shared/click-usage";
 import { SUPPORT_EMAIL } from "@/shared/support";
 import { graceRunning } from "../lib/grace";
-import {
-  OVER_LIMIT_KEYS,
-  PLAN_LIMITS,
-  isOverLimit,
-  type OrgPlan,
-  type UserOrg,
-} from "@/shared/types";
+import { OVER_LIMIT_KEYS, isOverLimit, type AccountTier, type UserOrg } from "@/shared/types";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 
 function BillingLink({ label = "See plans", primary }: { label?: string; primary?: boolean }) {
@@ -74,7 +68,7 @@ export function OverLimitBanner() {
   if (clicks?.reached) facts.push({ label: "Clicks counted", value: clicks.figure, over: true });
   return (
     <Notice
-      title={`Over the ${PLAN_NAMES[org.plan]} plan`}
+      title={`Over the ${TIER_NAMES[org.tier]} plan`}
       facts={facts}
       action={<BillingLink primary />}
       note={overLimitAdvice(org)}
@@ -114,17 +108,18 @@ function DomainStoppedNotice({ org }: { org: UserOrg }) {
   );
 }
 
-const PLAN_NAMES = {
+const TIER_NAMES = {
   free: "Free",
   hobby: "Hobby",
   pro: "Pro",
+  enterprise: "Enterprise",
   unlimited: "Unlimited",
-} satisfies Record<OrgPlan, string>;
+} satisfies Record<AccountTier, string>;
 
 /** "Links 184 of 30", one per resource over its cap, then the domains'
  * deadline when there is one. */
 function overFacts(org: UserOrg): Fact[] {
-  const limits = PLAN_LIMITS[org.plan];
+  const limits = org.limits;
   // Domains are left out of the counts: "Custom domains 1 of 0" reads as
   // a glitch. What matters about them is the day they stop.
   const facts: Fact[] = OVER_LIMIT_KEYS.flatMap((key) => {
@@ -170,7 +165,7 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
     },
     onError: (err) => toast(errorMessage(err), "error"),
   });
-  const onlyOne = PLAN_LIMITS[org.plan].orgs === 1;
+  const covered = org.limits.orgs;
   return (
     <Notice
       tone="bad"
@@ -178,14 +173,14 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
       facts={[
         {
           label: "Why",
-          value: `your plan covers ${onlyOne ? "one organization" : `${PLAN_LIMITS[org.plan].orgs} organizations`}`,
+          value: `your plan covers ${covered === 1 ? "one organization" : `${covered} organizations`}`,
         },
         { label: "Links", value: "keep working" },
       ]}
       note={
         org.role === "owner"
-          ? "Nothing was deleted. Upgrade to use every organization, or make this one active in place of the current one."
-          : "Nothing was deleted. Its owner can upgrade, or make this the organization they keep active."
+          ? "Nothing was deleted. Ask us about Enterprise to use every organization, or make this one active in place of the current one."
+          : "Nothing was deleted. Its owner can ask us about Enterprise, or make this the organization they keep active."
       }
       action={
         <div className="flex items-center gap-2">
@@ -201,7 +196,7 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
               <BusyContent busy={keepActive.isPending}>Use this one instead</BusyContent>
             </Button>
           )}
-          <BillingLink label="Upgrade to Pro" primary />
+          <BillingLink label="See your plan" primary />
         </div>
       }
     />

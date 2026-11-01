@@ -72,6 +72,16 @@ export interface PlanLimits {
   trackedClicks: number;
 }
 
+/**
+ * What to call an account to its holder: its plan, except that a paid account
+ * with custom limits is Enterprise (`tierOf`). Derived, never stored: the
+ * `plan` column, Polar and `PLAN_LIMITS` know nothing of it.
+ */
+export type AccountTier = OrgPlan | "enterprise";
+
+/** The keys of PlanLimits an admin has set for one account (`limitOverridesSchema`). */
+export type LimitOverrides = Partial<PlanLimits>;
+
 export const PLAN_LIMITS = {
   free: {
     orgs: 1,
@@ -92,7 +102,7 @@ export const PLAN_LIMITS = {
     trackedClicks: 50_000,
   },
   pro: {
-    orgs: 3,
+    orgs: 1,
     links: 3000,
     members: 25,
     domains: 5,
@@ -201,8 +211,13 @@ export interface User {
   name: string;
   isAdmin: boolean;
   emailVerified: boolean;
-  // The user's own subscription: drives the billing tab + multi-org limit.
+  // The user's own subscription: drives the billing tab.
   plan: OrgPlan;
+  /** What this account is called: its plan, or Enterprise with custom limits. */
+  tier: AccountTier;
+  /** What this account may use: its plan with any custom limits. `limits.orgs`
+   * is how many orgs it may own. */
+  limits: PlanLimits;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
   /** The billing cycle of the subscription, or null with none (or before its next event). */
@@ -259,6 +274,11 @@ export interface UserOrg extends QrOverrides {
    * upgrade or pick it as the one to keep (#160). Its links keep redirecting.
    */
   locked: boolean;
+  /** What the org's owner is called: the plan, or Enterprise with custom limits. */
+  tier: AccountTier;
+  /** What this org may use: its owner's plan with any custom limits applied.
+   * The app reads limits here, never off `plan`. */
+  limits: PlanLimits;
   /** What this org holds more of than its plan allows (#158). `{}` means fine. */
   over: OverLimits;
   /** Epoch ms the 30-day grace ends, or null when nothing is over (#159). */
@@ -643,7 +663,7 @@ export interface AdminUsage {
    * subscriptions; `compedUsers` is the gap between access and paying. Revenue
    * is read in the Polar dashboard, which knows what it charged net of
    * discounts, tax and refunds. */
-  planCounts: { free: number; hobby: number; pro: number };
+  planCounts: { free: number; hobby: number; pro: number; enterprise: number };
   payingSubscribers: number;
   compedUsers: number;
   paidConversionRate: number | null;
@@ -829,6 +849,13 @@ export interface AdminUserRow {
   compReason: string | null;
   compGrantedAt: number | null;
   compGrantedBy: string | null;
+  /** The custom limits an admin set for this account, or null for the plan's own. */
+  limitOverrides: LimitOverrides | null;
+  /** What the account is called: its plan, or Enterprise when paid with custom limits. */
+  tier: AccountTier;
+  /** The note an admin left with them, and the email of the admin who set them. */
+  limitNote: string | null;
+  limitSetBy: string | null;
   createdAt: number;
   orgCount: number;
   /** Links this person made, across every org. */

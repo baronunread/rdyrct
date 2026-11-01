@@ -6,7 +6,7 @@ import { clickUsageQuery, linksQuery, useCurrentUser, useClickUsage, useLinks } 
 import { canWriteOrg } from "../lib/org-limits";
 import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS, type OrgStats, type StatsLinkRef, type UserOrg } from "@/shared/types";
+import { type OrgStats, type StatsLinkRef, type UserOrg } from "@/shared/types";
 import { WhenHeatmap } from "../components/when-heatmap";
 import {
   AreaChart,
@@ -358,7 +358,7 @@ function NoClicksYet({
         action={
           <RangeControl
             presets={RANGE_PRESETS}
-            maxDays={PLAN_LIMITS[org.plan].analyticsDays}
+            maxDays={org.limits.analyticsDays}
             days={range?.days ?? s.rangeDays}
             bucket={range ? (range.bucket ?? "day") : s.bucket}
             onChange={onRangeChange}
@@ -409,7 +409,7 @@ function AnalyticsForOrg({ org }: { org: UserOrg }) {
   return (
     <AnalyticsReport
       stats={stats.data}
-      maxDays={PLAN_LIMITS[org.plan].analyticsDays}
+      maxDays={org.limits.analyticsDays}
       range={range}
       onRangeChange={setRange}
       updating={stats.isPlaceholderData}

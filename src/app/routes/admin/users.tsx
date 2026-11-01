@@ -8,7 +8,7 @@ import { useCurrentUser } from "../../lib/hooks";
 import { adminUsersQuery, useAdminUsersData } from "../../lib/admin-data";
 import { UserAvatar } from "../../components/user-avatar";
 import { api } from "../../lib/api";
-import type { AdminUserRow, Sort } from "@/shared/types";
+import type { AdminUserRow, LimitOverrides, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, Table, Td, Th } from "../../ui/misc";
 import {
@@ -34,6 +34,7 @@ import { shortDate } from "../../lib/dates";
 import { lastSeenLabel } from "../../lib/last-seen";
 import { Pager } from "../../ui/pagination";
 import { GrantCompDialog, type CompPlan } from "./comp-dialog";
+import { LimitsDialog } from "./limits-dialog";
 import { BanDialog } from "./ban-dialog";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
@@ -163,6 +164,24 @@ function CompMenuItems({
   );
 }
 
+/** Custom limits that are saved but do not count, because the account is on Free. */
+function LimitsKeptBadge({ user }: { user: AdminUserRow }) {
+  if (!user.limitOverrides || user.tier === "enterprise") return null;
+  return <Badge color="muted">limits kept</Badge>;
+}
+
+/** Enterprise is handled by hand: an admin sets custom limits for one account. */
+function LimitsMenuItem({ user, onClick }: { user: AdminUserRow; onClick: () => void }) {
+  return (
+    <MenuItem onClick={onClick}>
+      <span className="w-3.5">
+        {user.limitOverrides && <Check size={13} className="text-accent" />}
+      </span>
+      {user.limitOverrides ? "Custom limits" : "Set custom limits…"}
+    </MenuItem>
+  );
+}
+
 /** "Make/remove platform admin", hidden for your own row. */
 function AdminToggleMenuItem({
   user,
@@ -228,12 +247,14 @@ function UserRow({
   isSelf,
   onGrantComp,
   onRevokeComp,
+  onSetLimits,
   onConfirm,
 }: {
   user: AdminUserRow;
   isSelf: boolean;
   onGrantComp: () => void;
   onRevokeComp: () => void;
+  onSetLimits: () => void;
   onConfirm: (kind: UserAction) => void;
 }) {
   return (
@@ -264,10 +285,11 @@ function UserRow({
           failing payment, an end date) is a state, so it is a pill. */}
       <Td className={PHONE.meta} data-label="Plan">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className={user.plan === "free" ? "text-muted capitalize" : "capitalize"}>
-            {user.plan}
+          <span className={user.tier === "free" ? "text-muted capitalize" : "capitalize"}>
+            {user.tier}
           </span>
           <PlanNote user={user} />
+          <LimitsKeptBadge user={user} />
         </span>
       </Td>
       <Td className={`tnum text-right ${PHONE.meta}`} data-label="Orgs">
@@ -292,6 +314,7 @@ function UserRow({
         <Menu align="end" label={`Actions for ${user.name}`} trigger={<RowMenuTrigger />}>
           <AdminToggleMenuItem user={user} isSelf={isSelf} onConfirm={onConfirm} />
           <CompMenuItems user={user} onGrant={onGrantComp} onRevoke={onRevokeComp} />
+          <LimitsMenuItem user={user} onClick={onSetLimits} />
           <DangerMenuItems user={user} isSelf={isSelf} onConfirm={onConfirm} />
         </Menu>
       </Td>
@@ -306,6 +329,7 @@ function UsersTable({
   setSort,
   onGrantComp,
   onRevokeComp,
+  onSetLimits,
   onConfirm,
   emptyText,
 }: {
@@ -315,6 +339,7 @@ function UsersTable({
   setSort: (s: Sort) => void;
   onGrantComp: (user: AdminUserRow) => void;
   onRevokeComp: (user: AdminUserRow) => void;
+  onSetLimits: (user: AdminUserRow) => void;
   onConfirm: (kind: UserAction, user: AdminUserRow) => void;
   emptyText: string;
 }) {
@@ -359,6 +384,7 @@ function UsersTable({
             isSelf={u.id === meId}
             onGrantComp={() => onGrantComp(u)}
             onRevokeComp={() => onRevokeComp(u)}
+            onSetLimits={() => onSetLimits(u)}
             onConfirm={(kind) => onConfirm(kind, u)}
           />
         ))}
@@ -432,6 +458,7 @@ function useAdminUserActions() {
   const toast = useToast();
   const [confirm, setConfirm] = useState<{ kind: UserAction; user: AdminUserRow } | null>(null);
   const [compFor, setCompFor] = useState<AdminUserRow | null>(null);
+  const [limitsFor, setLimitsFor] = useState<AdminUserRow | null>(null);
 
   // All privileged changes go through one PATCH; the confirm popup closes on
   // success and each call site adds its own toast.
@@ -480,6 +507,26 @@ function useAdminUserActions() {
     onError: withErrorToast(toast),
   });
 
+  // The limits decide which orgs are locked, so the cached current user goes
+  // too, like a comp: an admin can set their own.
+  const setLimits = useMutation({
+    mutationFn: ({
+      userId,
+      overrides,
+      note,
+    }: {
+      userId: string;
+      overrides: LimitOverrides | null;
+      note: string;
+    }) => api(`/admin/users/${userId}/limits`, { method: "PUT", body: { overrides, note } }),
+    onSuccess: (_data, { overrides }) => {
+      compChanged();
+      setLimitsFor(null);
+      toast(overrides === null ? "Custom limits cleared" : "Custom limits set");
+    },
+    onError: withErrorToast(toast),
+  });
+
   const remove = useMutation({
     mutationFn: (userId: string) => api(`/admin/users/${userId}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -519,11 +566,61 @@ function useAdminUserActions() {
     setConfirm,
     compFor,
     setCompFor,
+    limitsFor,
+    setLimitsFor,
+    setLimits,
     runAction,
     grantComp,
     revokeComp,
     actionPending: patchUser.isPending || remove.isPending,
   };
+}
+
+/** The dialogs behind the row menus: whichever action is open. */
+function UserDialogs({ actions }: { actions: ReturnType<typeof useAdminUserActions> }) {
+  const {
+    confirm,
+    setConfirm,
+    compFor,
+    setCompFor,
+    limitsFor,
+    setLimitsFor,
+    setLimits,
+    runAction,
+    grantComp,
+    actionPending,
+  } = actions;
+  return (
+    <>
+      <BanDialog
+        user={confirm?.kind === "ban" ? confirm.user : null}
+        onClose={() => setConfirm(null)}
+      />
+      <UserActionConfirmDialog
+        confirm={confirm}
+        onClose={() => setConfirm(null)}
+        onConfirm={runAction}
+        pending={actionPending}
+      />
+
+      {compFor && (
+        <GrantCompDialog
+          user={compFor}
+          onClose={() => setCompFor(null)}
+          onGrant={(plan, reason) => grantComp.mutate({ userId: compFor.id, plan, reason })}
+          pending={grantComp.isPending}
+        />
+      )}
+      {limitsFor && (
+        <LimitsDialog
+          user={limitsFor}
+          onClose={() => setLimitsFor(null)}
+          onSave={(overrides, note) => setLimits.mutate({ userId: limitsFor.id, overrides, note })}
+          pending={setLimits.isPending}
+        />
+      )}
+    </>
+  );
 }
 
 /** The users page's first frame (see lib/route-preload.ts). */
@@ -532,16 +629,8 @@ export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminUser
 export function AdminUsersPage() {
   const users = useAdminUsersData();
   const currentUser = useCurrentUser();
-  const {
-    confirm,
-    setConfirm,
-    compFor,
-    setCompFor,
-    runAction,
-    grantComp,
-    revokeComp,
-    actionPending,
-  } = useAdminUserActions();
+  const actions = useAdminUserActions();
+  const { setConfirm, setCompFor, setLimitsFor, revokeComp } = actions;
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<UserFilter>("all");
   const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
@@ -614,31 +703,14 @@ export function AdminUsersPage() {
           setSort={setSort}
           onGrantComp={(u) => setCompFor(u)}
           onRevokeComp={(u) => revokeComp.mutate(u.id)}
+          onSetLimits={(u) => setLimitsFor(u)}
           onConfirm={(kind, u) => setConfirm({ kind, user: u })}
           emptyText={emptyMessage(filter, q.trim())}
         />
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
-      <BanDialog
-        user={confirm?.kind === "ban" ? confirm.user : null}
-        onClose={() => setConfirm(null)}
-      />
-      <UserActionConfirmDialog
-        confirm={confirm}
-        onClose={() => setConfirm(null)}
-        onConfirm={runAction}
-        pending={actionPending}
-      />
-
-      {compFor && (
-        <GrantCompDialog
-          user={compFor}
-          onClose={() => setCompFor(null)}
-          onGrant={(plan, reason) => grantComp.mutate({ userId: compFor.id, plan, reason })}
-          pending={grantComp.isPending}
-        />
-      )}
+      <UserDialogs actions={actions} />
     </div>
   );
 }

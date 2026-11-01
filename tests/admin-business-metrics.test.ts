@@ -23,6 +23,11 @@ describe("computeBusinessMetrics", () => {
         { plan: "hobby", n: 15 },
         { plan: "pro", n: 25 },
       ],
+      // Two of the Pro accounts have custom limits, and one Free one (which counts as Free).
+      limitHolderRows: [
+        { plan: "pro", n: 2 },
+        { plan: "free", n: 1 },
+      ],
       signups7dRows: [{ n: 20 }],
       signups7dPrevRows: [{ n: 10 }],
       wauRows: [{ n: 80 }],
@@ -31,7 +36,7 @@ describe("computeBusinessMetrics", () => {
     // 25 hold a paid plan but 3 are comped, so only 22 actually pay (#82).
     expect(metrics.payingUsers).toBe(22);
     expect(metrics.paidConversionRate).toBe(22);
-    expect(metrics.planCounts).toEqual({ free: 60, hobby: 15, pro: 25 });
+    expect(metrics.planCounts).toEqual({ free: 60, hobby: 15, pro: 23, enterprise: 2 });
     // 25 people hold a paid plan and 2 of them pay for it: access and paying
     // are different counts now (#82).
     expect(metrics.payingSubscribers).toBe(2);
@@ -48,6 +53,7 @@ describe("computeBusinessMetrics", () => {
       compedUserRows: [],
       subscriptionRows: [],
       planCountRows: [],
+      limitHolderRows: [],
       signups7dRows: [],
       signups7dPrevRows: [],
       wauRows: [],

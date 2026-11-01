@@ -2,6 +2,8 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
+import { EnterpriseNote } from "../components/enterprise-note";
+import { SUPPORT_EMAIL } from "@/shared/support";
 import { Check, ChevronDown } from "@/app/ui/icons";
 import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion } from "motion/react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -49,7 +51,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own. Yearly billing saves 10%.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Each plan covers one organization, and only its owner needs a paid plan. Need several organizations or higher limits? Email ${SUPPORT_EMAIL} about Enterprise. Yearly billing saves 10%.`,
   },
   {
     q: "What happens when my links get more clicks than my plan counts?",
@@ -373,10 +375,9 @@ function MobilePlans({
       sub: yearly ? "billed yearly" : "",
       highlight: true,
       features: [
-        `${PLAN_LIMITS.pro.orgs} organizations (only the owner pays)`,
         `${formatNumber(PLAN_LIMITS.pro.links)} links`,
         `${PLAN_LIMITS.pro.members} team members`,
-        `${PLAN_LIMITS.pro.domains} custom domains each`,
+        `${PLAN_LIMITS.pro.domains} custom domains`,
         `${PLAN_LIMITS.pro.analyticsDays}-day click analytics`,
         `${formatNumber(PLAN_LIMITS.pro.trackedClicks)} clicks counted a month`,
         "Direct email support",
@@ -607,6 +608,7 @@ function PricingTable({
           </tr>
         </tbody>
       </Table>
+      <EnterpriseNote className="mt-4 text-center" />
     </div>
   );
 }
@@ -1080,7 +1082,7 @@ function PricingTeaser() {
       name: "Pro",
       price: planPrice("pro", interval),
       sub: yearly ? "billed yearly" : "",
-      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
+      pitch: `Everything in Hobby, plus ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
       to: paidTo("pro", interval),
       cta: "Start Pro",
       variant: "primary" as const,
@@ -1110,7 +1112,8 @@ function PricingTeaser() {
         ))}
       </div>
 
-      <p className="mt-6 text-center text-sm">
+      <EnterpriseNote className="mt-6 text-center" />
+      <p className="mt-2 text-center text-sm">
         <MarketingLink to="/pricing" className="text-accent hover:underline">
           See the full comparison →
         </MarketingLink>

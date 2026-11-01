@@ -260,8 +260,15 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - **Billing is per-user, not per-org.** `user.plan` (`free`|`hobby`|`pro`) +
   Polar customer/subscription ids live on the user; each Polar product maps to
   a plan via `POLAR_*_PRODUCT_ID`. An org's effective limits are **its
-  owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Only
-  Pro raises the owned-org cap above 1. Caps: `PLAN_LIMITS` in
+  owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Every
+  plan owns one org. More, or any higher limit, is Enterprise, by hand: a
+  platform admin sets custom limits for one account (admin users menu, "Set
+  custom limits"), stored as JSON in `user.limit_overrides` and read and
+  written only through `src/worker/limit-overrides.ts`. The effective limits
+  are `effectiveLimits(plan, overrides)` in `src/shared/limits.ts`: per key the
+  higher of the plan's and the override, so an override only raises. The app
+  reads them off each org (`UserOrg.limits`) and the user
+  (`User.ownedOrgLimit`), never from `PLAN_LIMITS[plan]`. Caps: `PLAN_LIMITS` in
   `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
   analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
@@ -401,7 +408,7 @@ House rules on top of Orwell:
 
 - **No em dashes.** Use a period, comma, colon, or parentheses instead.
 - Say **"paid"** when a feature comes with any paid plan (Hobby or Pro);
-  name **"Pro"** only for the things only Pro has (extra orgs, more domains).
+  name **"Pro"** only for the things only Pro has (more domains, more members).
 
 ## Config
 

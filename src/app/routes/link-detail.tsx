@@ -52,7 +52,7 @@ import {
   type RangePreset,
 } from "../lib/insights-data";
 import posthog from "../lib/posthog";
-import { PLAN_LIMITS, type LinkDTO, type LinkInput, type LinkStats } from "@/shared/types";
+import { type LinkDTO, type LinkInput, type LinkStats } from "@/shared/types";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 import { Tooltip } from "@/app/ui/tooltip";
 
@@ -66,7 +66,7 @@ const rowSearch = (slug: string) => ({ q: slug, limit: 100 });
 export function preload(qc: QueryClient, orgId: string, page: PageContext) {
   const slug = page.params.slug ?? null;
   const domain = new URLSearchParams(page.searchStr).get("domain");
-  const days = defaultRange(PLAN_LIMITS[page.org.plan].analyticsDays).days;
+  const days = defaultRange(page.org.limits.analyticsDays).days;
   const stats = qc
     .ensureQueryData(linkInsightStatsQuery(orgId, slug, domain, days))
     .then((s) =>

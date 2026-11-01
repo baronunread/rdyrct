@@ -14,7 +14,7 @@ import {
 import { settle, type PageContext } from "../lib/route-preload";
 import { useCurrentOrg } from "../lib/current-org";
 import {
-  PLAN_LIMITS,
+  type PlanLimits,
   type DomainDTO,
   type OrgPlan,
   type OrgRole,
@@ -117,7 +117,7 @@ export function DomainsPage() {
   // A plan without domains says so to everyone, whoever may manage them:
   // the lock is about the plan, and the plan is the owner's to change.
   const canManage = canManageDomains(!!currentUser.data?.user.isAdmin, org.role);
-  if (!canManage && PLAN_LIMITS[org.plan].domains === 0)
+  if (!canManage && org.limits.domains === 0)
     return (
       <div className="mx-auto w-full max-w-[760px]">
         <PageHeader title="Domains" />
@@ -132,7 +132,7 @@ export function DomainsPage() {
       </div>
     );
 
-  return <DomainsSection orgId={orgId} plan={org.plan} />;
+  return <DomainsSection orgId={orgId} plan={org.plan} limits={org.limits} />;
 }
 
 type HostnameForm = { hostname: string };
@@ -373,14 +373,13 @@ function useDomainActions({
   return { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete };
 }
 
-function useDomainsModel(orgId: string, plan: OrgPlan) {
+function useDomainsModel(orgId: string, limits: PlanLimits) {
   const domains = useDomains(orgId);
   const mutations = useDomainMutations(orgId);
   const { org } = useCurrentOrg();
   const config = useConfig();
   const appHost = config.data?.appHost ?? window.location.host;
   const toast = useToast();
-  const limits = PLAN_LIMITS[plan];
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
   const [redirectEdit, setRedirectEdit] = useState<RedirectEdit | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -489,14 +488,22 @@ function DomainsLocked({ orgId, isOwner }: { orgId: string; isOwner: boolean }) 
   );
 }
 
-function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
-  const model = useDomainsModel(orgId, plan);
+function DomainsSection({
+  orgId,
+  plan,
+  limits,
+}: {
+  orgId: string;
+  plan: OrgPlan;
+  limits: PlanLimits;
+}) {
+  const model = useDomainsModel(orgId, limits);
 
   return (
     <div className="mx-auto w-full max-w-[760px]">
       <PageHeader
         title="Domains"
-        sub={domainsSubtitle(plan, model.domains.data?.length)}
+        sub={domainsSubtitle(plan, limits.domains, model.domains.data?.length)}
         action={<AddDomainAction model={model} />}
       />
       <div className="flex max-w-[760px] flex-col gap-8">
@@ -638,9 +645,12 @@ function DomainsBody({ model }: { model: DomainsModel }) {
  * has some (#159) says why there is no Add button instead: the notice above
  * the page and each row's status say the rest, so no card repeats it.
  */
-function domainsSubtitle(plan: OrgPlan, count: number | undefined): string | undefined {
+function domainsSubtitle(
+  plan: OrgPlan,
+  cap: number,
+  count: number | undefined,
+): string | undefined {
   if (count === undefined) return undefined;
-  const cap = PLAN_LIMITS[plan].domains;
   if (cap === 0) return count > 0 ? "Custom domains need a paid plan." : undefined;
   // A self-hosted instance has no cap to count against.
   if (plan === "unlimited") return count === 1 ? "1 domain" : `${count} domains`;

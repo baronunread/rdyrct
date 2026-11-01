@@ -12,6 +12,7 @@ import {
   jsonBody,
   rawAddressRow,
   rawLinkRow,
+  seedFillerLinks,
   signInCookie,
   TEST_PASSWORD,
 } from "./support";
@@ -119,41 +120,6 @@ async function seedPaidUser(id: string, email: string, plan: "hobby" | "pro"): P
     ).bind(`acct-${id}`, id, id, await hashPassword(TEST_PASSWORD)),
   ]);
   return signInCookie(email, TEST_PASSWORD);
-}
-
-// Seeds `count` active links (each with its own primary address), so a
-// caller can fill an org up to just under its links cap before racing the
-// last slot.
-async function seedFillerLinks(
-  db: ReturnType<typeof drizzle>,
-  orgId: string,
-  count: number,
-  idPrefix: string,
-) {
-  const rows = Array.from({ length: count }, (_, i) => ({
-    link: rawLinkRow({
-      id: `${idPrefix}-link-${i}`,
-      orgId,
-      slug: `${idPrefix}-${i}`,
-      destination: "https://example.com",
-      createdAt: 0,
-    }),
-    address: rawAddressRow({
-      id: `${idPrefix}-addr-${i}`,
-      linkId: `${idPrefix}-link-${i}`,
-      orgId,
-      slug: `${idPrefix}-${i}`,
-      kind: "primary",
-      createdAt: 0,
-    }),
-  }));
-  const writes = [
-    ...rows.map((r) => db.insert(schema.links).values(r.link)),
-    ...rows.map((r) => db.insert(schema.linkAddresses).values(r.address)),
-  ];
-  // SAFETY: rows is never empty here, so writes has at least the one entry
-  // drizzle batch() insists on in its first slot.
-  await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 }
 
 beforeEach(applyTestMigrations);

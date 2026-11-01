@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { setPlan } from "./db";
+import { setOrgsOverride, setPlan } from "./db";
 import {
   addActiveCustomDomain,
   createAdditionalOrg,
@@ -28,9 +28,11 @@ test.beforeAll(async ({ browser }) => {
   const page = await context.newPage();
   const email = `playwright-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  // Pro: the only plan that allows owning more than one org (AGENTS.md),
-  // which every test here needs since they each want a fresh, empty org.
+  // No plan covers more than one org: that is an allowance an admin sets by
+  // hand (Enterprise). Every test here needs it, since each wants a fresh,
+  // empty org. Pro is for the custom domain the alias tests add.
   await setPlan(page, email, "pro");
+  await setOrgsOverride(page, email, 3);
   await context.storageState({ path: authFile });
   await context.close();
 });
@@ -41,7 +43,7 @@ test.beforeAll(async ({ browser }) => {
  * this file runs serially, in one worker. */
 let defaultOrgSpent = false;
 
-/** A fresh, empty org under the shared signed-in user. Pro allows three, and
+/** A fresh, empty org under the shared signed-in user. The allowance is three, and
  * three is what this file uses: the one that came with the account, plus one
  * per remaining test. */
 async function freshOrg(page: Page, name: string): Promise<void> {

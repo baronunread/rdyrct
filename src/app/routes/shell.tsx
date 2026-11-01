@@ -48,7 +48,8 @@ import { AppNotFound } from "../components/app-not-found";
 import { InShell } from "../lib/in-shell";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
-import { PLAN_LIMITS, type OrgPlan, type User, type UserOrg } from "@/shared/types";
+import { type AccountTier, type User, type UserOrg } from "@/shared/types";
+import { ORG_LIMIT_MESSAGE } from "@/shared/support";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
@@ -65,10 +66,8 @@ import {
 } from "../lib/sidebar";
 import { useGoShortcuts } from "../lib/go-shortcuts";
 
-const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
-
 /** Friendly message for a failed org-create request: the org-limit error
- * gets an upgrade nudge, everything else shows the server's own message. */
+ * points at Enterprise, everything else shows the server's own message. */
 function orgCreateErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError && cause.code === "org_limit") return ORG_LIMIT_MESSAGE;
   return errorMessage(cause);
@@ -198,7 +197,7 @@ function OrgSwitcherMenu({
         </span>
         New organization
         {/* Only Pro holds more than one, so say so before the click. */}
-        {!canCreateOrg && <span className="ml-auto text-xs text-muted">Pro</span>}
+        {!canCreateOrg && <span className="ml-auto text-xs text-muted">Enterprise</span>}
       </MenuItem>
     </Menu>
   );
@@ -590,19 +589,19 @@ function MobileDrawer({
   );
 }
 
-const PLAN_NAME = {
+const TIER_NAME = {
   free: "Free",
   hobby: "Hobby",
   pro: "Pro",
+  enterprise: "Enterprise",
   unlimited: "this instance",
-} satisfies Record<OrgPlan, string>;
+} satisfies Record<AccountTier, string>;
 
-/** "You own 1 of 3 organizations on Pro." Nothing to count on a self-hosted
+/** "You own 1 of 1 organization on Pro." Nothing to count on a self-hosted
  * copy, where the cap is a number nobody reaches. */
-function ownedLine(owned: number, plan: OrgPlan): string | null {
-  if (plan === "unlimited") return null;
-  const limit = PLAN_LIMITS[plan].orgs;
-  return `You own ${owned} of ${limit} ${limit === 1 ? "organization" : "organizations"} on ${PLAN_NAME[plan]}.`;
+function ownedLine(owned: number, limit: number, tier: AccountTier): string | null {
+  if (tier === "unlimited") return null;
+  return `You own ${owned} of ${limit} ${limit === 1 ? "organization" : "organizations"} on ${TIER_NAME[tier]}.`;
 }
 
 function NewOrgDialog({
@@ -613,7 +612,8 @@ function NewOrgDialog({
   onCreate,
   pending,
   owned,
-  plan,
+  limit,
+  tier,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -622,11 +622,12 @@ function NewOrgDialog({
   onCreate: () => void;
   pending: boolean;
   owned: number;
-  plan: OrgPlan;
+  limit: number;
+  tier: AccountTier;
 }) {
   const [error, setError] = useState<string | undefined>();
   const input = useRef<HTMLInputElement>(null);
-  const line = ownedLine(owned, plan);
+  const line = ownedLine(owned, limit, tier);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     // Submit stays enabled; an empty name marks the field and says why.
@@ -754,9 +755,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
   // No org is fine: org-scoped pages render NoOrgState, billing is per-user.
   const { user } = shell;
 
-  // Multi-org is a Pro perk: the owned-org cap comes from the caller's plan.
+  // The owned-org cap is the account's effective limit: its plan's or a custom one.
   const ownedCount = orgs.filter((o) => o.role === "owner").length;
-  const canCreateOrg = ownedCount < PLAN_LIMITS[user.plan].orgs;
+  const canCreateOrg = ownedCount < user.limits.orgs;
 
   const switchOrg = (id: string) => {
     setOrg(id);
@@ -884,7 +885,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
           onCreate={createOrg}
           pending={creatingOrg}
           owned={ownedCount}
-          plan={user.plan}
+          limit={user.limits.orgs}
+          tier={user.tier}
         />
       </div>
     </NewLinkHost>

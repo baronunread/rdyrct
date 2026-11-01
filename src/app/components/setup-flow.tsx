@@ -9,7 +9,7 @@ import {
   type InvitableRole,
   type InvitesCreated,
   type LinkDTO,
-  type OrgPlan,
+  type AccountTier,
   type UserOrg,
 } from "@/shared/types";
 import { defaultOrgName, workDomain } from "@/shared/org-name";
@@ -474,7 +474,7 @@ function DomainStep({
     const timer = window.setTimeout(next, 1400);
     return () => window.clearTimeout(timer);
   }, [paidOnly]);
-  if (paidOnly) return <PaymentDone plan={org.plan} />;
+  if (paidOnly) return <PaymentDone tier={org.tier} />;
   if (org.plan !== "free")
     return <DomainForm org={org} host={host} kept={kept} onAdded={onAdded} onNext={onNext} />;
   return (
@@ -494,10 +494,10 @@ function DomainStep({
 }
 
 /** The moment between the payment landing and the next step. */
-function PaymentDone({ plan }: { plan: OrgPlan }) {
+function PaymentDone({ tier }: { tier: AccountTier }) {
   return (
     <div className="flex flex-col">
-      <StepHead title={`${PLAN_LABEL[plan]} is on`}>Thanks. Next, your team.</StepHead>
+      <StepHead title={`${TIER_LABEL[tier]} is on`}>Thanks. Next, your team.</StepHead>
     </div>
   );
 }
@@ -625,6 +625,8 @@ function DomainUpsell({
   );
 }
 
+const PRO_FACTS = `${PLAN_LIMITS.pro.domains} domains, ${PLAN_LIMITS.pro.members} members`;
+
 /** The other paid plan, one click away: Hobby leads, since a domain step
  * needs one domain; Pro is for more. */
 function PlanSwitch({ plan, onPlan }: { plan: PlanIntent; onPlan: (plan: PlanIntent) => void }) {
@@ -632,7 +634,7 @@ function PlanSwitch({ plan, onPlan }: { plan: PlanIntent; onPlan: (plan: PlanInt
   const other = { ...plan, target: OTHER[plan.target] };
   return (
     <p className="mt-2.5 text-xs text-pretty text-muted">
-      {pro ? "Pro: 5 domains, 3 organizations, 25 members. " : "Need more than one domain? "}
+      {pro ? `Pro: ${PRO_FACTS}. ` : "Need more than one domain? "}
       <button
         type="button"
         onClick={() => onPlan(other)}
@@ -640,7 +642,7 @@ function PlanSwitch({ plan, onPlan }: { plan: PlanIntent; onPlan: (plan: PlanInt
       >
         {pro ? "Back to Hobby" : "Pro"}, {priceLine(other)}
       </button>
-      {pro ? "" : ": 5 domains, 3 organizations."}
+      {pro ? "" : `: ${PRO_FACTS}.`}
     </p>
   );
 }
@@ -712,7 +714,7 @@ function DomainForm({
     return (
       <div className="flex flex-col">
         <StepHead title={`Adding ${kept}`}>
-          You are on {PLAN_LABEL[org.plan]}. This takes a few seconds.
+          You are on {TIER_LABEL[org.tier]}. This takes a few seconds.
         </StepHead>
       </div>
     );
@@ -756,12 +758,13 @@ function DomainForm({
   );
 }
 
-const PLAN_LABEL = {
+const TIER_LABEL = {
   free: "Free",
   hobby: "Hobby",
   pro: "Pro",
+  enterprise: "Enterprise",
   unlimited: "Unlimited",
-} satisfies Record<OrgPlan, string>;
+} satisfies Record<AccountTier, string>;
 
 /** The domain is theirs: the record to set, and on. */
 function DomainAdded({
@@ -776,7 +779,7 @@ function DomainAdded({
   return (
     <div className="setup-screen flex flex-col">
       <StepHead title={`${domain.hostname} is yours`}>
-        You are on {PLAN_LABEL[org.plan]}. Add the record below where you manage its DNS, and links
+        You are on {TIER_LABEL[org.tier]}. Add the record below where you manage its DNS, and links
         on it work.
       </StepHead>
       <div className="mt-6">
@@ -850,7 +853,7 @@ function TeamStep({
   return (
     <form onSubmit={send} noValidate className="flex flex-col">
       <StepHead title="Invite your team">
-        {seatsLine(org.plan)} Type their addresses, or share a link.
+        {seatsLine(org)} Type their addresses, or share a link.
       </StepHead>
       <div className="mt-6">
         <EmailChips
@@ -966,7 +969,7 @@ function InviteLinkButton({
   );
 }
 
-const seatsLine = (plan: OrgPlan) =>
-  plan === "unlimited"
+const seatsLine = (org: UserOrg) =>
+  org.tier === "unlimited"
     ? "Invite as many as you like."
-    : `${plan === "free" ? "Free" : PLAN_NAME[plan]} includes ${PLAN_LIMITS[plan].members} members.`;
+    : `${TIER_LABEL[org.tier]} includes ${org.limits.members} members.`;

@@ -38,6 +38,7 @@ import {
   PLAN_PRICES,
   PLAN_PRICES_YEARLY,
   YEARLY_DISCOUNT_LABEL,
+  type AccountTier,
   type BillingDetails,
   type ClickUsage,
   type Invoice,
@@ -59,6 +60,9 @@ import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
 import { PageHeader } from "../ui/misc";
 import { Segmented } from "../ui/segmented";
 import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
+import { EnterpriseNote } from "../components/enterprise-note";
+import { RDYRCT_SITE } from "@/shared/site";
+import { SUPPORT_EMAIL } from "@/shared/support";
 import { BusyContent } from "../ui/spinner";
 import { Skeleton } from "../ui/skeleton";
 import { BillingSkeleton } from "../components/skeletons";
@@ -78,6 +82,8 @@ type BillingInterval = "month" | "year";
 
 type PlanActionSnapshot = {
   plan: OrgPlan;
+  tier: AccountTier;
+  limits: PlanLimits;
   hasBillingAccount: boolean;
   comped: boolean;
   checkoutPlan: "hobby" | "pro" | null;
@@ -96,12 +102,14 @@ type PlanActionCommands = {
 
 type UsageSnapshot = {
   plan: OrgPlan;
-  org: { id: string; name: string; plan: OrgPlan } | null;
+  org: { id: string; name: string; plan: OrgPlan; limits: PlanLimits } | null;
   linkQuotaCount: number | undefined;
   clickUsage: ClickUsage | undefined;
   memberCount: number;
   domainCount: number;
   ownedOrgs: number;
+  /** How many orgs this account may own: its plan's cap or a custom one. */
+  ownedOrgLimit: number;
   loading: boolean;
 };
 
@@ -363,15 +371,20 @@ function ChangePlanDialog({
   );
 }
 
+/** What to call the account's plan: Enterprise when it has custom limits. */
+function planName(snapshot: PlanActionSnapshot): string {
+  return snapshot.tier === "enterprise" ? "Enterprise" : PLAN_LABEL[snapshot.plan];
+}
+
 /** The cancel-scheduled and still-confirming status notes; either, both, or
  * neither can show depending on account state. */
-function CancelScheduledNotice({ plan, periodEnd }: { plan: OrgPlan; periodEnd: number }) {
+function CancelScheduledNotice({ name, periodEnd }: { name: string; periodEnd: number }) {
   return (
     // Ink, not a caution colour: the sentence carries the warning, and
     // --butter is under AA as text on cream.
     <p className="text-sm text-text">
-      Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features
-      remain available until then.
+      Your {name} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features remain
+      available until then.
     </p>
   );
 }
@@ -419,7 +432,7 @@ function PlanStatusNotes({
         {showsCancelNotice(cancelAtPeriodEnd, periodEnd, comped) && (
           <m.div key="cancel" {...grow} transition={{ duration: 0.2 }} className="overflow-hidden">
             <div className={pad}>
-              <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
+              <CancelScheduledNotice name={planName(snapshot)} periodEnd={periodEnd} />
             </div>
           </m.div>
         )}
@@ -445,14 +458,14 @@ function PlanStatusNotes({
  * on how they got the plan: comped, or a subscription that arrived without a
  * customer id. Thanking the second group for a gift nobody gave them would be
  * false (#81). */
-function NoBillingAccountNote({ plan, comped }: { plan: OrgPlan; comped: boolean }) {
+function NoBillingAccountNote({ name, comped }: { name: string; comped: boolean }) {
   return (
     <p className="px-4 py-3 text-sm text-pretty text-muted">
       {comped
         ? // Not "nothing to pay": the comp is what grants the plan, and it
           // says nothing about whether a subscription is still charging
           // somewhere. Only support can see both and answer that.
-          `You have ${PLAN_LABEL[plan]} for free, with our thanks. There is no billing account linked, so the subscription portal cannot open. Email support if you want anything changed.`
+          `You have ${name} for free, with our thanks. There is no billing account linked, so the subscription portal cannot open. Email support if you want anything changed.`
         : "No billing account is linked to this plan, so the subscription portal cannot open. Email support and we will link it."}
     </p>
   );
@@ -464,7 +477,8 @@ const MONTH_DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric"
  * once a cancel is scheduled, since the note below says its own date. A comp
  * pays and renews nothing. */
 function renewalLine(snapshot: PlanActionSnapshot): string | null {
-  if (!snapshot.hasBillingAccount || snapshot.comped) return null;
+  // Enterprise is priced by hand: the plan's list price would be a wrong figure.
+  if (!snapshot.hasBillingAccount || snapshot.comped || snapshot.tier === "enterprise") return null;
   if (snapshot.plan !== "hobby" && snapshot.plan !== "pro") return null;
   const price =
     snapshot.interval === "year"
@@ -483,7 +497,8 @@ function canCancel(snapshot: PlanActionSnapshot): boolean {
 /** Whether "Change plan" can do anything: only a subscription the portal can
  * change. Not for a comp, which would still outrank whatever it changed to. */
 function canChangePlan(snapshot: PlanActionSnapshot): boolean {
-  return snapshot.hasBillingAccount && !snapshot.comped;
+  // Enterprise is arranged by hand: nothing to switch to in the portal.
+  return snapshot.hasBillingAccount && !snapshot.comped && snapshot.tier !== "enterprise";
 }
 
 /** A paid plan: what it is, what it costs and when it renews, the way to
@@ -505,7 +520,7 @@ function PaidPlan({
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-base font-semibold">{PLAN_LABEL[snapshot.plan]}</span>
+            <span className="text-base font-semibold">{planName(snapshot)}</span>
             {renewal && <span className="text-sm text-muted tnum">{renewal}</span>}
           </p>
           <p className="mt-0.5 text-xs text-muted">Covers every organization you own.</p>
@@ -529,9 +544,10 @@ function PaidPlan({
       </div>
       <PlanStatusNotes snapshot={snapshot} inset />
       {!snapshot.hasBillingAccount && (
-        <NoBillingAccountNote plan={snapshot.plan} comped={snapshot.comped} />
+        <NoBillingAccountNote name={planName(snapshot)} comped={snapshot.comped} />
       )}
       <UsageInPlan usage={usage} />
+      {snapshot.tier === "enterprise" && <EnterpriseTerms limits={snapshot.limits} />}
     </SettingsGroup>
   );
 }
@@ -757,31 +773,54 @@ function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: Plan
   );
 }
 
+/** What an Enterprise account has beyond the meters: the limits that are not
+ * counted against, and who to ask to change any of them. */
+function EnterpriseTerms({ limits }: { limits: PlanLimits }) {
+  return (
+    <>
+      <SettingsRow label="Analytics history">
+        <span className="text-sm tnum">{limits.analyticsDays} days</span>
+      </SettingsRow>
+      <SettingsRow label="QR logo and colors">
+        <span className="text-sm">{limits.qrCustom ? "Yes" : "No"}</span>
+      </SettingsRow>
+      <SettingsRow label="Change your limits">
+        {RDYRCT_SITE ? (
+          <a
+            href={`mailto:${SUPPORT_EMAIL}?subject=Enterprise limits`}
+            className="text-sm text-accent hover:underline"
+          >
+            Contact us
+          </a>
+        ) : (
+          <span className="text-sm text-muted">Ask this instance's administrator</span>
+        )}
+      </SettingsRow>
+    </>
+  );
+}
+
 /** The plan's meters, as rows of the plan card. */
 function UsageInPlan({ usage }: { usage: UsageSnapshot }) {
   if (!usage.org) return null;
   return (
     <>
-      <UsageRows snapshot={usage} limits={PLAN_LIMITS[usage.org.plan]} />
-      <UsageRow
-        label="Organizations"
-        count={usage.ownedOrgs}
-        limit={PLAN_LIMITS[usage.plan].orgs}
-      />
+      <UsageRows snapshot={usage} limits={usage.org.limits} />
+      <UsageRow label="Organizations" count={usage.ownedOrgs} limit={usage.ownedOrgLimit} />
     </>
   );
 }
 
 function UsageGroup({ snapshot }: { snapshot: UsageSnapshot }) {
   if (!snapshot.org) return null;
-  const limits = PLAN_LIMITS[snapshot.org.plan];
+  const limits = snapshot.org.limits;
   return (
     <SettingsGroup title="Usage" hint={snapshot.org.name}>
       <UsageRows snapshot={snapshot} limits={limits} />
       <UsageRow
         label="Organizations you own"
         count={snapshot.ownedOrgs}
-        limit={PLAN_LIMITS[snapshot.plan].orgs}
+        limit={snapshot.ownedOrgLimit}
       />
     </SettingsGroup>
   );
@@ -1141,9 +1180,13 @@ function billingOverlayState(
  * Every one of them is optional on the user, and defaulting each at the point
  * of use turned the page into a list of `?? false`.
  */
+const FREE_TIER: AccountTier = "free";
+
 const NO_ACCOUNT_YET = {
   hasBillingAccount: false,
   comped: false,
+  tier: FREE_TIER,
+  limits: PLAN_LIMITS.free,
   polarSubscriptionCancelAtPeriodEnd: false,
   polarSubscriptionCurrentPeriodEnd: null,
   polarSubscriptionInterval: null,
@@ -1163,6 +1206,8 @@ function useBillingAccount() {
     periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
     interval: subscription.polarSubscriptionInterval,
     ownedOrgs: ownedOrgCount(currentUser.data?.orgs),
+    tier: subscription.tier,
+    limits: subscription.limits,
   };
 }
 
@@ -1174,7 +1219,11 @@ function quotaCount(quota: { count: number } | undefined): number | undefined {
   return quota?.count;
 }
 
-function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapshot {
+function useBillingUsageSnapshot(
+  plan: OrgPlan,
+  ownedOrgs: number,
+  ownedOrgLimit: number,
+): UsageSnapshot {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
@@ -1189,6 +1238,7 @@ function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapsho
     memberCount: itemCount(memberData),
     domainCount: itemCount(domainData),
     ownedOrgs,
+    ownedOrgLimit,
     loading: [linksPending, membersPending, domainsPending, clicksPending].includes(true),
   };
 }
@@ -1209,7 +1259,7 @@ function useBillingPageModel() {
   const account = useBillingAccount();
   const details = useBillingDetails(account.hasBillingAccount);
   const flow = useCheckoutFlow();
-  const usage = useBillingUsageSnapshot(flow.plan, account.ownedOrgs);
+  const usage = useBillingUsageSnapshot(flow.plan, account.ownedOrgs, account.limits.orgs);
   const navigate = useNavigate();
   const dismissCelebration = () => flow.setShowCelebration(false);
 
@@ -1222,6 +1272,8 @@ function useBillingPageModel() {
     planActions: {
       snapshot: {
         plan: flow.plan,
+        tier: account.tier,
+        limits: account.limits,
         hasBillingAccount: account.hasBillingAccount,
         comped: account.comped,
         checkoutPlan: flow.checkoutPlan,
@@ -1301,6 +1353,7 @@ export function BillingPage() {
               shake={commands.shake}
               onUpgrade={commands.onUpgrade}
             />
+            <EnterpriseNote />
           </>
         ) : (
           <>

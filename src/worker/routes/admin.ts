@@ -1,6 +1,20 @@
 import { Hono } from "hono";
-import type { JsonValue } from "../../shared/types";
-import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
+import type { JsonValue, LimitOverrides } from "../../shared/types";
+import { effectiveLimits, tierOf } from "../../shared/limits";
+import {
+  type LimitSetting,
+  countLimitHoldersByPlan,
+  loadAllLimitSettings,
+  loadLimitOverrides,
+  saveLimitOverrides,
+} from "../limit-overrides";
+import {
+  optionalFlag,
+  optionalText,
+  limitsBodySchema,
+  parseBody,
+  parseOptionalBody,
+} from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
@@ -9,7 +23,6 @@ import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../guards";
 import { isDisposableEmail } from "../util";
 import {
-  PLAN_LIMITS,
   type AdminUsage,
   type AdminOrgRow,
   type AdminOrgDetail,
@@ -144,9 +157,20 @@ function cumulativeSeries(
   return result;
 }
 
-function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
-  const planCounts = { free: 0, hobby: 0, pro: 0 };
+function computePlanCounts(
+  planCountRows: { plan: string; n: number }[],
+  limitHolderRows: { plan: string; n: number }[],
+) {
+  const planCounts = { free: 0, hobby: 0, pro: 0, enterprise: 0 };
   for (const r of planCountRows) planCounts[orgPlanOf(r.plan)] = r.n;
+  // An account on a paid plan with custom limits is Enterprise, not Pro: move
+  // it out of its plan's count into its own.
+  for (const r of limitHolderRows) {
+    const plan = orgPlanOf(r.plan);
+    if (plan !== "hobby" && plan !== "pro") continue;
+    planCounts[plan] -= r.n;
+    planCounts.enterprise += r.n;
+  }
   return planCounts;
 }
 
@@ -187,6 +211,8 @@ export function computeBusinessMetrics(rows: {
   compedUserRows: { n: number }[];
   subscriptionRows: SubscriptionCountRow[];
   planCountRows: { plan: string; n: number }[];
+  /** Users with custom limits, by plan: the paid ones are Enterprise. */
+  limitHolderRows: { plan: string; n: number }[];
   signups7dRows: { n: number }[];
   signups7dPrevRows: { n: number }[];
   wauRows: { n: number }[];
@@ -196,7 +222,7 @@ export function computeBusinessMetrics(rows: {
   // plan, which is a different question from how many people pay.
   const paidPlanUsers = firstCount(rows.paidPlanUsers);
   const compedUsers = firstCount(rows.compedUserRows);
-  const planCounts = computePlanCounts(rows.planCountRows);
+  const planCounts = computePlanCounts(rows.planCountRows, rows.limitHolderRows);
   const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
   // "Paid users" is who actually pays, so comps come out: a comp grants
   // access but is not a paying customer (#82).
@@ -263,13 +289,14 @@ type CapPressureRow = {
   id: string;
   name: string;
   plan: OrgPlan;
+  ownerId: string | null;
   linkCount: number;
   memberCount: number;
   domainCount: number;
 };
 
 // Orgs at >=80% of any plan limit.
-function findCapPressure(orgs: CapPressureRow[]) {
+function findCapPressure(orgs: CapPressureRow[], overrides: Map<string, LimitOverrides>) {
   const capPressure: Array<{
     orgId: string;
     orgName: string;
@@ -279,7 +306,10 @@ function findCapPressure(orgs: CapPressureRow[]) {
     domainsPct: number;
   }> = [];
   for (const orgRow of orgs) {
-    const limits = PLAN_LIMITS[orgRow.plan];
+    const limits = effectiveLimits(
+      orgRow.plan,
+      orgRow.ownerId ? overrides.get(orgRow.ownerId) : undefined,
+    );
     const linksPct = Math.round((orgRow.linkCount / Math.max(1, limits.links)) * 100);
     const membersPct = Math.round((orgRow.memberCount / Math.max(1, limits.members)) * 100);
     const domainsPct = Math.round((orgRow.domainCount / Math.max(1, limits.domains)) * 100);
@@ -351,6 +381,7 @@ adminRoutes.get("/usage", async (c) => {
     paidPlanUsers,
     range,
     planCountRows,
+    limitHolderRows,
     signups7dRows,
     signups7dPrevRows,
     wauRows,
@@ -380,6 +411,7 @@ adminRoutes.get("/usage", async (c) => {
       .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
       .from(schema.user)
       .groupBy(schema.user.plan),
+    countLimitHoldersByPlan(db),
     // signups 7d (current)
     db
       .select({ n: sql<number>`count(*)` })
@@ -464,6 +496,7 @@ adminRoutes.get("/usage", async (c) => {
     compedUserRows,
     subscriptionRows,
     planCountRows,
+    limitHolderRows,
     signups7dRows,
     signups7dPrevRows,
     wauRows,
@@ -488,6 +521,7 @@ adminRoutes.get("/usage", async (c) => {
       id: schema.orgs.id,
       name: schema.orgs.name,
       plan: ownerPlan,
+      ownerId,
       linkCount: sql<number>`(
         select count(*) from links where links.org_id = orgs.id
       )`,
@@ -499,7 +533,13 @@ adminRoutes.get("/usage", async (c) => {
       )`,
     })
     .from(schema.orgs);
-  const capPressure = findCapPressure(allOrgs);
+  const capPressure = findCapPressure(
+    allOrgs,
+    await loadLimitOverrides(
+      db,
+      allOrgs.flatMap((o) => (o.ownerId ? [o.ownerId] : [])),
+    ),
+  );
 
   // Table size and growth projection
   const tableSize = clicks[0]?.n ?? 0;
@@ -666,7 +706,7 @@ adminRoutes.get("/users", async (c) => {
   const log = c.get("log");
   log.set({ route: "users" });
   const db = c.var.db;
-  const [rows, links] = await Promise.all([
+  const [rows, links, settings] = await Promise.all([
     db
       .select({
         id: schema.user.id,
@@ -707,12 +747,15 @@ adminRoutes.get("/users", async (c) => {
       })
       .from(schema.user),
     linksByCreator(db),
+    loadAllLimitSettings(db),
   ]);
+  const emails = new Map(rows.map((r) => [r.id, r.email]));
   return c.json(
     rows.map((r) => ({
       ...r,
       image: adminAvatarUrl(r.id, r.image),
       links: links.get(r.id) ?? 0,
+      ...limitFields(r.plan, settings.get(r.id), emails),
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
       compGrantedAt: r.compGrantedAt?.getTime() ?? null,
@@ -720,6 +763,22 @@ adminRoutes.get("/users", async (c) => {
     })) satisfies AdminUserRow[],
   );
 });
+
+/** What the users list says about an account's custom limits: the limits, the
+ * note, and the email of the admin who set them. Nothing when there are none. */
+function limitFields(
+  plan: OrgPlan,
+  setting: LimitSetting | undefined,
+  emails: Map<string, string>,
+) {
+  const has = setting && Object.keys(setting.overrides).length > 0;
+  return {
+    tier: tierOf(plan, setting?.overrides),
+    limitOverrides: has ? setting.overrides : null,
+    limitNote: has ? setting.note : null,
+    limitSetBy: has && setting.setBy ? (emails.get(setting.setBy) ?? null) : null,
+  };
+}
 
 function validateIsAdminPatch(
   value: boolean | null | undefined,
@@ -928,6 +987,42 @@ adminRoutes.delete("/users/:userId/comp", async (c) => {
     action: "user.comp_revoke",
     targetType: "user",
     targetId: c.req.param("userId")!,
+  });
+  return c.json({ ok: true });
+});
+
+/**
+ * Set or clear a user's custom limits: the Enterprise arrangement, done by
+ * hand. An override only raises (the effective value is the higher of it and
+ * the plan's), so removing one locks what no longer fits and adding one
+ * unlocks it, which is what the reconcile after the write does.
+ */
+adminRoutes.put("/users/:userId/limits", async (c) => {
+  const log = c.get("log");
+  const targetId = c.req.param("userId");
+  log.set({ userId: targetId });
+  const body = parseBody(
+    limitsBodySchema,
+    await c.req.json<JsonValue>().catch((): JsonValue => null),
+  );
+  // No keys is the same as none: store null, not "{}".
+  const overrides = body.overrides && Object.keys(body.overrides).length ? body.overrides : null;
+  const note = body.note || null;
+  if (!(await saveLimitOverrides(c.var.db, targetId, overrides, { note, setBy: c.var.user!.id })))
+    throw new HTTPException(404, { message: "User not found" });
+  await reconcileUser(c.env, c.var.db, targetId);
+  log.audit({
+    action: "admin.limits",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "user", id: targetId },
+    outcome: "success",
+  });
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "user.limits",
+    targetType: "user",
+    targetId,
+    detail: { overrides, note },
   });
   return c.json({ ok: true });
 });

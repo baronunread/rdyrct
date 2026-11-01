@@ -5,7 +5,6 @@ import { useCurrentUser, useLinkHost } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
 import {
-  PLAN_LIMITS,
   QR_CORNER_STYLES,
   QR_DEFAULT_BG,
   QR_DEFAULT_COLOR,
@@ -372,7 +371,7 @@ export function QrDefaultsCard() {
   const currentUser = useCurrentUser();
   const isPlatformAdmin = currentUser.data?.user.isAdmin;
   const isAdmin = canAdminOrg(isPlatformAdmin, org?.role, org?.locked);
-  const hasQrCustom = org ? PLAN_LIMITS[org.plan].qrCustom : false;
+  const hasQrCustom = org ? org.limits.qrCustom : false;
   // A style tried before checkout lands here once the plan allows it.
   useSavePendingQrStyle();
 

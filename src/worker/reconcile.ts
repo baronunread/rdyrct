@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { and, asc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { billingEnabled, countActiveAddresses, orgOwnerEmail } from "./plan";
+import { billingEnabled, countActiveAddresses, orgOwnerEmail, orgPlan, userPlan } from "./plan";
 import { enqueueStorage, syncDomainMsg } from "./storage";
 import { sendEmail } from "./email";
 import { NOTICE_FOOTER, renderEmail } from "./email-layout";
@@ -10,7 +10,6 @@ import { captureAlert } from "./sentry";
 import {
   GRACE_PERIOD_MS,
   GRACE_WARNING_MS,
-  PLAN_LIMITS,
   isOverLimit,
   orgPlanOf,
   type OrgPlan,
@@ -368,11 +367,13 @@ export async function reconcileUser(
       .from(schema.user)
       .where(eq(schema.user.id, userId));
     if (rows[0]) await recordPlanChange(env, db, userId, rows[0]);
-    const plan = orgPlanOf(rows[0]?.plan);
-    const limits = PLAN_LIMITS[plan];
+    // `limits.orgs` is the effective owned-org cap: the plan's or the admin's.
+    const { plan: current, limits } = await userPlan(db, userId);
+    const plan = orgPlanOf(current);
+    const orgCap = limits.orgs;
 
     const orgs = await ownedOrgs(db, userId);
-    const newlyLocked = await reconcileOrgLocks(db, orgs, limits.orgs, now);
+    const newlyLocked = await reconcileOrgLocks(db, orgs, orgCap, now);
     // Each org is reconciled against the same plan and touches only its own
     // rows, so they run together.
     await Promise.all(
@@ -386,7 +387,7 @@ export async function reconcileUser(
     // mention it (#160). Without this an owner whose only breach is the org
     // cap heard nothing at all: two of their orgs went read-only and the
     // first they knew of it was opening the app.
-    await notifyOrgsLocked(env, db, userId, plan, newlyLocked);
+    await notifyOrgsLocked(env, db, userId, orgCap, newlyLocked);
   } catch (error) {
     captureAlert([{ event: "reconcile_failed", userId }]);
     logFailure("reconcile_failed", error, { userId });
@@ -446,7 +447,7 @@ async function notifyOrgsLocked(
   env: Env,
   db: DB,
   userId: string,
-  plan: OrgPlan,
+  limit: number,
   locked: { id: string; name: string }[],
 ): Promise<void> {
   if (!locked.length) return;
@@ -456,7 +457,6 @@ async function notifyOrgsLocked(
     .where(eq(schema.user.id, userId));
   const to = rows[0]?.email;
   if (!to) return;
-  const limit = PLAN_LIMITS[plan].orgs;
   const names = locked.map((org) => org.name).join(", ");
   const heading =
     locked.length === 1 ? `${names} is read-only` : `Some organizations are read-only`;
@@ -467,7 +467,7 @@ async function notifyOrgsLocked(
       paragraphs: [
         `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}, and you own more, so ${names} ${locked.length === 1 ? "is" : "are"} now read-only.`,
         "Nothing was deleted, and every link in them keeps redirecting.",
-        "Upgrade to use all of them, or open one and choose to keep it active instead.",
+        "Ask us about Enterprise to use all of them, or open one and choose to keep it active instead.",
       ],
       cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
       footerLine: NOTICE_FOOTER,
@@ -510,7 +510,7 @@ async function sendDowngradeEmail(
 ): Promise<boolean> {
   const to = await orgOwnerEmail(db, org.id);
   if (!to) return false;
-  const limits = PLAN_LIMITS[plan];
+  const { limits } = await orgPlan(db, org.id);
   // Named for what is actually over. "loses its custom domains soon" went to
   // every org with a grace period, including ones whose only breach was links
   // or members and which lose nothing at all when the deadline passes.
