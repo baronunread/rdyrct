@@ -130,7 +130,69 @@ test("a pricing link goes to checkout, and going back still sets the organizatio
   await expect(heading(page, "What should we call your organization?")).toBeVisible();
   await page.getByRole("button", { name: "Skip" }).click();
   await page.getByRole("button", { name: "Skip" }).click();
-  await expect(page.getByRole("button", { name: /Pro, \$9 a month/ })).toBeVisible();
+  await expect(page.getByText("No payment went through.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Pro, $8.10 a month, billed yearly" }),
+  ).toBeVisible();
+});
+
+test("a domain typed before checkout is added when they come back paid", async ({ page }) => {
+  const email = `onboard-host-${Date.now()}@example.org`;
+  await signUpAndVerify(page, email, password);
+
+  // Polar stands in: by the time it sends them back, the webhook has landed.
+  const asked: unknown[] = [];
+  await page.route("**/api/billing/checkout", async (route) => {
+    asked.push(route.request().postDataJSON());
+    await setPlan(page, email, "hobby");
+    await route.fulfill({ json: { url: "/welcome?checkout_id=test&plan=hobby" } });
+  });
+  // Cloudflare stands in for the domain itself.
+  const added = {
+    id: "dom-onboard",
+    hostname: "go.example.org",
+    status: "checking_dns",
+    statusReason: "",
+    rootRedirect: "",
+    validation: "http",
+    createdAt: Date.now(),
+    lockedAt: null,
+  };
+  const posted: unknown[] = [];
+  await page.route("**/api/orgs/*/domains", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    posted.push(route.request().postDataJSON());
+    await route.fulfill({ json: added });
+  });
+  await page.route("**/api/orgs/*/domains/dom-onboard/records", (route) =>
+    route.fulfill({
+      json: { records: [{ type: "CNAME", name: "go.example.org", value: "rdyrct.test" }] },
+    }),
+  );
+
+  await page.goto("/welcome");
+  await expect(heading(page, "What should we call your organization?")).toBeVisible();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+
+  // A bad domain marks the field; a good one names itself on the button.
+  const domain = page.getByRole("textbox", { name: "Domain" });
+  await domain.fill("not a domain");
+  await page.getByRole("button", { name: /^Hobby, \$4 a month$/ }).click();
+  await expect(domain).toHaveAttribute("aria-invalid", "true");
+  await domain.fill("go.example.org");
+  await expect(page.getByText("go.example.org/launch")).toBeVisible();
+  await page.getByRole("button", { name: "Yearly, save 10%" }).click();
+  await page.getByRole("button", { name: "Add go.example.org with Hobby" }).click();
+
+  await expect(heading(page, "Hobby is on")).toBeVisible({ timeout: 15_000 });
+  expect(asked).toEqual([{ plan: "hobby", interval: "year", from: "welcome" }]);
+  await expect(heading(page, "go.example.org is yours")).toBeVisible({ timeout: 15_000 });
+  expect(posted).toEqual([{ hostname: "go.example.org" }]);
+  await expect(page.getByText("rdyrct.test").filter({ visible: true })).toBeVisible();
+  await expect(card(page)).toContainText("Checking DNS");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(heading(page, "Invite your team")).toBeVisible();
 });
 
 test("back from a paid checkout, the domain step asks for the domain", async ({ page }) => {

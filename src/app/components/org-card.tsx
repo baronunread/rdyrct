@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { LinkDTO, OrgPlan } from "@/shared/types";
 import { useCurrentUser } from "../lib/hooks";
 import { cn } from "../ui/cn";
+import { Badge } from "../ui/misc";
 import { QRPreview } from "./qr";
 
 /**
@@ -116,6 +117,7 @@ function Domain({ domain, set, paid }: { domain: string; set: boolean; paid: boo
       {!set && !paid && (
         <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">Paid</span>
       )}
+      {set && <Badge color="butter">Checking DNS</Badge>}
     </span>
   );
 }

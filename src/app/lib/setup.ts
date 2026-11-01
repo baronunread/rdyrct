@@ -26,6 +26,8 @@ const OrgSetup = v.object({
   at: v.optional(v.picklist(FLOW_STEPS)),
   plan: v.optional(PlanIntent),
   finished: v.optional(v.boolean()),
+  /** The domain typed before a checkout, added once the plan is paid. */
+  host: v.optional(v.string()),
   /** The owner closed the sidebar's setup list (components/setup-checklist.tsx). */
   listHidden: v.optional(v.boolean()),
 });
@@ -110,6 +112,12 @@ export function setupAt(orgId: string, at: FlowStep) {
 
 export function finishSetup(orgId: string) {
   write(orgId, (s) => ({ ...s, finished: true }));
+}
+
+/** Keeps the domain and plan the domain step was paying for, so the flow
+ * can add the domain when Polar sends them back. */
+export function keepForCheckout(orgId: string, host: string, plan: PlanIntent) {
+  write(orgId, (s) => ({ ...s, host: host || undefined, plan }));
 }
 
 export function hideSetupList(orgId: string) {

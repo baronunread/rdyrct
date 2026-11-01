@@ -249,7 +249,14 @@ export function WelcomePage() {
   }, []);
 
   if (phase === "flow")
-    return <WelcomeFlow intent={intent} fromCheckout={fromCheckout} enterApp={enterApp} />;
+    return (
+      <WelcomeFlow
+        intent={intent}
+        fromCheckout={fromCheckout}
+        cancelled={arrival.phase === "cancelled"}
+        enterApp={enterApp}
+      />
+    );
   return (
     <WelcomeCard
       phase={phase}
@@ -356,10 +363,12 @@ function useFlowGate(
 function WelcomeFlow({
   intent,
   fromCheckout,
+  cancelled,
   enterApp,
 }: {
   intent: PlanIntent | null;
   fromCheckout: boolean;
+  cancelled: boolean;
   enterApp: (wait: number) => void;
 }) {
   const qc = useQueryClient();
@@ -370,6 +379,7 @@ function WelcomeFlow({
       org={org}
       intent={resume.intent}
       start={resume.at}
+      cancelled={cancelled}
       onDone={async () => {
         finishSetup(org.id);
         // The dashboard was fetched before the flow made a link; fetched

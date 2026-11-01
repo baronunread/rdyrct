@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as v from "valibot";
 import {
   PLAN_LIMITS,
-  PLAN_PRICES,
+  YEARLY_DISCOUNT_LABEL,
+  type DomainDTO,
   type InvitesCreated,
   type LinkDTO,
   type OrgPlan,
@@ -11,9 +12,23 @@ import {
 } from "@/shared/types";
 import { defaultOrgName, workDomain } from "@/shared/org-name";
 import { api, ApiError } from "../lib/api";
-import { useCheckout, useCurrentUser, useDomainMutations, useLinkMutations } from "../lib/hooks";
+import {
+  useCheckout,
+  useCurrentUser,
+  useDomainMutations,
+  useDomains,
+  useLinkMutations,
+} from "../lib/hooks";
 import { orgNameSchema } from "../lib/schemas";
-import { PLAN_NAME, setupAt, type PlanIntent, type FlowStep } from "../lib/setup";
+import {
+  keepForCheckout,
+  PLAN_NAME,
+  priceLine,
+  setupAt,
+  useOrgSetup,
+  type PlanIntent,
+  type FlowStep,
+} from "../lib/setup";
 import { Check } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
@@ -21,6 +36,8 @@ import { Field, Input } from "../ui/field";
 import { Logo } from "../ui/logo";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { Segmented } from "../ui/segmented";
+import { DnsRecords } from "./dns-records";
 import { OrgCard } from "./org-card";
 
 /**
@@ -38,6 +55,7 @@ export function SetupFlow({
   org,
   intent,
   start,
+  cancelled = false,
   onDone,
 }: {
   org: UserOrg;
@@ -45,6 +63,8 @@ export function SetupFlow({
   intent: PlanIntent | null;
   /** Where to pick up: a checkout from the domain step comes back to it. */
   start: FlowStep;
+  /** Back from a checkout the domain step opened, with no payment. */
+  cancelled?: boolean;
   onDone: () => void;
 }) {
   const [step, setStep] = useState<FlowStep>(start);
@@ -52,6 +72,8 @@ export function SetupFlow({
   const [link, setLink] = useState<LinkDTO | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
   const [domain, setDomain] = useState<string | null>(null);
+  // What the domain step has typed so far, for the card to show.
+  const [typed, setTyped] = useState("");
   useEffect(() => setupAt(org.id, step), [org.id, step]);
 
   const next = () => {
@@ -60,6 +82,7 @@ export function SetupFlow({
     else setStep(ORDER[at + 1]);
   };
   const host = useExampleHost(name);
+  const kept = useOrgSetup(org.id)?.host;
 
   return (
     <div className="flex min-h-dvh flex-col px-5 py-5 sm:px-8">
@@ -69,7 +92,7 @@ export function SetupFlow({
         </span>
         <Pips at={ORDER.indexOf(step)} />
       </header>
-      <main className="mx-auto grid w-full max-w-[880px] flex-1 items-center gap-10 py-10 md:grid-cols-[minmax(0,1fr)_300px]">
+      <main className="mx-auto grid w-full max-w-[880px] flex-1 grid-cols-[minmax(0,1fr)] items-center gap-10 py-10 md:grid-cols-[minmax(0,1fr)_300px]">
         <section key={step} className="setup-screen flex max-w-[400px] flex-col" aria-live="polite">
           {step === "name" && <NameStep org={org} name={name} onName={setName} onNext={next} />}
           {step === "link" && (
@@ -81,10 +104,10 @@ export function SetupFlow({
               host={host}
               link={link}
               intent={intent}
-              onAdded={(h) => {
-                setDomain(h);
-                next();
-              }}
+              kept={kept}
+              cancelled={cancelled}
+              onAdded={setDomain}
+              onTyped={setTyped}
               onNext={next}
             />
           )}
@@ -96,7 +119,7 @@ export function SetupFlow({
           name={name.trim() || org.name}
           plan={org.plan}
           link={link}
-          domain={domain ?? host}
+          domain={domain ?? (typed || host)}
           domainSet={!!domain}
           invited={invited}
           className="max-md:order-first"
@@ -354,58 +377,152 @@ function DomainStep({
   host,
   link,
   intent,
+  kept,
+  cancelled,
   onAdded,
+  onTyped,
   onNext,
 }: {
   org: UserOrg;
   host: string;
   link: LinkDTO | null;
   intent: PlanIntent | null;
+  onTyped: (hostname: string) => void;
+  /** The domain typed before a checkout, waiting to be added. */
+  kept: string | undefined;
+  /** Back from a checkout with no payment. */
+  cancelled: boolean;
   onAdded: (hostname: string) => void;
   onNext: () => void;
 }) {
   if (org.plan !== "free")
-    return <DomainForm org={org} host={host} onAdded={onAdded} onNext={onNext} />;
-  return <DomainUpsell host={host} link={link} intent={intent} onNext={onNext} />;
+    return <DomainForm org={org} host={host} kept={kept} onAdded={onAdded} onNext={onNext} />;
+  return (
+    <DomainUpsell
+      orgId={org.id}
+      host={host}
+      link={link}
+      intent={intent}
+      kept={kept}
+      cancelled={cancelled}
+      onTyped={onTyped}
+      onNext={onNext}
+    />
+  );
 }
+
+const INTERVALS = [
+  { id: "month", label: "Monthly" },
+  { id: "year", label: `Yearly, ${YEARLY_DISCOUNT_LABEL.toLowerCase()}` },
+] as const satisfies readonly { id: PlanIntent["interval"]; label: string }[];
+
+const OTHER = { hobby: "pro", pro: "hobby" } as const;
 
 /**
  * The domain step on Free: their link as it is and as it would be on their
  * own domain. On the shared domain every slug is random; choosing it is the
- * one thing only a domain gives, so that is what the step shows.
+ * one thing only a domain gives, so that is what the step shows. The domain
+ * typed here waits through checkout and is added when they come back paid.
  */
 function DomainUpsell({
+  orgId,
   host,
   link,
   intent,
+  kept,
+  cancelled,
+  onTyped,
   onNext,
 }: {
+  orgId: string;
+  onTyped: (hostname: string) => void;
   host: string;
   link: LinkDTO | null;
   intent: PlanIntent | null;
+  kept: string | undefined;
+  cancelled: boolean;
   onNext: () => void;
 }) {
   const upgrade = useUpgrade();
-  const plan = intent ?? { target: "hobby", interval: "month" };
+  const [plan, setPlan] = useState<PlanIntent>(intent ?? { target: "hobby", interval: "month" });
+  const [hostname, setHostname] = useState(kept ?? "");
+  const [error, setError] = useState<string | undefined>();
+  const typed = hostname.trim().toLowerCase();
   const slug = chosenSlug(link?.destination);
+  const name = PLAN_NAME[plan.target];
+  const other = OTHER[plan.target];
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (typed && !HOSTNAME.test(typed)) {
+      setError("Not a domain");
+      return;
+    }
+    keepForCheckout(orgId, typed, plan);
+    upgrade.start(plan);
+  };
   return (
-    <div className="flex flex-col">
+    <form onSubmit={submit} noValidate className="flex flex-col">
       <StepHead title="Use your own domain">
-        On your own domain you choose the slug. On the shared one it is random.
+        {cancelled
+          ? "No payment went through. Your domain is still here when you want it."
+          : "On your own domain you choose the slug. Domains come with Hobby and Pro."}
       </StepHead>
-      <div className="mt-6 flex flex-col gap-2">
-        {link && <Address label="Now" address={shortUrl(link)} />}
-        <Address label="On your domain" address={`${host}/${slug}`} accent />
+      <div className="mt-6">
+        <Field label="Domain" error={error}>
+          <Input
+            value={hostname}
+            autoFocus
+            placeholder={host}
+            autoComplete="off"
+            spellCheck={false}
+            className="font-mono"
+            onChange={(e) => {
+              setHostname(e.target.value);
+              setError(undefined);
+              const value = e.target.value.trim().toLowerCase();
+              onTyped(HOSTNAME.test(value) ? value : "");
+            }}
+          />
+        </Field>
       </div>
+      <div className="mt-3 flex flex-col gap-2">
+        {link && <Address label="Now" address={shortUrl(link)} />}
+        <Address
+          label="On your domain"
+          address={`${(HOSTNAME.test(typed) && typed) || host}/${slug}`}
+          accent
+        />
+      </div>
+      <div className="mt-4">
+        <Segmented
+          label="Billing cycle"
+          items={INTERVALS}
+          value={plan.interval}
+          onChange={(interval) => setPlan({ ...plan, interval })}
+        />
+      </div>
+      <p className="mt-2.5 text-xs text-pretty text-muted">
+        {plan.target === "pro"
+          ? "Pro: 5 domains, 3 organizations, 25 members. "
+          : "Need more than one domain? "}
+        <button
+          type="button"
+          onClick={() => setPlan({ ...plan, target: other })}
+          className="cursor-pointer text-accent underline decoration-accent/40 underline-offset-2 [@media(hover:hover)]:hover:decoration-accent"
+        >
+          {plan.target === "pro" ? "Back to Hobby" : "Pro"}, {priceLine({ ...plan, target: other })}
+        </button>
+        {plan.target === "pro" ? "" : ": 5 domains, 3 organizations."}
+      </p>
       <Actions>
-        <Button variant="primary" disabled={upgrade.busy} onClick={() => upgrade.start(plan)}>
+        <Button type="submit" variant="primary" disabled={upgrade.busy}>
           <BusyContent busy={upgrade.busy}>
-            {PLAN_NAME[plan.target]}, {PLAN_PRICES[plan.target]} a month
+            {HOSTNAME.test(typed) ? `Add ${typed} with ${name}` : `${name}, ${priceLine(plan)}`}
           </BusyContent>
         </Button>
         <SkipButton onClick={onNext} label="Not now" />
       </Actions>
-    </div>
+    </form>
   );
 }
 
@@ -429,37 +546,73 @@ function Address({ label, address, accent }: { label: string; address: string; a
 
 const HOSTNAME = /^(?!https?:)([a-z0-9-]+\.)+[a-z]{2,}$/i;
 
+/**
+ * The domain step on a paid plan. A domain kept from before checkout is
+ * added on its own; otherwise the field asks for one. Once added, the step
+ * shows the record to set, and moves on when they say so: DNS takes its
+ * time, and Domains keeps checking.
+ */
 function DomainForm({
   org,
   host,
+  kept,
   onAdded,
   onNext,
 }: {
   org: UserOrg;
   host: string;
+  kept: string | undefined;
   onAdded: (hostname: string) => void;
   onNext: () => void;
 }) {
   const { add } = useDomainMutations(org.id);
-  const [hostname, setHostname] = useState("");
+  const domains = useDomains(org.id);
+  const [hostname, setHostname] = useState(kept ?? "");
   const [error, setError] = useState<string | undefined>();
+  const [added, setAdded] = useState<DomainDTO | null>(null);
+  const tried = useRef(false);
+  const addHost = (value: string) =>
+    add.mutate(value, {
+      onSuccess: (domain) => {
+        setAdded(domain);
+        onAdded(domain.hostname);
+      },
+      onError: (err) => setError(reasonFrom(err, "Could not add it")),
+    });
+  // Back from checkout with a domain typed before it: add that one, or pick
+  // it up if a reload already did.
+  useEffect(() => {
+    if (!kept || tried.current || !domains.data) return;
+    tried.current = true;
+    const existing = domains.data.find((d) => d.hostname === kept);
+    if (existing) {
+      setAdded(existing);
+      onAdded(existing.hostname);
+    } else addHost(kept);
+  });
+  const shown = added ?? null;
+  if (shown) return <DomainAdded org={org} domain={shown} onNext={onNext} />;
+  if (kept && !error)
+    return (
+      <div className="flex flex-col">
+        <StepHead title={`Adding ${kept}`}>
+          You are on {PLAN_LABEL[org.plan]}. This takes a few seconds.
+        </StepHead>
+      </div>
+    );
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const value = hostname.trim().toLowerCase();
     if (!HOSTNAME.test(value)) {
-      setError(`Needs a domain like ${host}`);
+      setError("Not a domain");
       return;
     }
-    add.mutate(value, {
-      onSuccess: () => onAdded(value),
-      onError: (err) => setError(reasonFrom(err, "Could not add it")),
-    });
+    addHost(value);
   };
   return (
     <form onSubmit={submit} noValidate className="flex flex-col">
       <StepHead title="Use your own domain">
-        Links on it read as yours, with the slug you choose. DNS takes a few minutes; Domains shows
-        how far it got.
+        Links on it read as yours, with the slug you choose.
       </StepHead>
       <div className="mt-6">
         <Field label="Domain" error={error}>
@@ -484,6 +637,45 @@ function DomainForm({
         <SkipButton onClick={onNext} label="Not now" />
       </Actions>
     </form>
+  );
+}
+
+const PLAN_LABEL = {
+  free: "Free",
+  hobby: "Hobby",
+  pro: "Pro",
+  unlimited: "Unlimited",
+} satisfies Record<OrgPlan, string>;
+
+/** The domain is theirs: the record to set, and on. */
+function DomainAdded({
+  org,
+  domain,
+  onNext,
+}: {
+  org: UserOrg;
+  domain: DomainDTO;
+  onNext: () => void;
+}) {
+  return (
+    <div className="setup-screen flex flex-col">
+      <StepHead title={`${domain.hostname} is yours`}>
+        You are on {PLAN_LABEL[org.plan]}. Add the record below where you manage its DNS, and links
+        on it work.
+      </StepHead>
+      <div className="mt-6">
+        <DnsRecords orgId={org.id} domain={domain} />
+      </div>
+      <p className="mt-2.5 text-xs text-pretty text-muted">
+        Usually live within an hour. You can keep going: we check on our own, and Domains says when
+        it is live.
+      </p>
+      <Actions>
+        <Button variant="primary" onClick={onNext}>
+          Continue
+        </Button>
+      </Actions>
+    </div>
   );
 }
 
