@@ -124,6 +124,10 @@ export function hideSetupList(orgId: string) {
   write(orgId, (s) => ({ ...s, listHidden: true }));
 }
 
+export function showSetupList(orgId: string) {
+  write(orgId, (s) => ({ ...s, listHidden: false }));
+}
+
 /** Reads `plan` and `interval` off a URL's search, as the pricing links and
  * the checkout return write them. Null when it names no paid plan. */
 export function planIntentFrom(search: URLSearchParams): PlanIntent | null {

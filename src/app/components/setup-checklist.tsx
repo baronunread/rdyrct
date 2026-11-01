@@ -9,22 +9,45 @@ import {
   useMembers,
   useRecentClicks,
 } from "../lib/hooks";
-import { hideSetupList, useOrgSetup } from "../lib/setup";
+import { hideSetupList, showSetupList, useOrgSetup } from "../lib/setup";
 import { countryName } from "../lib/places";
 import { relativeDate } from "../lib/dates";
-import { Check } from "../ui/icons";
+import { Check, Target } from "../ui/icons";
+import { MenuItem } from "../ui/menu";
 import { Badge } from "../ui/misc";
 import { cn } from "../ui/cn";
 
 /**
  * What is left of a new organization's setup, in the sidebar above the
  * account, the way Linear and Vercel keep theirs: a count, a bar and the next
- * step; open it for all four. Each step reads live data, so it ticks itself
+ * step; open it for the rest. Each step reads live data, so it ticks itself
  * (a click lands, DNS goes live, a teammate joins), and the card goes once
- * all four are done or the owner hides it. Only for an org whose setup flow
- * started in this browser (lib/setup.ts): an account that was already in use
- * never sees it.
+ * all are done or the owner hides it (Setup guide in the account menu brings
+ * it back). Free has no domain step: it could never be done there. Only for
+ * an org whose setup flow started in this browser (lib/setup.ts): an account
+ * that was already in use never sees it.
  */
+/** "Setup guide" in the account menu, while the list is hidden and has
+ * something left to do: it brings the list back. */
+export function SetupGuideItem({ org }: { org: UserOrg | null }) {
+  const setup = useOrgSetup(org?.id ?? "");
+  if (!org || org.role !== "owner" || org.locked || !setup?.listHidden) return null;
+  return <GuideItem org={org} />;
+}
+
+function GuideItem({ org }: { org: UserOrg }) {
+  const steps = useSteps(org);
+  if (!steps || steps.every((s) => s.done)) return null;
+  return (
+    <MenuItem onClick={() => showSetupList(org.id)}>
+      <Target size={15} className="text-muted" /> Setup guide
+      <span className="ml-auto text-xs text-muted tabular-nums">
+        {steps.filter((s) => s.done).length} of {steps.length}
+      </span>
+    </MenuItem>
+  );
+}
+
 export function SetupChecklist({ org, phone }: { org: UserOrg | null; phone?: boolean }) {
   const setup = useOrgSetup(org?.id ?? "");
   if (!org || org.role !== "owner" || org.locked || !setup || setup.listHidden) return null;
@@ -39,12 +62,14 @@ interface Step {
 }
 
 function useSteps(org: UserOrg): Step[] | null {
+  const paid = org.plan !== "free";
   const links = useLinkQuotaUsage(org.id);
   const clicks = useRecentClicks(org.id);
-  const domains = useDomains(org.id);
+  const domains = useDomains(org.id, paid);
   const members = useMembers(org.id);
   const invites = useInvites(org.id, true);
-  if (!links.data || !clicks.data || !domains.data || !members.data || !invites.data) return null;
+  if (!links.data || !clicks.data || (paid && !domains.data) || !members.data || !invites.data)
+    return null;
   const latest = clicks.data[0];
   const others = members.data.filter((m) => m.role !== "owner");
   const pendingInvite = invites.data.some((i) => i.email);
@@ -61,7 +86,7 @@ function useSteps(org: UserOrg): Step[] | null {
         ? `Latest${latest.country && latest.country !== "unknown" ? ` from ${countryName(latest.country)}` : ""}, ${relativeDate(latest.ts)}`
         : "Open your link, or scan its QR code with your phone",
     },
-    domainStep(org, domains.data),
+    ...(paid ? [domainStep(domains.data ?? [])] : []),
     {
       title: "Bring your team",
       done: others.length > 0,
@@ -78,7 +103,7 @@ function useSteps(org: UserOrg): Step[] | null {
   ];
 }
 
-function domainStep(org: UserOrg, domains: DomainDTO[]): Step {
+function domainStep(domains: DomainDTO[]): Step {
   const live = domains.find((d) => d.status === "active");
   const pending = domains.find((d) => d.status === "checking_dns" || d.status === "issuing_tls");
   if (live) return { title: "Use your own domain", done: true, detail: `${live.hostname} is live` };
@@ -92,12 +117,7 @@ function domainStep(org: UserOrg, domains: DomainDTO[]): Step {
   return {
     title: "Use your own domain",
     done: false,
-    detail:
-      org.plan === "free" ? (
-        <Go to="/billing">Comes with any paid plan</Go>
-      ) : (
-        <Go to="/domains">Add it in Domains</Go>
-      ),
+    detail: <Go to="/domains">Add it in Domains</Go>,
   };
 }
 

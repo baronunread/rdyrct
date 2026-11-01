@@ -93,13 +93,13 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
 
   // What is left of the setup waits in the sidebar, and opens to all four.
   const setup = page.getByRole("button", { name: /Finish setting up/ });
-  await expect(setup).toContainText("2 of 4");
+  await expect(setup).toContainText("2 of 3");
   // Sam is invited, not joined: the team step waits on them.
-  await expect(setup).toContainText("Next: Use your own domain");
+  await expect(setup).toContainText("Next: Bring your team");
   await setup.click();
   const list = page.getByRole("dialog", { name: "Finish setting up" });
-  await expect(list.getByRole("listitem")).toHaveCount(4);
-  await expect(list.getByRole("link", { name: "Comes with any paid plan" })).toBeVisible();
+  // Free has no domain step: it could never be done there.
+  await expect(list.getByRole("listitem")).toHaveCount(3);
   await expect(list).toContainText("Invited");
   // Hidden, it stays hidden.
   await list.getByRole("button", { name: "Hide this list" }).click();
@@ -107,6 +107,10 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await page.reload();
   await expect(heading(page, "Dashboard")).toBeVisible();
   await expect(setup).toHaveCount(0);
+  // The account menu brings it back while there is something left to do.
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: /Setup guide/ }).click();
+  await expect(setup).toContainText("2 of 3");
 
   // Done is done: /welcome moves straight on.
   await page.goto("/welcome");

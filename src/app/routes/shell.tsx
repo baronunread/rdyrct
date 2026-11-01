@@ -38,7 +38,7 @@ import { BusyContent } from "../ui/spinner";
 import { AdminPlatformSkeleton, AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
-import { SetupChecklist } from "../components/setup-checklist";
+import { SetupChecklist, SetupGuideItem } from "../components/setup-checklist";
 import { UserAvatar } from "../components/user-avatar";
 import { CommandMenu } from "../components/command-menu";
 import { openCommandMenu } from "../lib/shortcut";
@@ -346,7 +346,10 @@ function AccountMenu({
   onSignOut,
   signOutPending,
   trigger,
+  extra,
 }: {
+  /** Items for this org above Settings (the setup guide, while hidden). */
+  extra?: ReactNode;
   user: User;
   theme: ReturnType<typeof useTheme>[0];
   onToggleTheme: () => void;
@@ -359,6 +362,7 @@ function AccountMenu({
     <Menu label="Account menu" trigger={trigger}>
       <MenuHeader title={user.name} detail={user.email} />
       <MenuSeparator />
+      {extra}
       <MenuItem onClick={() => void navigate({ to: "/settings" })}>
         <Settings size={15} className="text-muted" /> Settings
       </MenuItem>
@@ -413,7 +417,14 @@ function AppSidebar({
   onSignOut: () => void;
   signOutPending: boolean;
 }) {
-  const account = { user, theme, onToggleTheme, onSignOut, signOutPending };
+  const account = {
+    user,
+    theme,
+    onToggleTheme,
+    onSignOut,
+    signOutPending,
+    extra: <SetupGuideItem org={org} />,
+  };
   return (
     <TooltipGroup>
       <div className={cn("flex h-full flex-col overflow-hidden", phone && "overflow-y-auto")}>
