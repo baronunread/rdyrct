@@ -38,6 +38,7 @@ import { BusyContent } from "../ui/spinner";
 import { AdminPlatformSkeleton, AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
+import { SetupChecklist } from "../components/setup-checklist";
 import { UserAvatar } from "../components/user-avatar";
 import { CommandMenu } from "../components/command-menu";
 import { openCommandMenu } from "../lib/shortcut";
@@ -459,6 +460,7 @@ function AppSidebar({
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} phone={phone} />
 
         <div className="mt-auto">
+          {!collapsed && <SetupChecklist org={org} phone={phone} />}
           {phone ? (
             <div className="px-3 py-3">
               <AccountMenu

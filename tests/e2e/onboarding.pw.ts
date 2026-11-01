@@ -78,6 +78,21 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   );
   expect(org.name).toBe("Acme Coffee");
 
+  // What is left of the setup waits in the sidebar, and opens to all four.
+  const setup = page.getByRole("button", { name: /Finish setting up/ });
+  await expect(setup).toContainText("1 of 4");
+  await expect(setup).toContainText("Next: Get its first click");
+  await setup.click();
+  const list = page.getByRole("dialog", { name: "Finish setting up" });
+  await expect(list.getByRole("listitem")).toHaveCount(4);
+  await expect(list.getByRole("link", { name: "Comes with any paid plan" })).toBeVisible();
+  // Hidden, it stays hidden.
+  await list.getByRole("button", { name: "Hide this list" }).click();
+  await expect(setup).toHaveCount(0);
+  await page.reload();
+  await expect(heading(page, "Dashboard")).toBeVisible();
+  await expect(setup).toHaveCount(0);
+
   // Done is done: /welcome moves straight on.
   await page.goto("/welcome");
   await expect(page).toHaveURL(/\/dashboard$/);

@@ -26,6 +26,8 @@ const OrgSetup = v.object({
   at: v.optional(v.picklist(FLOW_STEPS)),
   plan: v.optional(PlanIntent),
   finished: v.optional(v.boolean()),
+  /** The owner closed the sidebar's setup list (components/setup-checklist.tsx). */
+  listHidden: v.optional(v.boolean()),
 });
 export type OrgSetup = v.InferOutput<typeof OrgSetup>;
 
@@ -108,6 +110,10 @@ export function setupAt(orgId: string, at: FlowStep) {
 
 export function finishSetup(orgId: string) {
   write(orgId, (s) => ({ ...s, finished: true }));
+}
+
+export function hideSetupList(orgId: string) {
+  write(orgId, (s) => ({ ...s, listHidden: true }));
 }
 
 /** Reads `plan` and `interval` off a URL's search, as the pricing links and
