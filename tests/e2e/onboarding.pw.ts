@@ -58,14 +58,20 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await expect(page.getByRole("button", { name: /Hobby, \$4 a month/ })).toBeVisible();
   await page.getByRole("button", { name: "Not now" }).click();
 
-  // The team step marks a wrong address instead of sending.
+  // The team step takes addresses as chips, and marks a wrong one
+  // instead of sending.
   await expect(heading(page, "Invite your team")).toBeVisible();
-  await page.getByRole("button", { name: "Invite" }).click();
-  await expect(page.getByRole("textbox", { name: "Email" })).toHaveAttribute(
-    "aria-invalid",
-    "true",
-  );
-  await page.getByRole("button", { name: "Not now" }).click();
+  const emails = page.getByRole("textbox", { name: "Emails" });
+  await page.getByRole("button", { name: "Send invite" }).click();
+  await expect(emails).toHaveAttribute("aria-invalid", "true");
+  await emails.fill("sam@example.org nope ");
+  await page.getByRole("button", { name: "Send 2 invites" }).click();
+  await expect(page.getByText("Not an email: nope")).toBeVisible();
+  await page.getByRole("button", { name: "Remove nope" }).click();
+  await page.getByRole("button", { name: "Send invite" }).click();
+  await expect(page.getByText("1 invite sent.")).toBeVisible();
+  await expect(card(page)).toContainText("1 invited");
+  await page.getByRole("button", { name: "Open rdyrct" }).click();
 
   // Into the app, as a dashboard, under the new name.
   await expect(page).toHaveURL(/\/dashboard$/);
@@ -81,11 +87,13 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   // What is left of the setup waits in the sidebar, and opens to all four.
   const setup = page.getByRole("button", { name: /Finish setting up/ });
   await expect(setup).toContainText("1 of 4");
+  // Sam is invited, not joined: the team step waits on them.
   await expect(setup).toContainText("Next: Get its first click");
   await setup.click();
   const list = page.getByRole("dialog", { name: "Finish setting up" });
   await expect(list.getByRole("listitem")).toHaveCount(4);
   await expect(list.getByRole("link", { name: "Comes with any paid plan" })).toBeVisible();
+  await expect(list).toContainText("Invited");
   // Hidden, it stays hidden.
   await list.getByRole("button", { name: "Hide this list" }).click();
   await expect(setup).toHaveCount(0);
@@ -193,6 +201,11 @@ test("a domain typed before checkout is added when they come back paid", async (
   await expect(card(page)).toContainText("Checking DNS");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(heading(page, "Invite your team")).toBeVisible();
+  // One link anyone can use, copied.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy invite link" }).click();
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/invite\/\w+/);
 });
 
 test("back from a paid checkout, the domain step asks for the domain", async ({ page }) => {

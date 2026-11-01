@@ -5,6 +5,8 @@ import {
   PLAN_LIMITS,
   YEARLY_DISCOUNT_LABEL,
   type DomainDTO,
+  INVITABLE_ROLES,
+  type InvitableRole,
   type InvitesCreated,
   type LinkDTO,
   type OrgPlan,
@@ -29,7 +31,12 @@ import {
   type PlanIntent,
   type FlowStep,
 } from "../lib/setup";
-import { Check } from "@/app/ui/icons";
+import { Check, Link as LinkIcon } from "@/app/ui/icons";
+import { oneOf } from "@/shared/lookup";
+import { copyToClipboard } from "../lib/clipboard";
+import { ROLE_OPTIONS, isEmail, splitEmails } from "../lib/members-data";
+import { MenuSelect } from "../ui/menu";
+import { EmailChips } from "./email-chips";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Field, Input } from "../ui/field";
@@ -70,7 +77,7 @@ export function SetupFlow({
   const [step, setStep] = useState<FlowStep>(start);
   const [name, setName] = useState(org.name);
   const [link, setLink] = useState<LinkDTO | null>(null);
-  const [invited, setInvited] = useState<string | null>(null);
+  const [invited, setInvited] = useState<string[]>([]);
   const [domain, setDomain] = useState<string | null>(null);
   // What the domain step has typed so far, for the card to show.
   const [typed, setTyped] = useState("");
@@ -112,7 +119,12 @@ export function SetupFlow({
             />
           )}
           {step === "team" && (
-            <TeamStep org={org} invited={invited} onInvited={setInvited} onNext={next} />
+            <TeamStep
+              org={org}
+              invited={invited}
+              onInvited={(sent) => setInvited((was) => [...was, ...sent])}
+              onNext={next}
+            />
           )}
         </section>
         <OrgCard
@@ -679,8 +691,6 @@ function DomainAdded({
   );
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 function TeamStep({
   org,
   invited,
@@ -688,72 +698,139 @@ function TeamStep({
   onNext,
 }: {
   org: UserOrg;
-  invited: string | null;
-  onInvited: (email: string) => void;
+  invited: string[];
+  onInvited: (emails: string[]) => void;
   onNext: () => void;
 }) {
   const qc = useQueryClient();
-  const [email, setEmail] = useState("");
+  const toast = useToast();
+  const chips = useRef<HTMLInputElement>(null);
+  const [emails, setEmails] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [role, setRole] = useState<InvitableRole>("member");
   const [error, setError] = useState<string | undefined>();
+  const [copied, setCopied] = useState(false);
+  const refresh = () => qc.invalidateQueries({ queryKey: ["invites", org.id] });
   const invite = useMutation({
-    mutationFn: (address: string) =>
+    mutationFn: (addresses: string[]) =>
       api<InvitesCreated>(`/orgs/${org.id}/invites`, {
         method: "POST",
-        body: { role: "member", emails: [address] },
+        body: { role, emails: addresses },
       }),
-    onSuccess: ({ invites }, address) => {
-      if (!invites.length) {
-        setError("Could not invite them");
-        return;
+    onSuccess: ({ failed }, addresses) => {
+      void refresh();
+      onInvited(addresses.filter((a) => !failed.includes(a)));
+      setEmails(failed);
+      if (failed.length) {
+        setError("Couldn't email these. Try again");
+        chips.current?.focus();
       }
-      void qc.invalidateQueries({ queryKey: ["invites", org.id] });
-      onInvited(address);
-      setEmail("");
     },
-    onError: (err) => setError(reasonFrom(err, "Could not invite them")),
+    onError: (err) => {
+      setError(reasonFrom(err, "Could not invite them"));
+      chips.current?.focus();
+    },
   });
-  const submit = (e: FormEvent) => {
+  const link = useMutation({
+    mutationFn: () =>
+      api<InvitesCreated>(`/orgs/${org.id}/invites`, { method: "POST", body: { role } }),
+    onSuccess: async ({ invites }) => {
+      void refresh();
+      const token = invites[0]?.token;
+      if (!token) return;
+      await copyToClipboard(`${window.location.origin}/invite/${token}`, toast, {
+        success: "Invite link copied",
+      }).catch(() => {});
+      setCopied(true);
+    },
+    onError: (err) => toast(reasonFrom(err, "Could not make the link"), "error"),
+  });
+  const send = (e: FormEvent) => {
     e.preventDefault();
-    const value = email.trim();
-    if (!value && invited) return onNext();
-    if (!EMAIL.test(value)) {
-      setError("Needs an email address");
-      return;
-    }
-    invite.mutate(value);
+    if (invite.isPending) return;
+    const all = [...emails, ...splitEmails(draft)];
+    setEmails(all);
+    setDraft("");
+    const bad = all.filter((a) => !isEmail(a));
+    const reason = !all.length
+      ? "Add an email"
+      : bad.length === 1
+        ? `Not an email: ${bad[0]}`
+        : bad.length
+          ? `${bad.length} are not emails`
+          : undefined;
+    setError(reason);
+    if (reason) chips.current?.focus();
+    else invite.mutate(all);
   };
+  const count = emails.length + splitEmails(draft).length;
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col">
+    <form onSubmit={send} noValidate className="flex flex-col">
       <StepHead title="Invite your team">
-        {seatsLine(org.plan)} They get an email with a link.
+        {seatsLine(org.plan)} Type their addresses, or share a link.
       </StepHead>
       <div className="mt-6">
-        <Field label="Email" error={error}>
-          <Input
-            type="email"
-            value={email}
-            autoFocus
-            placeholder="sam@example.com"
-            autoComplete="off"
-            className="font-mono"
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setError(undefined);
-            }}
-          />
-        </Field>
+        <EmailChips
+          ref={chips}
+          label="Emails"
+          emails={emails}
+          onChange={(next) => {
+            setEmails(next);
+            setError(undefined);
+          }}
+          draft={draft}
+          onDraftChange={(next) => {
+            setDraft(next);
+            setError(undefined);
+          }}
+          error={error}
+          placeholder="sam@example.com"
+        />
       </div>
-      <Actions>
-        <Button type="submit" variant={invited ? "outline" : "primary"} disabled={invite.isPending}>
-          <BusyContent busy={invite.isPending}>Invite</BusyContent>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="w-32">
+          <MenuSelect
+            label="Role"
+            value={role}
+            onChange={(next) => setRole(oneOf(INVITABLE_ROLES, next, "member"))}
+            options={ROLE_OPTIONS}
+          />
+        </div>
+        <Button type="submit" variant="outline" disabled={invite.isPending}>
+          <BusyContent busy={invite.isPending}>
+            {count > 1 ? `Send ${count} invites` : "Send invite"}
+          </BusyContent>
         </Button>
-        {invited ? (
-          <Button variant="primary" onClick={onNext}>
-            Open rdyrct
-          </Button>
-        ) : (
-          <SkipButton onClick={onNext} label="Not now" />
-        )}
+      </div>
+      <div className="mt-1.5">
+        <Button
+          variant="ghost"
+          className="-ml-2.5"
+          disabled={link.isPending}
+          onClick={() => link.mutate()}
+          title="Makes a single-use link, valid 7 days, and copies it"
+        >
+          <BusyContent busy={link.isPending}>
+            <span className="inline-flex items-center gap-1.5">
+              {copied ? (
+                <Check size={15} aria-hidden className="welcome-check" />
+              ) : (
+                <LinkIcon size={15} aria-hidden />
+              )}
+              {copied ? "Copied" : "Copy invite link"}
+            </span>
+          </BusyContent>
+        </Button>
+      </div>
+      <p className="mt-2.5 min-h-4 text-xs text-muted tabular-nums" aria-live="polite">
+        {invited.length > 0 &&
+          `${invited.length} ${invited.length === 1 ? "invite" : "invites"} sent.`}
+      </p>
+      <Actions>
+        <Button variant="primary" onClick={onNext}>
+          {invited.length || copied ? "Open rdyrct" : "Continue"}
+        </Button>
+        {!invited.length && !copied && <SkipButton onClick={onNext} label="Not now" />}
       </Actions>
     </form>
   );

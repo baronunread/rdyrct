@@ -38,7 +38,7 @@ export function OrgCard({
   domain: string;
   /** The domain was added, rather than shown as what it could be. */
   domainSet: boolean;
-  invited: string | null;
+  invited: string[];
   className?: string;
 }) {
   return (
@@ -62,7 +62,7 @@ export function OrgCard({
             {name}
           </span>
           <span className="text-xs text-muted">
-            {PLAN_LABEL[plan]} · {invited ? "1 invited" : "1 member"}
+            {PLAN_LABEL[plan]} · 1 member{invited.length > 0 && `, ${invited.length} invited`}
           </span>
         </span>
       </div>
@@ -122,24 +122,34 @@ function Domain({ domain, set, paid }: { domain: string; set: boolean; paid: boo
   );
 }
 
-/** The team starts with whoever is setting it up. */
-function Team({ invited }: { invited: string | null }) {
+/** The team starts with whoever is setting it up; each invite takes a
+ * place, and two empty ones say there is room for more. */
+function Team({ invited }: { invited: string[] }) {
   const me = initial(useCurrentUser().data?.user.name ?? "");
+  const shown = invited.slice(0, 6);
   return (
-    <span className="flex gap-1.5">
+    <span className="flex flex-wrap gap-1.5">
       <span className="grid size-7 place-items-center rounded-lg bg-surface-2 text-xs font-semibold smooth-shadow-ring-xs">
         {me}
       </span>
-      <span
-        className={cn(
-          "size-7 rounded-lg",
-          invited
-            ? "bg-accent/20 shadow-[inset_0_0_0_1.5px_var(--accent)]"
-            : "shadow-[inset_0_0_0_1.5px_var(--border)]",
-        )}
-        title={invited ?? undefined}
-      />
-      <span className="size-7 rounded-lg shadow-[inset_0_0_0_1.5px_var(--border)]" />
+      {shown.map((email) => (
+        <span
+          key={email}
+          title={`${email}, invited`}
+          className="setup-arrive-in grid size-7 place-items-center rounded-lg bg-accent/15 font-mono text-xs text-accent shadow-[inset_0_0_0_1.5px_var(--accent)]"
+        >
+          {initial(email)}
+        </span>
+      ))}
+      {invited.length > shown.length && (
+        <span className="grid h-7 place-items-center px-1 text-xs text-muted tabular-nums">
+          +{invited.length - shown.length}
+        </span>
+      )}
+      {invited.length < 2 &&
+        Array.from({ length: 2 - invited.length }, (_, i) => (
+          <span key={i} className="size-7 rounded-lg shadow-[inset_0_0_0_1.5px_var(--border)]" />
+        ))}
     </span>
   );
 }

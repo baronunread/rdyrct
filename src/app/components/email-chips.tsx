@@ -66,7 +66,7 @@ export const EmailChips = forwardRef<
 
   return (
     <div className="min-w-0">
-      <span className="mb-1.5 flex items-center gap-1.5 text-xs text-muted">
+      <span className="mb-1.5 flex h-4 items-center gap-1.5 text-xs text-muted">
         <label htmlFor={inputId}>{label}</label>
         {error && (
           <OverflowTip content={error}>
