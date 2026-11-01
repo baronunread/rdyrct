@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as v from "valibot";
 import {
   PLAN_LIMITS,
@@ -20,6 +20,7 @@ import {
   useDomainMutations,
   useDomains,
   useLinkMutations,
+  recentClicksQuery,
 } from "../lib/hooks";
 import { orgNameSchema } from "../lib/schemas";
 import {
@@ -90,6 +91,7 @@ export function SetupFlow({
   };
   const host = useExampleHost(name);
   const kept = useOrgSetup(org.id)?.host;
+  const firstClick = useFirstClick(org.id, !!link);
 
   return (
     <div className="flex min-h-dvh flex-col px-5 py-5 sm:px-8">
@@ -134,11 +136,23 @@ export function SetupFlow({
           domain={domain ?? (typed || host)}
           domainSet={!!domain}
           invited={invited}
+          firstClick={firstClick}
           className="max-md:order-first"
         />
       </main>
     </div>
   );
+}
+
+/** The org's first click, asked for every few seconds once there is a
+ * link, so opening it during the flow shows up on the card. */
+function useFirstClick(orgId: string, hasLink: boolean) {
+  const clicks = useQuery({
+    ...recentClicksQuery(orgId),
+    enabled: hasLink,
+    refetchInterval: (q) => (q.state.data?.length ? false : 3000),
+  });
+  return clicks.data?.[0] ?? null;
 }
 
 /** Where a domain of their own would live: theirs if the address says, or

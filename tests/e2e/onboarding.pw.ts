@@ -52,6 +52,13 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   // Made, it moves on by itself once the card has it.
   await expect(page.getByRole("button", { name: "Link created" })).toBeDisabled();
 
+  // Opening it lands its first click on the card while the flow goes on.
+  const open = card(page).getByRole("link", { name: "Open it" });
+  const slug = new URL((await open.getAttribute("href"))!).pathname;
+  const res = await page.request.get(slug, { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
+  await expect(card(page)).toContainText("1 click", { timeout: 30_000 });
+
   // Free: the domain step shows the link on a domain of their own.
   await expect(heading(page, "Use your own domain")).toBeVisible();
   await expect(page.getByText("go.example.org/spring-menu")).toBeVisible();
@@ -86,9 +93,9 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
 
   // What is left of the setup waits in the sidebar, and opens to all four.
   const setup = page.getByRole("button", { name: /Finish setting up/ });
-  await expect(setup).toContainText("1 of 4");
+  await expect(setup).toContainText("2 of 4");
   // Sam is invited, not joined: the team step waits on them.
-  await expect(setup).toContainText("Next: Get its first click");
+  await expect(setup).toContainText("Next: Use your own domain");
   await setup.click();
   const list = page.getByRole("dialog", { name: "Finish setting up" });
   await expect(list.getByRole("listitem")).toHaveCount(4);

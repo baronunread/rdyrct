@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import type { LinkDTO, OrgPlan } from "@/shared/types";
+import type { LinkDTO, OrgPlan, RecentClick } from "@/shared/types";
+import { countryName } from "../lib/places";
 import { useCurrentUser } from "../lib/hooks";
 import { cn } from "../ui/cn";
 import { Badge } from "../ui/misc";
@@ -30,6 +31,7 @@ export function OrgCard({
   domain,
   domainSet,
   invited,
+  firstClick = null,
   className,
 }: {
   name: string;
@@ -39,6 +41,8 @@ export function OrgCard({
   /** The domain was added, rather than shown as what it could be. */
   domainSet: boolean;
   invited: string[];
+  /** The first click on the org, once somebody opens the link. */
+  firstClick?: RecentClick | null;
   className?: string;
 }) {
   return (
@@ -67,7 +71,7 @@ export function OrgCard({
         </span>
       </div>
       <CardRow label="First link">
-        <FirstLink link={link} />
+        <FirstLink link={link} click={firstClick} />
       </CardRow>
       <CardRow label="Domain">
         <Domain domain={domain} set={domainSet} paid={plan !== "free"} />
@@ -88,7 +92,7 @@ function CardRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function FirstLink({ link }: { link: LinkDTO | null }) {
+function FirstLink({ link, click }: { link: LinkDTO | null; click: RecentClick | null }) {
   if (!link)
     return (
       <div className="grid h-20 place-items-center rounded-[10px] text-xs text-placeholder shadow-[inset_0_0_0_1.5px_var(--border)]">
@@ -102,6 +106,30 @@ function FirstLink({ link }: { link: LinkDTO | null }) {
         <span className="truncate font-mono text-[13px] font-bold">{bare(link.url)}</span>
         <span className="truncate font-mono text-[11px] text-muted" title={link.destination}>
           {bare(link.destination)}
+        </span>
+        <span className="text-[11.5px]" aria-live="polite">
+          {click ? (
+            <span key="click" className="setup-arrive-in inline-block">
+              <span className="font-semibold text-accent-2">1 click</span>
+              <span className="text-muted">
+                {click.country && click.country !== "unknown"
+                  ? ` · ${countryName(click.country)}`
+                  : ""}
+              </span>
+            </span>
+          ) : (
+            <>
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-accent [@media(hover:hover)]:hover:underline"
+              >
+                Open it ↗
+              </a>
+              <span className="text-muted"> or scan it</span>
+            </>
+          )}
         </span>
       </span>
     </div>
