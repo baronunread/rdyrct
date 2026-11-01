@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { LinkDTO, OrgPlan, RecentClick } from "@/shared/types";
 import { countryName } from "../lib/places";
 import { useCurrentUser } from "../lib/hooks";
 import { cn } from "../ui/cn";
 import { Badge } from "../ui/misc";
+import { Spinner } from "../ui/spinner";
 import { QRPreview } from "./qr";
 
 /**
@@ -93,6 +94,9 @@ function CardRow({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function FirstLink({ link, click }: { link: LinkDTO | null; click: RecentClick | null }) {
+  // Clicks arrive in batches about every 10 seconds (worker/click-buffer.ts):
+  // once they open it, the card says it is counting rather than look stuck.
+  const [opened, setOpened] = useState(false);
   if (!link)
     return (
       <div className="grid h-20 place-items-center rounded-[10px] text-xs text-placeholder shadow-[inset_0_0_0_1.5px_var(--border)]">
@@ -117,9 +121,14 @@ function FirstLink({ link, click }: { link: LinkDTO | null; click: RecentClick |
                   : ""}
               </span>
             </span>
+          ) : opened ? (
+            <span className="inline-flex items-center gap-1.5 text-muted">
+              <Spinner className="size-3" /> Counting your click
+            </span>
           ) : (
             <>
               <a
+                onClick={() => setOpened(true)}
                 href={link.url}
                 target="_blank"
                 rel="noreferrer"

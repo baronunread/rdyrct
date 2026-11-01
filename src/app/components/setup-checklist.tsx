@@ -2,12 +2,13 @@ import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Link, useLocation } from "@tanstack/react-router";
 import type { DomainDTO, UserOrg } from "@/shared/types";
+import { useQuery } from "@tanstack/react-query";
 import {
+  recentClicksQuery,
   useDomains,
   useInvites,
   useLinkQuotaUsage,
   useMembers,
-  useRecentClicks,
 } from "../lib/hooks";
 import { hideSetupList, showSetupList, useOrgSetup } from "../lib/setup";
 import { countryName } from "../lib/places";
@@ -64,7 +65,13 @@ interface Step {
 function useSteps(org: UserOrg): Step[] | null {
   const paid = org.plan !== "free";
   const links = useLinkQuotaUsage(org.id);
-  const clicks = useRecentClicks(org.id);
+  // Clicks reach the dashboard in batches, about every 10 seconds
+  // (worker/click-buffer.ts), so while the first is awaited this asks more
+  // often than the dashboard does.
+  const clicks = useQuery({
+    ...recentClicksQuery(org.id),
+    refetchInterval: (q) => (q.state.data?.length ? 30_000 : 5_000),
+  });
   const domains = useDomains(org.id, paid);
   const members = useMembers(org.id);
   const invites = useInvites(org.id, true);
@@ -72,7 +79,7 @@ function useSteps(org: UserOrg): Step[] | null {
     return null;
   const latest = clicks.data[0];
   const others = members.data.filter((m) => m.role !== "owner");
-  const pendingInvite = invites.data.some((i) => i.email);
+  const invited = invites.data.length;
   return [
     {
       title: "Shorten your first link",
@@ -84,21 +91,21 @@ function useSteps(org: UserOrg): Step[] | null {
       done: !!latest,
       detail: latest
         ? `Latest${latest.country && latest.country !== "unknown" ? ` from ${countryName(latest.country)}` : ""}, ${relativeDate(latest.ts)}`
-        : "Open your link, or scan its QR code with your phone",
+        : "Open your link, or scan its QR code. A click shows up here within about 10 seconds.",
     },
     ...(paid ? [domainStep(domains.data ?? [])] : []),
     {
       title: "Bring your team",
-      done: others.length > 0,
+      // Done once anybody is asked: whether they accept is up to them.
+      done: others.length > 0 || invited > 0,
       detail:
         others.length > 0 ? (
           `${others[0].name} joined`
-        ) : pendingInvite ? (
-          "Waiting for them to accept"
+        ) : invited > 0 ? (
+          `${invited} invited`
         ) : (
           <Go to="/members">Invite them from Members</Go>
         ),
-      status: !others.length && pendingInvite ? <Badge>Invited</Badge> : undefined,
     },
   ];
 }

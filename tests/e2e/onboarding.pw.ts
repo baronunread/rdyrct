@@ -91,30 +91,53 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   );
   expect(org.name).toBe("Acme Coffee");
 
-  // What is left of the setup waits in the sidebar, and opens to all four.
+  // Link, click and an invite: nothing left, so no setup list.
+  await expect(page.getByRole("button", { name: /Account menu/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Finish setting up/ })).toHaveCount(0);
+
+  // Done is done: /welcome moves straight on.
+  await page.goto("/welcome");
+  await expect(page).toHaveURL(/\/dashboard$/);
+});
+
+test("what is left of the setup waits in the sidebar", async ({ page }) => {
+  await signUpAndVerify(page, `onboard-list-${Date.now()}@example.org`, password);
+  await page.goto("/welcome");
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("textbox", { name: "Long link" }).fill("https://example.org/list");
+  await page.getByRole("button", { name: "Create link" }).click();
+  await page.getByRole("button", { name: "Not now" }).click();
+  await expect(heading(page, "Invite your team")).toBeVisible();
+  await page.getByRole("button", { name: "Not now" }).click();
+  await expect(heading(page, "Dashboard")).toBeVisible();
+
+  // Free has three steps: the domain step could never be done there.
   const setup = page.getByRole("button", { name: /Finish setting up/ });
-  await expect(setup).toContainText("2 of 3");
-  // Sam is invited, not joined: the team step waits on them.
-  await expect(setup).toContainText("Next: Bring your team");
+  await expect(setup).toContainText("1 of 3");
+  await expect(setup).toContainText("Next: Get its first click");
   await setup.click();
   const list = page.getByRole("dialog", { name: "Finish setting up" });
-  // Free has no domain step: it could never be done there.
   await expect(list.getByRole("listitem")).toHaveCount(3);
-  await expect(list).toContainText("Invited");
-  // Hidden, it stays hidden.
+  await expect(list).toContainText("within about 10 seconds");
+
+  // Hidden, it stays hidden, and the account menu brings it back.
   await list.getByRole("button", { name: "Hide this list" }).click();
   await expect(setup).toHaveCount(0);
   await page.reload();
   await expect(heading(page, "Dashboard")).toBeVisible();
   await expect(setup).toHaveCount(0);
-  // The account menu brings it back while there is something left to do.
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: /Setup guide/ }).click();
-  await expect(setup).toContainText("2 of 3");
+  await expect(setup).toContainText("1 of 3");
 
-  // Done is done: /welcome moves straight on.
-  await page.goto("/welcome");
-  await expect(page).toHaveURL(/\/dashboard$/);
+  // An invite is enough for the team step: accepting is up to them.
+  const user = await (await page.request.get("/api/user")).json();
+  const made = await page.request.post(`/api/orgs/${user.orgs[0].id}/invites`, {
+    data: { role: "member" },
+  });
+  expect(made.status()).toBe(201);
+  await page.reload();
+  await expect(setup).toContainText("2 of 3");
 });
 
 test("an account that already has links never gets the flow", async ({ page }) => {
