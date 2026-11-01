@@ -58,6 +58,8 @@ import { OrgCard } from "./org-card";
  */
 
 const ORDER: FlowStep[] = ["name", "link", "domain", "team"];
+/** As long as .setup-screen-out runs (styles.css). */
+const STEP_OUT_MS = 150;
 
 export function SetupFlow({
   org,
@@ -84,10 +86,19 @@ export function SetupFlow({
   const [typed, setTyped] = useState("");
   useEffect(() => setupAt(org.id, step), [org.id, step]);
 
+  // The question on screen steps out, quieter than the next comes in,
+  // before the next one arrives.
+  const [leaving, setLeaving] = useState(false);
   const next = () => {
+    if (leaving) return;
     const at = ORDER.indexOf(step);
-    if (at === ORDER.length - 1) onDone();
-    else setStep(ORDER[at + 1]);
+    if (at === ORDER.length - 1) return onDone();
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setStep(ORDER[at + 1]);
+    setLeaving(true);
+    window.setTimeout(() => {
+      setLeaving(false);
+      setStep(ORDER[at + 1]);
+    }, STEP_OUT_MS);
   };
   const host = useExampleHost(name);
   const kept = useOrgSetup(org.id)?.host;
@@ -102,7 +113,12 @@ export function SetupFlow({
         <Pips at={ORDER.indexOf(step)} />
       </header>
       <main className="mx-auto grid w-full max-w-[880px] flex-1 grid-cols-[minmax(0,1fr)] items-center gap-10 py-10 md:grid-cols-[minmax(0,1fr)_300px]">
-        <section key={step} className="setup-screen flex max-w-[400px] flex-col" aria-live="polite">
+        <section
+          key={step}
+          className={cn("setup-screen flex max-w-[400px] flex-col", leaving && "setup-screen-out")}
+          inert={leaving}
+          aria-live="polite"
+        >
           {step === "name" && <NameStep org={org} name={name} onName={setName} onNext={next} />}
           {step === "link" && (
             <LinkStep orgId={org.id} link={link} onLink={setLink} onNext={next} />

@@ -839,6 +839,19 @@ html:active-view-transition-type(setup-flow) {
   }
 }
 
+/* And leaves to the left, half as far and faster (STEP_OUT_MS). */
+.setup-screen-out {
+  animation: 150ms ease-in both setup-screen-out;
+}
+
+@keyframes setup-screen-out {
+  to {
+    opacity: 0;
+    translate: -8px 0;
+    filter: blur(3px);
+  }
+}
+
 /* What lands in the organization card (the first link) scales in. */
 .setup-arrive-in {
   animation: 320ms cubic-bezier(0.32, 0.72, 0, 1) both setup-card-in;
