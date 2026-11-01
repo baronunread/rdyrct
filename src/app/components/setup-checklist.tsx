@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Link, useLocation } from "@tanstack/react-router";
-import type { DomainDTO, UserOrg } from "@/shared/types";
+import type { DomainDTO, RecentClick, UserOrg } from "@/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import {
   recentClicksQuery,
@@ -75,39 +75,50 @@ function useSteps(org: UserOrg): Step[] | null {
   const domains = useDomains(org.id, paid);
   const members = useMembers(org.id);
   const invites = useInvites(org.id, true);
-  if (!links.data || !clicks.data || (paid && !domains.data) || !members.data || !invites.data)
-    return null;
-  const latest = clicks.data[0];
-  const others = members.data.filter((m) => m.role !== "owner");
-  const invited = invites.data.length;
+  const domainsReady = !paid || !!domains.data;
+  if (!links.data || !clicks.data || !domainsReady || !members.data || !invites.data) return null;
   return [
-    {
-      title: "Shorten your first link",
-      done: links.data.count > 0,
-      detail: links.data.count > 0 ? "Done" : <Go to="/dashboard">Paste one on the dashboard</Go>,
-    },
-    {
-      title: "Get its first click",
-      done: !!latest,
-      detail: latest
-        ? `Latest${latest.country && latest.country !== "unknown" ? ` from ${countryName(latest.country)}` : ""}, ${relativeDate(latest.ts)}`
-        : "Open your link, or scan its QR code. A click shows up here within about 10 seconds.",
-    },
+    linkStep(links.data.count),
+    clickStep(clicks.data[0]),
     ...(paid ? [domainStep(domains.data ?? [])] : []),
-    {
-      title: "Bring your team",
-      // Done once anybody is asked: whether they accept is up to them.
-      done: others.length > 0 || invited > 0,
-      detail:
-        others.length > 0 ? (
-          `${others[0].name} joined`
-        ) : invited > 0 ? (
-          `${invited} invited`
-        ) : (
-          <Go to="/members">Invite them from Members</Go>
-        ),
-    },
+    teamStep(
+      members.data.filter((m) => m.role !== "owner"),
+      invites.data.length,
+    ),
   ];
+}
+
+function linkStep(count: number): Step {
+  const done = count > 0;
+  return {
+    title: "Shorten your first link",
+    done,
+    detail: done ? "Done" : <Go to="/dashboard">Paste one on the dashboard</Go>,
+  };
+}
+
+function clickStep(latest: RecentClick | undefined): Step {
+  if (!latest)
+    return {
+      title: "Get its first click",
+      done: false,
+      detail: "Open your link, or scan its QR code. A click shows up here within about 10 seconds.",
+    };
+  const known = latest.country && latest.country !== "unknown";
+  const from = known ? ` from ${countryName(latest.country)}` : "";
+  return {
+    title: "Get its first click",
+    done: true,
+    detail: `Latest${from}, ${relativeDate(latest.ts)}`,
+  };
+}
+
+/** Done once anybody is asked: whether they accept is up to them. */
+function teamStep(others: { name: string }[], invited: number): Step {
+  const title = "Bring your team";
+  if (others.length > 0) return { title, done: true, detail: `${others[0].name} joined` };
+  if (invited > 0) return { title, done: true, detail: `${invited} invited` };
+  return { title, done: false, detail: <Go to="/members">Invite them from Members</Go> };
 }
 
 function domainStep(domains: DomainDTO[]): Step {

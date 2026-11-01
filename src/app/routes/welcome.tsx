@@ -176,6 +176,7 @@ const holdFor = (phase: Phase): number | undefined =>
  * finished flow), the app for anybody else, however they signed in.
  */
 function useMoveOn(
+  phase: Phase,
   intent: PlanIntent | null,
   fromCheckout: boolean,
   enterApp: (wait: number) => void,
@@ -191,18 +192,15 @@ function useMoveOn(
       arriveInFlow(() => setPhase("flow"));
     }, hold);
   };
-  return { moveOn, known: list.known };
-}
-
-/** Each closing card moves on once, after its hold. */
-function useHold(phase: Phase, known: boolean, moveOn: (hold: number) => void) {
+  // Each closing card moves on once, after its hold.
   const moved = useRef(false);
   useEffect(() => {
     const hold = holdFor(phase);
-    if (hold === undefined || moved.current || !known) return;
+    if (hold === undefined || moved.current || !list.known) return;
     moved.current = true;
     moveOn(hold);
   });
+  return { moveOn, known: list.known };
 }
 
 /** Signed out (an old tab, an expired session): to sign-in, and back here. */
@@ -234,7 +232,7 @@ export function WelcomePage() {
   usePreloadApp(target);
   useLateWebhook(phase, user?.plan, setPhase);
   useConfirmPayment(phase, checkoutId, user?.plan, setPhase);
-  const { moveOn, known } = useMoveOn(intent, fromCheckout, enterApp, setPhase);
+  const { moveOn, known } = useMoveOn(phase, intent, fromCheckout, enterApp, setPhase);
   const retry = useOpenCheckout(
     phase,
     intent,
@@ -243,7 +241,6 @@ export function WelcomePage() {
     () => setPhase("failed"),
     () => moveOn(0),
   );
-  useHold(phase, known, moveOn);
   useEffect(() => {
     if (window.location.search) window.history.replaceState({}, "", "/welcome");
   }, []);

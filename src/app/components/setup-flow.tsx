@@ -77,32 +77,45 @@ export function SetupFlow({
   cancelled?: boolean;
   onDone: () => void;
 }) {
-  const [step, setStep] = useState<FlowStep>(start);
-  const [name, setName] = useState(org.name);
+  const { step, leaving, next } = useStepper(org.id, start, onDone);
+  // The name as typed; the org's own until somebody types.
+  const [edited, setName] = useState<string | null>(null);
+  const name = edited ?? org.name;
   const [link, setLink] = useState<LinkDTO | null>(null);
   const [invited, setInvited] = useState<string[]>([]);
   const [domain, setDomain] = useState<string | null>(null);
   // What the domain step has typed so far, for the card to show.
   const [typed, setTyped] = useState("");
-  useEffect(() => setupAt(org.id, step), [org.id, step]);
-
-  // The question on screen steps out, quieter than the next comes in,
-  // before the next one arrives.
-  const [leaving, setLeaving] = useState(false);
-  const next = () => {
-    if (leaving) return;
-    const at = ORDER.indexOf(step);
-    if (at === ORDER.length - 1) return onDone();
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setStep(ORDER[at + 1]);
-    setLeaving(true);
-    window.setTimeout(() => {
-      setLeaving(false);
-      setStep(ORDER[at + 1]);
-    }, STEP_OUT_MS);
-  };
   const host = useExampleHost(name);
   const kept = useOrgSetup(org.id)?.host;
+  const keptAdded = useKeptDomain(org, kept);
+  const added = domain ?? keptAdded;
   const firstClick = useFirstClick(org.id, !!link);
+  const screens = {
+    name: () => <NameStep org={org} name={name} onName={setName} onNext={next} />,
+    link: () => <LinkStep orgId={org.id} link={link} onLink={setLink} onNext={next} />,
+    domain: () => (
+      <DomainStep
+        org={org}
+        host={host}
+        link={link}
+        intent={intent}
+        kept={kept}
+        cancelled={cancelled}
+        onAdded={setDomain}
+        onTyped={setTyped}
+        onNext={next}
+      />
+    ),
+    team: () => (
+      <TeamStep
+        org={org}
+        invited={invited}
+        onInvited={(sent) => setInvited((was) => [...was, ...sent])}
+        onNext={next}
+      />
+    ),
+  } satisfies Record<FlowStep, () => ReactNode>;
 
   return (
     <div className="flex min-h-dvh flex-col px-5 py-5 sm:px-8">
@@ -119,38 +132,14 @@ export function SetupFlow({
           inert={leaving}
           aria-live="polite"
         >
-          {step === "name" && <NameStep org={org} name={name} onName={setName} onNext={next} />}
-          {step === "link" && (
-            <LinkStep orgId={org.id} link={link} onLink={setLink} onNext={next} />
-          )}
-          {step === "domain" && (
-            <DomainStep
-              org={org}
-              host={host}
-              link={link}
-              intent={intent}
-              kept={kept}
-              cancelled={cancelled}
-              onAdded={setDomain}
-              onTyped={setTyped}
-              onNext={next}
-            />
-          )}
-          {step === "team" && (
-            <TeamStep
-              org={org}
-              invited={invited}
-              onInvited={(sent) => setInvited((was) => [...was, ...sent])}
-              onNext={next}
-            />
-          )}
+          {screens[step]()}
         </section>
         <OrgCard
           name={name.trim() || org.name}
           plan={org.plan}
           link={link}
-          domain={domain ?? (typed || host)}
-          domainSet={!!domain}
+          domain={added ?? (typed || host)}
+          domainSet={!!added}
           invited={invited}
           firstClick={firstClick}
           className="max-md:order-first"
@@ -158,6 +147,35 @@ export function SetupFlow({
       </main>
     </div>
   );
+}
+
+/** Which question is on screen. Moving on, the one there steps out,
+ * quieter than the next comes in, before the next arrives; the last one
+ * ends the flow. The step is kept per browser (lib/setup.ts), so a trip to
+ * checkout comes back to it. */
+function useStepper(orgId: string, start: FlowStep, onDone: () => void) {
+  const [step, setStep] = useState<FlowStep>(start);
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => setupAt(orgId, step), [orgId, step]);
+  const next = () => {
+    if (leaving) return;
+    const after = ORDER[ORDER.indexOf(step) + 1];
+    if (!after) return onDone();
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setStep(after);
+    setLeaving(true);
+    window.setTimeout(() => {
+      setLeaving(false);
+      setStep(after);
+    }, STEP_OUT_MS);
+  };
+  return { step, leaving, next };
+}
+
+/** A domain kept through checkout that is already on the org (a reload
+ * after the domain step added it). */
+function useKeptDomain(org: UserOrg, kept: string | undefined): string | null {
+  const domains = useDomains(org.id, org.plan !== "free" && !!kept);
+  return kept && domains.data?.some((d) => d.hostname === kept) ? kept : null;
 }
 
 /** The org's first click, asked for every few seconds once there is a
@@ -490,9 +508,14 @@ function DomainUpsell({
   const [hostname, setHostname] = useState(kept ?? "");
   const [error, setError] = useState<string | undefined>();
   const typed = hostname.trim().toLowerCase();
+  const valid = HOSTNAME.test(typed);
   const slug = chosenSlug(link?.destination);
-  const name = PLAN_NAME[plan.target];
-  const other = OTHER[plan.target];
+  const type = (value: string) => {
+    setHostname(value);
+    setError(undefined);
+    const next = value.trim().toLowerCase();
+    onTyped(HOSTNAME.test(next) ? next : "");
+  };
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (typed && !HOSTNAME.test(typed)) {
@@ -518,22 +541,13 @@ function DomainUpsell({
             autoComplete="off"
             spellCheck={false}
             className="font-mono"
-            onChange={(e) => {
-              setHostname(e.target.value);
-              setError(undefined);
-              const value = e.target.value.trim().toLowerCase();
-              onTyped(HOSTNAME.test(value) ? value : "");
-            }}
+            onChange={(e) => type(e.target.value)}
           />
         </Field>
       </div>
       <div className="mt-3 flex flex-col gap-2">
         {link && <Address label="Now" address={shortUrl(link)} />}
-        <Address
-          label="On your domain"
-          address={`${(HOSTNAME.test(typed) && typed) || host}/${slug}`}
-          accent
-        />
+        <Address label="On your domain" address={`${valid ? typed : host}/${slug}`} accent />
       </div>
       <div className="mt-4">
         <Segmented
@@ -543,28 +557,38 @@ function DomainUpsell({
           onChange={(interval) => setPlan({ ...plan, interval })}
         />
       </div>
-      <p className="mt-2.5 text-xs text-pretty text-muted">
-        {plan.target === "pro"
-          ? "Pro: 5 domains, 3 organizations, 25 members. "
-          : "Need more than one domain? "}
-        <button
-          type="button"
-          onClick={() => setPlan({ ...plan, target: other })}
-          className="cursor-pointer text-accent underline decoration-accent/40 underline-offset-2 [@media(hover:hover)]:hover:decoration-accent"
-        >
-          {plan.target === "pro" ? "Back to Hobby" : "Pro"}, {priceLine({ ...plan, target: other })}
-        </button>
-        {plan.target === "pro" ? "" : ": 5 domains, 3 organizations."}
-      </p>
+      <PlanSwitch plan={plan} onPlan={setPlan} />
       <Actions>
         <Button type="submit" variant="primary" disabled={upgrade.busy}>
           <BusyContent busy={upgrade.busy}>
-            {HOSTNAME.test(typed) ? `Add ${typed} with ${name}` : `${name}, ${priceLine(plan)}`}
+            {valid
+              ? `Add ${typed} with ${PLAN_NAME[plan.target]}`
+              : `${PLAN_NAME[plan.target]}, ${priceLine(plan)}`}
           </BusyContent>
         </Button>
         <SkipButton onClick={onNext} label="Not now" />
       </Actions>
     </form>
+  );
+}
+
+/** The other paid plan, one click away: Hobby leads, since a domain step
+ * needs one domain; Pro is for more. */
+function PlanSwitch({ plan, onPlan }: { plan: PlanIntent; onPlan: (plan: PlanIntent) => void }) {
+  const pro = plan.target === "pro";
+  const other = { ...plan, target: OTHER[plan.target] };
+  return (
+    <p className="mt-2.5 text-xs text-pretty text-muted">
+      {pro ? "Pro: 5 domains, 3 organizations, 25 members. " : "Need more than one domain? "}
+      <button
+        type="button"
+        onClick={() => onPlan(other)}
+        className="cursor-pointer text-accent underline decoration-accent/40 underline-offset-2 [@media(hover:hover)]:hover:decoration-accent"
+      >
+        {pro ? "Back to Hobby" : "Pro"}, {priceLine(other)}
+      </button>
+      {pro ? "" : ": 5 domains, 3 organizations."}
+    </p>
   );
 }
 
@@ -621,18 +645,15 @@ function DomainForm({
       },
       onError: (err) => setError(reasonFrom(err, "Could not add it")),
     });
-  // Back from checkout with a domain typed before it: add that one, or pick
-  // it up if a reload already did.
+  // Back from checkout with a domain typed before it: add that one, unless
+  // a reload already did (then it is in the list, and shown from there).
+  const existing = kept ? domains.data?.find((d) => d.hostname === kept) : undefined;
   useEffect(() => {
     if (!kept || tried.current || !domains.data) return;
     tried.current = true;
-    const existing = domains.data.find((d) => d.hostname === kept);
-    if (existing) {
-      setAdded(existing);
-      onAdded(existing.hostname);
-    } else addHost(kept);
+    if (!existing) addHost(kept);
   });
-  const shown = added ?? null;
+  const shown = added ?? existing;
   if (shown) return <DomainAdded org={org} domain={shown} onNext={onNext} />;
   if (kept && !error)
     return (
@@ -733,7 +754,6 @@ function TeamStep({
   onNext: () => void;
 }) {
   const qc = useQueryClient();
-  const toast = useToast();
   const chips = useRef<HTMLInputElement>(null);
   const [emails, setEmails] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
@@ -749,7 +769,8 @@ function TeamStep({
       }),
     onSuccess: ({ failed }, addresses) => {
       void refresh();
-      onInvited(addresses.filter((a) => !failed.includes(a)));
+      const missed = new Set(failed);
+      onInvited(addresses.filter((a) => !missed.has(a)));
       setEmails(failed);
       if (failed.length) {
         setError("Couldn't email these. Try again");
@@ -761,34 +782,13 @@ function TeamStep({
       chips.current?.focus();
     },
   });
-  const link = useMutation({
-    mutationFn: () =>
-      api<InvitesCreated>(`/orgs/${org.id}/invites`, { method: "POST", body: { role } }),
-    onSuccess: async ({ invites }) => {
-      void refresh();
-      const token = invites[0]?.token;
-      if (!token) return;
-      await copyToClipboard(`${window.location.origin}/invite/${token}`, toast, {
-        success: "Invite link copied",
-      }).catch(() => {});
-      setCopied(true);
-    },
-    onError: (err) => toast(reasonFrom(err, "Could not make the link"), "error"),
-  });
   const send = (e: FormEvent) => {
     e.preventDefault();
     if (invite.isPending) return;
     const all = [...emails, ...splitEmails(draft)];
     setEmails(all);
     setDraft("");
-    const bad = all.filter((a) => !isEmail(a));
-    const reason = !all.length
-      ? "Add an email"
-      : bad.length === 1
-        ? `Not an email: ${bad[0]}`
-        : bad.length
-          ? `${bad.length} are not emails`
-          : undefined;
+    const reason = emailsProblem(all);
     setError(reason);
     if (reason) chips.current?.focus();
     else invite.mutate(all);
@@ -833,24 +833,12 @@ function TeamStep({
         </Button>
       </div>
       <div className="mt-1.5">
-        <Button
-          variant="ghost"
-          className="-ml-2.5"
-          disabled={link.isPending}
-          onClick={() => link.mutate()}
-          title="Makes a single-use link, valid 7 days, and copies it"
-        >
-          <BusyContent busy={link.isPending}>
-            <span className="inline-flex items-center gap-1.5">
-              {copied ? (
-                <Check size={15} aria-hidden className="welcome-check" />
-              ) : (
-                <LinkIcon size={15} aria-hidden />
-              )}
-              {copied ? "Copied" : "Copy invite link"}
-            </span>
-          </BusyContent>
-        </Button>
+        <InviteLinkButton
+          orgId={org.id}
+          role={role}
+          copied={copied}
+          onCopied={() => setCopied(true)}
+        />
       </div>
       <p className="mt-2.5 min-h-4 text-xs text-muted tabular-nums" aria-live="polite">
         {invited.length > 0 &&
@@ -863,6 +851,65 @@ function TeamStep({
         {!invited.length && !copied && <SkipButton onClick={onNext} label="Not now" />}
       </Actions>
     </form>
+  );
+}
+
+/** What is wrong with a list of addresses, if anything. */
+function emailsProblem(all: string[]): string | undefined {
+  if (!all.length) return "Add an email";
+  const bad = all.filter((a) => !isEmail(a));
+  if (bad.length === 1) return `Not an email: ${bad[0]}`;
+  if (bad.length) return `${bad.length} are not emails`;
+  return undefined;
+}
+
+/** A single-use invite link, made and copied in one press. */
+function InviteLinkButton({
+  orgId,
+  role,
+  copied,
+  onCopied,
+}: {
+  orgId: string;
+  role: InvitableRole;
+  copied: boolean;
+  onCopied: () => void;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const link = useMutation({
+    mutationFn: () =>
+      api<InvitesCreated>(`/orgs/${orgId}/invites`, { method: "POST", body: { role } }),
+    onSuccess: async ({ invites }) => {
+      void qc.invalidateQueries({ queryKey: ["invites", orgId] });
+      const token = invites[0]?.token;
+      if (!token) return;
+      await copyToClipboard(`${window.location.origin}/invite/${token}`, toast, {
+        success: "Invite link copied",
+      }).catch(() => {});
+      onCopied();
+    },
+    onError: (err) => toast(reasonFrom(err, "Could not make the link"), "error"),
+  });
+  return (
+    <Button
+      variant="ghost"
+      className="-ml-2.5"
+      disabled={link.isPending}
+      onClick={() => link.mutate()}
+      title="Makes a single-use link, valid 7 days, and copies it"
+    >
+      <BusyContent busy={link.isPending}>
+        <span className="inline-flex items-center gap-1.5">
+          {copied ? (
+            <Check size={15} aria-hidden className="welcome-check" />
+          ) : (
+            <LinkIcon size={15} aria-hidden />
+          )}
+          {copied ? "Copied" : "Copy invite link"}
+        </span>
+      </BusyContent>
+    </Button>
   );
 }
 

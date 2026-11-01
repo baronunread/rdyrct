@@ -7,6 +7,7 @@
  * Off where the browser cannot tell transition types apart: there the named
  * parts would also travel on every ordinary page change.
  */
+// react-doctor-disable-next-line react-doctor/no-flush-sync -- it runs inside startViewTransition's update, which must leave the new DOM in place when it returns.
 import { flushSync } from "react-dom";
 
 export const SETUP_ARRIVE = globalThis.CSS?.supports?.("selector(:active-view-transition-type(a))")
