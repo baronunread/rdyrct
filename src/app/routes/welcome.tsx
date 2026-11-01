@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "@/app/ui/icons";
@@ -75,15 +75,16 @@ function useEnterApp(target: string) {
   const user = useCurrentUser();
   const { org } = useCurrentOrg();
   const [delay, setDelay] = useState<number | null>(null);
-  const entered = useRef(false);
-  useEffect(() => {
-    if (delay === null || !user.data || entered.current) return;
-    entered.current = true;
-    window.setTimeout(() => {
-      if (org) void navigate({ href: target, replace: true, viewTransition: SETUP_ARRIVE });
-      else void navigate({ href: "/dashboard", replace: true });
-    }, delay);
+  const signedIn = !!user.data;
+  const enter = useEffectEvent(() => {
+    if (org) void navigate({ href: target, replace: true, viewTransition: SETUP_ARRIVE });
+    else void navigate({ href: "/dashboard", replace: true });
   });
+  useEffect(() => {
+    if (delay === null || !signedIn) return;
+    const timer = window.setTimeout(enter, delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, signedIn]);
   return (wait: number) => setDelay((current) => current ?? wait);
 }
 
@@ -184,10 +185,14 @@ function useMoveOn(
 ) {
   const { org } = useCurrentOrg();
   const list = useWelcomeList(fromCheckout);
+  // The hold before the flow, released if the page goes first.
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   const moveOn = (hold: number) => {
     if (!list.known) return;
     if (!list.listed || !org) return enterApp(hold);
-    window.setTimeout(() => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
       startSetup(org.id, intent ?? undefined);
       arriveInFlow(() => setPhase("flow"));
     }, hold);
