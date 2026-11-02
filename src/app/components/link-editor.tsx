@@ -13,7 +13,7 @@ import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { IconChevronLeft, IconWorld } from "@tabler/icons-react";
-import { Lock, Plus, QrCode } from "@/app/ui/icons";
+import { Lock, QrCode } from "@/app/ui/icons";
 import { shortUrl } from "../lib/api";
 import { useLinkHost } from "../lib/hooks";
 import {
@@ -93,6 +93,10 @@ const UTM_MAIN: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmMedium", label: "Medium", placeholder: "email" },
   { key: "utmCampaign", label: "Campaign", placeholder: "spring-sale" },
 ];
+/** The QR preview, the same on the link and in Customize QR, so moving
+ * between them does not resize it. */
+const QR_PREVIEW_SIZE = 160;
+
 const UTM_MORE: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmTerm", label: "Term", placeholder: "running-shoes" },
   { key: "utmContent", label: "Content", placeholder: "ad-variant-a" },
@@ -230,21 +234,9 @@ function UtmInput({
   );
 }
 
-/** UTM tags inline, because people change them more than anything else on
- * a link. Term and content open on request, and stay open once either has a
- * value, so nothing set is ever out of sight. */
-function UtmFields({
-  form,
-  setForm,
-  showMore,
-  onShowMore,
-}: {
-  form: LinkInput;
-  setForm: SetForm;
-  showMore: boolean;
-  onShowMore: () => void;
-}) {
-  const open = showMore || !!form.utmTerm || !!form.utmContent;
+/** UTM tags inline, all five, because people change them more than
+ * anything else on a link. */
+function UtmFields({ form, setForm }: { form: LinkInput; setForm: SetForm }) {
   return (
     <fieldset className="flex min-w-0 flex-col gap-2">
       <legend className="mb-2 text-sm font-semibold">UTM tags</legend>
@@ -253,32 +245,10 @@ function UtmFields({
           <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
         ))}
       </div>
-      {/* Closed, the row is still laid out, invisible, under the button: the
-          centred dialog would otherwise grow and jump when it opens. Not on
-          a phone, where the sheet grows from the bottom edge and two
-          stacked fields would be a lot of empty space. */}
-      <div className="grid *:[grid-area:1/1]">
-        <div
-          inert={!open}
-          className={cn(
-            "grid grid-cols-1 gap-2 min-[420px]:grid-cols-2",
-            !open && "max-sm:hidden sm:invisible",
-          )}
-        >
-          {UTM_MORE.map((f) => (
-            <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
-          ))}
-        </div>
-        {!open && (
-          <button
-            type="button"
-            onClick={onShowMore}
-            aria-expanded={false}
-            className="-ml-1 flex h-8 w-fit cursor-pointer items-center gap-1 self-start rounded-md px-1 text-xs text-muted transition-colors [@media(hover:hover)]:hover:text-text"
-          >
-            <Plus size={13} aria-hidden /> Term and content
-          </button>
-        )}
+      <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
+        {UTM_MORE.map((f) => (
+          <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
+        ))}
       </div>
     </fieldset>
   );
@@ -455,8 +425,6 @@ function LinkFormFields({
   slugRef,
   destinationError,
   slugError,
-  showMoreUtm,
-  onShowMoreUtm,
 }: {
   form: LinkInput;
   setForm: SetForm;
@@ -467,8 +435,6 @@ function LinkFormFields({
   slugRef: RefObject<HTMLInputElement | null>;
   destinationError?: LinkFieldError;
   slugError?: LinkFieldError;
-  showMoreUtm: boolean;
-  onShowMoreUtm: () => void;
 }) {
   const toast = useToast();
   const host = destinationHost(form.destination);
@@ -551,7 +517,7 @@ function LinkFormFields({
         />
       </Field>
 
-      <UtmFields form={form} setForm={setForm} showMore={showMoreUtm} onShowMore={onShowMoreUtm} />
+      <UtmFields form={form} setForm={setForm} />
     </div>
   );
 }
@@ -738,7 +704,6 @@ export function LinkEditor({
   const [formHeight, setFormHeight] = useState<number | undefined>();
   // The QR editor replaces the form in the same dialog, with a way back.
   const [view, setView] = useState<"form" | "qr">("form");
-  const [showMoreUtm, setShowMoreUtm] = useState(false);
   // A refusal pinned on a field: by the server, or by the same address test
   // run here first. Cleared as soon as that field changes.
   const [fieldError, setFieldError] = useState<LinkFieldError | null>(null);
@@ -773,8 +738,6 @@ export function LinkEditor({
       reset(editingLink ?? { ...defaultForm, domainId: newDomainId });
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
       setView("form");
-      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
-      setShowMoreUtm(false);
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
       setFieldError(null);
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
@@ -1008,8 +971,6 @@ export function LinkEditor({
                 slugRef={slugRef}
                 destinationError={destinationError}
                 slugError={slugError}
-                showMoreUtm={showMoreUtm}
-                onShowMoreUtm={() => setShowMoreUtm(true)}
               />
             </div>
             <aside className={ASIDE}>
@@ -1017,7 +978,12 @@ export function LinkEditor({
                 <DialogClose className="-mr-1.5" />
               </div>
               <div className="flex flex-col items-center gap-3">
-                <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={156} />
+                <LinkQrPreview
+                  form={form}
+                  orgQr={orgQr}
+                  previewUrl={previewUrl}
+                  size={QR_PREVIEW_SIZE}
+                />
                 {qrCustomEnabled ? (
                   <Button ref={customizeRef} size="sm" onClick={openQr}>
                     <QrCode size={14} aria-hidden /> Customize QR
@@ -1069,7 +1035,12 @@ export function LinkEditor({
                 <DialogClose className="-mr-1.5" />
               </div>
               <div className="flex flex-col items-center gap-3">
-                <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={168} />
+                <LinkQrPreview
+                  form={form}
+                  orgQr={orgQr}
+                  previewUrl={previewUrl}
+                  size={QR_PREVIEW_SIZE}
+                />
                 <QrContrastNote look={look} />
               </div>
               <Footer className="mt-auto pt-1 max-sm:hidden">{qrActions}</Footer>
