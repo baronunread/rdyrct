@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { IconChartLine, IconLink, IconPlus, IconQrcode, IconUsers } from "@tabler/icons-react";
+import { IconLink, IconPlus } from "@tabler/icons-react";
 import { dashboardView } from "./dashboard-view";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { HrefLink } from "../lib/router-search";
@@ -22,11 +22,9 @@ import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
 import { settle, type PageContext } from "../lib/route-preload";
 import { ApiError } from "../lib/api";
 import {
-  PLAN_LIMITS,
   type DomainDTO,
   type LinkDTO,
   type LinkInput,
-  type OrgPlan,
   type OrgStats,
   type RecentClick,
   type StatsLinkRef,
@@ -171,7 +169,11 @@ function DashboardBody({
     ...s.deadLinks.map((l) => ({ ...l, suffix: "No clicks in 30 days" })),
   ];
   const hourly = s.bucket === "hour";
-  const topLinks = s.topLinks.slice(0, 6);
+  // Before any link has a click in the range, the newest links stand in at
+  // zero: a link made a moment ago is on the page, not missing from it.
+  const topLinks: (StatsLinkRef & { clicks: number })[] = s.topLinks.length
+    ? s.topLinks.slice(0, 6)
+    : data.recentLinks.map((l) => ({ ...l, clicks: 0 }));
   return (
     <div
       aria-busy={data.updating}
@@ -336,12 +338,12 @@ function DashboardScreen({
   } | null>(null);
 
   // First run. An organization exists from the first session, so what is
-  // missing is the link, and the field that makes one is already the first
-  // thing on this page. Showing the rest (three zeroes, four empty cards, a
-  // flat chart) would teach somebody that the product is empty; hiding it
-  // until there is something to count leaves one question on screen. Only
-  // for somebody who can make that link: a read-only org or a viewer gets
-  // the dashboard as it is.
+  // missing is the link. The page keeps its header, the way Resend, Linear
+  // and Stripe keep theirs, and one plain panel takes the place of the cards
+  // with the field that makes it: three zeroes, four empty cards and a flat
+  // chart would teach somebody the product is empty. Only for somebody who
+  // can make that link: a read-only org or a viewer gets the dashboard as it
+  // is.
   const firstRun = useHeldFirstRun(
     s.totalLinks === 0 && canWrite,
     created !== null || sameDestination !== null || data.create.isPending,
@@ -365,15 +367,16 @@ function DashboardScreen({
 
   return (
     <div>
-      {firstRun ? null : (
-        <div data-setup-head>
-          <PageHeader
-            title="Dashboard"
-            action={
-              // The range sits left of New link on a desktop, where the eye
-              // ends on the primary action; on a phone New link comes first.
-              <div className="flex flex-wrap items-center gap-2">
-                <NewLinkAction canCreate={canCreate} locked={!!org?.locked} onOpen={openNewLink} />
+      <PageHeader
+        title="Dashboard"
+        action={
+          // The range sits left of New link on a desktop, where the eye
+          // ends on the primary action; on a phone New link comes first.
+          // No range before the first link: there is nothing to range over.
+          <div className="flex flex-wrap items-center gap-2">
+            <NewLinkAction canCreate={canCreate} locked={!!org?.locked} onOpen={openNewLink} />
+            {!firstRun && (
+              <div data-setup-head className="flex">
                 <RangeControl
                   presets={DASHBOARD_RANGES}
                   maxDays={limits.analyticsDays}
@@ -382,10 +385,10 @@ function DashboardScreen({
                   onChange={onRangeChange}
                 />
               </div>
-            }
-          />
-        </div>
-      )}
+            )}
+          </div>
+        }
+      />
 
       <ClickCapBanner />
 
@@ -393,7 +396,6 @@ function DashboardScreen({
           the same dialog everywhere (header, C, ⌘K). */}
       <DashboardMain
         firstRun={firstRun}
-        plan={org?.plan ?? "free"}
         stats={s}
         data={data}
         days={range.days}
@@ -448,21 +450,19 @@ function useHeldFirstRun(firstRun: boolean, holding: boolean): boolean {
  * empty org, the dashboard otherwise. */
 function DashboardMain({
   firstRun,
-  plan,
   stats,
   data,
   days,
   quickCreate,
 }: {
   firstRun: boolean;
-  plan: OrgPlan;
   stats: NonNullable<DashboardData["stats"]>;
   data: DashboardData;
   /** The range the insights row compares over. */
   days: number;
   quickCreate: QuickCreateProps;
 }) {
-  if (firstRun) return <FirstRun plan={plan} {...quickCreate} />;
+  if (firstRun) return <FirstRun {...quickCreate} />;
   return (
     <div data-setup-body>
       <DashboardBody stats={stats} data={data} days={days} />
@@ -470,66 +470,20 @@ function DashboardMain({
   );
 }
 
-const PLAN_NAMES = {
-  free: "Free",
-  hobby: "Hobby",
-  pro: "Pro",
-  unlimited: "",
-} satisfies Record<OrgPlan, string>;
-
-/** What a new account gets, in three lines under the field. */
-function firstRunFeatures(plan: OrgPlan) {
-  const members = PLAN_LIMITS[plan].members;
-  const team =
-    plan === "unlimited"
-      ? "Invite them from Members."
-      : `${PLAN_NAMES[plan]} includes ${members} members. Invite them from Members.`;
-  return [
-    {
-      icon: IconQrcode,
-      title: "Every link gets a QR code",
-      text: "Download it as PNG or SVG once the link exists.",
-    },
-    {
-      icon: IconChartLine,
-      title: "See who clicks",
-      text: "Countries, sources and devices, never an IP address.",
-    },
-    { icon: IconUsers, title: "Bring your team", text: team },
-  ];
-}
-
-/** A new account's dashboard: one question in a centred column, then what
- * comes with the answer. */
-function FirstRun({ plan, ...form }: { plan: OrgPlan } & QuickCreateProps) {
+/** A new account's dashboard under its header: one plain panel with a
+ * title, one line and the field, the way an empty page looks in Resend or
+ * Stripe. No feature list, no stand-in rows: the field is the point. */
+function FirstRun(form: QuickCreateProps) {
   return (
-    <div className="mx-auto flex max-w-[560px] flex-col gap-[22px] pt-4 sm:pt-14">
-      <div className="flex flex-col gap-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance">
-          Shorten your first link
-        </h1>
-        <p className="text-sm text-pretty text-muted">
-          Paste any long URL. Its clicks and QR code show up here.
-        </p>
+    <section className="flex flex-col items-center rounded-xl bg-surface px-5 py-12 text-center smooth-shadow-ring-xs sm:py-20">
+      <h2 className="text-lg font-semibold tracking-tight text-balance">Shorten your first link</h2>
+      <p className="mt-1.5 text-sm text-pretty text-muted">
+        Paste a long URL. Its clicks and QR code show up here.
+      </p>
+      <div className="mt-6 w-full max-w-[560px] text-left">
+        <QuickCreateCard {...form} />
       </div>
-      <QuickCreateCard {...form} />
-      <ul className="mt-3 flex flex-col rounded-xl smooth-shadow-ring-xs">
-        {firstRunFeatures(plan).map(({ icon: Icon, title, text }, i) => (
-          <li
-            key={title}
-            className={`flex min-h-[58px] items-center gap-3 py-2.5 pr-2.5 pl-3 ${i ? "shadow-[inset_0_1px_0_var(--border)]" : ""}`}
-          >
-            <span className="grid size-10 shrink-0 place-items-center rounded-[9px] bg-bg text-muted">
-              <Icon size={16} stroke={1.75} aria-hidden />
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="text-sm font-semibold">{title}</span>
-              <span className="text-xs text-pretty text-muted">{text}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </section>
   );
 }
 
@@ -552,7 +506,7 @@ function QuickCreateDomainSelect({
         value={domainId ?? ""}
         onChange={(v) => onChange(v || null)}
         options={[
-          { value: "", label: `shared: ${linkHost}` },
+          { value: "", label: linkHost },
           ...activeDomains.map((d) => ({ value: d.id, label: displayHost(d.hostname) })),
         ]}
       />
@@ -679,50 +633,44 @@ function QuickCreateCard({
   );
 
   return (
-    <div className="rounded-xl bg-surface p-2 smooth-shadow-ring-sm">
-      <form
-        onSubmit={submit}
-        noValidate
-        className="flex flex-col gap-2 sm:flex-row sm:items-center"
-      >
-        <div className="relative min-w-0 flex-1">
-          <IconLink
-            aria-hidden
-            size={16}
-            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-placeholder"
-          />
-          <Input
-            {...register("destination", { onChange: () => clearErrors("destination") })}
-            className="h-12 pl-9 text-base shadow-none sm:text-[15px]"
-            placeholder="https://example.com/launch"
-            aria-label="Destination URL"
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "first-link-error" : undefined}
-            inputMode="url"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            style={error ? { paddingRight: "9rem" } : undefined}
-          />
-          {error && (
-            <span
-              id="first-link-error"
-              className="pointer-events-none absolute top-1/2 right-3 max-w-32 -translate-y-1/2 truncate text-xs text-danger"
-            >
-              {fieldReason(error)}
-            </span>
-          )}
-        </div>
-        <QuickCreateDomainSelect
-          activeDomains={activeDomains}
-          domainId={domainId}
-          onChange={setPicked}
+    <form onSubmit={submit} noValidate className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="relative min-w-0 flex-1">
+        <IconLink
+          aria-hidden
+          size={16}
+          className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-placeholder"
         />
-        <Button variant="primary" type="submit" className="h-12 px-5">
-          <BusyContent busy={create.isPending}>Create link</BusyContent>
-        </Button>
-      </form>
-    </div>
+        <Input
+          {...register("destination", { onChange: () => clearErrors("destination") })}
+          className="h-12 pl-9 text-base shadow-none sm:text-[15px]"
+          placeholder="https://example.com/launch"
+          aria-label="Destination URL"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "first-link-error" : undefined}
+          inputMode="url"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          style={error ? { paddingRight: "9rem" } : undefined}
+        />
+        {error && (
+          <span
+            id="first-link-error"
+            className="pointer-events-none absolute top-1/2 right-3 max-w-32 -translate-y-1/2 truncate text-xs text-danger"
+          >
+            {fieldReason(error)}
+          </span>
+        )}
+      </div>
+      <QuickCreateDomainSelect
+        activeDomains={activeDomains}
+        domainId={domainId}
+        onChange={setPicked}
+      />
+      <Button variant="primary" type="submit" className="h-12 px-5">
+        <BusyContent busy={create.isPending}>Create link</BusyContent>
+      </Button>
+    </form>
   );
 }
 

@@ -270,7 +270,8 @@ export function BarList({
               <span
                 aria-hidden
                 className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors duration-150 ease-out [@media(hover:hover)]:group-hover:bg-chart/20"
-                style={{ width: `${Math.max(2, (item.clicks / max) * 100)}%` }}
+                // No sliver for no clicks: a link at zero has nothing to draw.
+                style={{ width: item.clicks ? `${Math.max(2, (item.clicks / max) * 100)}%` : 0 }}
               />
               {lead && <span className="relative flex shrink-0">{lead(item.key)}</span>}
               <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>

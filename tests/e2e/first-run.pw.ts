@@ -40,6 +40,8 @@ test("a new account arrives with an organization and one question", async ({ pag
   // And with a link in it, the dashboard becomes a dashboard.
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("term").getByText("Clicks", { exact: true })).toBeVisible();
+  // The new link is on the page at once, in Top links at zero clicks.
+  await expect(page.getByText("Your busiest links appear here")).toHaveCount(0);
   await expect(
     page.getByRole("group", { name: "Range" }).getByRole("button", { name: "7d", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");

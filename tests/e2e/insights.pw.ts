@@ -33,11 +33,13 @@ test("a read-only organization keeps its dashboard, with New link greyed out", a
   await expect(page.getByText("This organization is read-only")).toBeVisible();
 });
 
-test("the first-run page names what comes with a link", async ({ page }) => {
+test("the first-run page keeps the dashboard header around one plain panel", async ({ page }) => {
   await signUpAndVerify(page, `insights-first-${Date.now()}@gmail.com`, password);
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
-  for (const line of ["Every link gets a QR code", "See who clicks", "Bring your team"])
-    await expect(page.getByText(line, { exact: true })).toBeVisible();
+  // The page is still the dashboard: its title and New link, no range yet.
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /New link/ })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Range" })).toHaveCount(0);
 
   // Submit stays live; a bad address marks the field instead of a toast.
   const field = page.getByRole("textbox", { name: "Destination URL", exact: true });
