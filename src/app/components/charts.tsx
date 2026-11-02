@@ -14,7 +14,7 @@ import { focusNearestX } from "@tanstack/charts/focus";
 import { motion } from "@tanstack/charts/motion";
 import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
-import { pointerTooltip } from "./chart-tooltip";
+import { seriesTooltip } from "./chart-tooltip";
 import { ClicksTip } from "./clicks-tip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
@@ -145,7 +145,7 @@ export function AreaChart({
       maxFocusDistance: Infinity,
       // No ring on the focused point either.
       focusRing: false,
-      tooltip: pointerTooltip,
+      tooltip: seriesTooltip,
     });
   }, [data, tickFormat]);
 
@@ -510,7 +510,7 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
       focusRing: false,
-      tooltip: pointerTooltip,
+      tooltip: seriesTooltip,
     });
   }, [hours]);
 

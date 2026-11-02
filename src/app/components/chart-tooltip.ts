@@ -1,4 +1,5 @@
 import { tooltip } from "@tanstack/charts/tooltip";
+import type { ChartPoint, ChartTooltipAnchorContext } from "@tanstack/charts";
 
 /**
  * What every chart's tooltip eases with. A tooltip anchored to the pointer is
@@ -24,4 +25,29 @@ export const pointerTooltip = {
   offset: 16,
   motion: followSpring,
   className: "pointer-events-none",
+} as const;
+
+/** Beside the pointer across, at the hovered point's height. */
+function besidePoint(
+  points: readonly ChartPoint[],
+  context: ChartTooltipAnchorContext,
+): { x: number; y: number } | null {
+  const point = points[0];
+  if (!point) return null;
+  return { x: context.pointer?.x ?? point.x, y: point.y };
+}
+
+/**
+ * The tooltip for a chart read left to right (clicks by day, by hour): it
+ * follows the pointer across, but sits at the hovered point's height (the
+ * line, a bar's top) rather than the pointer's. Moving up and down changes
+ * nothing, so it never flips from below the cursor to above it halfway down
+ * the chart, which read as a jump. Above the point first, then beside it
+ * when a peak leaves no room over it, so it never covers the bar it is
+ * about; below only as a last resort.
+ */
+export const seriesTooltip = {
+  ...pointerTooltip,
+  anchor: besidePoint,
+  placement: ["top", "top-right", "top-left", "right", "left", "bottom"],
 } as const;
