@@ -51,3 +51,28 @@ test("a subscriber sees their billing cycle and where to change it", async ({ pa
   await expect(page.getByText("$8.10 a month, billed yearly")).toBeVisible();
   await expect(page.getByRole("button", { name: "Change plan" })).toBeVisible();
 });
+
+/** On the plan you are on, the other cycle is a way to move: Pro monthly
+ * flips the switch to Yearly and gets "Switch to yearly", which opens the
+ * portal, where yearly is a plan change like any other. */
+test("a monthly subscriber can switch the same plan to yearly", async ({ page }) => {
+  const email = `billing-to-yearly-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await setPlan(page, email, "pro", { interval: "month" });
+
+  let portalOpened = false;
+  await page.route("**/api/billing/portal", async (route) => {
+    portalOpened = true;
+    await route.fulfill({ json: { url: "/billing" } });
+  });
+
+  await page.goto("/billing");
+  await page.getByRole("button", { name: "Change plan" }).click();
+  const dialog = page.getByRole("dialog", { name: "Change plan" });
+  await expect(dialog.getByRole("button", { name: "Current plan" })).toBeVisible();
+
+  await dialog.getByRole("button", { name: /^Yearly/ }).click();
+  await expect(dialog.getByRole("button", { name: "Current plan" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Switch to yearly" }).click();
+  await expect.poll(() => portalOpened).toBe(true);
+});

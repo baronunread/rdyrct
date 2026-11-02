@@ -292,7 +292,8 @@ function FreePlans({
  * A subscriber's plans, behind "Change plan". A plan changes in the
  * subscription portal, never through a second checkout (that would be a second
  * subscription), so every button here opens the portal. The cycle switch only
- * shows the prices; the portal is where the cycle changes too.
+ * shows the prices, and on the plan you are on, the other cycle's button
+ * opens the portal too: that is where monthly becomes yearly.
  */
 function ChangePlanDialog({
   open,
@@ -305,22 +306,31 @@ function ChangePlanDialog({
   snapshot: PlanActionSnapshot;
   onPortal: () => void;
 }) {
-  const [interval, setInterval] = useState<BillingInterval>(snapshot.interval ?? "month");
+  const currentInterval = snapshot.interval ?? "month";
+  const [interval, setInterval] = useState<BillingInterval>(currentInterval);
   const currentRank = PLAN_ORDER.findIndex((plan) => plan === snapshot.plan);
+  const toPortal = () => {
+    onOpenChange(false);
+    onPortal();
+  };
   const moveTo = (plan: SellablePlan) => {
     const up = PLAN_ORDER.indexOf(plan) > currentRank;
     return (
-      <Button
-        variant={up && plan === "pro" ? "primary" : "outline"}
-        onClick={() => {
-          onOpenChange(false);
-          onPortal();
-        }}
-      >
+      <Button variant={up && plan === "pro" ? "primary" : "outline"} onClick={toPortal}>
         {up ? "Upgrade" : "Switch"} to {PLAN_LABEL[plan]}
       </Button>
     );
   };
+  // The plan you are on, at the other cycle: yearly is its own Polar
+  // product, so moving to it is a plan change like any other.
+  const ownCard = () =>
+    interval === currentInterval ? (
+      <CurrentPlanButton />
+    ) : (
+      <Button variant="primary" onClick={toPortal}>
+        Switch to {interval === "year" ? "yearly" : "monthly"}
+      </Button>
+    );
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Change plan" size="xl" bare>
       <div className="flex flex-col gap-4 max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
@@ -338,7 +348,7 @@ function ChangePlanDialog({
               plan={plan}
               current={plan === snapshot.plan}
               interval={interval}
-              action={plan === snapshot.plan ? <CurrentPlanButton /> : moveTo(plan)}
+              action={plan === snapshot.plan ? ownCard() : moveTo(plan)}
             />
           ))}
         </div>
