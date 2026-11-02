@@ -635,11 +635,6 @@ function MembersView({
 
       <MemberTable management={management} canManage={canManage} meId={userId} />
 
-      <p className="mt-3 text-xs text-pretty text-muted">
-        Roles: Admins manage links, domains and members. Members create and edit links. Viewers see
-        links and analytics.
-      </p>
-
       {canManage && <MemberOverlays org={org} seats={seats} management={management} />}
     </div>
   );

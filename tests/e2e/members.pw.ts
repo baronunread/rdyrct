@@ -80,8 +80,9 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   await page.getByRole("button", { name: "Remove member" }).click();
   await expect(page.locator("tbody tr").filter({ hasText: String(name) })).toHaveCount(0);
 
-  // The footnote says what each role can do.
-  await expect(page.getByText(/^Roles: Admins manage links, domains and members\./)).toBeVisible();
+  // No footnote spelling out the roles under the table: the role picker
+  // in the invite dialog says what each one does.
+  await expect(page.getByText(/^Roles: Admins manage links/)).toHaveCount(0);
 
   await guest.context.close();
 });

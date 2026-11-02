@@ -7,7 +7,6 @@ import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { McpSetupCopyButton } from "./mcp-setup-prompt";
 
 /** The key value, shown once right after minting, with its copy buttons. */
 function NewKeyShownOnce({ apiKey, onDone }: { apiKey: ApiKeyDTO; onDone: () => void }) {
@@ -27,8 +26,7 @@ function NewKeyShownOnce({ apiKey, onDone }: { apiKey: ApiKeyDTO; onDone: () => 
           onCopy={(text) => copyToClipboard(text, toast)}
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <McpSetupCopyButton apiKey={apiKey.key} />
+      <div className="flex justify-end pt-1">
         <Button variant="primary" onClick={onDone}>
           Done
         </Button>

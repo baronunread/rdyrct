@@ -712,6 +712,14 @@ body {
   outline-offset: 2px;
 }
 
+/* A chart's SVG takes focus so the arrow keys can walk its points, and a
+   click with the mouse focuses it too, which drew the ring round the whole
+   plot. The focused point already shows itself (the tooltip and the day's
+   guide follow the keys), so the plot needs no ring of its own. */
+svg.ts-chart:focus-visible {
+  outline: none;
+}
+
 /* number-heavy UI: keep digits aligned */
 .tnum {
   font-variant-numeric: tabular-nums;

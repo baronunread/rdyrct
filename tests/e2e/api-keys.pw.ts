@@ -23,8 +23,10 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
   if (!key) throw new Error("Minted key was never shown");
   expect(key).toMatch(/^rdyrct_live_/);
 
-  // The banner and the page both offer the ready-to-paste connector setup.
-  await expect(page.getByRole("button", { name: "Copy MCP setup" }).first()).toBeVisible();
+  // A key is not only for MCP: the dialog offers the key itself, nothing
+  // that assumes an MCP client.
+  await expect(page.getByRole("button", { name: "Copy key" })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: /MCP/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("row", { name: /Playwright key/ })).toBeVisible();
@@ -57,7 +59,6 @@ test("the selected tab survives a full page reload", async ({ page }) => {
   await signUpAndVerify(page, `apikeys-tab-${Date.now()}@gmail.com`, E2E_PASSWORD);
   await page.goto("/api-keys");
 
-  // exact: the "Copy MCP setup" button's accessible name also contains "MCP".
   await page.getByRole("button", { name: "MCP", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=mcp/);
   await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
