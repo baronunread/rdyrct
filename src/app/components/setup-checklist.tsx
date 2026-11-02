@@ -171,7 +171,7 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
               {done} of {steps.length}
             </span>
           </span>
-          <Progress steps={steps} />
+          <Progress done={done} total={steps.length} />
           <span className="truncate text-xs text-muted">Next: {next?.title}</span>
         </Popover.Trigger>
         <Popover.Portal>
@@ -182,9 +182,17 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
             collisionPadding={8}
             className="z-50"
           >
-            <Popover.Popup className="w-[min(360px,calc(100vw-1.5rem))] origin-[var(--transform-origin)] rounded-2xl bg-surface px-4 pt-3.5 pb-2 smooth-shadow-ring-xl transition-[opacity,scale] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
-              <Popover.Title className="text-sm font-semibold">Finish setting up</Popover.Title>
-              <Popover.Description className="mt-0.5 mb-1.5 text-xs text-muted">
+            <Popover.Popup className="w-[min(360px,calc(100vw-1.5rem))] origin-[var(--transform-origin)] rounded-2xl bg-surface px-4 pt-3.5 pb-1.5 smooth-shadow-ring-xl transition-[opacity,scale] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
+              <div className="flex items-start justify-between gap-3">
+                <Popover.Title className="text-sm font-semibold">Finish setting up</Popover.Title>
+                <Popover.Close
+                  onClick={() => hideSetupList(org.id)}
+                  className="-mt-1 -mr-2 cursor-pointer rounded-md px-2 py-1 text-xs text-muted [@media(hover:hover)]:hover:text-text"
+                >
+                  Hide this list
+                </Popover.Close>
+              </div>
+              <Popover.Description className="mb-1.5 text-xs text-muted">
                 {done} of {steps.length} done. This list goes once they all are.
               </Popover.Description>
               <ol className="flex flex-col">
@@ -192,14 +200,6 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
                   <StepRow key={s.title} step={s} />
                 ))}
               </ol>
-              <div className="flex justify-end pt-1">
-                <Popover.Close
-                  onClick={() => hideSetupList(org.id)}
-                  className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted [@media(hover:hover)]:hover:text-text"
-                >
-                  Hide this list
-                </Popover.Close>
-              </div>
             </Popover.Popup>
           </Popover.Positioner>
         </Popover.Portal>
@@ -208,18 +208,16 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
   );
 }
 
-function Progress({ steps }: { steps: Step[] }) {
+/** One bar filled as far as the count, as Vercel's and Stripe's are: steps
+ * finish in any order, and segments lit out of order read as which ones,
+ * not how far. */
+function Progress({ done, total }: { done: number; total: number }) {
   return (
-    <span className="flex gap-1" aria-hidden>
-      {steps.map((s) => (
-        <span
-          key={s.title}
-          className={cn(
-            "h-1 flex-1 rounded-full transition-colors duration-300",
-            s.done ? "bg-mint" : "bg-border",
-          )}
-        />
-      ))}
+    <span className="h-1 overflow-hidden rounded-full bg-border" aria-hidden>
+      <span
+        className="block h-full origin-left rounded-full bg-mint transition-[scale] duration-300 ease-out"
+        style={{ scale: `${done / total} 1` }}
+      />
     </span>
   );
 }

@@ -107,6 +107,12 @@ export const EmailChips = forwardRef<
           type="text"
           inputMode="email"
           autoComplete="off"
+          // Teammates' addresses, not the user's: password managers read
+          // "email" and offer to fill in their own.
+          data-bwignore
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           autoCapitalize="none"
           spellCheck={false}
           // eslint-disable-next-line jsx-a11y/no-autofocus, react-doctor/no-autofocus -- the dialog opens to type addresses; this is the first and main field.
