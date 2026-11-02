@@ -29,8 +29,11 @@ const variants = {
     "bg-surface text-text font-medium smooth-shadow-ring-xs [@media(hover:hover)]:hover:bg-surface-2",
   ghost:
     "text-muted [@media(hover:hover)]:hover:text-text [@media(hover:hover)]:hover:bg-surface-2",
+  // One danger button everywhere, the row, the page and the confirm dialog
+  // alike (as GitHub's): red text in a faint red ring at rest, filled red
+  // under the pointer, so it only looks loud when it is about to be pressed.
   danger:
-    "bg-surface text-danger font-medium shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_40%,transparent)] [@media(hover:hover)]:hover:bg-danger/10",
+    "bg-surface text-danger font-medium shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_40%,transparent)] [@media(hover:hover)]:hover:bg-danger [@media(hover:hover)]:hover:text-surface [@media(hover:hover)]:hover:shadow-[0_0_0_1px_var(--danger)] active:brightness-95",
 } satisfies Record<Variant, string>;
 
 const sizes = {

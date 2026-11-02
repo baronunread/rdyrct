@@ -123,12 +123,7 @@ function DeleteForm({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          variant="danger"
-          disabled={busy}
-          className="bg-danger font-semibold text-bg shadow-none [@media(hover:hover)]:hover:bg-danger [@media(hover:hover)]:hover:brightness-110"
-        >
+        <Button type="submit" variant="danger" disabled={busy}>
           <BusyContent busy={busy}>
             {single ? "Delete link" : `Delete ${n(links.length)} links`}
           </BusyContent>

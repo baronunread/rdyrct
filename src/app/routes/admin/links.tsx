@@ -273,13 +273,7 @@ function SuspendForm({ link, onClose }: { link: AdminLinkRow; onClose: () => voi
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        {/* Solid: this stops a live link for everyone who has it. */}
-        <Button
-          type="submit"
-          variant="danger"
-          disabled={suspend.isPending}
-          className="bg-danger font-semibold text-bg shadow-none [@media(hover:hover)]:hover:bg-danger [@media(hover:hover)]:hover:brightness-110"
-        >
+        <Button type="submit" variant="danger" disabled={suspend.isPending}>
           <BusyContent busy={suspend.isPending}>Suspend link</BusyContent>
         </Button>
       </div>

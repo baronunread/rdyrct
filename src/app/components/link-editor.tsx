@@ -917,11 +917,11 @@ export function LinkEditor({
     <>
       {editing && onDelete && (
         <Button
-          variant="ghost"
+          variant="danger"
           onClick={onDelete}
-          // Its padding tucked under the column's edge, so three buttons
-          // fit the 240px the side column leaves them.
-          className="-ml-2 mr-auto px-2 text-danger [@media(hover:hover)]:hover:bg-danger/10 [@media(hover:hover)]:hover:text-danger"
+          // Narrower padding, so three buttons fit the 240px the side
+          // column leaves them.
+          className="mr-auto px-2.5"
         >
           Delete
         </Button>

@@ -396,7 +396,7 @@ export interface LinkDTO extends QrOverrides {
 }
 
 /** The chips above the links table, as `filter=` on the list route. */
-export const LINK_FILTERS = ["all", "attention", "qr", "custom"] as const;
+export const LINK_FILTERS = ["all", "attention", "custom"] as const;
 export type LinkFilter = (typeof LINK_FILTERS)[number];
 
 /** How many of an org's links each chip holds (GET /orgs/:orgId/links/facets).
@@ -405,8 +405,6 @@ export interface LinkFacets {
   all: number;
   /** Paused, warned, quiet for a week, or down by half: see links-page.ts. */
   attention: number;
-  /** Links whose QR code has an override of its own. */
-  qr: number;
   customDomain: number;
 }
 

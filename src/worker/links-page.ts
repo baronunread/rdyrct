@@ -88,11 +88,6 @@ const DROP_FLOOR = 10;
 // correlated subqueries, where an interpolated drizzle column renders
 // unqualified and SQLite binds it to the subquery's own table.
 
-/** The link's QR code has an override of its own. */
-const hasQrSql = sql`(links.qr_logo <> '' or links.qr_style <> '' or links.qr_color <> ''
-  or links.qr_corner <> '' or links.qr_bg <> '' or links.qr_eye_color <> ''
-  or links.qr_logo_size is not null)`;
-
 const customDomainSql = sql`(links.domain_id is not null)`;
 
 /**
@@ -117,7 +112,6 @@ function attentionSql(now: number): SQL {
 
 function chipSql(filter: LinkFilter, now: number): SQL | undefined {
   if (filter === "attention") return attentionSql(now);
-  if (filter === "qr") return hasQrSql;
   if (filter === "custom") return customDomainSql;
   return undefined;
 }
@@ -131,12 +125,11 @@ export async function linkFacets(db: DB, orgId: string, now = Date.now()): Promi
     .select({
       all: sql<number>`count(*)`,
       attention: countWhere(attentionSql(now)),
-      qr: countWhere(hasQrSql),
       customDomain: countWhere(customDomainSql),
     })
     .from(schema.links)
     .where(eq(schema.links.orgId, orgId));
-  return row ?? { all: 0, attention: 0, qr: 0, customDomain: 0 };
+  return row ?? { all: 0, attention: 0, customDomain: 0 };
 }
 
 /** Days read per row: two weeks, so "needs attention" can compare this week

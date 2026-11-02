@@ -76,7 +76,6 @@ const API_SORT = {
 const FACET_OF = {
   all: "all",
   attention: "attention",
-  qr: "qr",
   custom: "customDomain",
 } satisfies Record<LinkFilter, keyof LinkFacets>;
 
@@ -705,7 +704,6 @@ function LinksToolbar({
           items={[
             { id: "all", label: "All", count: facets.all },
             { id: "attention", label: "Needs attention", count: facets.attention },
-            { id: "qr", label: "QR codes", count: facets.qr },
             ...(domains.length > 0
               ? [{ id: "custom" as const, label: "Custom domain", count: facets.customDomain }]
               : []),

@@ -132,12 +132,14 @@ test("the chips above the links table count and filter", async ({ page }) => {
     "aria-pressed",
     "true",
   );
-  // Two fresh links: neither needs a look, and neither has a QR look of its own.
+  // Two fresh links: neither needs a look. Every link has a QR code, so
+  // there is no QR chip to filter by.
   await expect(chips.getByRole("button", { name: "Needs attention 0" })).toBeVisible();
+  await expect(chips.getByRole("button", { name: /QR/ })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Last 7 days" })).toBeVisible();
   await expect(page.locator("tbody tr")).toHaveCount(2);
 
-  await chips.getByRole("button", { name: "QR codes 0" }).click();
+  await chips.getByRole("button", { name: "Needs attention 0" }).click();
   await expect(page.getByText("Try another word, or clear the filters.")).toBeVisible();
 
   await chips.getByRole("button", { name: "All 2" }).click();

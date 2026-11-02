@@ -87,7 +87,6 @@ describe("GET /orgs/:orgId/links/facets", () => {
     expect(await get<LinkFacets>(cookie, "/facets")).toEqual({
       all: 10,
       attention: ATTENTION.length,
-      qr: 1,
       customDomain: 1,
     });
   });
@@ -106,7 +105,9 @@ describe("GET /orgs/:orgId/links?filter=", () => {
       (await list(cookie, `filter=${filter}`)).items.map((l) => l.id).sort();
 
     expect(await ids("attention")).toEqual(ATTENTION);
-    expect(await ids("qr")).toEqual(["qr"]);
+    // Every link has a QR code, so there is no QR chip; its old name lists
+    // everything, like any other unknown filter.
+    expect(await ids("qr")).toHaveLength(10);
     expect(await ids("custom")).toEqual(["custom"]);
     expect(await ids("all")).toHaveLength(10);
     // Anything else is the whole list, not an error.

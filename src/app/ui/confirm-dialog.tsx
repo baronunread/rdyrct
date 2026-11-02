@@ -2,7 +2,6 @@ import type { ReactNode, RefObject } from "react";
 import { Button } from "./button";
 import { Dialog, type DialogSize } from "./dialog";
 import { BusyContent } from "./spinner";
-import { SOLID_DANGER } from "./solid-danger";
 
 export function ConfirmDialog({
   title,
@@ -22,7 +21,7 @@ export function ConfirmDialog({
   onClose: () => void;
   onConfirm: () => void;
   confirmLabel: string;
-  /** A solid danger button instead of the primary one. */
+  /** The danger button instead of the primary one. */
   danger?: boolean;
   pending?: boolean;
   confirmDisabled?: boolean;
@@ -47,7 +46,6 @@ export function ConfirmDialog({
           </Button>
           <Button
             variant={danger ? "danger" : "primary"}
-            className={danger ? SOLID_DANGER : undefined}
             disabled={pending || confirmDisabled}
             onClick={onConfirm}
           >
