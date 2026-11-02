@@ -199,19 +199,17 @@ const barWidths = [92, 71, 58, 44, 33, 24, 17];
 function BarListSkeleton({ rows, more }: { rows: number; more?: boolean }) {
   return (
     <div className="flex flex-col">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5">
         <span className="flex h-4 box-content items-center pb-1">
           <Skeleton className="h-2.5 w-10" />
         </span>
         <span className="flex h-4 box-content items-center justify-end pb-1">
           <Skeleton className="h-2.5 w-10" />
         </span>
-        <span />
         {barWidths.slice(0, rows).map((w) => (
           <div key={w} className="contents">
             <Skeleton className="h-[30px]" style={{ width: `${w}%` }} />
             <Skeleton className="ml-auto h-3 w-8" />
-            <Skeleton className="ml-auto h-2.5 w-6" />
           </div>
         ))}
       </div>
@@ -1261,8 +1259,6 @@ export function LinkDetailSkeleton() {
             labels={[RANGE_LABEL["7d"], RANGE_LABEL["30d"], RANGE_LABEL["365d"]]}
           />
           <div className="flex items-center gap-2 max-sm:ml-auto">
-            <SmallButtonSkeleton className="w-[2.625rem]" />
-            <SmallButtonSkeleton className="w-[5.5rem]" />
             <SmallButtonSkeleton className="w-[6.5rem]" />
             <Skeleton className="size-9 rounded-lg" />
           </div>

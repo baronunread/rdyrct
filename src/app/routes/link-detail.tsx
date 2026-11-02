@@ -6,6 +6,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   IconDots,
   IconExternalLink,
+  IconPencil,
   IconLinkPlus,
   IconQrcode,
   IconTrash,
@@ -38,7 +39,6 @@ import { QRPreview } from "../components/qr";
 import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { DeleteLinkDialog } from "../components/delete-link-dialog";
 import { Badge } from "../ui/misc";
-import { Button } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { PanelTabs } from "../ui/tabs";
@@ -131,16 +131,24 @@ function QrThumb({
   );
 }
 
+/** Everything that acts on the link rather than its stats: editing it, its
+ * QR code, opening it, another address, and deleting it. The header itself
+ * matches Analytics (range and Export CSV), since this is the link's
+ * analytics. */
 function LinkMenu({
   s,
   link,
   canWrite,
+  onEdit,
+  onQr,
   onAlias,
   onDelete,
 }: {
   s: LinkStats;
   link: LinkDTO | null;
   canWrite: boolean;
+  onEdit: () => void;
+  onQr: () => void;
   onAlias: () => void;
   onDelete: () => void;
 }) {
@@ -155,6 +163,17 @@ function LinkMenu({
         </span>
       }
     >
+      {link && canWrite && (
+        <MenuItem onClick={onEdit}>
+          <IconPencil size={14} aria-hidden /> Edit link
+        </MenuItem>
+      )}
+      {link && (
+        <MenuItem onClick={onQr}>
+          <IconQrcode size={14} aria-hidden /> QR code
+        </MenuItem>
+      )}
+      {link && <MenuSeparator />}
       <MenuItem onClick={() => open(s.url)}>
         <IconExternalLink size={14} aria-hidden /> Open short link
       </MenuItem>
@@ -256,20 +275,17 @@ function LinkDetailHeader({
           onChange={onRangeChange}
         />
         <div className="flex items-center gap-2 max-sm:ml-auto">
-          {link && canWrite && (
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              Edit
-            </Button>
-          )}
-          {link && (
-            <Button variant="outline" size="sm" onClick={onQr}>
-              <IconQrcode className="size-4" aria-hidden />
-              QR code
-            </Button>
-          )}
           <ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />
           <div className="w-9">
-            <LinkMenu s={s} link={link} canWrite={canWrite} onAlias={onAlias} onDelete={onDelete} />
+            <LinkMenu
+              s={s}
+              link={link}
+              canWrite={canWrite}
+              onEdit={onEdit}
+              onQr={onQr}
+              onAlias={onAlias}
+              onDelete={onDelete}
+            />
           </div>
         </div>
       </div>
@@ -311,24 +327,23 @@ function LinkPanels({ s }: { s: LinkStats }) {
           },
         ]}
       />
-      <div className="md:col-span-2 lg:col-span-1">
-        <PanelTabs
-          tabs={[
-            {
-              value: "devices",
-              label: "Devices",
-              panel: (
-                <BarList
-                  head={["Device", "Clicks"]}
-                  items={s.devices}
-                  formatKey={deviceLabel}
-                  empty="Phone, desktop or tablet, counted here once clicks arrive."
-                />
-              ),
-            },
-          ]}
-        />
-      </div>
+      <PanelTabs
+        className="md:col-span-2 lg:col-span-1"
+        tabs={[
+          {
+            value: "devices",
+            label: "Devices",
+            panel: (
+              <BarList
+                head={["Device", "Clicks"]}
+                items={s.devices}
+                formatKey={deviceLabel}
+                empty="Phone, desktop or tablet, counted here once clicks arrive."
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

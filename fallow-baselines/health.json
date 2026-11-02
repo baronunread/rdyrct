@@ -348,9 +348,6 @@
       "complexity_critical": {
         "count": 1
       },
-      "complexity_high": {
-        "count": 1
-      },
       "crap_critical": {
         "count": 1
       },
@@ -358,7 +355,7 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/app/routes/link-import.tsx": {
