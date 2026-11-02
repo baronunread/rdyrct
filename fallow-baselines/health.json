@@ -43,6 +43,17 @@
         "count": 3
       }
     },
+    "src/app/components/dashboard-insights.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "src/app/components/delete-link-dialog.tsx": {
       "crap_high": {
         "count": 1
@@ -321,7 +332,7 @@
     },
     "src/app/routes/api-keys.tsx": {
       "crap_moderate": {
-        "count": 3
+        "count": 1
       }
     },
     "src/app/routes/auth.tsx": {
@@ -364,7 +375,7 @@
     },
     "src/app/routes/domains.tsx": {
       "complexity_critical": {
-        "count": 1
+        "count": 2
       },
       "crap_critical": {
         "count": 3
@@ -473,11 +484,16 @@
     },
     "src/app/ui/field.tsx": {
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/app/ui/otp.tsx": {
       "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/ui/overflow-tip.tsx": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -494,6 +510,11 @@
     "src/app/ui/toast.tsx": {
       "crap_high": {
         "count": 2
+      }
+    },
+    "src/app/ui/tooltip.tsx": {
+      "crap_high": {
+        "count": 1
       }
     },
     "src/shared/link-import.ts": {
@@ -540,23 +561,21 @@
   "runtime_coverage_findings": [],
   "target_keys": [
     "src/app/ui/command.tsx:dead code",
-    "src/app/lib/current-org.ts:high impact",
     "src/app/routes/admin/audit.tsx:hidden coupling",
-    "src/app/components/qr-defaults-card.tsx:hidden coupling",
+    "src/app/lib/current-org.ts:high impact",
+    "src/app/lib/insights-data.ts:high impact",
     "src/worker/abuse.ts:hidden coupling",
     "src/app/lib/posthog.ts:hidden coupling",
-    "src/worker/routes/orgs.ts:hidden coupling",
     "src/app/lib/use-shake.ts:high impact",
     "src/app/lib/setup.ts:hidden coupling",
     "src/app/routes/welcome.tsx:hidden coupling",
     "src/app/lib/mcp-url.ts:high impact",
     "src/app/components/link-editor.tsx:complexity",
     "src/app/routes/admin/orgs.tsx:hidden coupling",
-    "src/worker/routes/links.ts:hidden coupling",
     "src/app/routes/link-import.tsx:complexity",
     "src/app/routes/admin/users.tsx:hidden coupling",
-    "src/app/lib/account-security.ts:complexity",
     "src/app/components/setup-flow.tsx:hidden coupling",
+    "src/app/lib/account-security.ts:complexity",
     "src/worker/routes/billing.ts:hidden coupling",
     "src/app/components/command-menu.tsx:complexity",
     "src/app/routes/admin/links.tsx:hidden coupling",
