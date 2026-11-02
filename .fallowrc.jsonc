@@ -8,8 +8,11 @@
   // preloadFonts in vite.config.ts resolves these package names dynamically;
   // the stylesheet also imports them through /node_modules URLs.
   // portless is run as a command (scripts/dev.ts), never imported.
+  // circle-flags is read through an import.meta.glob of its /node_modules
+  // path (components/source-tile.tsx), which no import statement names.
   "ignoreDependencies": [
     "portless",
+    "circle-flags",
     "tailwindcss",
     "@oxlint/plugins",
     "@fontsource-variable/figtree",
