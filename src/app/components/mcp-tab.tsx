@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AssistantMark, markForClient } from "./assistant-mark";
 import { errorMessage } from "@/app/lib/error-message";
 import { useSearchParams } from "../lib/router-search";
 import { useConnectedApps, useRevokeConnectedApp, type ConnectedApp } from "../lib/hooks";
@@ -79,15 +80,28 @@ function McpHero() {
   );
 }
 
+/** The client's own mark when its name says which assistant it is, else
+ * its initial. */
+function ClientMark({ name }: { name: string }) {
+  const mark = markForClient(name);
+  return (
+    <span
+      aria-hidden
+      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-xs font-bold text-muted smooth-shadow-ring-xs"
+    >
+      {mark ? (
+        <AssistantMark id={mark} className="size-[18px] text-text" />
+      ) : (
+        name.trim().charAt(0).toUpperCase()
+      )}
+    </span>
+  );
+}
+
 function ConnectedRow({ app, onDisconnect }: { app: ConnectedApp; onDisconnect: () => void }) {
   return (
     <li className="flex items-center gap-3 py-2.5">
-      <span
-        aria-hidden
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-xs font-bold text-muted smooth-shadow-ring-xs"
-      >
-        {app.clientName.trim().charAt(0).toUpperCase()}
-      </span>
+      <ClientMark name={app.clientName} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{app.clientName}</p>
         <p className="tnum text-xs text-muted">Last used {relativeDate(app.lastUsedAt)}</p>

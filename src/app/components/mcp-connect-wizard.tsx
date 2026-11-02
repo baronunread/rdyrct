@@ -5,7 +5,7 @@
  * "prove it works" step: the grant showing up in the Connected list is that
  * proof, which is what the waiting state polls for.
  */
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
@@ -23,42 +23,28 @@ import {
   vscodeInstallLink,
 } from "../lib/mcp-install";
 import { McpAgentPromptButton } from "./mcp-setup-prompt";
+import { AssistantMark, type AssistantMarkId } from "./assistant-mark";
 
-export type AssistantId = "claude" | "chatgpt" | "cursor" | "vscode" | "claude-code" | "other";
+export type AssistantId = AssistantMarkId;
 
 interface Assistant {
   id: AssistantId;
   label: string;
-  /** The monogram: letters, never a vendor's artwork. */
-  mark: string;
-  mono?: boolean;
-  /** A brand colour as a hue to tint with. The tile mixes it into the theme's
-   * own surface and ink, so it holds contrast in light and dark. Not a
-   * design token: it is somebody else's colour, named once, here. */
-  brand: string | null;
 }
 
 const ASSISTANTS: readonly Assistant[] = [
-  { id: "claude", label: "Claude", mark: "C", brand: "#d97757" },
-  { id: "chatgpt", label: "ChatGPT", mark: "G", brand: "#10a37f" },
-  { id: "cursor", label: "Cursor", mark: "Cu", brand: "#8c8c99" },
-  { id: "vscode", label: "VS Code", mark: "VS", brand: "#2f8de4" },
-  { id: "claude-code", label: "Claude Code", mark: ">_", mono: true, brand: "#d97757" },
-  { id: "other", label: "Other", mark: "+", brand: null },
+  { id: "claude", label: "Claude" },
+  { id: "chatgpt", label: "ChatGPT" },
+  { id: "cursor", label: "Cursor" },
+  { id: "vscode", label: "VS Code" },
+  { id: "claude-code", label: "Claude Code" },
+  { id: "other", label: "Other" },
 ];
 
 export const DEFAULT_ASSISTANT: AssistantId = "claude";
 
 export function isAssistantId(value: string | null): value is AssistantId {
   return ASSISTANTS.some((a) => a.id === value);
-}
-
-function markStyle(brand: string | null): CSSProperties | undefined {
-  if (!brand) return undefined;
-  return {
-    backgroundColor: `color-mix(in oklab, ${brand} 16%, var(--surface))`,
-    color: `color-mix(in oklab, ${brand} 62%, var(--text))`,
-  };
 }
 
 function AssistantTile({
@@ -84,14 +70,9 @@ function AssistantTile({
     >
       <span
         aria-hidden
-        style={markStyle(assistant.brand)}
-        className={cn(
-          "flex size-10 items-center justify-center rounded-[10px] text-sm font-bold smooth-shadow-ring-xs",
-          assistant.brand ? "" : "bg-surface text-muted",
-          assistant.mono && "font-mono",
-        )}
+        className="flex size-10 items-center justify-center rounded-[10px] bg-surface text-text smooth-shadow-ring-xs"
       >
-        {assistant.mark}
+        <AssistantMark id={assistant.id} className="size-[22px]" />
       </span>
       <span className="max-w-full truncate">{assistant.label}</span>
     </button>
