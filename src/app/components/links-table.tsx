@@ -273,20 +273,22 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
   );
 }
 
-/** Copy and the menu. Shown on hover or focus where there is hover, always
- * on a touch screen, where nothing hovers. */
+/** Copy and the menu. Shown on hover or keyboard focus where there is
+ * hover, always on a touch screen, where nothing hovers. Keyboard focus, not
+ * any focus: a clicked Copy keeps focus, and would keep its row's actions up
+ * after the pointer left. */
 function RowActionsCell({ link, actions }: { link: LinkDTO; actions: RowActions }) {
   const toast = useToast();
   return (
     <div className="flex items-center justify-end gap-0.5">
-      <span className="max-sm:hidden [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
+      <span className="max-sm:hidden [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-has-[:focus-visible]:opacity-100">
         <CopyButton
           text={link.url}
           label={`Copy ${link.url}`}
           onCopy={(text) => copyToClipboard(text, toast)}
         />
       </span>
-      <span className="w-8 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 [@media(hover:hover)]:sm:group-focus-within:opacity-100 [@media(hover:hover)]:sm:has-[[aria-expanded=true]]:opacity-100">
+      <span className="w-8 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 [@media(hover:hover)]:sm:group-has-[:focus-visible]:opacity-100 [@media(hover:hover)]:sm:has-[[aria-expanded=true]]:opacity-100">
         <RowMenu link={link} actions={actions} />
       </span>
     </div>

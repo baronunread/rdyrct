@@ -90,9 +90,8 @@ export function AreaChart({
           strokeWidth: 2,
           curve: smoothCurve,
         }),
-        // Vertical guide plus a marker on the focused point, drawn by the
-        // renderer inside the plot. The marker's surface-coloured ring is
-        // what separates it from the line it sits on.
+        // A vertical guide on the focused day, no marker: the line already
+        // says where the point is.
         crosshair({
           x: true,
           y: false,
@@ -103,12 +102,6 @@ export function AreaChart({
           motion: false,
           stroke: "var(--border)",
           strokeWidth: 1,
-          marker: {
-            radius: 4,
-            fill: "var(--chart)",
-            stroke: "var(--surface)",
-            strokeWidth: 2,
-          },
         }),
       ],
       // Charts 0.18 (Alpha) moved the Cartesian scales under `scales`.
@@ -147,7 +140,7 @@ export function AreaChart({
       // chart, not only within a few px of the line itself.
       focus: focusNearestX,
       maxFocusDistance: Infinity,
-      // The crosshair mark draws the marker; the built-in ring would double up.
+      // No ring on the focused point either.
       focusRing: false,
       tooltip: pointerTooltip,
     });
