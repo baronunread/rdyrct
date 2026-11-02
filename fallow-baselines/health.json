@@ -91,7 +91,7 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 3
+        "count": 5
       }
     },
     "src/app/components/link-marks.tsx": {
@@ -364,7 +364,7 @@
     },
     "src/app/routes/dashboard.tsx": {
       "crap_high": {
-        "count": 4
+        "count": 1
       },
       "crap_moderate": {
         "count": 3
