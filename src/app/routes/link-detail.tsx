@@ -27,7 +27,8 @@ import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { linkFeatures } from "../lib/links-data";
-import { LinkDetailSide } from "../components/link-detail-side";
+import { LinkFacts } from "../components/link-detail-side";
+import { ExportCsvButton } from "../components/export-csv-button";
 import { ShortAddress } from "../components/short-address";
 import { displayAddress } from "../lib/display-url";
 import { LinkDetailSkeleton } from "../components/skeletons";
@@ -177,6 +178,8 @@ function LinkMenu({
 
 function LinkDetailHeader({
   s,
+  orgId,
+  createdBy,
   link,
   canWrite,
   orgQr,
@@ -189,6 +192,8 @@ function LinkDetailHeader({
   onDelete,
 }: {
   s: LinkStats;
+  orgId: string;
+  createdBy: string | null;
   link: LinkDTO | null;
   canWrite: boolean;
   orgQr: OrgQr;
@@ -203,8 +208,8 @@ function LinkDetailHeader({
   const toast = useToast();
   const address = displayAddress(s.url);
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
-      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-x-3 gap-y-4">
+      <div className="flex min-w-0 flex-1 items-start gap-3.5">
         <span className="shrink-0" {...morphPart("qr")}>
           <QrThumb url={s.url} link={link} orgQr={orgQr} onOpen={onQr} />
         </span>
@@ -239,6 +244,7 @@ function LinkDetailHeader({
               }
             />
           </div>
+          <LinkFacts orgId={orgId} stats={s} createdBy={createdBy} />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:flex-wrap">
@@ -261,6 +267,7 @@ function LinkDetailHeader({
               QR code
             </Button>
           )}
+          <ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />
           <div className="w-9">
             <LinkMenu s={s} link={link} canWrite={canWrite} onAlias={onAlias} onDelete={onDelete} />
           </div>
@@ -270,9 +277,10 @@ function LinkDetailHeader({
   );
 }
 
+/** Where, from what, and on what, side by side under the chart. */
 function LinkPanels({ s }: { s: LinkStats }) {
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <PlacesPanel countries={s.countries} limit={7} />
       <PanelTabs
         tabs={[
@@ -301,20 +309,26 @@ function LinkPanels({ s }: { s: LinkStats }) {
               />
             ),
           },
-          {
-            value: "devices",
-            label: "Devices",
-            panel: (
-              <BarList
-                head={["Device", "Clicks"]}
-                items={s.devices}
-                formatKey={deviceLabel}
-                empty="Phone, desktop or tablet, counted here once clicks arrive."
-              />
-            ),
-          },
         ]}
       />
+      <div className="md:col-span-2 lg:col-span-1">
+        <PanelTabs
+          tabs={[
+            {
+              value: "devices",
+              label: "Devices",
+              panel: (
+                <BarList
+                  head={["Device", "Clicks"]}
+                  items={s.devices}
+                  formatKey={deviceLabel}
+                  empty="Phone, desktop or tablet, counted here once clicks arrive."
+                />
+              ),
+            },
+          ]}
+        />
+      </div>
     </div>
   );
 }
@@ -372,14 +386,32 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
   };
 }
 
+/** Who made the link, by name. Null until the roster is in, so a name never
+ * flips from "A former member". */
+function useCreatedBy(orgId: string, userId: string | null | undefined): string | null {
+  const members = useMembers(orgId);
+  const names = useMemo(
+    () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
+    [members.data],
+  );
+  if (members.data === undefined) return null;
+  return (userId && names.get(userId)) || "A former member";
+}
+
 /** The range a link's page opens on: 30 days, or the plan's whole window
  * when that is shorter. */
 const defaultRange = (maxDays: number) => (maxDays >= 30 ? PRESET_30D : PRESET_7D);
 
 /** The figures over the chart, for the range the API answered. */
 function linkFigures(s: LinkStats) {
+  // On the 7-day range the week is the range, and would only repeat Clicks.
+  const week =
+    s.rangeDays > 7
+      ? [{ label: "Last 7 days", value: formatNumber(s.clicks7d), delta: s.clicks7dDelta }]
+      : [];
   return [
     { label: "Clicks", value: formatNumber(s.totalClicks), delta: s.totalClicksDelta },
+    ...week,
     { label: "Countries", value: formatNumber(s.countryCount) },
     { label: "Top source", value: s.referrers[0] ? sourceLabel(s.referrers[0].key) : "None yet" },
   ];
@@ -400,11 +432,7 @@ export function LinkDetailPage() {
   const range = picked ?? defaultRange(limits.analyticsDays);
   const stats = useLinkInsightStats(orgId, slug ?? null, domain, range.days);
   const link = useLinkRow(orgId, stats.data);
-  const members = useMembers(orgId);
-  const memberNames = useMemo(
-    () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
-    [members.data],
-  );
+  const createdBy = useCreatedBy(orgId, stats.data?.createdBy);
   const dialogs = useLinkDetailDialogs(orgId, link);
 
   if (currentUser.isLoading) return <LinkDetailSkeleton />;
@@ -413,16 +441,13 @@ export function LinkDetailPage() {
   if (!stats.data)
     return <p className="py-8 text-center text-sm text-danger">Could not load link stats.</p>;
   const s = stats.data;
-  // Only once the roster is in, so a name never flips from "former member".
-  const createdBy =
-    members.data === undefined
-      ? null
-      : (s.createdBy && memberNames.get(s.createdBy)) || "A former member";
 
   return (
     <div>
       <LinkDetailHeader
         s={s}
+        orgId={orgId}
+        createdBy={createdBy}
         link={link}
         canWrite={canWrite}
         orgQr={orgQr}
@@ -435,22 +460,19 @@ export function LinkDetailPage() {
         onDelete={() => dialogs.setDeleteOpen(true)}
       />
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div
-          aria-busy={stats.isPlaceholderData}
-          className={cn(
-            "flex min-w-0 flex-col gap-6 transition-opacity duration-200 ease-out",
-            stats.isPlaceholderData && "opacity-60",
-          )}
-        >
-          <StatsChart figures={linkFigures(s)}>
-            <div key={s.rangeDays} className="chart-in">
-              <AreaChart data={s.series} tickFormat={dayTick} />
-            </div>
-          </StatsChart>
-          <LinkPanels s={s} />
-        </div>
-        <LinkDetailSide orgId={orgId} stats={s} createdBy={createdBy} />
+      <div
+        aria-busy={stats.isPlaceholderData}
+        className={cn(
+          "flex min-w-0 flex-col gap-6 transition-opacity duration-200 ease-out",
+          stats.isPlaceholderData && "opacity-60",
+        )}
+      >
+        <StatsChart figures={linkFigures(s)}>
+          <div key={s.rangeDays} className="chart-in">
+            <AreaChart data={s.series} tickFormat={dayTick} />
+          </div>
+        </StatsChart>
+        <LinkPanels s={s} />
       </div>
 
       {link && (

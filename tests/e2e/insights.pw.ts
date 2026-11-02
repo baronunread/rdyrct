@@ -108,8 +108,18 @@ test("a link's page has its QR code, a range and a menu in the header", async ({
     "aria-pressed",
     "true",
   );
+  // On seven days there is no separate "Last 7 days": it would repeat Clicks.
   for (const label of ["Clicks", "Countries", "Top source"])
     await expect(page.getByRole("term").getByText(label, { exact: true })).toBeVisible();
+  await expect(page.getByRole("term").getByText("Last 7 days")).toHaveCount(0);
+  // The link's facts sit under its title, Export beside the other actions, and
+  // devices in a panel of their own beside countries and referrers.
+  await expect(page.getByRole("link", { name: /example\.com\/insights-link/ })).toBeVisible();
+  await expect(page.getByText(/^Created /)).toBeVisible();
+  await expect(page.getByText("No clicks yet")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
+  for (const tab of ["Countries", "Referrers", "Devices"])
+    await expect(page.getByRole("tab", { name: tab })).toBeVisible();
 
   await page.getByLabel("More actions").click();
   await expect(page.getByRole("menuitem", { name: "Open short link" })).toBeVisible();

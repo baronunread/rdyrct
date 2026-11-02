@@ -1,22 +1,12 @@
-import type { ReactNode } from "react";
+import { IconArrowRight } from "@tabler/icons-react";
 import { useAddresses } from "../lib/hooks";
 import { relativeDate, shortDate } from "../lib/dates";
 import { copyToClipboard } from "../lib/clipboard";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
-import { ExportCsvButton } from "./export-csv-button";
 import { ShortAddress } from "./short-address";
 import { readableUrl } from "../lib/display-url";
 import type { LinkStats } from "@/shared/types";
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-xs text-muted">{label}</span>
-      {children}
-    </div>
-  );
-}
 
 /** Every other address that still leads to this link: aliases and the 48h
  * one a rename leaves behind. Nothing at all when there are none. An
@@ -29,10 +19,11 @@ function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string;
   const others = (addresses.data ?? []).filter((a) => a.kind !== "primary" && !a.retiredAt);
   if (!others.length) return null;
   return (
-    <Fact label="Also answers at">
-      <ul className="flex flex-col">
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2">
+      Also at
+      <ul className="contents">
         {others.map((a) => (
-          <li key={a.id} className="flex min-w-0 items-center justify-between gap-1">
+          <li key={a.id} className="flex min-w-0 items-center text-text">
             <ShortAddress
               url={a.url}
               slug={a.slug}
@@ -47,13 +38,14 @@ function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string;
           </li>
         ))}
       </ul>
-    </Fact>
+    </span>
   );
 }
 
-/** The side column of a link's page: where it goes, where else it answers,
- * who made it and when, and the export of the stats beside it. */
-export function LinkDetailSide({
+/** One line under a link's title: where it goes, who made it and when, its
+ * last click, and where else it answers. Under the title rather than in a
+ * side column, which left the page a hole below it. */
+export function LinkFacts({
   orgId,
   stats: s,
   createdBy,
@@ -64,38 +56,36 @@ export function LinkDetailSide({
   createdBy: string | null;
 }) {
   return (
-    <aside className="flex flex-col gap-4 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
-      <Fact label="Destination">
-        <a
-          href={s.destination}
-          target="_blank"
-          rel="noreferrer"
-          className="text-sm text-accent [overflow-wrap:anywhere] hover:underline"
-        >
-          {readableUrl(s.destination)}
-        </a>
-      </Fact>
-      <OtherAddresses orgId={orgId} linkId={s.id} url={s.url} />
-      <div className="grid grid-cols-2 gap-3">
-        <Fact label="Created">
-          <span className="tnum text-sm">{shortDate(s.createdAt)}</span>
-        </Fact>
+    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+      <a
+        href={s.destination}
+        target="_blank"
+        rel="noreferrer"
+        title={s.destination}
+        className="flex max-w-full min-w-0 items-center gap-1 text-accent [@media(hover:hover)]:hover:underline"
+      >
+        <IconArrowRight size={14} aria-hidden className="shrink-0" />
+        <span className="truncate">{readableUrl(s.destination)}</span>
+      </a>
+      <span>
+        Created <span className="tnum text-text">{shortDate(s.createdAt)}</span>
         {createdBy && (
-          <Fact label="By">
-            <span className="truncate text-sm" title={createdBy}>
-              {createdBy}
-            </span>
-          </Fact>
+          <>
+            {" "}
+            by <span className="text-text">{createdBy}</span>
+          </>
         )}
-      </div>
-      <Fact label="Last click">
-        <span className="text-sm" title={s.lastClick ? shortDate(s.lastClick) : undefined}>
-          {s.lastClick ? relativeDate(s.lastClick) : "No clicks yet"}
-        </span>
-      </Fact>
-      <div>
-        <ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />
-      </div>
-    </aside>
+      </span>
+      <span title={s.lastClick ? shortDate(s.lastClick) : undefined}>
+        {s.lastClick ? (
+          <>
+            Last click <span className="text-text">{relativeDate(s.lastClick)}</span>
+          </>
+        ) : (
+          "No clicks yet"
+        )}
+      </span>
+      <OtherAddresses orgId={orgId} linkId={s.id} url={s.url} />
+    </div>
   );
 }

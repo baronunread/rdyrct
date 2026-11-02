@@ -1239,8 +1239,8 @@ export function OrganizationSkeleton() {
 export function LinkDetailSkeleton() {
   return (
     <SkeletonStatus>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
-        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-3 gap-y-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3.5">
           <Skeleton className="size-14 shrink-0 rounded-xl" />
           <div className="min-w-0">
             <span className="flex h-7 items-center">
@@ -1248,6 +1248,11 @@ export function LinkDetailSkeleton() {
             </span>
             <span className="mt-0.5 flex h-6 items-center">
               <Skeleton className="h-3 w-48" />
+            </span>
+            <span className="mt-1.5 flex h-5 items-center gap-4">
+              <Skeleton className="h-3 w-44" />
+              <Skeleton className="h-3 w-36" />
+              <Skeleton className="h-3 w-28" />
             </span>
           </div>
         </div>
@@ -1258,31 +1263,24 @@ export function LinkDetailSkeleton() {
           <div className="flex items-center gap-2 max-sm:ml-auto">
             <SmallButtonSkeleton className="w-[2.625rem]" />
             <SmallButtonSkeleton className="w-[5.5rem]" />
+            <SmallButtonSkeleton className="w-[6.5rem]" />
             <Skeleton className="size-9 rounded-lg" />
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <StatsChartSkeleton figures={3} chartHeight={180} />
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <PanelSkeleton tabs={["w-16", "w-8"]}>
-              <BarListSkeleton rows={7} more />
+      <div className="flex min-w-0 flex-col gap-6">
+        <StatsChartSkeleton figures={4} chartHeight={180} />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <PanelSkeleton tabs={["w-16", "w-8"]}>
+            <BarListSkeleton rows={7} more />
+          </PanelSkeleton>
+          <PanelSkeleton tabs={["w-16", "w-14"]}>
+            <BarListSkeleton rows={7} more />
+          </PanelSkeleton>
+          <div className="md:col-span-2 lg:col-span-1">
+            <PanelSkeleton tabs={["w-14"]}>
+              <BarListSkeleton rows={3} />
             </PanelSkeleton>
-            <PanelSkeleton tabs={["w-16", "w-14"]}>
-              <BarListSkeleton rows={7} more />
-            </PanelSkeleton>
-          </div>
-        </div>
-        <div className="flex flex-col gap-4 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
-          <FactSkeleton label="w-16" value="w-full" lines={2} />
-          <div className="grid grid-cols-2 gap-3">
-            <FactSkeleton label="w-12" value="w-16" />
-            <FactSkeleton label="w-6" value="w-20" />
-          </div>
-          <FactSkeleton label="w-14" value="w-24" />
-          <div>
-            <SmallButtonSkeleton className="w-[6.5rem]" />
           </div>
         </div>
       </div>
@@ -1291,32 +1289,6 @@ export function LinkDetailSkeleton() {
 }
 
 /** One fact in the link's side card: a text-xs label over text-sm lines. */
-function FactSkeleton({
-  label,
-  value,
-  lines = 1,
-}: {
-  label: string;
-  value: string;
-  lines?: number;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="flex h-4 items-center">
-        <Skeleton className={cn("h-2.5", label)} />
-      </span>
-      {/* wrapped lines of one value, so no gap between them */}
-      <span className="flex flex-col">
-        {Array.from({ length: lines }, (_, i) => (
-          <span key={i} className={cn("h-5 items-center", i > 0 ? "hidden lg:flex" : "flex")}>
-            <Skeleton className={cn("h-3", i === lines - 1 && lines > 1 ? "w-2/3" : value)} />
-          </span>
-        ))}
-      </span>
-    </div>
-  );
-}
-
 /**
  * The skeleton a path stands behind.
  *
