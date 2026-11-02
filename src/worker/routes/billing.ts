@@ -325,10 +325,21 @@ billingRoutes.post("/portal", requireUser, async (c) => {
   log.set({ userId: c.var.user!.id });
   const customerId = await polarCustomerOf(c.var.db, c.var.user!.id);
   if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
-  const session = await (
-    await polarFor(c.env)
-  ).customerSessions.create({ customer_id: customerId });
-  return c.json({ url: session.customer_portal_url });
+  const polar = await polarFor(c.env);
+  // A refusal here is Polar's, not ours: say so, rather than a bare 500 the
+  // page can only call "Internal error".
+  try {
+    const session = await polar.customerSessions.create({ customer_id: customerId });
+    return c.json({ url: session.customer_portal_url });
+  } catch (cause) {
+    throw createError({
+      status: 502,
+      message: "Could not open the subscription portal",
+      why: `Polar refused or did not answer (${polarRefusal(cause) ?? "no refusal name"}).`,
+      fix: "Try again in a moment. If this persists, check the Polar token and that the customer id exists in this Polar environment.",
+      cause: cause instanceof Error ? cause : undefined,
+    });
+  }
 });
 
 /**
