@@ -475,6 +475,16 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
           fill: "var(--chart)",
           radius: 2,
           inset: 1,
+          // The hour under the pointer (or the keyboard) stands out from the
+          // rest: mixed toward the text colour, so it lightens on the dark
+          // theme and deepens on the light one, where --accent is nearly
+          // --chart's own purple.
+          states: [
+            {
+              when: { focus: "primary" },
+              style: { fill: "color-mix(in oklab, var(--chart), var(--text) 35%)" },
+            },
+          ],
         }),
       ],
       // All 24 hours are labelled: they fit, and thinning them would make the
