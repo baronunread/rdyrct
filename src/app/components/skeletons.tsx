@@ -196,7 +196,7 @@ const barWidths = [92, 71, 58, 44, 33, 24, 17];
 /** BarList with column headings: a 20px heading row, then 30px bars
  * `gap-y-0.5` apart, the count and share in their own columns. `more` is
  * the "Show all" button under a list cut at seven (28px, `mt-2 -mb-1`). */
-function BarListSkeleton({ rows, more }: { rows: number; more?: boolean }) {
+function BarListSkeleton({ rows }: { rows: number }) {
   return (
     <div className="flex flex-col">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5">
@@ -213,11 +213,6 @@ function BarListSkeleton({ rows, more }: { rows: number; more?: boolean }) {
           </div>
         ))}
       </div>
-      {more && (
-        <span className="mx-auto mt-2 -mb-1 flex h-7 items-center px-2">
-          <Skeleton className="h-2.5 w-16" />
-        </span>
-      )}
     </div>
   );
 }
@@ -329,13 +324,13 @@ export function AnalyticsSkeleton() {
         <StatsChartSkeleton figures={3} chartHeight={180} />
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <PanelSkeleton tabs={["w-16", "w-16", "w-8"]}>
-            <BarListSkeleton rows={7} more />
+            <BarListSkeleton rows={7} />
           </PanelSkeleton>
           <PanelSkeleton tabs={["w-16"]}>
-            <BarListSkeleton rows={7} more />
+            <BarListSkeleton rows={7} />
           </PanelSkeleton>
           <PanelSkeleton tabs={["w-16", "w-8"]}>
-            <BarListSkeleton rows={7} more />
+            <BarListSkeleton rows={7} />
           </PanelSkeleton>
           <PanelSkeleton tabs={["w-14"]}>
             <BarListSkeleton rows={4} />
@@ -1264,10 +1259,10 @@ export function LinkDetailSkeleton() {
         <StatsChartSkeleton figures={4} chartHeight={180} />
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           <PanelSkeleton tabs={["w-16", "w-8"]}>
-            <BarListSkeleton rows={7} more />
+            <BarListSkeleton rows={7} />
           </PanelSkeleton>
           <PanelSkeleton tabs={["w-16", "w-14"]}>
-            <BarListSkeleton rows={7} more />
+            <BarListSkeleton rows={7} />
           </PanelSkeleton>
           <div className="md:col-span-2 lg:col-span-1">
             <PanelSkeleton tabs={["w-14"]}>

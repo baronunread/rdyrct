@@ -205,11 +205,16 @@ test("Analytics counts clicked links and countries, Show all opens every country
   await expect(figure("Countries").getByRole("definition")).toHaveText("9");
   await expect(figure("Clicks per link").getByRole("definition")).toHaveText("45");
 
-  // The card shows seven; Show all names the full count and opens the rest.
-  await expect(page.getByText("Switzerland", { exact: true })).toHaveCount(0);
+  // The card scrolls past seven; Show all, in its corner, names the full
+  // count and opens every country in a dialog with a search.
   await page.getByRole("button", { name: "Show all 9" }).click();
-  await expect(page.getByText("Switzerland", { exact: true })).toBeVisible();
-  await expect(page.getByText("Austria", { exact: true })).toBeVisible();
+  const all = page.getByRole("dialog", { name: "Countries" });
+  await expect(all.getByText("Switzerland", { exact: true })).toBeVisible();
+  await all.getByRole("searchbox", { name: "Search countries" }).fill("aus");
+  await expect(all.getByText("Austria", { exact: true })).toBeVisible();
+  await expect(all.getByText("Switzerland", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(all).toHaveCount(0);
 
   await page.goto(`/links/${link.slug}`);
   await expect(figure("Countries").getByRole("definition")).toHaveText("9");

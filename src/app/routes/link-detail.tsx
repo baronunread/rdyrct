@@ -15,7 +15,7 @@ import { useSearchParams } from "../lib/router-search";
 import { addressesQuery, linksQuery, useLinks, useLinkMutations } from "../lib/hooks";
 import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
 import { settle, type PageContext } from "../lib/route-preload";
-import { AreaChart, BarList, PlacesPanel, StatsChart } from "../components/charts";
+import { AreaChart, BarList, listTab, PlacesPanel, StatsChart } from "../components/charts";
 import { dayTick } from "../lib/dates";
 import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
@@ -287,20 +287,16 @@ function LinkPanels({ s }: { s: LinkStats }) {
       <PlacesPanel countries={s.countries} limit={7} />
       <PanelTabs
         tabs={[
-          {
+          listTab({
             value: "referrers",
             label: "Referrers",
-            panel: (
-              <BarList
-                head={["Source", "Clicks"]}
-                items={s.referrers}
-                formatKey={sourceLabel}
-                lead={(key) => <SourceTile source={key} />}
-                limit={7}
-                empty="Where people were when they followed this link appears here."
-              />
-            ),
-          },
+            head: ["Source", "Clicks"],
+            items: s.referrers,
+            formatKey: sourceLabel,
+            lead: (key) => <SourceTile source={key} />,
+            limit: 7,
+            empty: "Where people were when they followed this link appears here.",
+          }),
           {
             value: "campaigns",
             label: "Campaigns",

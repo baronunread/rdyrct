@@ -1,7 +1,16 @@
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "./cn";
 import { StableLabel } from "./stable-label";
+
+/** What sits in the tab row's corner: the open tab's own, else the card's. */
+function cornerOf(
+  tabs: { value: string; end?: ReactNode }[],
+  active: string | undefined,
+  fallback: ReactNode,
+): ReactNode {
+  return tabs.find((t) => t.value === active)?.end ?? fallback;
+}
 
 /**
  * Several lists in one card, switched by underline tabs (rdyrct-design, "The
@@ -16,16 +25,20 @@ export function PanelTabs({
   end,
   className,
 }: {
-  /** `count` follows the label, muted, when there is one. */
-  tabs: { value: string; label: string; count?: number; panel: ReactNode }[];
+  /** `count` follows the label, muted, when there is one. `end` replaces
+   * the card's own `end` while that tab is open (a list's Show all). */
+  tabs: { value: string; label: string; count?: number; panel: ReactNode; end?: ReactNode }[];
   defaultValue?: string;
   /** Something on the right of the tab row, e.g. an "All links" link. */
   end?: ReactNode;
   className?: string;
 }) {
+  const [active, setActive] = useState(defaultValue ?? tabs[0]?.value);
+  const corner = cornerOf(tabs, active, end);
   return (
     <BaseTabs.Root
-      defaultValue={defaultValue ?? tabs[0]?.value}
+      value={active}
+      onValueChange={(value: string) => setActive(value)}
       className={cn("rounded-xl bg-surface px-4 pt-3 pb-3.5 smooth-shadow-ring-xs", className)}
     >
       <div className="mb-3 flex items-center gap-4 shadow-[inset_0_-1px_0_var(--border)]">
@@ -46,7 +59,7 @@ export function PanelTabs({
               swaps at once. */}
           <BaseTabs.Indicator className="absolute bottom-0 left-0 h-[1.5px] w-(--active-tab-width) translate-x-(--active-tab-left) bg-text transition-[translate,width] duration-200 ease-out motion-reduce:transition-none" />
         </BaseTabs.List>
-        {end && <div className="ml-auto shrink-0 pb-2.5 text-xs text-muted">{end}</div>}
+        {corner && <div className="ml-auto shrink-0 pb-2.5 text-xs text-muted">{corner}</div>}
       </div>
       {/* Every panel stays mounted in the same grid cell and only the active
           one is visible, so the card is as tall as its tallest list and

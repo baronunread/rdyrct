@@ -17,6 +17,7 @@ import {
 import {
   AreaChart,
   BarList,
+  listTab,
   ClicksByHour,
   LinkBarLabel,
   PlacesPanel,
@@ -95,27 +96,25 @@ function SourcesPanel({ s, period }: { s: OrgStats; period?: string }) {
     <PanelTabs
       end={period}
       tabs={[
-        {
+        listTab({
           value: "referrers",
           label: "Referrers",
-          panel: (
-            <BarList
-              head={["Source", "Clicks"]}
-              items={s.referrers}
-              formatKey={sourceLabel}
-              lead={(key) => <SourceTile source={key} />}
-              limit={CARD_ROWS}
-              empty="Where people were when they followed a link appears here."
-            />
-          ),
-        },
-        ...utm.map((g) => ({
-          value: g.value,
-          label: g.label,
-          panel: (
-            <BarList head={[g.label.slice(0, -1), "Clicks"]} items={g.items} limit={CARD_ROWS} />
-          ),
-        })),
+          head: ["Source", "Clicks"],
+          items: s.referrers,
+          formatKey: sourceLabel,
+          lead: (key) => <SourceTile source={key} />,
+          limit: CARD_ROWS,
+          empty: "Where people were when they followed a link appears here.",
+        }),
+        ...utm.map((g) =>
+          listTab({
+            value: g.value,
+            label: g.label,
+            head: [g.label.slice(0, -1), "Clicks"],
+            items: g.items,
+            limit: CARD_ROWS,
+          }),
+        ),
       ]}
     />
   );
@@ -141,26 +140,26 @@ function LinksPanel({ s }: { s: OrgStats }) {
   return (
     <PanelTabs
       tabs={[
-        {
+        listTab({
           value: "top",
           label: "Top links",
-          panel: (
-            <BarList
-              head={["Link", "Clicks"]}
-              empty="Your busiest links appear here once they start collecting clicks."
-              items={s.topLinks.map((l) => ({ key: l.id, clicks: l.clicks }))}
-              limit={CARD_ROWS}
-              formatKey={(id) => {
-                const link = s.topLinks.find((l) => l.id === id);
-                return link ? (
-                  <LinkBarLabel slug={link.slug} title={link.title} domain={link.domain} />
-                ) : (
-                  id
-                );
-              }}
-            />
-          ),
-        },
+          head: ["Link", "Clicks"],
+          empty: "Your busiest links appear here once they start collecting clicks.",
+          items: s.topLinks.map((l) => ({ key: l.id, clicks: l.clicks })),
+          limit: CARD_ROWS,
+          formatKey: (id) => {
+            const link = s.topLinks.find((l) => l.id === id);
+            return link ? (
+              <LinkBarLabel slug={link.slug} title={link.title} domain={link.domain} />
+            ) : (
+              id
+            );
+          },
+          searchBy: (id) => {
+            const link = s.topLinks.find((l) => l.id === id);
+            return link ? `${link.slug} ${link.title}` : id;
+          },
+        }),
         {
           value: "decaying",
           label: "Decaying",

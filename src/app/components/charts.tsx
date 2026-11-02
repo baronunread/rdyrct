@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { IconArrowDown, IconArrowUp } from "@tabler/icons-react";
+import { useDeferredValue, useMemo, useState } from "react";
+import { IconArrowDown, IconArrowUp, IconSearch } from "@tabler/icons-react";
 import { HrefLink } from "../lib/router-search";
 import { Flag } from "./source-tile";
 import type { ReactNode } from "react";
@@ -20,6 +20,9 @@ import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { CountryMap } from "./country-map";
 import { PanelTabs } from "../ui/tabs";
+import { Dialog } from "../ui/dialog";
+import { Input } from "../ui/field";
+import { cn } from "../ui/cn";
 import { countryName } from "../lib/places";
 import { linkPagePath } from "../lib/link-display";
 import { formatNumber } from "../lib/numbers";
@@ -163,22 +166,10 @@ export function AreaChart({
   );
 }
 
-/**
- * Ranked bars with the label inside: each row is a tinted bar sized to its
- * value, the label sits on it, and the count lines up in its own column
- * (rdyrct-design, "The app's surfaces"). No percentage: the bar already
- * says the share. One scale per list, so a
- * bar's length still encodes its value; identity is in the label, so one hue
- * does the work.
- */
-export function BarList({
-  items,
-  formatKey = (k) => k,
-  lead,
-  empty = "Nothing recorded in this period yet.",
-  head,
-  limit,
-}: {
+/** A bar list's rows, its column heads and how it labels and leads each row:
+ * everything a list needs, wherever it is drawn (a card or the Show all
+ * dialog). */
+interface BarListProps {
   items: { key: string; clicks: number }[];
   formatKey?: (key: string) => string | ReactNode;
   /** A flag or a site's letter tile ahead of each label. */
@@ -189,25 +180,62 @@ export function BarList({
   empty?: string;
   /** Column headings, e.g. ["Country", "Clicks"]. */
   head?: [string, string];
-  /** Rows shown before "Show all N". Unset shows every row. */
+  /** What Show all's search matches a row by, when that is not its key (a
+   * country's name rather than its code, a link's slug and title rather
+   * than its id). */
+  searchBy?: (key: string) => string;
+}
+
+/** One row's height plus the gap under it, in px: what `limit` rows take. */
+const ROW_PX = 32;
+
+/**
+ * Ranked bars with the label inside: each row is a tinted bar sized to its
+ * value, the label sits on it, and the count lines up in its own column
+ * (rdyrct-design, "The app's surfaces"). No percentage: the bar already says
+ * the share. One scale per list, so a bar's length still encodes its value;
+ * identity is in the label, so one hue does the work.
+ *
+ * With `limit`, the card stays `limit` rows tall and the rest scroll under
+ * the column heads; on a phone, where a box that scrolls inside a page that
+ * scrolls is a trap, it shows the first `limit` and no more. Show all
+ * (listTab, below) opens every row with a search.
+ */
+export function BarList({
+  items,
+  formatKey = (k) => k,
+  lead,
+  empty = "Nothing recorded in this period yet.",
+  head,
+  limit,
+}: Omit<BarListProps, "searchBy"> & {
+  /** Rows before the list scrolls. Unset shows every row. */
   limit?: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const max = Math.max(1, ...items.map((i) => i.clicks));
   if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
-  const cut = limit !== undefined && items.length > limit;
-  const shown = cut && !expanded ? items.slice(0, limit) : items;
+  const scrolls = limit !== undefined && items.length > limit;
   return (
     <div className="flex flex-col">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 text-sm">
-        {head && (
-          <>
-            <span className="pb-1 text-xs text-muted">{head[0]}</span>
-            <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
-          </>
+      {head && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 pb-1 text-xs text-muted">
+          <span>{head[0]}</span>
+          <span className="text-right">{head[1]}</span>
+        </div>
+      )}
+      <div
+        className={cn(
+          "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 text-sm",
+          scrolls &&
+            "overscroll-contain sm:overflow-y-auto sm:pb-3 sm:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
         )}
-        {shown.map((item) => (
-          <div key={item.key} className="group contents">
+        style={scrolls ? { maxHeight: `${limit * ROW_PX + 12}px` } : undefined}
+      >
+        {items.map((item, i) => (
+          <div
+            key={item.key}
+            className={cn("group contents", scrolls && i >= limit && "max-sm:hidden")}
+          >
             <div className="relative flex h-[30px] min-w-0 items-center gap-2 px-2">
               <span
                 aria-hidden
@@ -217,22 +245,90 @@ export function BarList({
               {lead && <span className="relative flex shrink-0">{lead(item.key)}</span>}
               <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
             </div>
-            <span className="tnum text-right">{formatNumber(item.clicks)}</span>
+            <span className="tnum pr-1 text-right">{formatNumber(item.clicks)}</span>
           </div>
         ))}
       </div>
-      {cut && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-          className="mx-auto mt-2 -mb-1 flex h-7 cursor-pointer items-center rounded-md px-2 text-xs text-muted transition-colors duration-150 ease-out [@media(hover:hover)]:hover:text-text"
-        >
-          {expanded ? "Show fewer" : `Show all ${items.length}`}
-        </button>
-      )}
     </div>
   );
+}
+
+/** The text a row is searched by: searchBy's, else its key. */
+function searchText(key: string, list: BarListProps): string {
+  return list.searchBy?.(key) ?? key;
+}
+
+/** Every row of a list, in a dialog with a search (a sheet on a phone). */
+function BarListDialog({
+  title,
+  open,
+  onOpenChange,
+  ...list
+}: BarListProps & { title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [query, setQuery] = useState("");
+  const typed = useDeferredValue(query.trim().toLowerCase());
+  const shown = typed
+    ? list.items.filter((i) => searchText(i.key, list).toLowerCase().includes(typed))
+    : list.items;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title={title}>
+      <div className="flex flex-col gap-3">
+        <span className="relative block">
+          <IconSearch
+            size={15}
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-muted"
+          />
+          <Input
+            type="search"
+            value={query}
+            placeholder={`Search ${title.toLowerCase()}`}
+            aria-label={`Search ${title.toLowerCase()}`}
+            className="pl-9"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </span>
+        <BarList {...list} items={shown} empty={`Nothing matches “${query.trim()}”.`} />
+      </div>
+    </Dialog>
+  );
+}
+
+/** "Show all 9", in the card's top-right corner: opens BarListDialog. */
+function ShowAll({ title, ...list }: BarListProps & { title: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="cursor-pointer rounded text-xs text-muted transition-colors duration-150 ease-out [@media(hover:hover)]:hover:text-text"
+      >
+        Show all {list.items.length}
+      </button>
+      <BarListDialog title={title} open={open} onOpenChange={setOpen} {...list} />
+    </>
+  );
+}
+
+/**
+ * A PanelTabs tab holding a BarList: the list scrolls past `limit` rows, and
+ * once it does, Show all sits in the card's corner. The dialog is titled with
+ * the tab's own label.
+ */
+export function listTab({
+  value,
+  label,
+  limit,
+  ...list
+}: BarListProps & { value: string; label: string; limit?: number }) {
+  const more = limit !== undefined && list.items.length > limit;
+  return {
+    value,
+    label,
+    panel: <BarList {...list} limit={limit} />,
+    end: more ? <ShowAll title={label} {...list} /> : undefined,
+  };
 }
 
 /** A link in a bar list: its slug, which is what people search for and
@@ -394,27 +490,24 @@ export function PlacesPanel({
 }: {
   countries: TopEntry[];
   period?: string;
-  /** Rows before "Show all N". */
+  /** Rows before the list scrolls and Show all appears. */
   limit?: number;
 }) {
   return (
     <PanelTabs
       end={period}
       tabs={[
-        {
+        listTab({
           value: "countries",
           label: "Countries",
-          panel: (
-            <BarList
-              head={["Country", "Clicks"]}
-              items={countries}
-              formatKey={placeName}
-              lead={(code) => <Flag code={code} />}
-              limit={limit}
-              empty="The country each click came from appears here. No IP address is stored."
-            />
-          ),
-        },
+          head: ["Country", "Clicks"],
+          items: countries,
+          formatKey: placeName,
+          searchBy: placeName,
+          lead: (code) => <Flag code={code} />,
+          limit,
+          empty: "The country each click came from appears here. No IP address is stored.",
+        }),
         { value: "map", label: "Map", panel: <CountryMap countries={countries} /> },
       ]}
     />
