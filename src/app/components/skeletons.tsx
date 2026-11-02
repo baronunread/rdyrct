@@ -1237,20 +1237,16 @@ export function OrganizationSkeleton() {
 export function LinkDetailSkeleton() {
   return (
     <SkeletonStatus>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-3 gap-y-4">
-        <div className="flex min-w-0 flex-1 items-start gap-3.5">
-          <Skeleton className="size-14 shrink-0 rounded-xl" />
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Skeleton className="size-10 shrink-0 rounded-lg" />
           <div className="min-w-0">
-            <span className="flex h-7 items-center">
-              <Skeleton className="h-5 w-40" />
+            <span className="flex h-7 items-center gap-2.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-40" />
             </span>
-            <span className="mt-0.5 flex h-6 items-center">
-              <Skeleton className="h-3 w-48" />
-            </span>
-            <span className="mt-1.5 flex h-5 items-center gap-4">
-              <Skeleton className="h-3 w-44" />
-              <Skeleton className="h-3 w-36" />
-              <Skeleton className="h-3 w-28" />
+            <span className="mt-0.5 flex h-5 items-center">
+              <Skeleton className="h-3 w-56" />
             </span>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { useAddresses } from "../lib/hooks";
-import { relativeDate, shortDate } from "../lib/dates";
 import { copyToClipboard } from "../lib/clipboard";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
@@ -42,21 +41,12 @@ function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string;
   );
 }
 
-/** One line under a link's title: where it goes, who made it and when, its
- * last click, and where else it answers. Under the title rather than in a
- * side column, which left the page a hole below it. */
-export function LinkFacts({
-  orgId,
-  stats: s,
-  createdBy,
-}: {
-  orgId: string;
-  stats: LinkStats;
-  /** The creator's name, or null while the member list loads. */
-  createdBy: string | null;
-}) {
+/** One line under a link's title: where it goes, and where else it answers.
+ * Nothing more: who made it and its last click were noise on a page about
+ * its numbers. */
+export function LinkFacts({ orgId, stats: s }: { orgId: string; stats: LinkStats }) {
   return (
-    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
       <a
         href={s.destination}
         target="_blank"
@@ -67,24 +57,6 @@ export function LinkFacts({
         <IconArrowRight size={14} aria-hidden className="shrink-0" />
         <span className="truncate">{readableUrl(s.destination)}</span>
       </a>
-      <span>
-        Created <span className="tnum text-text">{shortDate(s.createdAt)}</span>
-        {createdBy && (
-          <>
-            {" "}
-            by <span className="text-text">{createdBy}</span>
-          </>
-        )}
-      </span>
-      <span title={s.lastClick ? shortDate(s.lastClick) : undefined}>
-        {s.lastClick ? (
-          <>
-            Last click <span className="text-text">{relativeDate(s.lastClick)}</span>
-          </>
-        ) : (
-          "No clicks yet"
-        )}
-      </span>
       <OtherAddresses orgId={orgId} linkId={s.id} url={s.url} />
     </div>
   );

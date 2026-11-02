@@ -112,11 +112,10 @@ test("a link's page has its QR code, a range and a menu in the header", async ({
   for (const label of ["Clicks", "Countries", "Top source"])
     await expect(page.getByRole("term").getByText(label, { exact: true })).toBeVisible();
   await expect(page.getByRole("term").getByText("Last 7 days")).toHaveCount(0);
-  // The header matches Analytics (range, Export CSV); the link's facts sit
-  // under its title, and devices get a panel beside countries and referrers.
+  // The header matches Analytics (range, Export CSV); under the title only
+  // the destination, and devices get a panel beside countries and referrers.
   await expect(page.getByRole("link", { name: /example\.com\/insights-link/ })).toBeVisible();
-  await expect(page.getByText(/^Created /)).toBeVisible();
-  await expect(page.getByText("No clicks yet")).toBeVisible();
+  await expect(page.getByText(/^Last click /)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
   for (const tab of ["Countries", "Referrers", "Devices"])
     await expect(page.getByRole("tab", { name: tab })).toBeVisible();

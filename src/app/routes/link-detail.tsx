@@ -1,5 +1,5 @@
 import { linkFieldError } from "../lib/link-field-errors";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { morphKey, morphPart, setMorphLink } from "../lib/link-morph";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
@@ -12,14 +12,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useSearchParams } from "../lib/router-search";
-import {
-  addressesQuery,
-  linksQuery,
-  membersQuery,
-  useLinks,
-  useLinkMutations,
-  useMembers,
-} from "../lib/hooks";
+import { addressesQuery, linksQuery, useLinks, useLinkMutations } from "../lib/hooks";
 import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
 import { settle, type PageContext } from "../lib/route-preload";
 import { AreaChart, BarList, PlacesPanel, StatsChart } from "../components/charts";
@@ -80,11 +73,7 @@ export function preload(qc: QueryClient, orgId: string, page: PageContext) {
         qc.ensureQueryData(addressesQuery(orgId, s.id)),
       ]),
     );
-  return settle([
-    stats,
-    qc.ensureQueryData(membersQuery(orgId)),
-    preloadOrgDomains(qc, page.org, page.user),
-  ]);
+  return settle([stats, preloadOrgDomains(qc, page.org, page.user)]);
 }
 
 /**
@@ -124,9 +113,9 @@ function QrThumb({
       disabled={!link}
       aria-label="Show QR code"
       style={{ background: qrFallbacks(link ?? {}, orgQr).bg }}
-      className="shrink-0 cursor-pointer rounded-xl p-1 smooth-shadow-ring-xs transition-[scale] duration-200 ease-out active:scale-[0.97] disabled:cursor-default [&_[role=img]]:rounded-none [&_[role=img]]:border-0"
+      className="shrink-0 cursor-pointer rounded-lg p-0.5 smooth-shadow-ring-xs transition-[scale] duration-200 ease-out active:scale-[0.97] disabled:cursor-default [&_[role=img]]:rounded-none [&_[role=img]]:border-0"
     >
-      <QRPreview url={url} size={48} {...look} />
+      <QRPreview url={url} size={36} {...look} />
     </button>
   );
 }
@@ -198,7 +187,6 @@ function LinkMenu({
 function LinkDetailHeader({
   s,
   orgId,
-  createdBy,
   link,
   canWrite,
   orgQr,
@@ -212,7 +200,6 @@ function LinkDetailHeader({
 }: {
   s: LinkStats;
   orgId: string;
-  createdBy: string | null;
   link: LinkDTO | null;
   canWrite: boolean;
   orgQr: OrgQr;
@@ -227,16 +214,16 @@ function LinkDetailHeader({
   const toast = useToast();
   const address = displayAddress(s.url);
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-x-3 gap-y-4">
-      <div className="flex min-w-0 flex-1 items-start gap-3.5">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <span className="shrink-0" {...morphPart("qr")}>
           <QrThumb url={s.url} link={link} orgQr={orgQr} onOpen={onQr} />
         </span>
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
             <h1
               dir={s.title ? "auto" : undefined}
-              className="truncate text-xl font-semibold tracking-tight"
+              className="max-w-full truncate text-lg font-semibold tracking-tight"
               title={s.title || address}
               {...morphPart("title")}
             >
@@ -250,20 +237,20 @@ function LinkDetailHeader({
                 <Badge color="pink">paused</Badge>
               </span>
             )}
-          </div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1">
-            <span className="flex min-w-0" {...morphPart("addr")}>
-              <ShortAddress url={s.url} slug={s.slug} className="text-sm" />
+            <span className="flex min-w-0 items-center gap-0.5 self-center">
+              <span className="flex min-w-0" {...morphPart("addr")}>
+                <ShortAddress url={s.url} slug={s.slug} className="text-sm" />
+              </span>
+              <CopyButton
+                text={s.url}
+                label={`Copy ${s.url}`}
+                onCopy={(text) =>
+                  copyToClipboard(text, toast, { success: `Copied ${linkDisplayTitle(text)}` })
+                }
+              />
             </span>
-            <CopyButton
-              text={s.url}
-              label={`Copy ${s.url}`}
-              onCopy={(text) =>
-                copyToClipboard(text, toast, { success: `Copied ${linkDisplayTitle(text)}` })
-              }
-            />
           </div>
-          <LinkFacts orgId={orgId} stats={s} createdBy={createdBy} />
+          <LinkFacts orgId={orgId} stats={s} />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:flex-wrap">
@@ -401,18 +388,6 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
   };
 }
 
-/** Who made the link, by name. Null until the roster is in, so a name never
- * flips from "A former member". */
-function useCreatedBy(orgId: string, userId: string | null | undefined): string | null {
-  const members = useMembers(orgId);
-  const names = useMemo(
-    () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
-    [members.data],
-  );
-  if (members.data === undefined) return null;
-  return (userId && names.get(userId)) || "A former member";
-}
-
 /** The range a link's page opens on: 30 days, or the plan's whole window
  * when that is shorter. */
 const defaultRange = (maxDays: number) => (maxDays >= 30 ? PRESET_30D : PRESET_7D);
@@ -447,7 +422,6 @@ export function LinkDetailPage() {
   const range = picked ?? defaultRange(limits.analyticsDays);
   const stats = useLinkInsightStats(orgId, slug ?? null, domain, range.days);
   const link = useLinkRow(orgId, stats.data);
-  const createdBy = useCreatedBy(orgId, stats.data?.createdBy);
   const dialogs = useLinkDetailDialogs(orgId, link);
 
   if (currentUser.isLoading) return <LinkDetailSkeleton />;
@@ -462,7 +436,6 @@ export function LinkDetailPage() {
       <LinkDetailHeader
         s={s}
         orgId={orgId}
-        createdBy={createdBy}
         link={link}
         canWrite={canWrite}
         orgQr={orgQr}
