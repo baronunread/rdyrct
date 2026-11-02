@@ -52,11 +52,14 @@ export function AssistantMark({ id, className }: { id: AssistantMarkId; classNam
  * list shows what the client called itself at sign-in. */
 export function markForClient(name: string): AssistantMarkId | null {
   const n = name.toLowerCase();
-  if (n.includes("claude code")) return "claude-code";
-  if (n.includes("claude")) return "claude";
-  if (n.includes("chatgpt") || n.includes("openai")) return "chatgpt";
-  if (n.includes("cursor")) return "cursor";
-  if (n.includes("vs code") || n.includes("vscode") || n.includes("visual studio code"))
-    return "vscode";
-  return null;
+  return CLIENT_NAMES.find(([, words]) => words.some((w) => n.includes(w)))?.[0] ?? null;
 }
+
+/** In order: "Claude Code" has to match before "Claude" does. */
+const CLIENT_NAMES = [
+  ["claude-code", ["claude code"]],
+  ["claude", ["claude"]],
+  ["chatgpt", ["chatgpt", "openai"]],
+  ["cursor", ["cursor"]],
+  ["vscode", ["vs code", "vscode", "visual studio code"]],
+] as const satisfies readonly (readonly [AssistantMarkId, readonly string[]])[];
