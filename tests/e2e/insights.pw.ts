@@ -227,3 +227,54 @@ test("Analytics counts clicked links and countries, the map zooms to them, Show 
   await page.getByRole("tab", { name: "Campaigns" }).click();
   await expect(page.getByText("spring-menu", { exact: true })).toBeVisible();
 });
+
+test("Analytics' When card shades clicks by weekday and UTC hour, with totals and a tooltip", async ({
+  page,
+}) => {
+  const email = `insights-when-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await createQuickLink(page, "example.com/insights-when");
+  await page.keyboard.press("Escape");
+
+  const [link] = await queryRows<{ id: string; org_id: string }>(
+    page,
+    `select l.id, l.org_id from links l
+     join org_members m on m.org_id = l.org_id join user u on u.id = m.user_id
+     where u.email = ?`,
+    [email],
+  );
+  expect(link).toBeTruthy();
+  // The stats read only the rollups: 30 clicks in the UTC hour that began
+  // two hours ago, on today's day row so the range covers them.
+  await rawSql(
+    page,
+    `insert into click_daily (org_id, day, link_id, clicks) values (?, date('now'), ?, 30)`,
+    [link.org_id, link.id],
+  );
+  await rawSql(
+    page,
+    `insert into click_hourly (org_id, hour, link_id, clicks)
+     values (?, (cast(strftime('%s', 'now') as integer) / 3600 - 2) * 3600000, ?, 30)`,
+    [link.org_id, link.id],
+  );
+
+  await page.goto("/analytics");
+  const card = page.getByRole("tabpanel").filter({ has: page.getByRole("grid") });
+  await expect(page.getByRole("tab", { name: "When" })).toBeVisible();
+  await expect(page.getByText("UTC", { exact: true })).toBeVisible();
+
+  const grid = page.getByRole("grid", { name: /Clicks by day of the week and hour/ });
+  await expect(grid).toBeVisible();
+  await expect(card).toBeVisible();
+  await expect(grid.getByRole("gridcell", { name: "Total, 30 clicks" })).toHaveText("30");
+
+  // The one busy cell names its day, its hour range and its clicks in a
+  // tooltip, not a native title.
+  const busy = grid.getByRole("gridcell", { name: /to \d\d:00, 30 clicks$/ });
+  await expect(busy).toHaveCount(1);
+  await expect(busy).not.toHaveAttribute("title", /.*/);
+  await busy.hover();
+  await expect(
+    page.getByRole("tooltip").filter({ hasText: /\w{3}, \d\d:00 to \d\d:00 · 30 clicks/ }),
+  ).toBeVisible();
+});

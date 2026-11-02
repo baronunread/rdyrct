@@ -3,9 +3,8 @@ import { IconArrowDown, IconArrowUp, IconSearch } from "@tabler/icons-react";
 import { HrefLink } from "../lib/router-search";
 import { Flag } from "./source-tile";
 import type { ReactNode, UIEvent } from "react";
-import { areaY, barY, defineChart, lineY } from "@tanstack/charts";
+import { areaY, defineChart, lineY } from "@tanstack/charts";
 import { d3Curve } from "@tanstack/charts/d3/shape";
-import { scaleBand } from "@tanstack/charts/scales/band";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { scalePoint } from "@tanstack/charts/scales/point";
 import { curveMonotoneX } from "d3-shape";
@@ -16,8 +15,7 @@ import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { seriesTooltip } from "./chart-tooltip";
 import { ClicksTip } from "./clicks-tip";
-import { clicksByHour, HOURS } from "../lib/click-buckets";
-import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
+import type { SeriesPoint, DeltaValue, TopEntry } from "@/shared/types";
 import { CountryMap } from "./country-map";
 import { PanelTabs } from "../ui/tabs";
 import { Dialog, usePhone } from "../ui/dialog";
@@ -34,7 +32,6 @@ const smoothCurve = d3Curve(curveMonotoneX);
 // One motion renderer per chart type: it holds no per-instance state, so a
 // module-level instance avoids reallocating it on every render.
 const areaChartMotion = motion<SeriesPoint, string, number>(chartMotion);
-const hourBarMotion = motion<{ hour: number; clicks: number }, number, number>(chartMotion);
 
 const defaultTickFormat = (day: string) => day.slice(5);
 
@@ -449,87 +446,6 @@ function DeltaBadge({ pct }: { pct: number }) {
       <span className="sr-only">{flat ? "No change" : up ? "Up" : "Down"}</span>
       {Math.abs(pct)}%
     </span>
-  );
-}
-
-/**
- * Day-of-week × hour-of-day activity heatmap. Sequential color scale from
- * the --chart hue. Compact enough to live inside a card. Tooltip appears
- * immediately on hover (no native-title delay), matching the other charts.
- */
-/**
- * Clicks by hour of day, summed over the whole range. The weekday half of
- * the old day-by-hour grid lives next to this as a BarList: two flat
- * questions, each answered plainly, instead of one grid that needed square
- * tiles and a colour ramp to be read at all.
- */
-export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; height?: number }) {
-  const hours = useMemo(() => clicksByHour(data), [data]);
-
-  const definition = useMemo(() => {
-    const top = yTop(Math.max(1, ...hours.map((h) => h.clicks)));
-    return defineChart({
-      marks: [
-        barY(hours, {
-          x: "hour",
-          y: "clicks",
-          key: "hour",
-          fill: "var(--chart)",
-          radius: 2,
-          inset: 1,
-          // The hour under the pointer (or the keyboard) stands out from the
-          // rest: mixed toward the text colour, so it lightens on the dark
-          // theme and deepens on the light one, where --accent is nearly
-          // --chart's own purple.
-          states: [
-            {
-              when: { focus: "primary" },
-              style: { fill: "color-mix(in oklab, var(--chart), var(--text) 35%)" },
-            },
-          ],
-        }),
-      ],
-      // All 24 hours are labelled: they fit, and thinning them would make the
-      // reader count bars to find an hour. `thin` drops labels itself if a
-      // narrow card ever takes that choice away.
-      scales: {
-        x: {
-          scale: scaleBand<number>().domain(HOURS),
-          grid: false,
-          axis: { line: false, ticks: { size: 0 }, tickLabels: { thin: true } },
-        },
-        // Same y axis as the clicks chart: three hairlines, labelled on the
-        // right, no axis line.
-        y: {
-          scale: scaleLinear().domain([0, top]),
-          side: "right",
-          grid: true,
-          axis: {
-            line: false,
-            ticks: { values: [0, top / 2, top], size: 0, format: (v: number) => formatNumber(v) },
-          },
-        },
-      },
-      theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
-      focusRing: false,
-      tooltip: seriesTooltip,
-    });
-  }, [hours]);
-
-  if (!data.length) return null;
-
-  return (
-    <RendererChart
-      definition={definition}
-      renderer={hourBarMotion}
-      height={height}
-      ariaLabel="Clicks by hour of day"
-      renderTooltipBody={({ points }) => {
-        const datum = points[0]?.datum;
-        if (!datum) return null;
-        return <ClicksTip label={`${datum.hour}:00`} clicks={datum.clicks} />;
-      }}
-    />
   );
 }
 

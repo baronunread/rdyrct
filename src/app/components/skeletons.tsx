@@ -344,8 +344,8 @@ export function AnalyticsSkeleton() {
           <PanelSkeleton tabs={["w-14"]}>
             <BarListSkeleton rows={4} />
           </PanelSkeleton>
-          <PanelSkeleton tabs={["w-14", "w-20"]}>
-            <Skeleton className="h-[260px] w-full" />
+          <PanelSkeleton tabs={["w-10"]}>
+            <Skeleton className="h-[196px] w-full" />
           </PanelSkeleton>
         </div>
       </div>

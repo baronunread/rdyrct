@@ -109,7 +109,7 @@ const fmtCountry = (key: string) => {
  * dim violet up to the bright accent, on a square root. On a linear scale,
  * and with --chart as the top, one big country left every other one
  * indistinguishable from no clicks at all. */
-const shade = (share: number) =>
+export const shade = (share: number) =>
   `color-mix(in oklab, var(--accent) ${Math.round(Math.sqrt(share) * 100)}%, color-mix(in oklab, var(--chart) 45%, var(--surface-2)))`;
 
 /** "+2 countries outside, 4 clicks": what a zoomed frame leaves out. */

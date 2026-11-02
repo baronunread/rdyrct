@@ -23,3 +23,16 @@ const NUMBER = new Intl.NumberFormat("en-US", {
 export function formatNumber(value: number): string {
   return NUMBER.format(value).replace("K", "k");
 }
+
+const WHOLE = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  compactDisplay: "short",
+  maximumFractionDigits: 0,
+});
+
+/** formatNumber, but never wider than four characters: 80.6k reads 81k. For
+ * a figure that has to fit under a column a few pixels wide. */
+export function formatNumberShort(value: number): string {
+  const full = formatNumber(value);
+  return full.length <= 4 ? full : WHOLE.format(value).replace("K", "k");
+}

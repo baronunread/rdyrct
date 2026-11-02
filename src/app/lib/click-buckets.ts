@@ -1,20 +1,35 @@
 import type { HeatmapRow } from "@/shared/types";
 
-/** Monday-first, matching the order the stats query returns rows in. */
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** Monday-first, matching the stats query (0 = Monday). */
+export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-/** Clicks per weekday, summed across every hour, ready for a BarList. */
-export function clicksByWeekday(data: HeatmapRow[]): { key: string; clicks: number }[] {
-  const totals = WEEKDAYS.map((day) => ({ key: day, clicks: 0 }));
-  for (const row of data) totals[row.dayOfWeek].clicks += row.clicks;
-  return totals;
+export interface HeatmapGrid {
+  /** Clicks by weekday, then by UTC hour. */
+  cells: number[][];
+  dayTotals: number[];
+  hourTotals: number[];
+  total: number;
+  /** The busiest single cell, for the colour scale. */
+  max: number;
 }
 
-/** Clicks per hour of the day, summed across every weekday. */
-export function clicksByHour(data: HeatmapRow[]): { hour: number; clicks: number }[] {
-  const totals = HOURS.map((hour) => ({ hour, clicks: 0 }));
-  for (const row of data) totals[row.hour].clicks += row.clicks;
-  return totals;
+/** The sparse rows of the stats answer as a full 7 by 24 grid with totals. */
+export function heatmapGrid(data: HeatmapRow[]): HeatmapGrid {
+  const cells = WEEKDAYS.map(() => HOURS.map(() => 0));
+  const dayTotals = WEEKDAYS.map(() => 0);
+  const hourTotals = HOURS.map(() => 0);
+  let total = 0;
+  let max = 0;
+  for (const { dayOfWeek, hour, clicks } of data) {
+    const row = cells[dayOfWeek];
+    if (!row || hour < 0 || hour > 23) continue;
+    row[hour] += clicks;
+    dayTotals[dayOfWeek] += clicks;
+    hourTotals[hour] += clicks;
+    total += clicks;
+    max = Math.max(max, row[hour]);
+  }
+  return { cells, dayTotals, hourTotals, total, max };
 }

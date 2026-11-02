@@ -6,19 +6,12 @@ import { clickUsageQuery, linksQuery, useCurrentUser, useClickUsage, useLinks } 
 import { canWriteOrg } from "../lib/org-limits";
 import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useCurrentOrg } from "../lib/current-org";
-import { clicksByWeekday } from "../lib/click-buckets";
-import {
-  PLAN_LIMITS,
-  type HeatmapRow,
-  type OrgStats,
-  type StatsLinkRef,
-  type UserOrg,
-} from "@/shared/types";
+import { PLAN_LIMITS, type OrgStats, type StatsLinkRef, type UserOrg } from "@/shared/types";
+import { WhenHeatmap } from "../components/when-heatmap";
 import {
   AreaChart,
   BarList,
   listTab,
-  ClicksByHour,
   LinkBarLabel,
   PlacesPanel,
   StatsChart,
@@ -178,24 +171,6 @@ function LinksPanel({ s }: { s: OrgStats }) {
   );
 }
 
-/** Only for daily buckets: an hourly range is too short for a by-hour and
- * by-weekday breakdown to mean anything. */
-function TimingPanel({ heatmap }: { heatmap: HeatmapRow[] }) {
-  return (
-    <PanelTabs
-      tabs={[
-        { value: "hour", label: "By hour", panel: <ClicksByHour data={heatmap} /> },
-        {
-          value: "weekday",
-          label: "By weekday",
-          // clicksByWeekday always returns all seven days.
-          panel: <BarList items={clicksByWeekday(heatmap)} />,
-        },
-      ]}
-    />
-  );
-}
-
 /** The period the breakdown cards name, when it differs from the heading's.
  * The 24-hour view's chart and totals cover the last 24 hours, but its
  * breakdowns read the daily rollups, so they cover today's UTC day. The
@@ -297,7 +272,14 @@ function AnalyticsReport({
               },
             ]}
           />
-          {timing && <TimingPanel heatmap={s.heatmap} />}
+          {/* Only for daily buckets: an hourly range is too short for a
+              day-by-hour grid to mean anything. The rollups bucket by UTC. */}
+          {timing && (
+            <PanelTabs
+              end="UTC"
+              tabs={[{ value: "when", label: "When", panel: <WhenHeatmap data={s.heatmap} /> }]}
+            />
+          )}
         </div>
       </div>
     </div>
