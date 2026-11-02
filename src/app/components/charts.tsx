@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { IconArrowDown, IconArrowUp, IconSearch } from "@tabler/icons-react";
 import { HrefLink } from "../lib/router-search";
 import { Flag } from "./source-tile";
-import type { ReactNode } from "react";
+import type { ReactNode, UIEvent } from "react";
 import { areaY, barY, defineChart, lineY } from "@tanstack/charts";
 import { d3Curve } from "@tanstack/charts/d3/shape";
 import { scaleBand } from "@tanstack/charts/scales/band";
@@ -189,6 +189,25 @@ interface BarListProps {
 /** One row's height plus the gap under it, in px: what `limit` rows take. */
 const ROW_PX = 32;
 
+/** Whether a scrolling box is at its bottom, kept by its onScroll. */
+function useScrolledToEnd() {
+  const [atEnd, setAtEnd] = useState(false);
+  const onScroll = (e: UIEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    setAtEnd(el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
+  };
+  return { atEnd, onScroll };
+}
+
+/** A list that scrolls past its limit (not on a phone): a fade at the
+ * bottom says there is more, gone once the last row is in view. */
+function scrollBox(atEnd: boolean): string {
+  return cn(
+    "overscroll-contain sm:overflow-y-auto sm:pb-3",
+    !atEnd && "sm:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
+  );
+}
+
 /**
  * Ranked bars with the label inside: each row is a tinted bar sized to its
  * value, the label sits on it, and the count lines up in its own column
@@ -212,6 +231,7 @@ export function BarList({
   /** Rows before the list scrolls. Unset shows every row. */
   limit?: number;
 }) {
+  const { atEnd, onScroll } = useScrolledToEnd();
   const max = Math.max(1, ...items.map((i) => i.clicks));
   if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
   const scrolls = limit !== undefined && items.length > limit;
@@ -226,10 +246,10 @@ export function BarList({
       <div
         className={cn(
           "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 text-sm",
-          scrolls &&
-            "overscroll-contain sm:overflow-y-auto sm:pb-3 sm:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
+          scrolls && scrollBox(atEnd),
         )}
         style={scrolls ? { maxHeight: `${limit * ROW_PX + 12}px` } : undefined}
+        onScroll={onScroll}
       >
         {items.map((item, i) => (
           <div
