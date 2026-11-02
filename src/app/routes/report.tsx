@@ -150,6 +150,7 @@ export function ReportPage() {
           <Field label="Your email (optional)" hint="Only if you want us to be able to ask you.">
             <Input
               type="email"
+              autoComplete="email"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               maxLength={200}

@@ -56,6 +56,25 @@ export function InvalidMark({ className }: { className?: string }) {
  * can appear when the field is marked without the input moving (it is never
  * remounted, so it keeps focus and what was typed).
  */
+/**
+ * Keeps password managers (Bitwarden, 1Password, LastPass, Dashlane) off a
+ * field. They ignore autocomplete="off" and guess from the label, so a link
+ * title, an org name or a teammate's address gets offered the user's own
+ * name, email or card. Each reads its own attribute.
+ */
+export const NO_AUTOFILL = {
+  "data-bwignore": true,
+  "data-1p-ignore": true,
+  "data-lpignore": "true",
+  "data-form-type": "other",
+} as const;
+
+/** An input with no autocomplete token (or "off") asks for something the
+ * browser cannot know, so password managers stay away; one with a token
+ * (email, name, new-password...) is the user's own and keeps autofill. */
+const autofillProps = (autoComplete: string | undefined) =>
+  !autoComplete || autoComplete === "off" ? NO_AUTOFILL : undefined;
+
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => {
     const { invalid, inField } = useContext(FieldState);
@@ -64,6 +83,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       <input
         ref={ref}
         className={cn(inputClass, invalid && "pr-8", className)}
+        {...autofillProps(props.autoComplete)}
         {...aria}
         {...props}
       />

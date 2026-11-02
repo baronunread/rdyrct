@@ -17,7 +17,7 @@ import {
   useId,
 } from "react";
 import { Button } from "../ui/button";
-import { FieldReason } from "../ui/field";
+import { FieldReason, NO_AUTOFILL } from "../ui/field";
 import { invalidAria } from "../ui/invalid-aria";
 import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
@@ -97,6 +97,7 @@ export function HeroBar({
           type="text"
           inputMode="url"
           autoComplete="off"
+          {...NO_AUTOFILL}
           autoCapitalize="none"
           spellCheck={false}
           placeholder={again ? "Paste another…" : "Paste a long link…"}
