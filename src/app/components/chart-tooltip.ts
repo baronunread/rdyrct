@@ -27,27 +27,30 @@ export const pointerTooltip = {
   className: "pointer-events-none",
 } as const;
 
-/** Beside the pointer across, at the hovered point's height. */
-function besidePoint(
+/** Room the tooltip card takes above its anchor: its height (two lines)
+ * plus pointerTooltip's offset, with a little to spare. */
+const ROOM_ABOVE = 64;
+
+/** The pointer, held low enough under the plot's top that the card always
+ * fits above it. */
+function abovePointer(
   points: readonly ChartPoint[],
   context: ChartTooltipAnchorContext,
 ): { x: number; y: number } | null {
-  const point = points[0];
-  if (!point) return null;
-  return { x: context.pointer?.x ?? point.x, y: point.y };
+  const at = context.pointer ?? points[0];
+  if (!at) return null;
+  return { x: at.x, y: Math.max(at.y, context.plot.y + ROOM_ABOVE) };
 }
 
 /**
- * The tooltip for a chart read left to right (clicks by day, by hour): it
- * follows the pointer across, but sits at the hovered point's height (the
- * line, a bar's top) rather than the pointer's. Moving up and down changes
- * nothing, so it never flips from below the cursor to above it halfway down
- * the chart, which read as a jump. Above the point first, then beside it
- * when a peak leaves no room over it, so it never covers the bar it is
- * about; below only as a last resort.
+ * The tooltip for a chart read left to right (clicks by day, by hour): up
+ * and to the right of the cursor, following it on both axes, and to the left
+ * only near the right edge. It never flips from below the cursor to above it
+ * (crossing the middle of the plot used to jump it about 67px): near the top
+ * it stops and waits there instead.
  */
 export const seriesTooltip = {
   ...pointerTooltip,
-  anchor: besidePoint,
-  placement: ["top", "top-right", "top-left", "right", "left", "bottom"],
+  anchor: abovePointer,
+  placement: ["top-right", "top-left"],
 } as const;

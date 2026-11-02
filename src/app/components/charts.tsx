@@ -93,17 +93,19 @@ export function AreaChart({
           strokeWidth: 2,
           curve: smoothCurve,
         }),
-        // A vertical guide on the focused day, no marker: the line already
-        // says where the point is.
+        // A dashed vertical guide on the focused day, no marker: the line
+        // already says where the point is, and the guide ties the tooltip
+        // that follows the cursor to the day it describes.
         crosshair({
           x: true,
           y: false,
+          strokeDasharray: "3 3",
           // No animation at all. Any spring here, however stiff, is chasing a
           // target that moves every frame, so it renders behind the cursor:
           // a smooth-looking dot and a dot that keeps up are the same thing
           // only when the position is continuous rather than animated.
           motion: false,
-          stroke: "var(--border)",
+          stroke: "var(--placeholder)",
           strokeWidth: 1,
         }),
       ],
