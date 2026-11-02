@@ -439,10 +439,18 @@ html {
 }
 
 /* Where a scrollbar takes room (Windows, Linux), a thin one in the muted
-   ink, with no arrows: the default grey block reads as a second frame. */
-[data-app-sheet] {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
+   ink, with no arrows: the default grey block reads as a second frame.
+   Every scrolling box gets it (the sheet, dialogs, lists, menus), not just
+   the sheet; scrollbar-color inherits, scrollbar-width does not. In the
+   base layer, so a row that hides its scrollbar ([scrollbar-width:none])
+   still wins. */
+@layer base {
+  html {
+    scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
+  }
+  * {
+    scrollbar-width: thin;
+  }
 }
 
 /* A sideways-scrolling row with more behind an edge fades that edge
