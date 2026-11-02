@@ -312,12 +312,13 @@ function BarListDialog({
       title={title}
       initialFocus={phone ? undefined : search}
     >
-      <div className="flex flex-col gap-3">
-        <span className="relative block">
+      <div className="flex flex-col">
+        {/* The search stays put while the rows scroll under it. */}
+        <span className="sticky -top-1 z-10 -mt-1 block bg-surface pt-1 pb-3">
           <IconSearch
             size={15}
             aria-hidden
-            className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-muted"
+            className="pointer-events-none absolute top-[calc(50%-4px)] left-3 z-10 -translate-y-1/2 text-muted"
           />
           <Input
             ref={search}

@@ -123,7 +123,11 @@ export function Dialog({
                 />
                 <BaseDialog.Popup
                   className={cn(
-                    "fixed overflow-y-auto overscroll-none bg-surface text-text smooth-shadow-ring-2xl",
+                    "fixed overscroll-none bg-surface text-text smooth-shadow-ring-2xl",
+                    // A bare dialog scrolls as one (the link editor's footer
+                    // sticks to its bottom); any other scrolls its body only,
+                    // below.
+                    bare ? "overflow-y-auto" : "flex flex-col overflow-hidden",
                     phone
                       ? "inset-x-0 bottom-0 max-h-[92dvh] rounded-t-[22px] pt-2"
                       : "top-1/2 left-1/2 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl",
@@ -164,13 +168,30 @@ export function Dialog({
                   {phone && (
                     <div aria-hidden className="mx-auto mb-3 h-1 w-9 rounded-full bg-border" />
                   )}
-                  {!bare && (
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <DialogTitle>{title}</DialogTitle>
-                      <DialogClose className="-m-1.5" />
-                    </div>
+                  {bare ? (
+                    children
+                  ) : (
+                    <>
+                      <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
+                        <DialogTitle>{title}</DialogTitle>
+                        <DialogClose className="-m-1.5" />
+                      </div>
+                      {/* The body scrolls under a title that stays. It runs to
+                          the popup's sides, so its scrollbar sits on the edge,
+                          and starts below the title and ends above the bottom
+                          padding, so the bar never runs into the rounded
+                          corners. py-1 keeps a focus ring at its top or bottom
+                          from being cut off. */}
+                      <div
+                        className={cn(
+                          "-my-1 min-h-0 overflow-y-auto overscroll-contain py-1",
+                          phone ? "-mx-5 px-5" : "-mx-6 px-6",
+                        )}
+                      >
+                        {children}
+                      </div>
+                    </>
                   )}
-                  {children}
                 </BaseDialog.Popup>
               </BaseDialog.Portal>
             </BaseDialog.Root>
