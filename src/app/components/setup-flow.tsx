@@ -146,7 +146,7 @@ export function SetupFlow({
           name={name.trim() || org.name}
           plan={org.plan}
           link={link}
-          domain={added ?? (typed || host)}
+          domain={added ?? (typed || kept || host)}
           domainSet={!!added}
           invited={invited}
           firstClick={firstClick}
