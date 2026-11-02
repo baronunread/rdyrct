@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { geoNaturalEarth1 } from "d3-geo";
+import { useMemo, useState } from "react";
+import { geoCentroid, geoNaturalEarth1 } from "d3-geo";
+import type { GeoProjection } from "d3-geo";
 import { feature } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import { whereNumeric } from "iso-3166-1";
@@ -9,15 +10,13 @@ import { defineChart } from "@tanstack/charts";
 // geoShape is TanStack Charts' own export name, not ours; geoMark is what this file uses.
 // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names
 import { geoShape as geoMark } from "@tanstack/charts/geo";
+import type { GeoProjectionContext } from "@tanstack/charts/geo";
 import { motion } from "@tanstack/charts/motion";
 import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { pointerTooltip } from "./chart-tooltip";
 import { ClicksTip } from "./clicks-tip";
 import { formatNumber } from "../lib/numbers";
-
-// The world without Antarctica, in Natural Earth: about 2.1 wide for 1 tall.
-const ASPECT = 2.1;
 
 // tsc infers world-110m.json's literal shape from the file itself, which is
 // far wider than the TopoJSON types and does not narrow to them on its own.
@@ -32,6 +31,59 @@ const countries = feature(world, world.objects.countries).features.filter(
 );
 
 type CountryFeature = (typeof countries)[number];
+
+const WORLD = { type: "FeatureCollection" as const, features: countries };
+
+/** The map's frame inside the plot: the countries it zooms to fill the
+ * middle, so their neighbours show round them for a sense of where. */
+const FRAME_PAD = { x: 0.18, y: 0.14 };
+
+/** A width to measure the frame against before the card has one: the map
+ * column on a desktop. Only decides whether the map zooms and what falls
+ * outside it; the chart draws to its real width. */
+const NOMINAL_WIDTH = 640;
+
+/** The projection for a plot box: the world, or, when `frame` is given and
+ * fits closer than the world does, that frame. Never wider than the world,
+ * so spread-out clicks get the whole map and not a shrunken one. */
+function projectionFor(
+  box: { x: number; y: number; width: number; height: number },
+  frame: CountryFeature[] | null,
+): GeoProjection {
+  const { x, y, width: w, height: h } = box;
+  const whole = geoNaturalEarth1().fitExtent(
+    [
+      [x, y],
+      [x + w, y + h],
+    ],
+    WORLD,
+  );
+  if (!frame) return whole;
+  const near = geoNaturalEarth1().fitExtent(
+    [
+      [x + w * FRAME_PAD.x, y + h * FRAME_PAD.y],
+      [x + w * (1 - FRAME_PAD.x), y + h * (1 - FRAME_PAD.y)],
+    ],
+    { type: "FeatureCollection", features: frame },
+  );
+  return (near.scale() > whole.scale() ? near : whole).clipExtent([
+    [x, y],
+    [x + w, y + h],
+  ]);
+}
+
+/** The countries holding most clicks: the fewest, from the top, that reach
+ * nine in ten. The map frames these. */
+function busiest(features: CountryFeature[], clicksOf: (f: CountryFeature) => number) {
+  const ranked = features.filter((f) => clicksOf(f) > 0).sort((a, b) => clicksOf(b) - clicksOf(a));
+  const total = ranked.reduce((sum, f) => sum + clicksOf(f), 0);
+  let seen = 0;
+  return ranked.filter((f) => {
+    const keep = seen < total * 0.9;
+    seen += clicksOf(f);
+    return keep;
+  });
+}
 
 const mapMotion = motion<CountryFeature, number, number>(chartMotion);
 
@@ -60,18 +112,44 @@ const fmtCountry = (key: string) => {
 const shade = (share: number) =>
   `color-mix(in oklab, var(--accent) ${Math.round(Math.sqrt(share) * 100)}%, color-mix(in oklab, var(--chart) 45%, var(--surface-2)))`;
 
-/** Fewer to more, under the map: the scale's two ends and the counts they
- * stand for, so a shade reads as a number. */
-function MapLegend({ max }: { max: number }) {
+/** "+2 countries outside, 4 clicks": what a zoomed frame leaves out. */
+function outsideLine({ countries, clicks }: { countries: number; clicks: number }): string {
+  const places = countries === 1 ? "country" : "countries";
+  return `+${countries} ${places} outside, ${formatNumber(clicks)} ${clicks === 1 ? "click" : "clicks"}`;
+}
+
+/** Whether a projected point misses the box (or did not project at all). */
+function offBox(at: [number, number] | null, box: { width: number; height: number }): boolean {
+  if (!at) return true;
+  const [x, y] = at;
+  return x < 0 || x > box.width || y < 0 || y > box.height;
+}
+
+/** Under the map: the way between the zoomed frame and the whole world, and
+ * what the frame leaves out, so nobody reads a country off the edge as no
+ * clicks. */
+function MapFoot({
+  zoomable,
+  world,
+  onWorld,
+  outside,
+}: {
+  zoomable: boolean;
+  world: boolean;
+  onWorld: (world: boolean) => void;
+  outside: { countries: number; clicks: number };
+}) {
+  if (!zoomable) return null;
   return (
-    <div className="flex items-center justify-end gap-2 text-xs text-muted">
-      <span className="tnum">1</span>
-      <span
-        aria-hidden
-        className="h-1.5 w-24 rounded-full"
-        style={{ background: `linear-gradient(to right, ${shade(0)}, ${shade(1)})` }}
-      />
-      <span className="tnum">{formatNumber(max)}</span>
+    <div className="flex items-center justify-between gap-3 text-xs text-muted">
+      <button
+        type="button"
+        onClick={() => onWorld(!world)}
+        className="cursor-pointer rounded transition-colors duration-150 ease-out [@media(hover:hover)]:hover:text-text"
+      >
+        {world ? "Zoom to the clicks" : "Show the world"}
+      </button>
+      {!world && outside.countries > 0 && <span className="tnum">{outsideLine(outside)}</span>}
     </div>
   );
 }
@@ -81,27 +159,56 @@ function MapLegend({ max }: { max: number }) {
  * CSP): countries shade from --surface-2 (no clicks) to --chart (most
  * clicks), matching the BarList ranking it sits next to.
  *
+ * It frames the countries most clicks come from (busiest, projectionFor):
+ * clicks from five neighbouring countries fill the map instead of a speck
+ * of a world map. Clicks from everywhere get the whole world, and a footnote
+ * says what a frame leaves out and switches to the world and back.
+ *
  * Drawn by Charts' geoShape mark rather than by hand, so it carries the same
  * tooltip as every other chart. One consequence worth knowing: geoShape gives
  * each country one interaction point, at its projected centroid, so hover
  * resolves to the nearest centroid rather than to the shape under the
  * pointer. maxFocusDistance keeps that from reaching across an ocean.
  */
-export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
-  const definition = useMemo(() => {
+export function CountryMap({
+  countries: data,
+  height,
+}: {
+  countries: TopEntry[];
+  /** The map's height in px; it is as wide as its column. */
+  height: number;
+}) {
+  const [world, setWorld] = useState(false);
+  const { clicksOf, max, frame, outside } = useMemo(() => {
     const clicksByAlpha2 = new Map(data.map((d) => [d.key, d.clicks]));
-    const max = Math.max(1, ...data.map((d) => d.clicks));
     const clicksOf = (f: CountryFeature) => {
       const alpha2 = alpha2ById.get(f.id);
       return (alpha2 && clicksByAlpha2.get(alpha2)) || 0;
     };
+    const core = busiest(countries, clicksOf);
+    // Measured on a desktop-sized box: whether a frame beats the world, and
+    // which clicked countries it leaves off the edge.
+    const box = { x: 0, y: 0, width: NOMINAL_WIDTH, height };
+    const near = projectionFor(box, core);
+    const zooms = near.scale() > projectionFor(box, null).scale();
+    const off = countries.filter(
+      (f) => clicksOf(f) > 0 && !core.includes(f) && offBox(near(geoCentroid(f)), box),
+    );
+    return {
+      clicksOf,
+      max: Math.max(1, ...data.map((d) => d.clicks)),
+      frame: zooms ? core : null,
+      outside: { countries: off.length, clicks: off.reduce((sum, f) => sum + clicksOf(f), 0) },
+    };
+  }, [data, height]);
+
+  const definition = useMemo(() => {
+    const shown = world ? null : frame;
     return defineChart({
       marks: [
         geoMark(countries, {
-          projection: {
-            type: () => geoNaturalEarth1(),
-            fit: "data",
-          },
+          projection: ({ chart }: GeoProjectionContext<CountryFeature>) =>
+            projectionFor(chart, shown),
           key: (f: CountryFeature) => String(f.id),
           fill: (f: CountryFeature) => {
             const clicks = clicksOf(f);
@@ -121,16 +228,18 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
       maxFocusDistance: 60,
       tooltip: pointerTooltip,
     });
-  }, [data]);
+  }, [clicksOf, max, frame, world]);
 
   if (!data.length) return <p className="py-4 text-sm text-muted">No data yet</p>;
 
   return (
-    <div className="flex h-full flex-col justify-center gap-3 overflow-hidden">
+    // A zoomed frame cuts countries at its edge; round corners make that a
+    // window onto the map rather than a crop.
+    <div className="flex min-w-0 flex-col gap-2 [&_svg.ts-chart]:[clip-path:inset(0_round_8px)]">
       <RendererChart
         definition={definition}
         renderer={mapMotion}
-        aspectRatio={ASPECT}
+        height={height}
         ariaLabel="Clicks by country"
         // The map only explains the country ranking beside it. It has no action
         // of its own, so it must not become a tab stop or draw a focus border.
@@ -143,16 +252,15 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
           // world-110m.json carries a "name" on each country. The ?? below
           // covers a feature that does not.
           const named = f.properties as { name?: string } | null;
-          const clicksByAlpha2 = new Map(data.map((d) => [d.key, d.clicks]));
           return (
             <ClicksTip
               label={alpha2 ? fmtCountry(alpha2) : String(named?.name ?? "")}
-              clicks={(alpha2 && clicksByAlpha2.get(alpha2)) || 0}
+              clicks={clicksOf(f)}
             />
           );
         }}
       />
-      <MapLegend max={Math.max(1, ...data.map((d) => d.clicks))} />
+      <MapFoot zoomable={frame !== null} world={world} onWorld={setWorld} outside={outside} />
     </div>
   );
 }

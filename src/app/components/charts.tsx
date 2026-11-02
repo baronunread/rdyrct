@@ -492,33 +492,57 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
 /** "Italy" from "IT"; a click the edge could not place says so. */
 const placeName = (code: string) => (code === "unknown" ? "Unknown" : countryName(code));
 
-/** Countries as bars, with the map one tab away. */
+/** The map's height beside the list, and the rows that fill it: nine rows of
+ * ROW_PX run as tall as the map and its footnote. A phone stacks the two, so
+ * the map gets a shorter box and the list its usual seven. */
+const MAP_HEIGHT = { desk: 270, phone: 220 };
+const MAP_ROWS = { desk: 9, phone: 7 };
+
+/**
+ * Countries, a full-width card: the map on the left, the ranked list on its
+ * right, under one Countries tab with Show all in the corner. The list needs
+ * no column heads; the tab already says what it lists. On a phone the map
+ * sits over the list.
+ */
 export function PlacesPanel({
   countries,
   period,
-  limit,
+  className,
 }: {
   countries: TopEntry[];
   period?: string;
-  /** Rows before the list scrolls and Show all appears. */
-  limit?: number;
+  className?: string;
 }) {
+  const phone = usePhone();
+  const list = listTab({
+    value: "countries",
+    label: "Countries",
+    items: countries,
+    formatKey: placeName,
+    searchBy: placeName,
+    lead: (code) => <Flag code={code} />,
+    limit: phone ? MAP_ROWS.phone : MAP_ROWS.desk,
+    empty: "The country each click came from appears here. No IP address is stored.",
+  });
   return (
     <PanelTabs
+      className={className}
       end={period}
       tabs={[
-        listTab({
-          value: "countries",
-          label: "Countries",
-          head: ["Country", "Clicks"],
-          items: countries,
-          formatKey: placeName,
-          searchBy: placeName,
-          lead: (code) => <Flag code={code} />,
-          limit,
-          empty: "The country each click came from appears here. No IP address is stored.",
-        }),
-        { value: "map", label: "Map", panel: <CountryMap countries={countries} /> },
+        {
+          ...list,
+          panel: countries.length ? (
+            <div className="grid grid-cols-1 gap-x-7 gap-y-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start">
+              <CountryMap
+                countries={countries.filter((c) => c.key !== "unknown")}
+                height={phone ? MAP_HEIGHT.phone : MAP_HEIGHT.desk}
+              />
+              {list.panel}
+            </div>
+          ) : (
+            list.panel
+          ),
+        },
       ]}
     />
   );

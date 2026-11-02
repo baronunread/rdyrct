@@ -280,53 +280,55 @@ function LinkDetailHeader({
   );
 }
 
-/** Where, from what, and on what, side by side under the chart. */
+/** Where, across the page under the chart; from what and on what, side by
+ * side under that. */
 function LinkPanels({ s }: { s: LinkStats }) {
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <PlacesPanel countries={s.countries} limit={7} />
-      <PanelTabs
-        tabs={[
-          listTab({
-            value: "referrers",
-            label: "Referrers",
-            head: ["Source", "Clicks"],
-            items: s.referrers,
-            formatKey: sourceLabel,
-            lead: (key) => <SourceTile source={key} />,
-            limit: 7,
-            empty: "Where people were when they followed this link appears here.",
-          }),
-          {
-            value: "campaigns",
-            label: "Campaigns",
-            panel: (
-              <BarList
-                head={["Campaign", "Clicks"]}
-                items={s.campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))}
-                empty="Tag this link with utm_campaign and its clicks appear here."
-              />
-            ),
-          },
-        ]}
-      />
-      <PanelTabs
-        className="md:col-span-2 lg:col-span-1"
-        tabs={[
-          {
-            value: "devices",
-            label: "Devices",
-            panel: (
-              <BarList
-                head={["Device", "Clicks"]}
-                items={s.devices}
-                formatKey={deviceLabel}
-                empty="Phone, desktop or tablet, counted here once clicks arrive."
-              />
-            ),
-          },
-        ]}
-      />
+    <div className="flex flex-col gap-6">
+      <PlacesPanel countries={s.countries} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <PanelTabs
+          tabs={[
+            listTab({
+              value: "referrers",
+              label: "Referrers",
+              head: ["Source", "Clicks"],
+              items: s.referrers,
+              formatKey: sourceLabel,
+              lead: (key) => <SourceTile source={key} />,
+              limit: 7,
+              empty: "Where people were when they followed this link appears here.",
+            }),
+            {
+              value: "campaigns",
+              label: "Campaigns",
+              panel: (
+                <BarList
+                  head={["Campaign", "Clicks"]}
+                  items={s.campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))}
+                  empty="Tag this link with utm_campaign and its clicks appear here."
+                />
+              ),
+            },
+          ]}
+        />
+        <PanelTabs
+          tabs={[
+            {
+              value: "devices",
+              label: "Devices",
+              panel: (
+                <BarList
+                  head={["Device", "Clicks"]}
+                  items={s.devices}
+                  formatKey={deviceLabel}
+                  empty="Phone, desktop or tablet, counted here once clicks arrive."
+                />
+              ),
+            },
+          ]}
+        />
+      </div>
     </div>
   );
 }

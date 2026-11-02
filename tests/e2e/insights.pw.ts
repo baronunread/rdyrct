@@ -161,7 +161,7 @@ test("a top link on a custom domain links to its page with the domain", async ({
   );
 });
 
-test("Analytics counts clicked links and countries, Show all opens every country, and a link's page lists its campaign", async ({
+test("Analytics counts clicked links and countries, the map zooms to them, Show all opens every country, and a link's page lists its campaign", async ({
   page,
 }) => {
   const email = `insights-full-${Date.now()}@gmail.com`;
@@ -178,9 +178,10 @@ test("Analytics counts clicked links and countries, Show all opens every country
   );
   expect(link).toBeTruthy();
   // Clicks take a redirect each and a flush; the stats read only the
-  // rollups, so the rollups carry them: nine countries, nine clicks from
-  // Italy down to one from Switzerland, so the order is fixed.
-  const countries = ["IT", "FR", "DE", "ES", "PT", "NL", "BE", "AT", "CH"];
+  // rollups, so the rollups carry them: ten countries, ten clicks from
+  // Italy down to one from Sweden, so the order is fixed. All of them
+  // European, so the map frames Europe.
+  const countries = ["IT", "FR", "DE", "ES", "PT", "NL", "BE", "AT", "CH", "SE"];
   const dims = countries.map((code, i) => [link.org_id, code, link.id, countries.length - i]);
   await rawSql(
     page,
@@ -202,22 +203,27 @@ test("Analytics counts clicked links and countries, Show all opens every country
       .locator("dl > div")
       .filter({ has: page.getByRole("term").getByText(label, { exact: true }) });
   await expect(figure("Links clicked").getByRole("definition")).toHaveText("1");
-  await expect(figure("Countries").getByRole("definition")).toHaveText("9");
+  await expect(figure("Countries").getByRole("definition")).toHaveText("10");
   await expect(figure("Clicks per link").getByRole("definition")).toHaveText("45");
 
-  // The card scrolls past seven; Show all, in its corner, names the full
-  // count and opens every country in a dialog with a search.
-  await page.getByRole("button", { name: "Show all 9" }).click();
+  // The map is zoomed to Europe, and the whole world is one press away.
+  await expect(page.getByLabel("Clicks by country")).toBeVisible();
+  await page.getByRole("button", { name: "Show the world" }).click();
+  await page.getByRole("button", { name: "Zoom to the clicks" }).click();
+
+  // The list beside the map scrolls past nine; Show all, in the card's
+  // corner, names the full count and opens every country with a search.
+  await page.getByRole("button", { name: "Show all 10" }).click();
   const all = page.getByRole("dialog", { name: "Countries" });
-  await expect(all.getByText("Switzerland", { exact: true })).toBeVisible();
+  await expect(all.getByText("Sweden", { exact: true })).toBeVisible();
   await all.getByRole("searchbox", { name: "Search countries" }).fill("aus");
   await expect(all.getByText("Austria", { exact: true })).toBeVisible();
-  await expect(all.getByText("Switzerland", { exact: true })).toHaveCount(0);
+  await expect(all.getByText("Sweden", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(all).toHaveCount(0);
 
   await page.goto(`/links/${link.slug}`);
-  await expect(figure("Countries").getByRole("definition")).toHaveText("9");
+  await expect(figure("Countries").getByRole("definition")).toHaveText("10");
   await page.getByRole("tab", { name: "Campaigns" }).click();
   await expect(page.getByText("spring-menu", { exact: true })).toBeVisible();
 });

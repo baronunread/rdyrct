@@ -146,14 +146,16 @@ function StatsChartSkeleton({ figures, chartHeight }: { figures: number; chartHe
 function PanelSkeleton({
   tabs,
   end,
+  className,
   children,
 }: {
   tabs: string[];
   end?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-xl bg-surface px-4 pt-3 pb-3.5 smooth-shadow-ring-xs">
+    <div className={cn("rounded-xl bg-surface px-4 pt-3 pb-3.5 smooth-shadow-ring-xs", className)}>
       <TabsSkeleton tabs={tabs} className="mb-3">
         {end && (
           <span className="ml-auto flex h-4 box-content items-center pb-2.5">
@@ -193,19 +195,22 @@ function TabsSkeleton({
 
 const barWidths = [92, 71, 58, 44, 33, 24, 17];
 
-/** BarList with column headings: a 20px heading row, then 30px bars
- * `gap-y-0.5` apart, the count and share in their own columns. `more` is
- * the "Show all" button under a list cut at seven (28px, `mt-2 -mb-1`). */
-function BarListSkeleton({ rows }: { rows: number }) {
+/** BarList: a 20px heading row unless `head` is false, then 30px bars
+ * `gap-y-0.5` apart, the count in its own column. */
+function BarListSkeleton({ rows, head = true }: { rows: number; head?: boolean }) {
   return (
     <div className="flex flex-col">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5">
-        <span className="flex h-4 box-content items-center pb-1">
-          <Skeleton className="h-2.5 w-10" />
-        </span>
-        <span className="flex h-4 box-content items-center justify-end pb-1">
-          <Skeleton className="h-2.5 w-10" />
-        </span>
+        {head && (
+          <>
+            <span className="flex h-4 box-content items-center pb-1">
+              <Skeleton className="h-2.5 w-10" />
+            </span>
+            <span className="flex h-4 box-content items-center justify-end pb-1">
+              <Skeleton className="h-2.5 w-10" />
+            </span>
+          </>
+        )}
         {barWidths.slice(0, rows).map((w) => (
           <div key={w} className="contents">
             <Skeleton className="h-[30px]" style={{ width: `${w}%` }} />
@@ -214,6 +219,24 @@ function BarListSkeleton({ rows }: { rows: number }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** PlacesPanel: the Countries tab and Show all over the map (270px, its
+ * 16px footnote under it) and the list beside it, stacked on a phone. */
+function PlacesSkeleton({ className }: { className?: string }) {
+  return (
+    <PanelSkeleton tabs={["w-16"]} end className={className}>
+      <div className="grid grid-cols-1 gap-x-7 gap-y-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-[220px] w-full sm:h-[270px]" />
+          <span className="flex h-4 items-center">
+            <Skeleton className="h-2.5 w-24" />
+          </span>
+        </div>
+        <BarListSkeleton rows={7} head={false} />
+      </div>
+    </PanelSkeleton>
   );
 }
 
@@ -291,15 +314,13 @@ export function DashboardSkeleton() {
 /**
  * /analytics: the title over "All links · last N days", the range (four
  * segments) and Export CSV (a `sm` button) on the right; then the figure
- * strip over the chart (180), the 2x2 grid of panels (links, sources and
- * places cut at seven rows with "Show all" under them, and devices) and the
- * by-hour panel (260) under it.
+ * strip over the chart (180), then the grid: links and sources, the
+ * countries map across both columns, devices and the by-hour panel (260).
  *
- * The strip has three figures until the API sends clicks per link, and
- * each list is only cut when it has more than seven rows; a figure more or
- * fewer only changes their widths. The by-hour panel is left out of the
- * 24-hour view and before the first click; it is last, so leaving it drawn
- * moves nothing above it.
+ * The strip has three figures until the API sends clicks per link; a figure
+ * more or fewer only changes their widths. The by-hour panel is left out of
+ * the 24-hour view and before the first click; it is last, so leaving it
+ * drawn moves nothing above it.
  */
 export function AnalyticsSkeleton() {
   return (
@@ -329,16 +350,14 @@ export function AnalyticsSkeleton() {
           <PanelSkeleton tabs={["w-16"]}>
             <BarListSkeleton rows={7} />
           </PanelSkeleton>
-          <PanelSkeleton tabs={["w-16", "w-8"]}>
-            <BarListSkeleton rows={7} />
-          </PanelSkeleton>
+          <PlacesSkeleton className="lg:col-span-2" />
           <PanelSkeleton tabs={["w-14"]}>
             <BarListSkeleton rows={4} />
           </PanelSkeleton>
+          <PanelSkeleton tabs={["w-14", "w-20"]}>
+            <Skeleton className="h-[260px] w-full" />
+          </PanelSkeleton>
         </div>
-        <PanelSkeleton tabs={["w-14", "w-20"]}>
-          <Skeleton className="h-[260px] w-full" />
-        </PanelSkeleton>
       </div>
     </SkeletonStatus>
   );
@@ -1257,18 +1276,14 @@ export function LinkDetailSkeleton() {
       </div>
       <div className="flex min-w-0 flex-col gap-6">
         <StatsChartSkeleton figures={4} chartHeight={180} />
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <PanelSkeleton tabs={["w-16", "w-8"]}>
-            <BarListSkeleton rows={7} />
-          </PanelSkeleton>
+        <PlacesSkeleton />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <PanelSkeleton tabs={["w-16", "w-14"]}>
             <BarListSkeleton rows={7} />
           </PanelSkeleton>
-          <div className="md:col-span-2 lg:col-span-1">
-            <PanelSkeleton tabs={["w-14"]}>
-              <BarListSkeleton rows={3} />
-            </PanelSkeleton>
-          </div>
+          <PanelSkeleton tabs={["w-14"]}>
+            <BarListSkeleton rows={4} />
+          </PanelSkeleton>
         </div>
       </div>
     </SkeletonStatus>

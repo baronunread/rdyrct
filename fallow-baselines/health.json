@@ -13,7 +13,10 @@
     },
     "src/app/components/charts.tsx": {
       "crap_high": {
-        "count": 2
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/components/command-menu.tsx": {
@@ -36,8 +39,8 @@
       }
     },
     "src/app/components/country-map.tsx": {
-      "crap_high": {
-        "count": 1
+      "crap_moderate": {
+        "count": 3
       }
     },
     "src/app/components/delete-link-dialog.tsx": {

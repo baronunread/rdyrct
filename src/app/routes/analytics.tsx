@@ -241,6 +241,7 @@ function AnalyticsReport({
 }) {
   const period = breakdownPeriod(s.bucket);
   const hourly = s.bucket === "hour";
+  const timing = !hourly && s.heatmap.length > 0;
   return (
     <div>
       <PageHeader
@@ -276,11 +277,14 @@ function AnalyticsReport({
           </div>
         </StatsChart>
 
+        {/* Countries spans the grid, map and list side by side; Devices then
+            pairs with the timing card, or spans the row when there is none. */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LinksPanel s={s} />
           <SourcesPanel s={s} period={period} />
-          <PlacesPanel countries={s.countries} period={period} limit={CARD_ROWS} />
+          <PlacesPanel countries={s.countries} period={period} className="lg:col-span-2" />
           <PanelTabs
+            className={cn(!timing && "lg:col-span-2")}
             end={period}
             tabs={[
               {
@@ -297,9 +301,8 @@ function AnalyticsReport({
               },
             ]}
           />
+          {timing && <TimingPanel heatmap={s.heatmap} />}
         </div>
-
-        {!hourly && s.heatmap.length > 0 && <TimingPanel heatmap={s.heatmap} />}
       </div>
     </div>
   );
