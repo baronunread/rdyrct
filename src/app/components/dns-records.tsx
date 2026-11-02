@@ -43,9 +43,11 @@ export function DnsRecords({
       </div>
     );
 
+  // Sized by the space it is given, not the window: the setup flow's column
+  // is 400px on a desktop, too narrow for the table, which scrolled sideways.
   return (
-    <>
-      <ul className="flex flex-col divide-y divide-border rounded-md border border-border sm:hidden">
+    <div className="@container">
+      <ul className="flex flex-col divide-y divide-border rounded-md border border-border @xl:hidden">
         {list.map((record) => (
           <li
             key={`${record.type}-${record.name}`}
@@ -65,7 +67,7 @@ export function DnsRecords({
           </li>
         ))}
       </ul>
-      <div className="hidden overflow-x-auto rounded-md border border-border sm:block">
+      <div className="hidden overflow-x-auto rounded-md border border-border @xl:block">
         <table className="w-full min-w-[34rem] text-left text-sm">
           <thead className="bg-surface-2 text-xs text-muted">
             <tr>
@@ -77,14 +79,14 @@ export function DnsRecords({
           <tbody>
             {list.map((record) => (
               <tr key={`${record.type}-${record.name}`} className="border-t border-border">
-                <td className="px-3 py-2 align-top">{record.type}</td>
-                <td className="px-3 py-2 align-top">
+                <td className="px-3 py-2 align-middle">{record.type}</td>
+                <td className="px-3 py-2 align-middle">
                   <span className="flex items-center gap-1.5">
                     <code className="font-mono text-xs break-all">{record.name}</code>
                     <CopyButton text={record.name} label="Copy name" onCopy={copy} />
                   </span>
                 </td>
-                <td className="px-3 py-2 align-top">
+                <td className="px-3 py-2 align-middle">
                   <span className="flex items-center gap-1.5">
                     <code className="font-mono text-xs break-all">{record.value}</code>
                     <CopyButton text={record.value} label="Copy value" onCopy={copy} />
@@ -95,6 +97,6 @@ export function DnsRecords({
           </tbody>
         </table>
       </div>
-    </>
+    </div>
   );
 }

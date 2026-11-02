@@ -21,9 +21,12 @@ export function Badge({
   children: ReactNode;
 }) {
   return (
+    // Figtree sits high in its line box, so equal padding left the words
+    // above the middle. Trimmed to cap height and baseline, the padding is
+    // what centres them; a browser without text-box keeps the line box.
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-2xs tracking-wide whitespace-nowrap",
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-2xs tracking-wide whitespace-nowrap supports-[text-box:trim-both_cap_alphabetic]:py-1.5 supports-[text-box:trim-both_cap_alphabetic]:[text-box:trim-both_cap_alphabetic]",
         badgeColors[color],
         className,
       )}
