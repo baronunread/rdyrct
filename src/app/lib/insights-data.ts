@@ -1,6 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
-import type { DeltaValue, LinkStats, OrgStats } from "@/shared/types";
+import type { DeltaValue, LinkStats, OrgInsights, OrgStats } from "@/shared/types";
 
 /** The org's stats for a range, with the crossfade between ranges. */
 export const useInsightStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
@@ -20,6 +20,21 @@ export const insightStatsQuery = (orgId: string, days?: number, bucket?: "day" |
     // A new range keeps the last one on screen until it arrives, so the
     // chart crossfades instead of the page dropping to a skeleton. Never
     // across orgs: another org's numbers are not a placeholder for this one's.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === orgId ? previous : undefined,
+  });
+
+/** What moved in a range against the one before it: the dashboard's
+ * "What changed". Keeps the last answer up while the next range loads. */
+export const useOrgInsights = (orgId: string, days: number) =>
+  useQuery(orgInsightsQuery(orgId, days));
+
+export const orgInsightsQuery = (orgId: string, days: number) =>
+  queryOptions<OrgInsights>({
+    queryKey: ["insights", orgId, days],
+    queryFn: () => api<OrgInsights>(`/orgs/${orgId}/insights?days=${days}`),
+    enabled: !!orgId,
+    staleTime: 60_000,
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === orgId ? previous : undefined,
   });

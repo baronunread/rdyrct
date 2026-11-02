@@ -296,6 +296,31 @@ export function DashboardSkeleton() {
             <LineListSkeleton rows={8} />
           </PanelSkeleton>
         </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <PanelSkeleton tabs={["w-24"]}>
+            <div className="flex flex-col gap-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="size-8 shrink-0 rounded-lg" />
+                  <div className="flex flex-col gap-1.5">
+                    <Skeleton className="h-3.5 w-56 max-w-full" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </PanelSkeleton>
+          <PanelSkeleton tabs={["w-20"]} end>
+            <div className="flex flex-col gap-3.5">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex flex-col gap-2">
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-1 w-full rounded-full" />
+                </div>
+              ))}
+            </div>
+          </PanelSkeleton>
+        </div>
       </div>
     </SkeletonStatus>
   );

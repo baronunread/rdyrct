@@ -16,6 +16,7 @@ import {
   membersQuery,
   recentClicksQuery,
   clickUsageQuery,
+  linkQuotaUsageQuery,
 } from "../lib/hooks";
 import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
 import { settle, type PageContext } from "../lib/route-preload";
@@ -61,9 +62,11 @@ import {
   shortAgo,
   sourceLabel,
   insightStatsQuery,
+  orgInsightsQuery,
   useInsightStats,
   type RangePreset,
 } from "../lib/insights-data";
+import { InsightsRow } from "../components/dashboard-insights";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 
@@ -81,6 +84,8 @@ export function preload(qc: QueryClient, orgId: string, { org, user }: PageConte
     qc.ensureQueryData(membersQuery(orgId)),
     qc.ensureQueryData(recentClicksQuery(orgId)),
     qc.ensureQueryData(clickUsageQuery(orgId)),
+    qc.ensureQueryData(linkQuotaUsageQuery(orgId)),
+    qc.ensureQueryData(orgInsightsQuery(orgId, DEFAULT_RANGE.days)),
     preloadOrgDomains(qc, org, user),
   ]);
 }
@@ -154,9 +159,11 @@ function dashboardFigures(s: OrgStats) {
 function DashboardBody({
   stats: s,
   data,
+  days,
 }: {
   stats: NonNullable<DashboardData["stats"]>;
   data: DashboardData;
+  days: number;
 }) {
   const attention = [
     ...s.decayingLinks.map((l) => ({ ...l, suffix: `${l.drop}% fewer clicks` })),
@@ -230,6 +237,8 @@ function DashboardBody({
           ]}
         />
       </div>
+
+      <InsightsRow days={days} />
     </div>
   );
 }
@@ -376,7 +385,7 @@ function DashboardScreen({
           }
         />
       ) : (
-        <DashboardBody stats={s} data={data} />
+        <DashboardBody stats={s} data={data} days={range.days} />
       )}
 
       <LinkPreviewDialog

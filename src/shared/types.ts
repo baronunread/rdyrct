@@ -523,6 +523,43 @@ export interface OrgStats {
   countryCount: number;
 }
 
+/** One sentence the dashboard's "What changed" card tells, as data. */
+export type OrgInsight =
+  | {
+      kind: "country";
+      country: string;
+      current: number;
+      previous: number;
+      /** Rounded percent change, positive or negative. */
+      pct: number;
+    }
+  | {
+      kind: "link_fell";
+      link: StatsLinkRef;
+      current: number;
+      previous: number;
+      /** Rounded percent the link fell, always positive. */
+      pct: number;
+    }
+  | {
+      kind: "first_referrer";
+      link: StatsLinkRef;
+      /** The referrer's host. */
+      referrer: string;
+      clicks: number;
+      /** UTC `YYYY-MM-DD` of its first click in the range. */
+      since: string;
+    };
+
+/** GET /orgs/:orgId/insights: what moved in a range against the range before. */
+export interface OrgInsights {
+  /** Days the answer compares: the range, or 1 for the 24-hour view. */
+  days: number;
+  insights: OrgInsight[];
+  /** The biggest country move when none cleared the floor. */
+  minor: OrgInsight | null;
+}
+
 export interface HeatmapRow {
   /** 0=Monday … 6=Sunday */
   dayOfWeek: number;

@@ -278,3 +278,64 @@ test("Analytics' When card shades clicks by weekday and UTC hour, with totals an
     page.getByRole("tooltip").filter({ hasText: /\w{3}, \d\d:00 to \d\d:00 · 30 clicks/ }),
   ).toBeVisible();
 });
+
+test("the dashboard says what changed and how much of the plan is used", async ({ page }) => {
+  await signUpAndVerify(page, `insights-changed-${Date.now()}@gmail.com`, password);
+  await createQuickLink(page, "example.com/insights-changed");
+  await page.keyboard.press("Escape");
+  // The Worker answers from the rollup tables; the page is what is under test.
+  await page.route("**/api/orgs/*/insights*", (route) =>
+    route.fulfill({
+      json: {
+        days: 7,
+        minor: null,
+        insights: [
+          { kind: "country", country: "BE", current: 1600, previous: 1130, pct: 41 },
+          {
+            kind: "link_fell",
+            link: { id: "l1", slug: "spring-sale", title: "", domain: null },
+            current: 80,
+            previous: 210,
+            pct: 62,
+          },
+          {
+            kind: "first_referrer",
+            link: { id: "l2", slug: "menu", title: "", domain: null },
+            referrer: "instagram.com",
+            clicks: 38,
+            since: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10),
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/dashboard");
+
+  const changed = page.getByRole("list", { name: "What changed" });
+  await expect(changed.getByText("Belgium is up 41% on last week")).toBeVisible();
+  await expect(changed.getByText("1.6k clicks, 1.1k last week")).toBeVisible();
+  await expect(changed.getByText("/spring-sale fell 62%")).toBeVisible();
+  await expect(changed.getByText("210 clicks last week")).toBeVisible();
+  await expect(changed.getByText("got its first clicks from instagram.com")).toBeVisible();
+
+  // A free plan: links, clicks and members. No custom domains to count.
+  const plan = page.getByRole("list", { name: "Your plan" });
+  await expect(plan.getByRole("meter", { name: "Links" })).toBeVisible();
+  await expect(plan.getByText("1 of 30")).toBeVisible();
+  await expect(plan.getByRole("meter", { name: "Clicks this month" })).toBeVisible();
+  await expect(plan.getByRole("meter", { name: "Members" })).toBeVisible();
+  await expect(plan.getByRole("meter", { name: "Custom domains" })).toHaveCount(0);
+  await page.getByRole("link", { name: /Free plan, open billing/ }).click();
+  await expect(page).toHaveURL(/\/billing/);
+});
+
+test("nothing that clears the floor reads as one calm line", async ({ page }) => {
+  await signUpAndVerify(page, `insights-calm-${Date.now()}@gmail.com`, password);
+  await createQuickLink(page, "example.com/insights-calm");
+  await page.keyboard.press("Escape");
+  await page.route("**/api/orgs/*/insights*", (route) =>
+    route.fulfill({ json: { days: 7, insights: [], minor: null } }),
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByText("Nothing stands out this week.")).toBeVisible();
+});

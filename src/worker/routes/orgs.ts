@@ -34,7 +34,9 @@ import type {
   InvitePreview,
   RecentClick,
   ClickUsage,
+  OrgInsights,
 } from "@/shared/types";
+import { orgInsights } from "../insights";
 import { monthKey, nextMonthStart } from "@/shared/click-usage";
 import { clicksThisMonth } from "../click-caps";
 import { INVITABLE_ROLES } from "@/shared/types";
@@ -1063,6 +1065,25 @@ orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
       referrer: r.referrer ? referrerHost(r.referrer) || r.referrer : "",
     })) satisfies RecentClick[],
   );
+});
+
+/* ---------------- what changed (dashboard) ---------------- */
+
+orgRoutes.get("/:orgId/insights", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId");
+  const { limits } = await orgPlan(c.var.db, orgId);
+  const queryDays = c.req.query("days");
+  const days = clampDays(queryDays ? parseInt(queryDays, 10) : null, limits.analyticsDays);
+  const answer = await orgInsights(c.env, orgId, days);
+  c.get("log")?.set({
+    orgId,
+    insights: {
+      days: answer.days,
+      kinds: answer.insights.map((i) => i.kind),
+      minor: answer.minor !== null,
+    },
+  });
+  return c.json(answer satisfies OrgInsights);
 });
 
 /* ---------------- tracked clicks this month (#387) ---------------- */
