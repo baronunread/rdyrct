@@ -266,7 +266,9 @@ test("Analytics' When card shades clicks by weekday and UTC hour, with totals an
   const grid = page.getByRole("grid", { name: /Clicks by day of the week and hour/ });
   await expect(grid).toBeVisible();
   await expect(card).toBeVisible();
-  await expect(grid.getByRole("gridcell", { name: "Total, 30 clicks" })).toHaveText("30");
+  await expect(grid.getByRole("gridcell", { name: "Total, 30 clicks", exact: true })).toHaveText(
+    "30",
+  );
 
   // The one busy cell names its day, its hour range and its clicks in a
   // tooltip, not a native title.
@@ -274,9 +276,7 @@ test("Analytics' When card shades clicks by weekday and UTC hour, with totals an
   await expect(busy).toHaveCount(1);
   await expect(busy).not.toHaveAttribute("title", /.*/);
   await busy.hover();
-  await expect(
-    page.getByRole("tooltip").filter({ hasText: /\w{3}, \d\d:00 to \d\d:00 · 30 clicks/ }),
-  ).toBeVisible();
+  await expect(page.getByText(/^\w{3}, \d\d:00 to \d\d:00 · 30 clicks$/)).toBeVisible();
 });
 
 test("the dashboard says what changed and how much of the plan is used", async ({ page }) => {
