@@ -1131,7 +1131,7 @@ function billingOverlayState(
 ) {
   return {
     show: checkoutPlan !== null || showPortalOverlay || confirming,
-    message: confirming ? "Confirming your upgrade…" : "Redirecting to Polar…",
+    message: confirming ? "Confirming your payment with Polar…" : "Redirecting to Polar…",
   };
 }
 

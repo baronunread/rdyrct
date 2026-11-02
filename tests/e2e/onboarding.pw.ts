@@ -83,7 +83,9 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   // Into the app, as a dashboard, under the new name.
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(heading(page, "Dashboard")).toBeVisible();
-  await expect(page.getByTitle("Switch organization")).toContainText("Acme Coffee");
+  await expect(page.getByRole("button", { name: "Switch organization" })).toContainText(
+    "Acme Coffee",
+  );
   const [org] = await queryRows<{ name: string }>(
     page,
     "select o.name from orgs o join org_members m on m.org_id = o.id join user u on u.id = m.user_id where u.email = ?",

@@ -453,9 +453,12 @@ const COPY = {
     heading: "Checkout did not open",
     body: "Your account is ready. Try again, or start free and upgrade later.",
   }),
-  confirming: () => ({ heading: "Confirming your payment", body: "This takes a few seconds." }),
+  confirming: () => ({
+    heading: "Confirming your payment with Polar",
+    body: "Polar tells us when the payment goes through, usually within seconds.",
+  }),
   slow: () => ({
-    heading: "Still confirming",
+    heading: "Still waiting on Polar",
     body: "Polar has not told us yet. Billing shows your plan the moment it does.",
   }),
   on: ({ name, orgName }: CopyContext) => ({

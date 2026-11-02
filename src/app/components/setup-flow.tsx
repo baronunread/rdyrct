@@ -502,10 +502,18 @@ function PaymentDone({ plan }: { plan: OrgPlan }) {
   );
 }
 
+/** The domain step's heading: while it holds for the payment, the heading
+ * says so, or the busy button reads as stuck. */
+function upsellTitle(confirming: boolean, slow: boolean): string {
+  if (slow) return "Still waiting on Polar";
+  if (confirming) return "Confirming your payment with Polar";
+  return "Use your own domain";
+}
+
 /** What the domain step says above its field. */
 function upsellLine(cancelled: boolean, confirming: boolean, slow: boolean): string {
-  if (slow) return "Polar has not told us yet. This step goes on the moment it does.";
-  if (confirming) return "Confirming your payment. This takes a few seconds.";
+  if (slow) return "Polar has not confirmed the payment yet. This step goes on the moment it does.";
+  if (confirming) return "Polar tells us when the payment goes through, usually within seconds.";
   if (cancelled) return "No payment went through. Your domain is still here when you want it.";
   return "On your own domain you choose the slug. Domains come with Hobby and Pro.";
 }
@@ -573,7 +581,9 @@ function DomainUpsell({
   };
   return (
     <form onSubmit={submit} noValidate className="flex flex-col" aria-busy={confirming}>
-      <StepHead title="Use your own domain">{upsellLine(cancelled, confirming, slow)}</StepHead>
+      <StepHead title={upsellTitle(confirming, slow)}>
+        {upsellLine(cancelled, confirming, slow)}
+      </StepHead>
       <div className="mt-6">
         <Field label="Domain" error={error}>
           <Input
