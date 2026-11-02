@@ -127,29 +127,38 @@ const navLinkProps = {
   },
 };
 
+function triggerClass(phone?: boolean, still?: boolean): string {
+  return cn(
+    "flex w-full min-w-9 items-center gap-2.5 rounded-lg px-1.5 text-sm select-none",
+    // In the drawer the switcher is lifted, as the mock draws it, so it
+    // reads as a control and not as a heading over the nav.
+    phone
+      ? "h-11 rounded-[10px] bg-surface px-2 smooth-shadow-ring-xs"
+      : cn("h-10", !still && "[@media(hover:hover)]:hover:bg-surface-2"),
+  );
+}
+
 /** The switcher's face: the org's initial, so a glance tells two orgs
- * apart, then its name. Folded, only the initial shows. */
+ * apart, then its name. Folded, only the initial shows. `still` is the
+ * same face with nothing to open: no chevron and no hover. */
 function OrgTrigger({
   org,
   collapsed,
   phone,
+  still,
 }: {
   org: UserOrg | null;
   collapsed: boolean;
   phone?: boolean;
+  still?: boolean;
 }) {
   return (
     <div
+      // Tests find the organization's name here, menu or not.
+      data-org-switcher=""
       // What a sign-in card becomes on the way in (setup-arrive in styles.css).
       data-setup-card={phone ? undefined : ""}
-      className={cn(
-        "flex w-full min-w-9 items-center gap-2.5 rounded-lg px-1.5 text-sm select-none",
-        // In the drawer the switcher is lifted, as the mock draws it, so it
-        // reads as a control and not as a heading over the nav.
-        phone
-          ? "h-11 rounded-[10px] bg-surface px-2 smooth-shadow-ring-xs"
-          : "h-10 [@media(hover:hover)]:hover:bg-surface-2",
-      )}
+      className={triggerClass(phone, still)}
     >
       {org && (
         <span
@@ -162,7 +171,9 @@ function OrgTrigger({
       <span className={cn("min-w-0 flex-1 truncate font-semibold", fade(collapsed))}>
         {org ? org.name : "No organization"}
       </span>
-      <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
+      {!still && (
+        <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
+      )}
     </div>
   );
 }
@@ -184,21 +195,28 @@ function OrgSwitcherMenu({
   canCreateOrg: boolean;
   onNewOrg: () => void;
 }) {
+  // One organization and no room for another (every plan but Enterprise):
+  // there is nothing to switch to, so the name is just a name.
+  if (orgs.length <= 1 && !canCreateOrg)
+    return <OrgTrigger org={org} collapsed={collapsed} phone={phone} still />;
   return (
     <Menu
       trigger={<OrgTrigger org={org} collapsed={collapsed} phone={phone} />}
       label="Switch organization"
     >
       <OrgMenuItems orgs={orgs} currentId={org?.id} onPick={onSwitchOrg} />
-      <MenuSeparator />
-      <MenuItem onClick={onNewOrg}>
-        <span className="grid size-5 shrink-0 place-items-center text-muted">
-          <Plus size={15} />
-        </span>
-        New organization
-        {/* Only Pro holds more than one, so say so before the click. */}
-        {!canCreateOrg && <span className="ml-auto text-xs text-muted">Enterprise</span>}
-      </MenuItem>
+      {/* Only where the plan holds another (Enterprise). */}
+      {canCreateOrg && (
+        <>
+          <MenuSeparator />
+          <MenuItem onClick={onNewOrg}>
+            <span className="grid size-5 shrink-0 place-items-center text-muted">
+              <Plus size={15} />
+            </span>
+            New organization
+          </MenuItem>
+        </>
+      )}
     </Menu>
   );
 }

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { queryRows } from "./db";
 import { signUpThroughForm } from "./resend";
 import { currentOrgName } from "./orgs";
 
@@ -20,7 +21,7 @@ test("a new account arrives with an organization and one question", async ({ pag
 
   // The organization is real before anything is created: the switcher names
   // it, rather than saying there is none.
-  const switcher = page.getByRole("button", { name: "Switch organization" });
+  const switcher = page.locator("[data-org-switcher]").first();
   await expect(switcher).toBeVisible();
   await expect(currentOrgName(page)).not.toHaveText("No organization");
 
@@ -52,30 +53,28 @@ test("a new account arrives with an organization and one question", async ({ pag
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("deleting the last organization asks for a new one, not for a first link", async ({
+test("the only organization can't be deleted; the page points at deleting the account", async ({
   page,
 }) => {
-  await signUpThroughForm(page, `lastorg-${Date.now()}@gmail.com`, password);
+  const email = `lastorg-${Date.now()}@gmail.com`;
+  await signUpThroughForm(page, email, password);
 
+  // An account with one organization and nowhere else to go: deleting it
+  // would leave an account with nothing to use, so the way out is the
+  // account itself.
   await page.goto("/organization");
-  const name = await page.getByLabel("Organization name").inputValue();
-  await page.getByRole("button", { name: "Delete organization" }).first().click();
-  const dialog = page.getByRole("dialog", { name: "Delete organization" });
-  await dialog.getByLabel(`Type ${name} to confirm deletion`).fill(name);
-  await dialog.getByRole("button", { name: "Delete organization" }).click();
+  await expect(page.getByText("This is your only organization.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete organization" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Go to Settings" }).click();
+  await expect(page).toHaveURL(/\/settings/);
+  await expect(page.getByRole("button", { name: "Delete account" })).toBeVisible();
 
-  // The plain question, with a name field. Whoever gets here has owned an
-  // organization already, so onboarding copy would be nonsense.
-  await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "Create an organization" })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole("heading", { name: "Shorten your first link" })).toHaveCount(0);
-
-  // And it works: naming one puts them back in the app.
-  await page.getByLabel("Name").fill("Second Time");
-  await page.getByRole("button", { name: "Create organization" }).click();
-  await expect(currentOrgName(page)).toHaveText("Second Time", {
-    timeout: 15_000,
-  });
+  // The Worker refuses it too, whatever the page shows.
+  const [org] = await queryRows<{ id: string }>(
+    page,
+    "select o.id from orgs o join org_members m on m.org_id = o.id join user u on u.id = m.user_id where u.email = ?",
+    [email],
+  );
+  const res = await page.request.delete(`/api/orgs/${org!.id}`);
+  expect(res.status()).toBe(409);
 });

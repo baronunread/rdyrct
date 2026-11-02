@@ -57,7 +57,7 @@ import {
   topLinkRows,
   utmRows,
 } from "../rollups";
-import { ORG_LIMIT_MESSAGE } from "../../shared/support";
+import { ORG_LIMIT_MESSAGE, ONLY_ORG_MESSAGE } from "../../shared/support";
 
 export const orgRoutes = new Hono<AppEnv>();
 orgRoutes.use("*", jsonBodyLimit());
@@ -485,11 +485,23 @@ export async function startOrgTeardown(
 
 // A locked org can still be deleted: deleting it is one of the two ways out
 // of the lock, and refusing would trap the owner.
+//
+// The only organization somebody belongs to can't be: they would be left
+// with an account and nowhere to use it, and the next sign-in would treat
+// them as new. Deleting the account is the way out for them. A platform
+// admin who is not a member deletes as before.
 orgRoutes.delete(
   "/:orgId",
   requireOrgRole("owner", { allowWhileDeleting: true, allowWhileLocked: true }),
   async (c) => {
-    await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
+    const orgId = c.req.param("orgId");
+    const memberships = await c.var.db
+      .select({ orgId: schema.orgMembers.orgId })
+      .from(schema.orgMembers)
+      .where(eq(schema.orgMembers.userId, c.var.user!.id));
+    if (memberships.length === 1 && memberships[0]?.orgId === orgId)
+      throw new HTTPException(409, { message: ONLY_ORG_MESSAGE, cause: { code: "only_org" } });
+    await deleteOrg(c.var.db, c.env, orgId);
     return c.json({ ok: true });
   },
 );

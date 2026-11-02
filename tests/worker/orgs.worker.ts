@@ -11,6 +11,8 @@ import {
   applyTestMigrations,
   arrayFormCreateBatch,
   authEnv,
+  freeOwnerCookie,
+  jsonBody,
   overrideEnv,
 } from "./support";
 
@@ -242,6 +244,38 @@ describe("requireOrgRole: writes during teardown", () => {
 
     const second = await del();
     expect(second.status).toBe(200);
+  });
+});
+
+describe("DELETE /orgs/:orgId: the only organization", () => {
+  async function del(cookie: string, orgId = "org-1"): Promise<Response> {
+    const ctx = createExecutionContext();
+    const { workflow } = fakeOrgDeleteWorkflow();
+    const res = await worker.fetch(
+      new Request(`http://localhost/api/orgs/${orgId}`, { method: "DELETE", headers: { cookie } }),
+      overrideEnv({ BETTER_AUTH_SECRET: "test-secret", ORG_DELETE: workflow }),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  it("refuses the only organization its owner belongs to, and keeps it", async () => {
+    const cookie = await freeOwnerCookie();
+    const res = await del(cookie);
+    expect(res.status).toBe(409);
+    expect(await jsonBody<{ code: string }>(res)).toMatchObject({ code: "only_org" });
+    expect(await deletingAtOf("org-1")).toBeNull();
+  });
+
+  it("deletes it once the owner belongs to another organization", async () => {
+    const cookie = await freeOwnerCookie();
+    await seedOrg("org-2");
+    await env.DB.prepare(
+      "insert into org_members (org_id, user_id, role, created_at) values ('org-2', 'free-1', 'member', 0)",
+    ).run();
+    expect((await del(cookie)).status).toBe(200);
+    expect(await deletingAtOf("org-1")).not.toBeNull();
   });
 });
 

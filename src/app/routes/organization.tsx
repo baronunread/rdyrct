@@ -258,13 +258,27 @@ function deleteHint(links: number | undefined, domains: number): string {
 function DeleteOrgGroup({ orgId, onDelete }: { orgId: string; onDelete: () => void }) {
   const links = useLinkQuotaUsage(orgId).data?.count;
   const domains = useOrgLimits().domains.data?.length ?? 0;
+  // The only organization somebody belongs to can't be deleted (the Worker
+  // refuses it too): the way out is deleting the account.
+  const only = (useCurrentUser().data?.orgs.length ?? 0) <= 1;
   return (
     <SettingsGroup danger>
-      <SettingsRow label="Delete organization" hint={deleteHint(links, domains)}>
-        <Button variant="danger" onClick={onDelete} aria-label="Delete organization">
-          Delete
-        </Button>
-      </SettingsRow>
+      {only ? (
+        <SettingsRow
+          label="Delete organization"
+          hint="This is your only organization. To leave rdyrct, delete your account instead."
+        >
+          <HrefLink href="/settings" className={buttonClass({ variant: "outline" })}>
+            Go to Settings
+          </HrefLink>
+        </SettingsRow>
+      ) : (
+        <SettingsRow label="Delete organization" hint={deleteHint(links, domains)}>
+          <Button variant="danger" onClick={onDelete} aria-label="Delete organization">
+            Delete
+          </Button>
+        </SettingsRow>
+      )}
     </SettingsGroup>
   );
 }

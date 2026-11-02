@@ -441,7 +441,7 @@
         "count": 2
       },
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/app/routes/settings.tsx": {
@@ -460,7 +460,7 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 2
+        "count": 3
       }
     },
     "src/app/routes/welcome.tsx": {

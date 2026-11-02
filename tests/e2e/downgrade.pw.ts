@@ -106,7 +106,7 @@ test("losing the custom organization limit locks the extra org, says why, and le
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeHidden();
 
   // The locked org is still in the switcher, marked, rather than gone.
-  await page.getByRole("button", { name: "Switch organization" }).click();
+  await page.locator("[data-org-switcher]").first().click();
   await expect(page.getByRole("menuitem", { name: /Second org/ })).toContainText("Read-only");
   await page.keyboard.press("Escape");
 
