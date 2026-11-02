@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { OverflowTip } from "../ui/overflow-tip";
 import { TabUnderline } from "../ui/tab-underline";
 import { errorMessage } from "@/app/lib/error-message";
 import { useCurrentOrg } from "../lib/current-org";
@@ -47,9 +48,9 @@ function createdLabel(key: ApiKeyRowData): string {
 function ApiKeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyRowData; onRevoke: () => void }) {
   return (
     <tr className="group/row">
-      <Td className="truncate text-sm font-semibold" title={apiKey.name}>
-        {apiKey.name}
-      </Td>
+      <OverflowTip content={apiKey.name}>
+        <Td className="truncate text-sm font-semibold">{apiKey.name}</Td>
+      </OverflowTip>
       <Td className="hidden truncate font-mono text-xs text-muted sm:table-cell">
         {apiKey.keyPrefix}…
       </Td>

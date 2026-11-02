@@ -643,7 +643,6 @@ function QuickCreateCard({
           {error && (
             <span
               id="first-link-error"
-              title={error}
               className="pointer-events-none absolute top-1/2 right-3 max-w-32 -translate-y-1/2 truncate text-xs text-danger"
             >
               {fieldReason(error)}
@@ -685,17 +684,20 @@ function RecentClicks({ clicks }: { clicks: RecentClick[] }) {
               /{click.slug}
             </HrefLink>
             <span className="truncate text-muted">{sourceLabel(click.referrer || "direct")}</span>
-            <span title={place || "Unknown country"} className="flex">
-              <Flag code={click.country || "unknown"} />
-              <span className="sr-only">{place || "Unknown country"}</span>
-            </span>
-            <time
-              dateTime={new Date(click.ts).toISOString()}
-              title={`${shortDate(click.ts)}, ${relativeDate(click.ts)}`}
-              className="tnum text-right text-xs text-muted"
-            >
-              {shortAgo(click.ts)}
-            </time>
+            <Tooltip content={place || "Unknown country"}>
+              <span className="flex">
+                <Flag code={click.country || "unknown"} />
+                <span className="sr-only">{place || "Unknown country"}</span>
+              </span>
+            </Tooltip>
+            <Tooltip content={`${shortDate(click.ts)}, ${relativeDate(click.ts)}`}>
+              <time
+                dateTime={new Date(click.ts).toISOString()}
+                className="tnum text-right text-xs text-muted"
+              >
+                {shortAgo(click.ts)}
+              </time>
+            </Tooltip>
           </li>
         );
       })}
@@ -733,9 +735,9 @@ function TeamActivity({
               /{l.slug}
             </HrefLink>
           </span>
-          <span className="tnum shrink-0 text-xs text-muted" title={shortDate(l.createdAt)}>
-            {shortAgo(l.createdAt)}
-          </span>
+          <Tooltip content={shortDate(l.createdAt)}>
+            <span className="tnum shrink-0 text-xs text-muted">{shortAgo(l.createdAt)}</span>
+          </Tooltip>
         </li>
       ))}
     </ul>
