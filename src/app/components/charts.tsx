@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { IconArrowDown, IconArrowUp, IconSearch } from "@tabler/icons-react";
 import { HrefLink } from "../lib/router-search";
 import { Flag } from "./source-tile";
@@ -20,7 +20,7 @@ import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { CountryMap } from "./country-map";
 import { PanelTabs } from "../ui/tabs";
-import { Dialog } from "../ui/dialog";
+import { Dialog, usePhone } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { cn } from "../ui/cn";
 import { countryName } from "../lib/places";
@@ -266,12 +266,21 @@ function BarListDialog({
   ...list
 }: BarListProps & { title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [query, setQuery] = useState("");
+  // Open on the search, typing being why somebody opens every row; not on a
+  // phone, where focus would put the keyboard over the sheet.
+  const search = useRef<HTMLInputElement>(null);
+  const phone = usePhone();
   const typed = useDeferredValue(query.trim().toLowerCase());
   const shown = typed
     ? list.items.filter((i) => searchText(i.key, list).toLowerCase().includes(typed))
     : list.items;
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={title}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      initialFocus={phone ? undefined : search}
+    >
       <div className="flex flex-col gap-3">
         <span className="relative block">
           <IconSearch
@@ -280,6 +289,7 @@ function BarListDialog({
             className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-muted"
           />
           <Input
+            ref={search}
             type="search"
             value={query}
             placeholder={`Search ${title.toLowerCase()}`}

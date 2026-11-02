@@ -14,9 +14,10 @@ import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { pointerTooltip } from "./chart-tooltip";
 import { ClicksTip } from "./clicks-tip";
+import { formatNumber } from "../lib/numbers";
 
-const WIDTH = 960;
-const HEIGHT = 500;
+// The world without Antarctica, in Natural Earth: about 2.1 wide for 1 tall.
+const ASPECT = 2.1;
 
 // tsc infers world-110m.json's literal shape from the file itself, which is
 // far wider than the TopoJSON types and does not narrow to them on its own.
@@ -24,7 +25,11 @@ const worldJson: unknown = worldTopology;
 // SAFETY: the file is a checked-in TopoJSON world map with a "countries"
 // object; feature() below reads exactly that and nothing else.
 const world = worldJson as Topology<{ countries: GeometryCollection }>;
-const countries = feature(world, world.objects.countries).features;
+// Antarctica (ISO 010) goes: nobody clicks from there, and it took a fifth of
+// the map's height for a white band.
+const countries = feature(world, world.objects.countries).features.filter(
+  (f) => String(f.id) !== "010",
+);
 
 type CountryFeature = (typeof countries)[number];
 
@@ -48,6 +53,29 @@ const fmtCountry = (key: string) => {
   }
 };
 
+/** A country's colour for its share of the top country's clicks: from a
+ * dim violet up to the bright accent, on a square root. On a linear scale,
+ * and with --chart as the top, one big country left every other one
+ * indistinguishable from no clicks at all. */
+const shade = (share: number) =>
+  `color-mix(in oklab, var(--accent) ${Math.round(Math.sqrt(share) * 100)}%, color-mix(in oklab, var(--chart) 45%, var(--surface-2)))`;
+
+/** Fewer to more, under the map: the scale's two ends and the counts they
+ * stand for, so a shade reads as a number. */
+function MapLegend({ max }: { max: number }) {
+  return (
+    <div className="flex items-center justify-end gap-2 text-xs text-muted">
+      <span className="tnum">1</span>
+      <span
+        aria-hidden
+        className="h-1.5 w-24 rounded-full"
+        style={{ background: `linear-gradient(to right, ${shade(0)}, ${shade(1)})` }}
+      />
+      <span className="tnum">{formatNumber(max)}</span>
+    </div>
+  );
+}
+
 /**
  * Self-contained choropleth (no tile requests, satisfies the app's strict
  * CSP): countries shade from --surface-2 (no clicks) to --chart (most
@@ -70,16 +98,19 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
     return defineChart({
       marks: [
         geoMark(countries, {
-          projection: { type: () => geoNaturalEarth1(), fit: "data" },
+          projection: {
+            type: () => geoNaturalEarth1(),
+            fit: "data",
+          },
           key: (f: CountryFeature) => String(f.id),
           fill: (f: CountryFeature) => {
             const clicks = clicksOf(f);
-            return clicks
-              ? `color-mix(in srgb, var(--chart) ${5 + (clicks / max) * 95}%, var(--surface-2))`
-              : "var(--surface-2)";
+            return clicks ? shade(clicks / max) : "var(--surface-2)";
           },
-          stroke: "var(--border)",
-          strokeWidth: 0.5,
+          // Gaps in the card's colour rather than drawn borders: the shapes
+          // read as land, not as a wireframe.
+          stroke: "var(--surface)",
+          strokeWidth: 0.6,
         }),
       ],
       // A map has no axes to draw, and no grid to draw them on. Charts 0.18
@@ -95,30 +126,33 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
   if (!data.length) return <p className="py-4 text-sm text-muted">No data yet</p>;
 
   return (
-    <RendererChart
-      definition={definition}
-      renderer={mapMotion}
-      aspectRatio={WIDTH / HEIGHT}
-      ariaLabel="Clicks by country"
-      // The map only explains the country ranking beside it. It has no action
-      // of its own, so it must not become a tab stop or draw a focus border.
-      tabIndex={-1}
-      renderTooltipBody={({ points }) => {
-        const f = points[0]?.datum;
-        if (!f) return null;
-        const alpha2 = alpha2ById.get(f.id);
-        // SAFETY: TopoJSON leaves feature properties untyped, and
-        // world-110m.json carries a "name" on each country. The ?? below
-        // covers a feature that does not.
-        const named = f.properties as { name?: string } | null;
-        const clicksByAlpha2 = new Map(data.map((d) => [d.key, d.clicks]));
-        return (
-          <ClicksTip
-            label={alpha2 ? fmtCountry(alpha2) : String(named?.name ?? "")}
-            clicks={(alpha2 && clicksByAlpha2.get(alpha2)) || 0}
-          />
-        );
-      }}
-    />
+    <div className="flex h-full flex-col justify-center gap-3 overflow-hidden">
+      <RendererChart
+        definition={definition}
+        renderer={mapMotion}
+        aspectRatio={ASPECT}
+        ariaLabel="Clicks by country"
+        // The map only explains the country ranking beside it. It has no action
+        // of its own, so it must not become a tab stop or draw a focus border.
+        tabIndex={-1}
+        renderTooltipBody={({ points }) => {
+          const f = points[0]?.datum;
+          if (!f) return null;
+          const alpha2 = alpha2ById.get(f.id);
+          // SAFETY: TopoJSON leaves feature properties untyped, and
+          // world-110m.json carries a "name" on each country. The ?? below
+          // covers a feature that does not.
+          const named = f.properties as { name?: string } | null;
+          const clicksByAlpha2 = new Map(data.map((d) => [d.key, d.clicks]));
+          return (
+            <ClicksTip
+              label={alpha2 ? fmtCountry(alpha2) : String(named?.name ?? "")}
+              clicks={(alpha2 && clicksByAlpha2.get(alpha2)) || 0}
+            />
+          );
+        }}
+      />
+      <MapLegend max={Math.max(1, ...data.map((d) => d.clicks))} />
+    </div>
   );
 }

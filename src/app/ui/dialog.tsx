@@ -12,7 +12,7 @@ const subscribePhone = (onChange: () => void) => {
 };
 
 /** True below the sm breakpoint, where a dialog opens as a bottom sheet. */
-function usePhone(): boolean {
+export function usePhone(): boolean {
   return useSyncExternalStore(
     subscribePhone,
     () => matchMedia(PHONE).matches,
