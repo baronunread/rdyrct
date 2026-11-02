@@ -189,23 +189,34 @@ interface BarListProps {
 /** One row's height plus the gap under it, in px: what `limit` rows take. */
 const ROW_PX = 32;
 
-/** Whether a scrolling box is at its bottom, kept by its onScroll. */
-function useScrolledToEnd() {
-  const [atEnd, setAtEnd] = useState(false);
+/** Which edges of a scrolling box have rows past them: "above", "below",
+ * "both", or "none". Kept by the box's onScroll; it opens at the top. */
+type ScrollEdge = "above" | "below" | "both" | "none";
+
+function useScrollEdge() {
+  const [edge, setEdge] = useState<ScrollEdge>("below");
   const onScroll = (e: UIEvent<HTMLElement>) => {
     const el = e.currentTarget;
-    setAtEnd(el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
+    const above = el.scrollTop > 1;
+    const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    setEdge(above && below ? "both" : above ? "above" : below ? "below" : "none");
   };
-  return { atEnd, onScroll };
+  return { edge, onScroll };
 }
 
-/** A list that scrolls past its limit (not on a phone): a fade at the
- * bottom says there is more, gone once the last row is in view. */
-function scrollBox(atEnd: boolean): string {
-  return cn(
-    "overscroll-contain sm:overflow-y-auto sm:pb-3",
-    !atEnd && "sm:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
-  );
+/** The fade on each edge with rows past it: 24px at the bottom, 16px at the
+ * top so the column heads above it never look washed out. */
+const EDGE_FADE = {
+  below: "sm:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
+  above: "sm:[mask-image:linear-gradient(to_bottom,transparent,black_16px)]",
+  both: "sm:[mask-image:linear-gradient(to_bottom,transparent,black_16px,black_calc(100%-24px),transparent)]",
+  none: "",
+} satisfies Record<ScrollEdge, string>;
+
+/** A list that scrolls past its limit (not on a phone), faded on whichever
+ * edge has more rows past it. */
+function scrollBox(edge: ScrollEdge): string {
+  return cn("overscroll-contain sm:overflow-y-auto sm:pb-3", EDGE_FADE[edge]);
 }
 
 /**
@@ -231,7 +242,7 @@ export function BarList({
   /** Rows before the list scrolls. Unset shows every row. */
   limit?: number;
 }) {
-  const { atEnd, onScroll } = useScrolledToEnd();
+  const { edge, onScroll } = useScrollEdge();
   const max = Math.max(1, ...items.map((i) => i.clicks));
   if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
   const scrolls = limit !== undefined && items.length > limit;
@@ -246,7 +257,7 @@ export function BarList({
       <div
         className={cn(
           "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 text-sm",
-          scrolls && scrollBox(atEnd),
+          scrolls && scrollBox(edge),
         )}
         style={scrolls ? { maxHeight: `${limit * ROW_PX + 12}px` } : undefined}
         onScroll={onScroll}
