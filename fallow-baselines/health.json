@@ -173,13 +173,13 @@
     },
     "src/app/components/setup-flow.tsx": {
       "complexity_high": {
-        "count": 1
+        "count": 2
       },
       "crap_high": {
         "count": 4
       },
       "crap_moderate": {
-        "count": 4
+        "count": 5
       }
     },
     "src/app/components/signing-in-group.tsx": {
@@ -456,14 +456,11 @@
       }
     },
     "src/app/routes/welcome.tsx": {
-      "complexity_high": {
-        "count": 1
-      },
       "crap_high": {
         "count": 4
       },
       "crap_moderate": {
-        "count": 5
+        "count": 6
       }
     },
     "src/app/ui/dialog.tsx": {
@@ -543,7 +540,6 @@
   "runtime_coverage_findings": [],
   "target_keys": [
     "src/app/ui/command.tsx:dead code",
-    "src/app/routes/welcome.tsx:hidden coupling",
     "src/app/lib/current-org.ts:high impact",
     "src/app/routes/admin/audit.tsx:hidden coupling",
     "src/app/components/qr-defaults-card.tsx:hidden coupling",
@@ -552,6 +548,7 @@
     "src/worker/routes/orgs.ts:hidden coupling",
     "src/app/lib/use-shake.ts:high impact",
     "src/app/lib/setup.ts:hidden coupling",
+    "src/app/routes/welcome.tsx:hidden coupling",
     "src/app/lib/mcp-url.ts:high impact",
     "src/app/components/link-editor.tsx:complexity",
     "src/app/routes/admin/orgs.tsx:hidden coupling",

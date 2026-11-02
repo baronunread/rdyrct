@@ -227,9 +227,10 @@ test("a domain typed before checkout is added when they come back paid", async (
   await page.getByRole("button", { name: "Yearly, save 10%" }).click();
   await page.getByRole("button", { name: "Add go.example.org with Hobby" }).click();
 
-  await expect(heading(page, "Hobby is on")).toBeVisible({ timeout: 15_000 });
-  expect(asked).toEqual([{ plan: "hobby", interval: "year", from: "welcome" }]);
+  // Back on the step it left, no card of its own in between.
   await expect(heading(page, "go.example.org is yours")).toBeVisible({ timeout: 15_000 });
+  expect(asked).toEqual([{ plan: "hobby", interval: "year", from: "welcome" }]);
+  await expect(heading(page, "Hobby is on")).toHaveCount(0);
   expect(posted).toEqual([{ hostname: "go.example.org" }]);
   await expect(page.getByText("rdyrct.test").filter({ visible: true })).toBeVisible();
   await expect(card(page)).toContainText("Checking DNS");
@@ -240,6 +241,26 @@ test("a domain typed before checkout is added when they come back paid", async (
   await page.getByRole("button", { name: "Copy invite link" }).click();
   await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/invite\/\w+/);
+});
+
+test("the domain step holds until the payment lands, then goes on", async ({ page }) => {
+  const email = `onboard-wait-${Date.now()}@example.org`;
+  await signUpAndVerify(page, email, password);
+  // Polar sends them back before its webhook arrives.
+  await page.route("**/api/billing/checkout", (route) =>
+    route.fulfill({ json: { url: "/welcome?checkout_id=test&plan=hobby" } }),
+  );
+
+  await page.goto("/welcome");
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: /^Hobby, \$4 a month$/ }).click();
+
+  await expect(page.getByText("Confirming your payment")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: /^Hobby, \$4 a month$/ })).toBeDisabled();
+  await setPlan(page, email, "hobby");
+  await expect(heading(page, "Hobby is on")).toBeVisible({ timeout: 15_000 });
+  await expect(heading(page, "Invite your team")).toBeVisible({ timeout: 15_000 });
 });
 
 test("back from a paid checkout, the domain step asks for the domain", async ({ page }) => {

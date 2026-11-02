@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as v from "valibot";
 import {
@@ -58,6 +58,10 @@ import { OrgCard } from "./org-card";
  */
 
 const ORDER: FlowStep[] = ["name", "link", "domain", "team"];
+
+/** Where a checkout the domain step opened stands, back from Polar: waiting
+ * on the webhook, past the wait, or paid. Null when there was none. */
+export type Payment = "confirming" | "slow" | "paid" | null;
 /** As long as .setup-screen-out runs (styles.css). */
 const STEP_OUT_MS = 150;
 
@@ -66,6 +70,7 @@ export function SetupFlow({
   intent,
   start,
   cancelled = false,
+  payment,
   onDone,
 }: {
   org: UserOrg;
@@ -75,6 +80,8 @@ export function SetupFlow({
   start: FlowStep;
   /** Back from a checkout the domain step opened, with no payment. */
   cancelled?: boolean;
+  /** Back from a checkout the domain step opened, paid or still confirming. */
+  payment: Payment;
   onDone: () => void;
 }) {
   const { step, leaving, next } = useStepper(org.id, start, onDone);
@@ -102,6 +109,7 @@ export function SetupFlow({
         intent={intent}
         kept={kept}
         cancelled={cancelled}
+        payment={payment}
         onAdded={setDomain}
         onTyped={setTyped}
         onNext={next}
@@ -439,6 +447,7 @@ function DomainStep({
   intent,
   kept,
   cancelled,
+  payment,
   onAdded,
   onTyped,
   onNext,
@@ -452,9 +461,20 @@ function DomainStep({
   kept: string | undefined;
   /** Back from a checkout with no payment. */
   cancelled: boolean;
+  payment: Payment;
   onAdded: (hostname: string) => void;
   onNext: () => void;
 }) {
+  // Paid with no domain typed: the plan was the point, so on to the team.
+  const paidOnly = payment === "paid" && !kept && org.plan !== "free";
+  const next = useEffectEvent(onNext);
+  useEffect(() => {
+    if (!paidOnly) return;
+    // Long enough to read that the plan is on.
+    const timer = window.setTimeout(next, 1400);
+    return () => window.clearTimeout(timer);
+  }, [paidOnly]);
+  if (paidOnly) return <PaymentDone plan={org.plan} />;
   if (org.plan !== "free")
     return <DomainForm org={org} host={host} kept={kept} onAdded={onAdded} onNext={onNext} />;
   return (
@@ -465,10 +485,29 @@ function DomainStep({
       intent={intent}
       kept={kept}
       cancelled={cancelled}
+      confirming={payment === "confirming" || payment === "slow"}
+      slow={payment === "slow"}
       onTyped={onTyped}
       onNext={onNext}
     />
   );
+}
+
+/** The moment between the payment landing and the next step. */
+function PaymentDone({ plan }: { plan: OrgPlan }) {
+  return (
+    <div className="flex flex-col">
+      <StepHead title={`${PLAN_LABEL[plan]} is on`}>Thanks. Next, your team.</StepHead>
+    </div>
+  );
+}
+
+/** What the domain step says above its field. */
+function upsellLine(cancelled: boolean, confirming: boolean, slow: boolean): string {
+  if (slow) return "Polar has not told us yet. This step goes on the moment it does.";
+  if (confirming) return "Confirming your payment. This takes a few seconds.";
+  if (cancelled) return "No payment went through. Your domain is still here when you want it.";
+  return "On your own domain you choose the slug. Domains come with Hobby and Pro.";
 }
 
 const INTERVALS = [
@@ -491,6 +530,8 @@ function DomainUpsell({
   intent,
   kept,
   cancelled,
+  confirming,
+  slow,
   onTyped,
   onNext,
 }: {
@@ -501,9 +542,14 @@ function DomainUpsell({
   intent: PlanIntent | null;
   kept: string | undefined;
   cancelled: boolean;
+  /** Back from checkout, the payment not confirmed yet: the step holds. */
+  confirming: boolean;
+  slow: boolean;
   onNext: () => void;
 }) {
   const upgrade = useUpgrade();
+  // Opening checkout, or back from it and waiting on the payment.
+  const busy = upgrade.busy || confirming;
   const [plan, setPlan] = useState<PlanIntent>(intent ?? { target: "hobby", interval: "month" });
   const [hostname, setHostname] = useState(kept ?? "");
   const [error, setError] = useState<string | undefined>();
@@ -526,17 +572,14 @@ function DomainUpsell({
     upgrade.start(plan);
   };
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col">
-      <StepHead title="Use your own domain">
-        {cancelled
-          ? "No payment went through. Your domain is still here when you want it."
-          : "On your own domain you choose the slug. Domains come with Hobby and Pro."}
-      </StepHead>
+    <form onSubmit={submit} noValidate className="flex flex-col" aria-busy={confirming}>
+      <StepHead title="Use your own domain">{upsellLine(cancelled, confirming, slow)}</StepHead>
       <div className="mt-6">
         <Field label="Domain" error={error}>
           <Input
             value={hostname}
-            autoFocus
+            autoFocus={!confirming}
+            readOnly={confirming}
             placeholder={host}
             autoComplete="off"
             spellCheck={false}
@@ -559,8 +602,8 @@ function DomainUpsell({
       </div>
       <PlanSwitch plan={plan} onPlan={setPlan} />
       <Actions>
-        <Button type="submit" variant="primary" disabled={upgrade.busy}>
-          <BusyContent busy={upgrade.busy}>
+        <Button type="submit" variant="primary" disabled={busy}>
+          <BusyContent busy={busy}>
             {valid
               ? `Add ${typed} with ${PLAN_NAME[plan.target]}`
               : `${PLAN_NAME[plan.target]}, ${priceLine(plan)}`}

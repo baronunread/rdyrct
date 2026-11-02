@@ -4,12 +4,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "@/app/ui/icons";
 import type { OrgPlan } from "@/shared/types";
 import { AuthHeading, AuthPanel } from "../components/auth-panel";
-import { SetupFlow } from "../components/setup-flow";
+import { SetupFlow, type Payment } from "../components/setup-flow";
 import { useAwaitWebhook } from "../lib/await-webhook";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCheckout, useConfirmCheckout, useCurrentUser } from "../lib/hooks";
 import {
   finishSetup,
+  flowAtCheckout,
   PLAN_NAME,
   planIntentFrom,
   priceLine,
@@ -43,28 +44,30 @@ type Phase = "opening" | "failed" | "confirming" | "slow" | "on" | "cancelled" |
 /** What the URL asks for. Pure, because render may run it twice; the page
  * strips the URL in an effect, so a reload is a plain visit. */
 function readArrival(search: URLSearchParams) {
-  const via = search.get("via");
   const checkoutId = search.get("checkout_id");
   const cancelled = search.get("checkout") === "cancelled";
-  const phase: Phase =
-    via === "email"
-      ? "flow"
-      : via === "google"
-        ? "google"
-        : checkoutId
-          ? "confirming"
-          : cancelled
-            ? "cancelled"
-            : "opening";
+  const phase = arrivalPhase(search.get("via"), checkoutId, cancelled);
   const next = search.get("next") ?? "";
   return {
     intent: planIntentFrom(search),
     checkoutId,
+    cancelled,
     phase,
     // Where the sign-in was going, if it is a page of the app.
     target: isAppPage(next) ? next : "/dashboard",
     newAccount: search.get("signup") === "google",
   };
+}
+
+/** The card a way in opens on. A checkout the flow's domain step opened
+ * comes back to that step, which says how it went; one from a pricing link
+ * gets a card. */
+function arrivalPhase(via: string | null, checkoutId: string | null, cancelled: boolean): Phase {
+  if (via === "email") return "flow";
+  if (via === "google") return "google";
+  if (!checkoutId && !cancelled) return "opening";
+  if (flowAtCheckout()) return "flow";
+  return checkoutId ? "confirming" : "cancelled";
 }
 
 /** Into the app, once: the card in view (this page's, or the flow's
@@ -119,39 +122,66 @@ function useOpenCheckout(
 /** Back from a paid checkout: the plan turning paid is the webhook landing.
  * Past the poll, Polar is asked directly, as the billing page does. */
 function useConfirmPayment(
-  phase: Phase,
+  waiting: boolean,
   checkoutId: string | null,
   plan: OrgPlan | undefined,
-  setPhase: (phase: Phase) => void,
+  onPaid: () => void,
+  onSlow: () => void,
 ) {
   const qc = useQueryClient();
   const confirm = useConfirmCheckout();
   useAwaitWebhook({
-    waiting: phase === "confirming" && !!plan,
+    waiting: waiting && !!plan,
     arrived: !!plan && plan !== "free",
-    onArrived: () => setPhase("on"),
+    onArrived: onPaid,
     onGaveUp: async () => {
       const confirmed = checkoutId ? await confirm.mutateAsync(checkoutId).catch(() => null) : null;
       const paid = !!confirmed && confirmed.plan !== "free";
       if (paid) await qc.refetchQueries({ queryKey: ["user"] });
-      setPhase(paid ? "on" : "slow");
+      if (paid) onPaid();
+      else onSlow();
     },
   });
 }
 
+/** Back from Polar, the payment confirmed: on the card, or on the flow's
+ * domain step when that is where the checkout started. */
+function usePayment(
+  arrival: { phase: Phase; checkoutId: string | null },
+  phase: Phase,
+  setPhase: (phase: Phase) => void,
+  plan: OrgPlan | undefined,
+) {
+  const [payment, setPayment] = useState<Payment>(
+    arrival.phase === "flow" && arrival.checkoutId ? "confirming" : null,
+  );
+  const inFlow = phase === "flow";
+  const onPaid = () => (inFlow ? setPayment("paid") : setPhase("on"));
+  useLateWebhook(phase === "slow" || payment === "slow", plan, onPaid);
+  useConfirmPayment(
+    phase === "confirming" || payment === "confirming",
+    arrival.checkoutId,
+    plan,
+    onPaid,
+    () => (inFlow ? setPayment("slow") : setPhase("slow")),
+  );
+  return payment;
+}
+
 /** Polar answered after the card gave up waiting: keep asking, slowly, and
  * say so the moment the plan turns paid. */
-function useLateWebhook(phase: Phase, plan: OrgPlan | undefined, setPhase: (p: Phase) => void) {
+function useLateWebhook(slow: boolean, plan: OrgPlan | undefined, onPaid: () => void) {
   const qc = useQueryClient();
+  const paid = useEffectEvent(onPaid);
   useEffect(() => {
-    if (phase !== "slow") return;
+    if (!slow) return;
     if (plan && plan !== "free") {
-      setPhase("on");
+      paid();
       return;
     }
     const id = window.setInterval(() => void qc.refetchQueries({ queryKey: ["user"] }), 5000);
     return () => window.clearInterval(id);
-  }, [phase, plan, qc, setPhase]);
+  }, [slow, plan, qc]);
 }
 
 /** The shell's code and the dashboard's data, loading while a card is up,
@@ -235,8 +265,7 @@ export function WelcomePage() {
   // the email code it is already on screen, carried over by the transition.
   const [entering] = useState(() => arrival.phase !== "flow");
   usePreloadApp(target);
-  useLateWebhook(phase, user?.plan, setPhase);
-  useConfirmPayment(phase, checkoutId, user?.plan, setPhase);
+  const payment = usePayment(arrival, phase, setPhase, user?.plan);
   const { moveOn, known } = useMoveOn(phase, intent, fromCheckout, enterApp, setPhase);
   const retry = useOpenCheckout(
     phase,
@@ -255,7 +284,8 @@ export function WelcomePage() {
       <WelcomeFlow
         intent={intent}
         fromCheckout={fromCheckout}
-        cancelled={arrival.phase === "cancelled"}
+        cancelled={arrival.cancelled}
+        payment={payment}
         enterApp={enterApp}
       />
     );
@@ -366,11 +396,13 @@ function WelcomeFlow({
   intent,
   fromCheckout,
   cancelled,
+  payment,
   enterApp,
 }: {
   intent: PlanIntent | null;
   fromCheckout: boolean;
   cancelled: boolean;
+  payment: Payment;
   enterApp: (wait: number) => void;
 }) {
   const qc = useQueryClient();
@@ -382,6 +414,7 @@ function WelcomeFlow({
       intent={resume.intent}
       start={resume.at}
       cancelled={cancelled}
+      payment={payment}
       onDone={async () => {
         finishSetup(org.id);
         // The dashboard was fetched before the flow made a link; fetched

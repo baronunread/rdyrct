@@ -28,6 +28,9 @@ const OrgSetup = v.object({
   finished: v.optional(v.boolean()),
   /** The domain typed before a checkout, added once the plan is paid. */
   host: v.optional(v.string()),
+  /** The domain step sent them to checkout: Polar's way back resumes the
+   * flow on that step instead of showing a card of its own. */
+  paying: v.optional(v.boolean()),
   /** The owner closed the sidebar's setup list (components/setup-checklist.tsx). */
   listHidden: v.optional(v.boolean()),
 });
@@ -107,7 +110,8 @@ export function setupAt(orgId: string, at: FlowStep) {
   // org gets one, and drawing it must not be what starts it.
   const current = read()[orgId];
   if (!current || current.at === at) return;
-  write(orgId, (s) => ({ ...s, at }));
+  // Past the domain step, a checkout it opened is behind them.
+  write(orgId, (s) => ({ ...s, at, paying: at === "domain" ? s?.paying : undefined }));
 }
 
 export function finishSetup(orgId: string) {
@@ -117,7 +121,14 @@ export function finishSetup(orgId: string) {
 /** Keeps the domain and plan the domain step was paying for, so the flow
  * can add the domain when Polar sends them back. */
 export function keepForCheckout(orgId: string, host: string, plan: PlanIntent) {
-  write(orgId, (s) => ({ ...s, host: host || undefined, plan }));
+  write(orgId, (s) => ({ ...s, host: host || undefined, plan, paying: true }));
+}
+
+/** Whether a flow in this browser is out at a checkout its domain step
+ * opened. Read before the org is known, so it asks of every org kept: a
+ * browser has one new organization in setup at a time. */
+export function flowAtCheckout(): boolean {
+  return Object.values(read()).some((s) => s.paying && !s.finished);
 }
 
 export function hideSetupList(orgId: string) {
