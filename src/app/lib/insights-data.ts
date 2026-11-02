@@ -102,18 +102,6 @@ export const deviceLabel = (key: string) => key.charAt(0).toUpperCase() + key.sl
 export const sourceLabel = (key: string) => (key === "direct" ? "Direct" : key);
 
 /**
- * The flag emoji for a two-letter country code, or null for anything else
- * ("unknown", or a code the edge could not place). Regional indicator
- * symbols: the platform draws the flag, so no image and nothing remote.
- */
-export function flagEmoji(code: string): string | null {
-  if (!/^[A-Za-z]{2}$/.test(code)) return null;
-  const base = 0x1f1e6 - 65;
-  const upper = code.toUpperCase();
-  return String.fromCodePoint(base + upper.charCodeAt(0), base + upper.charCodeAt(1));
-}
-
-/**
  * The first letter of a site, for the tile that stands in for its favicon
  * (the CSP allows no remote images). "www." and "m." do not count: they
  * would make half the list a W.

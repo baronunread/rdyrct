@@ -1,5 +1,23 @@
 import { IconArrowRight, IconWorld } from "@tabler/icons-react";
-import { flagEmoji, siteLetter } from "../lib/insights-data";
+import { siteLetter } from "../lib/insights-data";
+
+/**
+ * Every country's round flag (circle-flags, MIT), each its own file under
+ * /assets and fetched only when a list shows it. `no-inline` keeps Vite from
+ * turning the small ones into base64 inside the bundle. Bundled rather than
+ * loaded from the library's site, which the CSP would refuse. Emoji flags
+ * were the first try: Windows has none, and draws the two letters instead.
+ */
+const FLAGS = import.meta.glob<string>("/node_modules/circle-flags/flags/*.svg", {
+  query: "?no-inline",
+  import: "default",
+  eager: true,
+});
+
+const flagUrl = (code: string): string | undefined =>
+  /^[A-Za-z]{2}$/.test(code)
+    ? FLAGS[`/node_modules/circle-flags/flags/${code.toLowerCase()}.svg`]
+    : undefined;
 
 /**
  * The letter tile that stands in for a site's favicon: the CSP allows no
@@ -19,15 +37,21 @@ export function SourceTile({ source }: { source: string }) {
   );
 }
 
-/** A country's flag, drawn by the platform from its code. A click the edge
- * could not place gets a globe instead. Decoration, like SourceTile. */
+/** A country's round flag. A click the edge could not place gets a globe
+ * instead. Decoration, like SourceTile: the name beside it says the same. */
 export function Flag({ code }: { code: string }) {
-  const flag = flagEmoji(code);
-  if (!flag)
-    return <IconWorld aria-hidden size={15} stroke={1.75} className="shrink-0 text-muted" />;
+  const src = flagUrl(code);
+  if (!src)
+    return <IconWorld aria-hidden size={16} stroke={1.75} className="shrink-0 text-muted" />;
   return (
-    <span aria-hidden className="shrink-0 text-[15px] leading-none">
-      {flag}
-    </span>
+    <img
+      src={src}
+      alt=""
+      width={16}
+      height={16}
+      loading="lazy"
+      decoding="async"
+      className="size-4 shrink-0 rounded-full smooth-shadow-ring-xs"
+    />
   );
 }

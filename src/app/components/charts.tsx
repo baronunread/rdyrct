@@ -165,8 +165,9 @@ export function AreaChart({
 
 /**
  * Ranked bars with the label inside: each row is a tinted bar sized to its
- * value, the label sits on it, and the count and its share line up in their
- * own columns (rdyrct-design, "The app's surfaces"). One scale per list, so a
+ * value, the label sits on it, and the count lines up in its own column
+ * (rdyrct-design, "The app's surfaces"). No percentage: the bar already
+ * says the share. One scale per list, so a
  * bar's length still encodes its value; identity is in the label, so one hue
  * does the work.
  */
@@ -193,18 +194,16 @@ export function BarList({
 }) {
   const [expanded, setExpanded] = useState(false);
   const max = Math.max(1, ...items.map((i) => i.clicks));
-  const total = items.reduce((sum, i) => sum + i.clicks, 0) || 1;
   if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
   const cut = limit !== undefined && items.length > limit;
   const shown = cut && !expanded ? items.slice(0, limit) : items;
   return (
     <div className="flex flex-col">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5 text-sm">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 text-sm">
         {head && (
           <>
             <span className="pb-1 text-xs text-muted">{head[0]}</span>
             <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
-            <span />
           </>
         )}
         {shown.map((item) => (
@@ -219,9 +218,6 @@ export function BarList({
               <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
             </div>
             <span className="tnum text-right">{formatNumber(item.clicks)}</span>
-            <span className="tnum text-right text-xs text-muted">
-              {Math.round((item.clicks / total) * 100)}%
-            </span>
           </div>
         ))}
       </div>
