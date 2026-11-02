@@ -46,7 +46,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { formatNumber } from "../lib/numbers";
 import { linkDisplayTitle } from "../lib/link-display";
-import { resolveQrLook, type OrgQr } from "../lib/org-qr";
+import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
 import {
   PRESET_30D,
   PRESET_365D,
@@ -101,7 +101,9 @@ function useLinkRow(orgId: string, s: LinkStats | undefined): LinkDTO | null {
 }
 
 /** The link's own QR code, small, as the page's picture of it. Opens the
- * full-size code with its downloads. */
+ * full-size code with its downloads. The rounding is on a tile of the code's
+ * own background around it, so the corners never cut into the finder
+ * squares. */
 function QrThumb({
   url,
   link,
@@ -113,15 +115,17 @@ function QrThumb({
   orgQr: OrgQr;
   onOpen: () => void;
 }) {
+  const look = resolveQrLook(link ?? {}, orgQr);
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={!link}
       aria-label="Show QR code"
-      className="shrink-0 cursor-pointer rounded-xl transition-[scale] duration-200 ease-out active:scale-[0.97] disabled:cursor-default [&_[role=img]]:rounded-xl [&_[role=img]]:border-0 [&_[role=img]]:smooth-shadow-ring-xs"
+      style={{ background: qrFallbacks(link ?? {}, orgQr).bg }}
+      className="shrink-0 cursor-pointer rounded-xl p-1 smooth-shadow-ring-xs transition-[scale] duration-200 ease-out active:scale-[0.97] disabled:cursor-default [&_[role=img]]:rounded-none [&_[role=img]]:border-0"
     >
-      <QRPreview url={url} size={56} {...resolveQrLook(link ?? {}, orgQr)} />
+      <QRPreview url={url} size={48} {...look} />
     </button>
   );
 }
