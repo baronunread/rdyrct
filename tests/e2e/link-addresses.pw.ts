@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { addActiveCustomDomain, createAdditionalOrg, openNewLinkDialog } from "./orgs";
+import {
+  addActiveCustomDomain,
+  createAdditionalOrg,
+  createQuickLink,
+  openNewLinkDialog,
+} from "./orgs";
 
 const password = "test-password-123";
 const authFile = join(mkdtempSync(join(tmpdir(), "rdyrct-e2e-")), "auth.json");
@@ -49,28 +54,9 @@ async function freshOrg(page: Page, name: string): Promise<void> {
   } else {
     defaultOrgSpent = true;
   }
-  // Switching org invalidates the dashboard's queries, which briefly remounts
-  // its form. Wait for that form, not network idle: product analytics can
-  // keep an unrelated request open. createQuickLink retries its fill in case
-  // a final query update replaces the field.
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible();
-}
-
-/** Fills the dashboard's quick-create destination field and submits it,
- * waiting for the "Link created" confirmation dialog. */
-async function createQuickLink(page: Page, destination: string) {
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  const button = page.getByRole("button", { name: "Create link" });
-  // Right after switching org, the dashboard's data queries can still be
-  // settling and remount the form underneath a fill(): keep re-filling
-  // until it actually sticks (and so the submit button un-disables) rather
-  // than trusting a single fill call landed in the final instance.
-  await expect(async () => {
-    await field.fill(destination);
-    await expect(button).toBeEnabled();
-  }).toPass();
-  await button.click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  // Wait for the dashboard's New link, not network idle: product analytics
+  // can keep an unrelated request open.
+  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 }
 
 /** Fills the "New link" dialog with `destination` and submits it, for tests

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { appUrl } from "./environment";
 import { queryRows } from "./db";
 import { signUpAndVerify, submitSignup } from "./resend";
+import { createQuickLink as createLink } from "./orgs";
 
 const password = "test-password-123";
 
@@ -14,11 +15,7 @@ const password = "test-password-123";
  * instance across every test the suite runs in parallel (playwright.config.ts
  * runs 2 workers), so two tests' clicks can land in the very same flush. */
 async function createQuickLink(page: Page): Promise<{ slug: string; id: string }> {
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(destination).toBeVisible();
-  await destination.fill("example.com/referrer-privacy");
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createLink(page, "example.com/referrer-privacy");
 
   const rows = await queryRows<{ slug: string; id: string }>(
     page,

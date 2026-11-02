@@ -126,7 +126,7 @@ export async function signUpAndVerify(page: Page, email: string, password: strin
   const res = await page.request.post("/__dev/test-account", { data: { email, password } });
   expect(res.status(), await res.text()).toBe(201);
   await page.goto("/dashboard");
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({
     timeout: 30_000,
   });
 }

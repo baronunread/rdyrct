@@ -1,15 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
 test("link stats keep their layout while loading (#174)", async ({ page }) => {
   await signUpAndVerify(page, `link-skeleton-${Date.now()}@gmail.com`, password);
 
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await destination.fill("https://example.com/loading");
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, "https://example.com/loading");
   await page.keyboard.press("Escape");
 
   let releaseStats!: () => void;
@@ -34,9 +32,7 @@ test("link stats keep their layout while loading (#174)", async ({ page }) => {
 test("the country map is not a keyboard focus target (#175)", async ({ page }) => {
   await signUpAndVerify(page, `map-focus-${Date.now()}@gmail.com`, password);
   // An org with no links gets one empty state on Analytics, not the panels.
-  await page.getByPlaceholder("https://example.com/launch").first().fill("https://example.com/map");
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, "https://example.com/map");
   await page.keyboard.press("Escape");
 
   await page.route("**/api/orgs/*/stats**", async (route) => {

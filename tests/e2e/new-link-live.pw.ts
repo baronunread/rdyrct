@@ -1,7 +1,7 @@
-import { expect, test } from "@playwright/test";
+import { test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
-import { expectRedirect } from "./orgs";
+import { createQuickLink, expectRedirect } from "./orgs";
 
 /**
  * A link redirects on the first click after "Create link", with no wait.
@@ -17,13 +17,7 @@ test("a new link redirects on its very first click", async ({ page }) => {
   await signUpAndVerify(page, `live-link-${Date.now()}@gmail.com`, "test-password-123");
 
   const destination = `https://example.com/live-${Date.now()}`;
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(async () => {
-    await field.fill(destination);
-    await expect(page.getByRole("button", { name: "Create link" })).toBeEnabled();
-  }).toPass();
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, destination);
 
   const [{ slug }] = await queryRows<{ slug: string }>(
     page,

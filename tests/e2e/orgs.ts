@@ -66,24 +66,21 @@ export async function openNewLinkDialog(page: Page) {
   return page.getByRole("dialog", { name: "New link" });
 }
 
-/** Creates a link from the dashboard (or the links page) and waits for the
- * confirmation dialog. On an org with no links yet the dashboard asks for the
- * first one with its own field; after that, the header's New link button
- * opens the New link dialog. Either way the same "Link created" dialog
- * answers. */
+/** Opens the New link form from the current page's header (the dashboard,
+ * first run included, or the links page) and returns it. */
+export async function openNewLinkForm(page: Page) {
+  await page.getByRole("button", { name: "New link" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "New link" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Creates a link through the New link form and waits for the "Link
+ * created" dialog. */
 export async function createQuickLink(page: Page, destination: string) {
-  const firstRunField = page.getByRole("textbox", { name: "Destination URL", exact: true });
-  const newLinkButton = page.getByRole("button", { name: "New link" }).first();
-  await expect(firstRunField.or(newLinkButton).first()).toBeVisible();
-  if (await firstRunField.isVisible()) {
-    await firstRunField.fill(destination);
-    await page.getByRole("button", { name: "Create link" }).click();
-  } else {
-    await newLinkButton.click();
-    const dialog = page.getByRole("dialog", { name: "New link" });
-    await dialog.getByRole("textbox", { name: "Destination", exact: true }).fill(destination);
-    await dialog.getByRole("button", { name: "Create link" }).click();
-  }
+  const dialog = await openNewLinkForm(page);
+  await dialog.getByRole("textbox", { name: "Destination", exact: true }).fill(destination);
+  await dialog.getByRole("button", { name: "Create link" }).click();
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 }
 

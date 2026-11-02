@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
+import { openNewLinkForm } from "./orgs";
 
 /**
  * Destination scoring, through the app the way a person uses it (#68).
@@ -24,12 +25,11 @@ test("a new link is created immediately and scored afterwards (#68)", async ({ p
   const email = `risk-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
 
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(destination).toBeVisible();
-  await destination.fill(BLOCKED_DESTINATION);
+  const form = await openNewLinkForm(page);
+  await form.getByRole("textbox", { name: "Destination", exact: true }).fill(BLOCKED_DESTINATION);
 
   const started = Date.now();
-  await page.getByRole("button", { name: "Create link" }).click();
+  await form.getByRole("button", { name: "Create link" }).click();
 
   // The link exists straight away: scoring never sits in the request path.
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();

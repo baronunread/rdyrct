@@ -15,7 +15,7 @@ const NOT_FOUND = "This page does not exist";
 async function signUp(page: Page, email: string) {
   await submitSignup(page, email, password);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({
     timeout: 30_000,
   });
 }

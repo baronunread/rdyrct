@@ -168,10 +168,9 @@ test("G then a letter goes to a page, and ⌘K shows the keys", async ({ page })
   await page.keyboard.press("d");
   await expect(page).toHaveURL(/\/dashboard$/);
 
-  // The first-run dashboard sends every keystroke to its one field, so G
-  // is a letter there, not a shortcut.
+  // The first-run dashboard has no field waiting either: G works there too.
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
   await page.keyboard.press("g");
   await page.keyboard.press("l");
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/links$/);
 });

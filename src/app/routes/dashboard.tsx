@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
-import { IconLink, IconPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { dashboardView } from "./dashboard-view";
-import { valibotResolver } from "@hookform/resolvers/valibot";
 import { HrefLink } from "../lib/router-search";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   useLinks,
   useMembers,
-  useLinkMutations,
   useRecentClicks,
-  useLinkHost,
   useClickUsage,
   linksQuery,
   membersQuery,
@@ -20,19 +16,10 @@ import {
 } from "../lib/hooks";
 import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
 import { settle, type PageContext } from "../lib/route-preload";
-import { ApiError } from "../lib/api";
-import {
-  type DomainDTO,
-  type LinkDTO,
-  type LinkInput,
-  type OrgStats,
-  type RecentClick,
-  type StatsLinkRef,
-} from "@/shared/types";
+import { type LinkDTO, type OrgStats, type RecentClick, type StatsLinkRef } from "@/shared/types";
 import { AreaChart, BarList, LinkBarLabel, StatsChart } from "../components/charts";
 import { countryName } from "../lib/places";
 import { linkPagePath } from "../lib/link-display";
-import { displayHost } from "../lib/display-url";
 import { dayTick, hourTick } from "../lib/dates";
 import { useNewLink, NewLinkButton } from "../components/new-link-host";
 import { RangeControl } from "../components/range-control";
@@ -43,15 +30,9 @@ import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { ClickCapBanner } from "../components/over-limit";
 import { Button } from "../ui/button";
-import { Input } from "../ui/field";
 import { Kbd } from "../ui/kbd";
-import { MenuSelect } from "../ui/menu";
 import { PageHeader, SlugLink } from "../ui/misc";
-import { BusyContent } from "../ui/spinner";
 import { Tooltip } from "../ui/tooltip";
-import { useToast } from "../ui/toast";
-import { withErrorToast } from "../lib/mutation-toast";
-import { destinationSchema } from "../lib/schemas";
 import { relativeDate, shortDate } from "../lib/dates";
 import {
   PRESET_24H,
@@ -65,8 +46,6 @@ import {
   type RangePreset,
 } from "../lib/insights-data";
 import { InsightsRow } from "../components/dashboard-insights";
-import { SameDestinationDialog } from "../components/same-destination-dialog";
-import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { settleSetup } from "../lib/setup-arrive";
 
 /** The dashboard's ranges: a glance, not a report. Analytics adds 365d. */
@@ -102,7 +81,6 @@ function useDashboardData(orgId: string, range: RangePreset) {
   const links = useLinks(orgId, RECENT_LINKS);
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
-  const { create } = useLinkMutations(orgId);
 
   const recentLinks = links.data?.items ?? [];
   const memberNames = useMemo(
@@ -118,20 +96,7 @@ function useDashboardData(orgId: string, range: RangePreset) {
     recentLinks,
     creatorName: (id: string | null) => creatorNameFrom(memberNames, id),
     clicks: clicks.data ?? [],
-    create,
   };
-}
-
-/** Shared shape of the same-destination dialog's two "go ahead" actions:
- * differ only in which extra field they send. */
-function submitSameDestination(
-  create: ReturnType<typeof useLinkMutations>["create"],
-  input: LinkInput,
-  extra: Partial<LinkInput>,
-  onDone: (link: LinkDTO) => void,
-  onError: (e: Error) => void,
-) {
-  create.mutate({ ...input, ...extra }, { onSuccess: onDone, onError });
 }
 
 type DashboardData = ReturnType<typeof useDashboardData>;
@@ -328,42 +293,18 @@ function DashboardScreen({
   range: RangePreset;
   onRangeChange: (range: RangePreset) => void;
 }) {
-  const { org, limits, activeDomains, defaultDomainId, orgQr, canWrite } = useOrgLimits();
-  const { openNewLink, canCreate } = useNewLink();
-  const toast = useToast();
-  const [created, setCreated] = useState<LinkDTO | null>(null);
-  const [sameDestination, setSameDestination] = useState<{
-    input: LinkInput;
-    matchedLinks: LinkDTO[];
-  } | null>(null);
+  const { org, limits, canWrite } = useOrgLimits();
+  const { openNewLink, canCreate, busy } = useNewLink();
 
   // First run. An organization exists from the first session, so what is
   // missing is the link. The page keeps its header, the way Resend, Linear
   // and Stripe keep theirs, and one plain panel takes the place of the cards
-  // with the field that makes it: three zeroes, four empty cards and a flat
-  // chart would teach somebody the product is empty. Only for somebody who
-  // can make that link: a read-only org or a viewer gets the dashboard as it
-  // is.
-  const firstRun = useHeldFirstRun(
-    s.totalLinks === 0 && canWrite,
-    created !== null || sameDestination !== null || data.create.isPending,
-  );
-
-  /** Both answers to "this destination already has a link" submit the same
-   * input with one extra field, and land on the same created-link dialog. */
-  const resolveMatch = (extra: { mergeIntoLinkId?: string; forceSeparateLink?: boolean }) => {
-    if (!sameDestination) return;
-    submitSameDestination(
-      data.create,
-      sameDestination.input,
-      extra,
-      (link) => {
-        setSameDestination(null);
-        setCreated(link);
-      },
-      withErrorToast(toast),
-    );
-  };
+  // with one button: three zeroes, four empty cards and a flat chart would
+  // teach somebody the product is empty. The button opens the same New link
+  // form as everywhere else, and once its "Link created" dialog closes the
+  // dashboard fills in. Only for somebody who can make that link: a
+  // read-only org or a viewer gets the dashboard as it is.
+  const firstRun = useHeldFirstRun(s.totalLinks === 0 && canWrite, busy);
 
   return (
     <div>
@@ -392,38 +333,13 @@ function DashboardScreen({
 
       <ClickCapBanner />
 
-      {/* The field only asks for the first link. After that, New link opens
-          the same dialog everywhere (header, C, ⌘K). */}
-      <DashboardMain
-        firstRun={firstRun}
-        stats={s}
-        data={data}
-        days={range.days}
-        quickCreate={{
-          create: data.create,
-          activeDomains,
-          defaultDomainId,
-          atLimit: s.totalLinks >= limits.links,
-          onCreated: setCreated,
-          onSameDestinationMatch: (input, matchedLinks) =>
-            setSameDestination({ input, matchedLinks }),
-        }}
-      />
-
-      <LinkPreviewDialog
-        title="Link created"
-        link={created}
-        onClose={() => setCreated(null)}
-        orgQr={orgQr}
-      />
-
-      <SameDestinationDialog
-        matchedLinks={sameDestination?.matchedLinks ?? null}
-        pending={data.create.isPending}
-        onClose={() => setSameDestination(null)}
-        onAddToExisting={(matchedLink) => resolveMatch({ mergeIntoLinkId: matchedLink.id })}
-        onCreateSeparate={() => resolveMatch({ forceSeparateLink: true })}
-      />
+      {firstRun ? (
+        <FirstRun onCreate={openNewLink} />
+      ) : (
+        <div data-setup-body>
+          <DashboardBody stats={s} data={data} days={range.days} />
+        </div>
+      )}
     </div>
   );
 }
@@ -446,231 +362,18 @@ function useHeldFirstRun(firstRun: boolean, holding: boolean): boolean {
   return shown;
 }
 
-/** Under the header: the first-link screen for somebody who can write to an
- * empty org, the dashboard otherwise. */
-function DashboardMain({
-  firstRun,
-  stats,
-  data,
-  days,
-  quickCreate,
-}: {
-  firstRun: boolean;
-  stats: NonNullable<DashboardData["stats"]>;
-  data: DashboardData;
-  /** The range the insights row compares over. */
-  days: number;
-  quickCreate: QuickCreateProps;
-}) {
-  if (firstRun) return <FirstRun {...quickCreate} />;
-  return (
-    <div data-setup-body>
-      <DashboardBody stats={stats} data={data} days={days} />
-    </div>
-  );
-}
-
 /** A new account's dashboard under its header: one plain panel with a
- * title, one line and the field, the way an empty page looks in Resend or
- * Stripe. No feature list, no stand-in rows: the field is the point. */
-function FirstRun(form: QuickCreateProps) {
+ * title, one line and one button, the way an empty page looks in Resend or
+ * Stripe. No feature list, no stand-in rows. */
+function FirstRun({ onCreate }: { onCreate: () => void }) {
   return (
-    <section className="flex flex-col items-center rounded-xl bg-surface px-5 py-12 text-center smooth-shadow-ring-xs sm:py-20">
+    <section className="flex flex-col items-center rounded-xl bg-surface px-5 py-14 text-center smooth-shadow-ring-xs sm:py-20">
       <h2 className="text-lg font-semibold tracking-tight text-balance">Shorten your first link</h2>
-      <p className="mt-1.5 text-sm text-pretty text-muted">
-        Paste a long URL. Its clicks and QR code show up here.
-      </p>
-      <div className="mt-6 w-full max-w-[560px] text-left">
-        <QuickCreateCard {...form} />
-      </div>
-    </section>
-  );
-}
-
-function QuickCreateDomainSelect({
-  activeDomains,
-  domainId,
-  onChange,
-}: {
-  activeDomains: DomainDTO[];
-  domainId: string | null;
-  onChange: (id: string | null) => void;
-}) {
-  const linkHost = useLinkHost();
-  if (!activeDomains.length) return null;
-  return (
-    <div className="sm:w-48">
-      <MenuSelect
-        label="Domain"
-        className="h-12 text-base sm:text-sm"
-        value={domainId ?? ""}
-        onChange={(v) => onChange(v || null)}
-        options={[
-          { value: "", label: linkHost },
-          ...activeDomains.map((d) => ({ value: d.id, label: displayHost(d.hostname) })),
-        ]}
-      />
-    </div>
-  );
-}
-
-interface QuickCreateProps {
-  create: ReturnType<typeof useLinkMutations>["create"];
-  activeDomains: DomainDTO[];
-  /** The org's default domain (#69), already checked against activeDomains. */
-  defaultDomainId: string | null;
-  atLimit: boolean;
-  onCreated: (link: LinkDTO) => void;
-  onSameDestinationMatch: (input: LinkInput, matchedLinks: LinkDTO[]) => void;
-}
-
-/** A field reason short enough for the field itself. */
-const fieldReason = (message: string) => (message.length <= 32 ? message : "Check this URL");
-
-/** The no-fuss link creator: paste a URL, pick a domain, done. */
-function QuickCreateCard({
-  create,
-  activeDomains,
-  defaultDomainId,
-  atLimit,
-  onCreated,
-  onSameDestinationMatch,
-}: QuickCreateProps) {
-  const toast = useToast();
-  // undefined means "not chosen yet", which is not the same as choosing the
-  // shared domain: until someone picks, the card follows the org default,
-  // including when the domains query answers after this first render.
-  const [picked, setPicked] = useState<string | null | undefined>(undefined);
-  const domainId = picked === undefined ? defaultDomainId : picked;
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    getValues,
-    setValue,
-    setFocus,
-    setError,
-    clearErrors,
-    formState: { errors },
-  } = useForm({
-    resolver: valibotResolver(destinationSchema),
-    defaultValues: { destination: "" },
-  });
-  const error = errors.destination?.message;
-
-  // Type or paste anywhere on the dashboard and it lands in this field:
-  // this screen has one job, so a keystroke is enough to start it.
-  useEffect(() => {
-    const busyElsewhere = () => {
-      const el = document.activeElement;
-      if (!(el instanceof HTMLElement)) return false;
-      return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
-    };
-    const fill = (value: string) => {
-      setValue("destination", value);
-      clearErrors("destination");
-      setFocus("destination");
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || busyElsewhere()) return;
-      // The browser won't route this keystroke to an input we focus mid-event,
-      // so append it by hand. busyElsewhere() already excluded the field
-      // itself, so there's no double-insert.
-      e.preventDefault();
-      fill((getValues("destination") ?? "") + e.key);
-    };
-    const onPaste = (e: ClipboardEvent) => {
-      if (busyElsewhere()) return;
-      const text = e.clipboardData?.getData("text")?.trim();
-      if (!text) return;
-      e.preventDefault();
-      fill(text);
-    };
-    // Capture phase, so this claims the key before the shell's G chords
-    // (go-shortcuts.ts) see it: they skip a key somebody already took.
-    document.addEventListener("keydown", onKeyDown, true);
-    document.addEventListener("paste", onPaste);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.removeEventListener("paste", onPaste);
-    };
-  }, [getValues, setFocus, setValue, clearErrors]);
-
-  // Validated on submit: the button stays live and a bad URL marks the
-  // field, with the reason inside it, rather than a toast.
-  const submit = handleSubmit(
-    (data) => {
-      if (create.isPending) return;
-      if (atLimit) {
-        toast("Link limit reached: delete a link or upgrade for more", "error");
-        return;
-      }
-      const input: LinkInput = { destination: data.destination.trim(), domainId };
-      create.mutate(input, {
-        onSuccess: (link) => {
-          reset({ destination: "" });
-          onCreated(link);
-        },
-        onError: (e) => {
-          if (e instanceof ApiError && e.code === "same_destination_match") {
-            // SAFETY: guarded by the same_destination_match code above, and
-            // the route that sets that code attaches matchedLinks with it.
-            const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
-            onSameDestinationMatch(input, matchedLinks);
-            return;
-          }
-          // A destination the server refuses is this field's problem.
-          if (e instanceof ApiError && e.status === 400) {
-            setError("destination", { message: e.message }, { shouldFocus: true });
-            return;
-          }
-          withErrorToast(toast)(e);
-        },
-      });
-    },
-    () => setFocus("destination"),
-  );
-
-  return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <div className="relative min-w-0 flex-1">
-        <IconLink
-          aria-hidden
-          size={16}
-          className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-placeholder"
-        />
-        <Input
-          {...register("destination", { onChange: () => clearErrors("destination") })}
-          className="h-12 pl-9 text-base shadow-none sm:text-[15px]"
-          placeholder="https://example.com/launch"
-          aria-label="Destination URL"
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? "first-link-error" : undefined}
-          inputMode="url"
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          style={error ? { paddingRight: "9rem" } : undefined}
-        />
-        {error && (
-          <span
-            id="first-link-error"
-            className="pointer-events-none absolute top-1/2 right-3 max-w-32 -translate-y-1/2 truncate text-xs text-danger"
-          >
-            {fieldReason(error)}
-          </span>
-        )}
-      </div>
-      <QuickCreateDomainSelect
-        activeDomains={activeDomains}
-        domainId={domainId}
-        onChange={setPicked}
-      />
-      <Button variant="primary" type="submit" className="h-12 px-5">
-        <BusyContent busy={create.isPending}>Create link</BusyContent>
+      <p className="mt-1.5 text-sm text-pretty text-muted">Its clicks and QR code show up here.</p>
+      <Button variant="primary" className="mt-6" onClick={onCreate}>
+        <IconPlus size={15} aria-hidden /> Create link
       </Button>
-    </form>
+    </section>
   );
 }
 

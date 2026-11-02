@@ -29,8 +29,13 @@ test("a new account arrives with an organization and one question", async ({ pag
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
   await expect(page.getByRole("term").getByText("Clicks", { exact: true })).toHaveCount(0);
 
-  await page.getByPlaceholder("https://example.com/launch").first().fill("example.com/first-run");
+  // The panel's button opens the New link form every page uses.
   await page.getByRole("button", { name: "Create link" }).click();
+  const form = page.getByRole("dialog", { name: "New link" });
+  await form
+    .getByRole("textbox", { name: "Destination", exact: true })
+    .fill("example.com/first-run");
+  await form.getByRole("button", { name: "Create link" }).click();
 
   // The QR and the short URL, in the same dialog every other creation uses.
   const dialog = page.getByRole("dialog", { name: "Link created" });
@@ -45,29 +50,6 @@ test("a new account arrives with an organization and one question", async ({ pag
   await expect(
     page.getByRole("group", { name: "Range" }).getByRole("button", { name: "7d", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-});
-
-test("typing or pasting anywhere on the dashboard goes into the link field", async ({ page }) => {
-  await signUpThroughForm(page, `typeahead-${Date.now()}@gmail.com`, password);
-
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(field).toBeVisible();
-
-  // Move focus off the field, then type: it should catch the keystrokes.
-  await page.getByRole("heading", { name: "Shorten your first link" }).click();
-  await page.keyboard.type("example.com/typed");
-  await expect(field).toHaveValue("example.com/typed");
-  await expect(field).toBeFocused();
-
-  // A paste while the field is not focused fills it without submitting.
-  await page.getByRole("heading", { name: "Shorten your first link" }).click();
-  await page.evaluate(() => {
-    const data = new DataTransfer();
-    data.setData("text", "  https://pasted.example/launch  ");
-    document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
-  });
-  await expect(field).toHaveValue("https://pasted.example/launch");
-  await expect(page.getByRole("dialog", { name: "Link created" })).toHaveCount(0);
 });
 
 test("deleting the last organization asks for a new one, not for a first link", async ({

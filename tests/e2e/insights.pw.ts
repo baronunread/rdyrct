@@ -41,12 +41,9 @@ test("the first-run page keeps the dashboard header around one plain panel", asy
   await expect(page.getByRole("button", { name: /New link/ })).toBeVisible();
   await expect(page.getByRole("group", { name: "Range" })).toHaveCount(0);
 
-  // Submit stays live; a bad address marks the field instead of a toast.
-  const field = page.getByRole("textbox", { name: "Destination URL", exact: true });
-  await field.fill("not a url");
+  // The panel's one button opens the same New link form as the header.
   await page.getByRole("button", { name: "Create link" }).click();
-  await expect(field).toHaveAttribute("aria-invalid", "true");
-  await expect(field).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "New link" })).toBeVisible();
 });
 
 test("the dashboard's range control switches the period and locks what the plan hides", async ({

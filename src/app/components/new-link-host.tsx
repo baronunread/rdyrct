@@ -31,9 +31,17 @@ import { linkFieldError } from "../lib/link-field-errors";
  * twice, as a field parked on the dashboard and as the links page's own
  * editor, and each copy handled a duplicate destination its own way.
  */
-const NewLinkContext = createContext<{ openNewLink: () => void; canCreate: boolean }>({
+const NewLinkContext = createContext<{
+  openNewLink: () => void;
+  canCreate: boolean;
+  /** A link is on its way: the form, its duplicate question or its "Link
+   * created" dialog is open, or the save is in flight. The dashboard holds
+   * its first-run panel until this settles. */
+  busy: boolean;
+}>({
   openNewLink: () => {},
   canCreate: false,
+  busy: false,
 });
 
 export function useNewLink() {
@@ -54,8 +62,7 @@ export function NewLinkButton({ onClick }: { onClick: () => void }) {
 }
 
 /** `C` opens the dialog, unless the key is for a field, carries a modifier,
- * another dialog is already on screen, or something took the key first (the
- * first-run field on the dashboard, which catches every keystroke). */
+ * or another dialog is already on screen. */
 function useNewLinkShortcut(open: () => void, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
@@ -150,7 +157,8 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
     );
   };
 
-  const value = useMemo(() => ({ openNewLink, canCreate }), [openNewLink, canCreate]);
+  const busy = open || match !== null || created !== null || create.isPending;
+  const value = useMemo(() => ({ openNewLink, canCreate, busy }), [openNewLink, canCreate, busy]);
   return (
     <NewLinkContext.Provider value={value}>
       {children}
