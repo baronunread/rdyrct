@@ -800,13 +800,22 @@ function EnterpriseTerms({ limits }: { limits: PlanLimits }) {
   );
 }
 
+/** The organizations meter is worth a row only where there is more than
+ * one to have (Enterprise), or more owned than the plan covers (a downgrade
+ * in its grace period). "1 of 1" says nothing. */
+function showsOrgs(usage: UsageSnapshot): boolean {
+  return usage.ownedOrgLimit > 1 || usage.ownedOrgs > usage.ownedOrgLimit;
+}
+
 /** The plan's meters, as rows of the plan card. */
 function UsageInPlan({ usage }: { usage: UsageSnapshot }) {
   if (!usage.org) return null;
   return (
     <>
       <UsageRows snapshot={usage} limits={usage.org.limits} />
-      <UsageRow label="Organizations" count={usage.ownedOrgs} limit={usage.ownedOrgLimit} />
+      {showsOrgs(usage) && (
+        <UsageRow label="Organizations" count={usage.ownedOrgs} limit={usage.ownedOrgLimit} />
+      )}
     </>
   );
 }
@@ -817,11 +826,13 @@ function UsageGroup({ snapshot }: { snapshot: UsageSnapshot }) {
   return (
     <SettingsGroup title="Usage" hint={snapshot.org.name}>
       <UsageRows snapshot={snapshot} limits={limits} />
-      <UsageRow
-        label="Organizations you own"
-        count={snapshot.ownedOrgs}
-        limit={snapshot.ownedOrgLimit}
-      />
+      {showsOrgs(snapshot) && (
+        <UsageRow
+          label="Organizations you own"
+          count={snapshot.ownedOrgs}
+          limit={snapshot.ownedOrgLimit}
+        />
+      )}
     </SettingsGroup>
   );
 }

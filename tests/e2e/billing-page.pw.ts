@@ -72,7 +72,10 @@ test("a subscriber sees price, renewal, usage in the plan card, card and invoice
   await page.goto("/billing");
   await expect(page.getByText("$9 a month, renews Nov 14")).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
-  await expect(page.getByText("Organizations", { exact: true })).toBeVisible();
+  // The meters sit in the plan card; one organization of one is not worth a
+  // row, so only the ones that can run out show.
+  await expect(page.getByText("Links", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Organizations", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
   await expect(page.getByRole("button", { name: "View invoices" })).toBeVisible();
 
