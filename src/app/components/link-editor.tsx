@@ -247,31 +247,39 @@ function UtmFields({
   const open = showMore || !!form.utmTerm || !!form.utmContent;
   return (
     <fieldset className="flex min-w-0 flex-col gap-2">
-      <legend className="mb-2 flex w-full items-baseline justify-between gap-3">
-        <span className="text-sm font-semibold">UTM tags</span>
-        <span className="text-xs text-muted">Added to the destination</span>
-      </legend>
+      <legend className="mb-2 text-sm font-semibold">UTM tags</legend>
       <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
         {UTM_MAIN.map((f) => (
           <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
         ))}
       </div>
-      {open ? (
-        <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
+      {/* Closed, the row is still laid out, invisible, under the button: the
+          centred dialog would otherwise grow and jump when it opens. Not on
+          a phone, where the sheet grows from the bottom edge and two
+          stacked fields would be a lot of empty space. */}
+      <div className="grid *:[grid-area:1/1]">
+        <div
+          inert={!open}
+          className={cn(
+            "grid grid-cols-1 gap-2 min-[420px]:grid-cols-2",
+            !open && "max-sm:hidden sm:invisible",
+          )}
+        >
           {UTM_MORE.map((f) => (
             <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
           ))}
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={onShowMore}
-          aria-expanded={false}
-          className="-ml-1 flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-1 text-xs text-muted transition-colors [@media(hover:hover)]:hover:text-text"
-        >
-          <Plus size={13} aria-hidden /> Term and content
-        </button>
-      )}
+        {!open && (
+          <button
+            type="button"
+            onClick={onShowMore}
+            aria-expanded={false}
+            className="-ml-1 flex h-8 w-fit cursor-pointer items-center gap-1 self-start rounded-md px-1 text-xs text-muted transition-colors [@media(hover:hover)]:hover:text-text"
+          >
+            <Plus size={13} aria-hidden /> Term and content
+          </button>
+        )}
+      </div>
     </fieldset>
   );
 }
@@ -609,17 +617,23 @@ function LinkSummary({
     <dl className="flex min-w-0 flex-col gap-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-xs text-muted">Short link</dt>
-        <dd className="font-mono text-[13px] font-bold [overflow-wrap:anywhere]">
+        {/* Clamped, and as tall as the clamp from the start (min-h in lh):
+            a long slug or URL would otherwise grow the column, and the
+            centred dialog with it, a line per keystroke. The fields show
+            the whole value. */}
+        <dd className="line-clamp-2 min-h-[2lh] font-mono text-[13px] font-bold [overflow-wrap:anywhere]">
           {host}/{slug || <span className="font-sans font-normal text-muted">(random)</span>}
         </dd>
       </div>
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-xs text-muted">Opens</dt>
-        <dd className="font-mono text-[11.5px] leading-relaxed text-muted [overflow-wrap:anywhere]">
+        {/* The address and its tags clamp apart, so a long address never
+            hides the tags just typed. */}
+        <dd className="flex min-h-[4lh] flex-col font-mono text-[11.5px] leading-relaxed text-muted [overflow-wrap:anywhere]">
           {opened ? (
             <>
-              {opened.base}
-              <span className="text-text">{opened.tags}</span>
+              <span className={opened.tags ? "line-clamp-2" : "line-clamp-4"}>{opened.base}</span>
+              {opened.tags && <span className="line-clamp-2 text-text">{opened.tags}</span>}
             </>
           ) : (
             "Nothing yet"

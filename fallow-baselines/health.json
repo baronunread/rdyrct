@@ -91,7 +91,7 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 3
+        "count": 5
       }
     },
     "src/app/components/link-marks.tsx": {
@@ -528,8 +528,8 @@
     "src/app/routes/link-import.tsx:complexity",
     "src/app/routes/admin/users.tsx:hidden coupling",
     "src/app/lib/account-security.ts:complexity",
-    "src/app/components/command-menu.tsx:complexity",
     "src/worker/routes/billing.ts:hidden coupling",
+    "src/app/components/command-menu.tsx:complexity",
     "src/app/routes/admin/links.tsx:hidden coupling",
     "tests/consent.test.ts:hidden coupling",
     "src/worker/routes/admin-links.ts:hidden coupling",
