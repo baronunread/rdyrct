@@ -61,10 +61,14 @@ test("the selected tab survives a full page reload", async ({ page }) => {
 
   await page.getByRole("button", { name: "MCP", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=mcp/);
-  await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Use rdyrct from your AI assistant" }),
+  ).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Use rdyrct from your AI assistant" }),
+  ).toBeVisible();
   await expect(page.getByPlaceholder("Key name, e.g. Claude")).not.toBeVisible();
 });
 
@@ -101,8 +105,46 @@ test("the connect wizard notices a new connection while waiting", async ({ page 
     [`consent-${clientId}`, clientId, email],
   );
 
-  await expect(page.getByRole("cell", { name: "Wizard Client", exact: true })).toBeVisible({
+  await expect(
+    page.getByRole("region", { name: "Connected" }).getByText("Wizard Client"),
+  ).toBeVisible({
     timeout: 10_000,
   });
   await expect(page.getByText("Waiting for the connection")).not.toBeVisible();
+  await expect(page.getByText(/Last used/)).toBeVisible();
+});
+
+test("the assistant tiles switch the steps and stay in the URL", async ({ page }) => {
+  await signUpAndVerify(page, `apikeys-tiles-${Date.now()}@gmail.com`, E2E_PASSWORD);
+  await page.goto("/api-keys?tab=mcp");
+
+  await expect(page.getByText("Add custom connector", { exact: false }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Claude", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.getByRole("button", { name: "Cursor", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]client=cursor/);
+  const cursorLink = page.getByRole("link", { name: "Add to Cursor" });
+  await expect(cursorLink).toHaveAttribute(
+    "href",
+    /^cursor:\/\/anysphere\.cursor-deeplink\/mcp\/install\?name=rdyrct&config=/,
+  );
+
+  await page.getByRole("button", { name: "VS Code", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Add to VS Code" })).toHaveAttribute(
+    "href",
+    /^vscode:mcp\/install\?/,
+  );
+
+  await page.getByRole("button", { name: "Claude Code", exact: true }).click();
+  await expect(page.getByText("claude mcp add --transport http rdyrct")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Claude Code", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByText("What it can do")).toBeVisible();
 });

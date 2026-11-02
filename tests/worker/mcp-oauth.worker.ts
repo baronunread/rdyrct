@@ -301,6 +301,47 @@ describe("MCP OAuth (#139 follow-up)", () => {
     expect(count).toBe(1);
   });
 
+  it("lists only the caller's own connections, with the client name and last use", async () => {
+    const cookie = await freeOwnerCookie();
+    await registerTestClient();
+    const { verifier, challenge } = await pkcePair();
+    await exchangeCode(await grantAuthorizationCode(cookie, challenge), verifier);
+
+    const res = await fetchWorker(
+      new Request("http://localhost/api/oauth-connections", { headers: { cookie } }),
+      authEnv(),
+    );
+    expect(res.status).toBe(200);
+    const list =
+      await jsonBody<
+        { clientId: string; clientName: string; createdAt: number; lastUsedAt: number }[]
+      >(res);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ clientId: CLIENT_ID, clientName: "Test Client" });
+    expect(list[0]!.lastUsedAt).toBeGreaterThan(0);
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('other-2', 'Other', 'other2@example.com', 1, 0, 'free', 0, 0)",
+      ),
+      env.DB.prepare(
+        "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-other-2', 'other-2', 'credential', 'other-2', ?, 0, 0)",
+      ).bind(await hashPassword(TEST_PASSWORD)),
+    ]);
+    const otherCookie = await signInCookie("other2@example.com", TEST_PASSWORD);
+    const otherRes = await fetchWorker(
+      new Request("http://localhost/api/oauth-connections", { headers: { cookie: otherCookie } }),
+      authEnv(),
+    );
+    expect(await jsonBody<unknown[]>(otherRes)).toEqual([]);
+
+    const anon = await fetchWorker(
+      new Request("http://localhost/api/oauth-connections"),
+      authEnv(),
+    );
+    expect(anon.status).toBe(401);
+  });
+
   it("401s an unauthenticated revoke instead of 500ing on a null user", async () => {
     const res = await fetchWorker(
       new Request("http://localhost/api/oauth-connections/whatever", { method: "DELETE" }),

@@ -4,26 +4,6 @@ import { copyToClipboard } from "../lib/clipboard";
 import { useMcpUrl } from "../lib/mcp-url";
 import { useToast } from "../ui/toast";
 
-/** Just the endpoint, for the MCP tab's connect guide: an OAuth client
- * discovers and drives the auth flow itself once it has the URL, so there
- * is no header to paste alongside it (a client that takes a static key
- * instead gets the URL and an API key's bearer header, from the agent prompt
- * below). */
-export function McpUrlCopyButton() {
-  const toast = useToast();
-  const url = useMcpUrl();
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => void copyToClipboard(url, toast).catch(() => {})}
-      className="shrink-0"
-    >
-      <Copy size={14} /> Copy URL
-    </Button>
-  );
-}
-
 // Coding agents (Claude Code, Cursor, etc.) can be told to wire up a remote
 // MCP server themselves rather than walking a person through settings
 // screens by hand. The prompt has to cover both paths a client can take,

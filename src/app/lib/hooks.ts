@@ -448,8 +448,8 @@ export interface ConnectedApp {
   id: string;
   clientId: string;
   clientName: string;
-  scopes: string[];
   createdAt: Date;
+  lastUsedAt: Date;
 }
 
 // Connected apps (#139 follow-up): an OAuth grant, unlike an API key, is
@@ -469,22 +469,20 @@ export const connectedAppsQuery = (polling = false) =>
     queryKey: ["connected-apps"],
     refetchInterval: polling ? 3000 : false,
     queryFn: async () => {
-      const { data, error } = await authClient.oauth2.getConsents();
-      if (error) throw new Error(error.message ?? "Could not load connected apps");
-      return Promise.all(
-        (data ?? []).map(async (consent) => {
-          const client = await authClient.oauth2.publicClient({
-            query: { client_id: consent.clientId },
-          });
-          return {
-            id: consent.id,
-            clientId: consent.clientId,
-            clientName: client.data?.client_name || consent.clientId,
-            scopes: consent.scopes,
-            createdAt: consent.createdAt,
-          };
-        }),
-      );
+      const rows = await api<
+        {
+          id: string;
+          clientId: string;
+          clientName: string;
+          createdAt: number;
+          lastUsedAt: number;
+        }[]
+      >("/oauth-connections");
+      return rows.map((row) => ({
+        ...row,
+        createdAt: new Date(row.createdAt),
+        lastUsedAt: new Date(row.lastUsedAt),
+      }));
     },
   });
 

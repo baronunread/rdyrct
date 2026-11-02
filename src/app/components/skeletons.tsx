@@ -1180,16 +1180,18 @@ export function ApiKeysSkeleton() {
   );
 }
 
-/** /api-keys?tab=mcp: same header and tab bar. A table-shaped guess below
- * them either way — whether this resolves to the connect guide (a first
- * visit) or the connected-apps table (a returning one) isn't known until
- * the query answers, and this is a brief, transient state either way. */
+/** /api-keys?tab=mcp: same header and tab bar, then the hero and the setup
+ * card. The Connected list above the card appears only for somebody with a
+ * grant, which the query has not answered yet. */
 function McpTabSkeleton() {
   return (
     <SkeletonStatus testId="mcp-tab-skeleton">
       <HeaderSkeleton sub subWidth="w-60" />
       <ApiTabBarSkeleton />
-      <TableSkeleton rows={3} />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-28 w-full rounded-2xl" />
+        <Skeleton className="h-96 w-full rounded-2xl" />
+      </div>
     </SkeletonStatus>
   );
 }

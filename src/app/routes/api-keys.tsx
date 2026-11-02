@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { TabUnderline } from "../ui/tab-underline";
 import { errorMessage } from "@/app/lib/error-message";
 import { useCurrentOrg } from "../lib/current-org";
@@ -10,10 +10,7 @@ import {
   connectedAppsQuery,
   useApiKeys,
   useApiKeyMutations,
-  useConnectedApps,
   useCurrentUser,
-  useRevokeConnectedApp,
-  type ConnectedApp,
 } from "../lib/hooks";
 import type { ApiKeyDTO } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
@@ -25,153 +22,11 @@ import { relativeDate, shortDate } from "../lib/dates";
 import { ExternalLink, Plus, Trash2 } from "../ui/icons";
 import { RDYRCT_SITE } from "@/shared/site";
 import { cn } from "../ui/cn";
-import { McpConnectWizard } from "../components/mcp-connect-wizard";
+import { McpTab } from "../components/mcp-tab";
 import { CreateApiKeyDialog } from "../components/create-api-key-dialog";
 import { NoOrgState } from "../components/no-org";
 import { ApiKeysSkeleton } from "../components/skeletons";
 import { StableLabel } from "../ui/stable-label";
-
-function ConnectedAppRow({ app, onRevoke }: { app: ConnectedApp; onRevoke: () => void }) {
-  return (
-    <tr>
-      <Td className="truncate text-sm font-semibold">{app.clientName}</Td>
-      <Td className="tnum text-sm whitespace-nowrap text-muted">{relativeDate(app.createdAt)}</Td>
-      <Td className="py-1.5">
-        <div className="flex justify-end">
-          <IconButton label={`Revoke ${app.clientName}`} danger onClick={onRevoke}>
-            <Trash2 size={15} />
-          </IconButton>
-        </div>
-      </Td>
-    </tr>
-  );
-}
-
-/** Connected apps: OAuth grants (#139 follow-up), the recommended way to
- * connect an MCP client now — a real consent screen, no key to copy or
- * lose. Per-user, not per-org: unlike API keys below, any member sees and
- * revokes their own connections, since authorizing one is a session action
- * (a browser consent screen), not minting a standing credential. */
-// Loading and empty are both handled a level up, by ConnectedAppsSection's
-// wizard gate: the empty case shows the connect guide instead of a plain
-// "no apps yet" line, so this only ever renders once `apps` is non-empty.
-function ConnectedAppsTable({
-  apps,
-  onRevoke,
-}: {
-  apps: ConnectedApp[];
-  onRevoke: (app: ConnectedApp) => void;
-}) {
-  return (
-    <Table fixed>
-      <thead>
-        <tr>
-          <Th>App</Th>
-          <Th className="w-32 sm:w-40">Connected</Th>
-          <Th className="w-14">
-            <span className="sr-only">Actions</span>
-          </Th>
-        </tr>
-      </thead>
-      <tbody>
-        {apps.map((app) => (
-          <ConnectedAppRow key={app.id} app={app} onRevoke={() => onRevoke(app)} />
-        ))}
-      </tbody>
-    </Table>
-  );
-}
-
-/** Drives the connect wizard's two states (the guide, and waiting for the
- * first grant to appear) on top of the same useConnectedApps() query the
- * table below reads — there's no webhook for "finished the OAuth flow in
- * your AI tool", so a new id showing up in this list, polled while waiting,
- * is the only signal there is. */
-function useConnectWizard() {
-  const toast = useToast();
-  const [waiting, setWaiting] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
-  const knownIds = useRef<Set<string>>(new Set());
-  const apps = useConnectedApps(waiting);
-
-  useEffect(() => {
-    if (!waiting) return;
-    const fresh = apps.data?.find((app) => !knownIds.current.has(app.id));
-    if (!fresh) return;
-    toast(`${fresh.clientName} connected`);
-    setWaiting(false);
-    setGuideOpen(false);
-  }, [waiting, apps.data, toast]);
-
-  return {
-    apps,
-    waiting,
-    showWizard: !apps.isLoading && (waiting || guideOpen || apps.data?.length === 0),
-    startWaiting: () => {
-      knownIds.current = new Set((apps.data ?? []).map((app) => app.id));
-      setWaiting(true);
-    },
-    cancelWaiting: () => setWaiting(false),
-    openGuide: () => setGuideOpen(true),
-  };
-}
-
-function ConnectedAppsSection() {
-  const toast = useToast();
-  const { apps, waiting, showWizard, startWaiting, cancelWaiting, openGuide } = useConnectWizard();
-  const revokeApp = useRevokeConnectedApp();
-  const [revokeTarget, setRevokeTarget] = useState<ConnectedApp | null>(null);
-
-  const revoke = async () => {
-    if (!revokeTarget) return;
-    try {
-      await revokeApp.mutateAsync(revokeTarget.id);
-      toast("Disconnected");
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    } finally {
-      setRevokeTarget(null);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-4">
-      {apps.isLoading ? (
-        <TableSkeleton rows={3} testId="connected-apps-rows-skeleton" />
-      ) : showWizard ? (
-        <McpConnectWizard
-          waiting={waiting}
-          onStartWaiting={startWaiting}
-          onCancelWaiting={cancelWaiting}
-        />
-      ) : (
-        <>
-          <ConnectedAppsTable apps={apps.data ?? []} onRevoke={setRevokeTarget} />
-          <div>
-            <Button variant="outline" size="sm" onClick={openGuide}>
-              Connect another app
-            </Button>
-          </div>
-        </>
-      )}
-
-      <ConfirmDialog
-        title="Disconnect app"
-        open={!!revokeTarget}
-        onClose={() => setRevokeTarget(null)}
-        onConfirm={revoke}
-        confirmLabel="Disconnect app"
-        danger
-        pending={revokeApp.isPending}
-      >
-        <p className="text-sm">
-          <strong>{revokeTarget?.clientName}</strong> can't get a new token after this. Anything it
-          already has keeps working for up to an hour, until that token expires.
-        </p>
-      </ConfirmDialog>
-    </div>
-  );
-}
 
 /**
  * A key as the API may send it: who made it, once the worker says so. Keys
@@ -450,7 +305,7 @@ function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
       />
       <ApiTabBar active={tab} onChange={setTab} />
       {tab === "mcp" ? (
-        <ConnectedAppsSection />
+        <McpTab />
       ) : isOwner ? (
         <ApiKeysSection orgId={orgId} section={section} />
       ) : (
