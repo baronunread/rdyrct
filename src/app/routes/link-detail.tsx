@@ -292,7 +292,6 @@ function LinkPanels({ s }: { s: LinkStats }) {
             listTab({
               value: "referrers",
               label: "Referrers",
-              head: ["Source", "Clicks"],
               items: s.referrers,
               formatKey: sourceLabel,
               lead: (key) => <SourceTile source={key} />,
@@ -304,7 +303,6 @@ function LinkPanels({ s }: { s: LinkStats }) {
               label: "Campaigns",
               panel: (
                 <BarList
-                  head={["Campaign", "Clicks"]}
                   items={s.campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))}
                   empty="Tag this link with utm_campaign and its clicks appear here."
                 />
@@ -319,7 +317,6 @@ function LinkPanels({ s }: { s: LinkStats }) {
               label: "Devices",
               panel: (
                 <BarList
-                  head={["Device", "Clicks"]}
                   items={s.devices}
                   formatKey={deviceLabel}
                   empty="Phone, desktop or tablet, counted here once clicks arrive."

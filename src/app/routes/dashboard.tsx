@@ -194,7 +194,6 @@ function DashboardBody({
               label: "Top links",
               panel: (
                 <BarList
-                  head={["Link", "Clicks"]}
                   empty="Your busiest links appear here once they start collecting clicks."
                   items={topLinks.map((l) => ({ key: l.id, clicks: l.clicks }))}
                   formatKey={(id) => {

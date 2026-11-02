@@ -195,22 +195,12 @@ function TabsSkeleton({
 
 const barWidths = [92, 71, 58, 44, 33, 24, 17];
 
-/** BarList: a 20px heading row unless `head` is false, then 30px bars
- * `gap-y-0.5` apart, the count in its own column. */
-function BarListSkeleton({ rows, head = true }: { rows: number; head?: boolean }) {
+/** BarList: 30px bars `gap-y-0.5` apart, the count in its own column. The
+ * app's lists have no column heads; the tab says what they list. */
+function BarListSkeleton({ rows }: { rows: number }) {
   return (
     <div className="flex flex-col">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5">
-        {head && (
-          <>
-            <span className="flex h-4 box-content items-center pb-1">
-              <Skeleton className="h-2.5 w-10" />
-            </span>
-            <span className="flex h-4 box-content items-center justify-end pb-1">
-              <Skeleton className="h-2.5 w-10" />
-            </span>
-          </>
-        )}
         {barWidths.slice(0, rows).map((w) => (
           <div key={w} className="contents">
             <Skeleton className="h-[30px]" style={{ width: `${w}%` }} />
@@ -234,7 +224,7 @@ function PlacesSkeleton({ className }: { className?: string }) {
             <Skeleton className="h-2.5 w-24" />
           </span>
         </div>
-        <BarListSkeleton rows={7} head={false} />
+        <BarListSkeleton rows={7} />
       </div>
     </PanelSkeleton>
   );

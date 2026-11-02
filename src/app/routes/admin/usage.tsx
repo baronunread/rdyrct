@@ -329,7 +329,6 @@ function TopLists({ s }: { s: AdminUsageData }) {
           label: "Top organizations",
           panel: (
             <BarList
-              head={["Organization", "Clicks"]}
               items={s.topOrgs.map((o) => ({ key: o.id, clicks: o.clicks }))}
               formatKey={(id) => {
                 const o = s.topOrgs.find((t) => t.id === id);
@@ -349,7 +348,6 @@ function TopLists({ s }: { s: AdminUsageData }) {
           label: "Top links",
           panel: (
             <BarList
-              head={["Link", "Clicks"]}
               items={s.topLinks.map((l) => ({ key: l.id, clicks: l.clicks }))}
               formatKey={(id) => {
                 const l = s.topLinks.find((t) => t.id === id);

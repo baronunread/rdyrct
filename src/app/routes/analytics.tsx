@@ -99,7 +99,6 @@ function SourcesPanel({ s, period }: { s: OrgStats; period?: string }) {
         listTab({
           value: "referrers",
           label: "Referrers",
-          head: ["Source", "Clicks"],
           items: s.referrers,
           formatKey: sourceLabel,
           lead: (key) => <SourceTile source={key} />,
@@ -110,7 +109,6 @@ function SourcesPanel({ s, period }: { s: OrgStats; period?: string }) {
           listTab({
             value: g.value,
             label: g.label,
-            head: [g.label.slice(0, -1), "Clicks"],
             items: g.items,
             limit: CARD_ROWS,
           }),
@@ -143,7 +141,6 @@ function LinksPanel({ s }: { s: OrgStats }) {
         listTab({
           value: "top",
           label: "Top links",
-          head: ["Link", "Clicks"],
           empty: "Your busiest links appear here once they start collecting clicks.",
           items: s.topLinks.map((l) => ({ key: l.id, clicks: l.clicks })),
           limit: CARD_ROWS,
@@ -192,7 +189,7 @@ function TimingPanel({ heatmap }: { heatmap: HeatmapRow[] }) {
           value: "weekday",
           label: "By weekday",
           // clicksByWeekday always returns all seven days.
-          panel: <BarList head={["Day", "Clicks"]} items={clicksByWeekday(heatmap)} />,
+          panel: <BarList items={clicksByWeekday(heatmap)} />,
         },
       ]}
     />
@@ -292,7 +289,6 @@ function AnalyticsReport({
                 label: "Devices",
                 panel: (
                   <BarList
-                    head={["Device", "Clicks"]}
                     items={s.devices}
                     formatKey={deviceLabel}
                     empty="Phone, desktop or tablet, counted here once clicks arrive."
