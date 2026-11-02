@@ -23,6 +23,8 @@ import { useCurrentOrg } from "../lib/current-org";
 import { readPreparedQrLogo, uploadPreparedQrLogo } from "../lib/qr-logo-file";
 import { qrContrast, toHex6 } from "../lib/qr-contrast";
 import { hasTransparency } from "../lib/qr-look";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 export type DotStyle = (typeof QR_DOT_STYLES)[number];
 export type CornerStyle = (typeof QR_CORNER_STYLES)[number];
@@ -162,23 +164,23 @@ function IconPicker<V extends string>({
       {options.map((o) => {
         const on = o.value === value;
         return (
-          <button
-            key={o.value}
-            type="button"
-            aria-label={o.name}
-            title={o.name}
-            aria-pressed={on}
-            disabled={disabled}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              "grid size-[34px] cursor-pointer place-items-center rounded-[7px] transition-[color,background-color,box-shadow,scale] duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:scale-[0.96] disabled:cursor-default disabled:active:scale-100",
-              on
-                ? "bg-surface text-text shadow-[0_0_0_1.5px_var(--accent)]"
-                : "text-muted enabled:[@media(hover:hover)]:hover:text-text",
-            )}
-          >
-            {o.face}
-          </button>
+          <Tooltip key={o.value} content={o.name}>
+            <button
+              type="button"
+              aria-label={o.name}
+              aria-pressed={on}
+              disabled={disabled}
+              onClick={() => onChange(o.value)}
+              className={cn(
+                "grid size-[34px] cursor-pointer place-items-center rounded-[7px] transition-[color,background-color,box-shadow,scale] duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:scale-[0.96] disabled:cursor-default disabled:active:scale-100",
+                on
+                  ? "bg-surface text-text shadow-[0_0_0_1.5px_var(--accent)]"
+                  : "text-muted enabled:[@media(hover:hover)]:hover:text-text",
+              )}
+            >
+              {o.face}
+            </button>
+          </Tooltip>
         );
       })}
     </div>
@@ -295,9 +297,9 @@ function LogoRow({
     </span>
   ) : logo ? (
     <span className="flex min-w-0 items-baseline gap-1">
-      <span className="max-w-48 truncate" title={name}>
-        {name}
-      </span>
+      <OverflowTip content={name}>
+        <span className="max-w-48 truncate">{name}</span>
+      </OverflowTip>
       {!disabled && (
         <>
           <span aria-hidden>·</span>

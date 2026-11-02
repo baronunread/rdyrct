@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ChevronDown, Info, X } from "@/app/ui/icons";
 import { cn } from "./cn";
+import { OverflowTip } from "./overflow-tip";
 import { Tooltip } from "./tooltip";
 
 // Lifted by a ring shadow rather than bordered (rdyrct-design, "The app's
@@ -132,17 +133,21 @@ export function FieldReason({
   reason: string;
   detail?: string;
 }) {
-  return (
-    <span
-      id={id}
-      className="ml-auto flex min-w-0 items-center gap-1 text-danger"
-      title={detail ?? reason}
-    >
+  const longer = detail && detail !== reason ? detail : undefined;
+  const row = (
+    <span id={id} className="ml-auto flex min-w-0 items-center gap-1 text-danger">
       <X aria-hidden size={11} stroke={2.5} className="shrink-0" />
-      <span className="truncate">{reason}</span>
-      {detail && detail !== reason && <span className="sr-only">. {detail}</span>}
+      {longer ? (
+        <span className="truncate">{reason}</span>
+      ) : (
+        <OverflowTip content={reason}>
+          <span className="truncate">{reason}</span>
+        </OverflowTip>
+      )}
+      {longer && <span className="sr-only">. {longer}</span>}
     </span>
   );
+  return longer ? <Tooltip content={longer}>{row}</Tooltip> : row;
 }
 
 /** The label line: the name, its tip, and on the right the reason it is

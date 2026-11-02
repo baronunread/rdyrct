@@ -20,7 +20,7 @@ test("a new account arrives with an organization and one question", async ({ pag
 
   // The organization is real before anything is created: the switcher names
   // it, rather than saying there is none.
-  const switcher = page.getByTitle("Switch organization");
+  const switcher = page.getByRole("button", { name: "Switch organization" });
   await expect(switcher).toBeVisible();
   await expect(currentOrgName(page)).not.toHaveText("No organization");
 

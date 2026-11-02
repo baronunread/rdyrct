@@ -6,6 +6,7 @@ import { useToast } from "../ui/toast";
 import { ShortAddress } from "./short-address";
 import { readableUrl } from "../lib/display-url";
 import type { LinkStats } from "@/shared/types";
+import { OverflowTip } from "@/app/ui/overflow-tip";
 
 /** Every other address that still leads to this link: aliases and the 48h
  * one a rename leaves behind. Nothing at all when there are none. An
@@ -47,16 +48,17 @@ function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string;
 export function LinkFacts({ orgId, stats: s }: { orgId: string; stats: LinkStats }) {
   return (
     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-      <a
-        href={s.destination}
-        target="_blank"
-        rel="noreferrer"
-        title={s.destination}
-        className="flex max-w-full min-w-0 items-center gap-1 text-accent [@media(hover:hover)]:hover:underline"
-      >
-        <IconArrowRight size={14} aria-hidden className="shrink-0" />
-        <span className="truncate">{readableUrl(s.destination)}</span>
-      </a>
+      <OverflowTip content={s.destination}>
+        <a
+          href={s.destination}
+          target="_blank"
+          rel="noreferrer"
+          className="flex max-w-full min-w-0 items-center gap-1 text-accent [@media(hover:hover)]:hover:underline"
+        >
+          <IconArrowRight size={14} aria-hidden className="shrink-0" />
+          <span className="truncate">{readableUrl(s.destination)}</span>
+        </a>
+      </OverflowTip>
       <OtherAddresses orgId={orgId} linkId={s.id} url={s.url} />
     </div>
   );

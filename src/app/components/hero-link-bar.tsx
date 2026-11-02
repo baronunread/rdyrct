@@ -25,6 +25,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { CHALLENGE_LABEL } from "../lib/turnstile";
 import { cn } from "../ui/cn";
+import { Tooltip } from "@/app/ui/tooltip";
 
 // A QR code is useful only once a link exists. Keeping the renderer behind
 // that state avoids loading its encoder for everyone who only reads the page.
@@ -107,17 +108,22 @@ export function HeroBar({
         />
         {error && <BarReason id={reasonId} error={error} />}
       </div>
-      <Button
-        variant="primary"
-        type="submit"
-        disabled={disabled}
-        title={title}
-        className="h-9 rounded-lg sm:w-auto"
-      >
-        <BusyContent busy={busy}>
-          <ShortenLabel waiting={waiting} />
-        </BusyContent>
-      </Button>
+      {/* A disabled button takes no pointer events, so the reason sits on
+          a wrapper; grid keeps the button as wide as it was. */}
+      <Tooltip content={title}>
+        <span className="grid">
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={disabled}
+            className="h-9 rounded-lg sm:w-auto"
+          >
+            <BusyContent busy={busy}>
+              <ShortenLabel waiting={waiting} />
+            </BusyContent>
+          </Button>
+        </span>
+      </Tooltip>
     </div>
   );
 }

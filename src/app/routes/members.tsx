@@ -38,6 +38,7 @@ import { withErrorToast } from "../lib/mutation-toast";
 import { shortDate } from "../lib/dates";
 import { ROLE_LABEL, expiresLabel, lastActiveLabel, type InviteRowData } from "../lib/members-data";
 import posthog from "../lib/posthog";
+import { OverflowTip } from "@/app/ui/overflow-tip";
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
@@ -158,12 +159,12 @@ function PersonCell({
     <div className="flex min-w-0 items-center gap-3">
       {avatar}
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-sm font-semibold" title={title}>
-          {title}
-        </span>
-        <span className="truncate font-mono text-xs text-muted" title={detail}>
-          {detail}
-        </span>
+        <OverflowTip content={title}>
+          <span className="truncate text-sm font-semibold">{title}</span>
+        </OverflowTip>
+        <OverflowTip content={detail}>
+          <span className="truncate font-mono text-xs text-muted">{detail}</span>
+        </OverflowTip>
       </div>
     </div>
   );

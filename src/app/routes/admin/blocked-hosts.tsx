@@ -12,6 +12,7 @@ import { Table, Td, Th } from "../../ui/misc";
 import { BusyContent } from "../../ui/spinner";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
+import { OverflowTip } from "@/app/ui/overflow-tip";
 
 /** Destination hosts nobody may link to. Fed by a ban (only the hosts the
  * admin picks), and by hand here. Listed with a way to remove an entry, because a blocklist with no
@@ -139,12 +140,12 @@ function BlockedTable({
       <tbody>
         {rows.map((h) => (
           <tr key={h.host}>
-            <Td className="truncate font-mono text-sm font-semibold" title={h.host}>
-              {h.host}
-            </Td>
-            <Td className="truncate text-muted" title={h.reason}>
-              {h.reason || "None given"}
-            </Td>
+            <OverflowTip content={h.host}>
+              <Td className="truncate font-mono text-sm font-semibold">{h.host}</Td>
+            </OverflowTip>
+            <OverflowTip content={h.reason}>
+              <Td className="truncate text-muted">{h.reason || "None given"}</Td>
+            </OverflowTip>
             <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(h.createdAt)}</Td>
             <Td className="px-2 text-right">
               <IconButton

@@ -177,9 +177,9 @@ test("the users table keeps one line per user when the name and email are huge",
     return wrapper.scrollWidth - wrapper.clientWidth;
   });
   expect(tableScroll).toBeLessThanOrEqual(0);
-  // The full value stays reachable.
-  await expect(row.getByTitle(email)).toBeVisible();
-  await expect(row.getByTitle(longName).first()).toBeVisible();
+  // The full value stays in the row.
+  await expect(row.getByText(email)).toBeVisible();
+  await expect(row.getByText(longName).first()).toBeVisible();
 });
 
 test("an empty status filter says what it found, not an empty search", async ({ page }) => {

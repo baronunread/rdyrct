@@ -1,5 +1,5 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import type { ReactElement, ReactNode } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 import { cn } from "./cn";
 
 /**
@@ -31,16 +31,32 @@ export function Tooltip({
   children,
   side,
   grouped,
+  guard,
 }: {
-  content: ReactNode;
+  /** Empty (undefined, null or "") shows no tooltip at all. */
+  content?: ReactNode;
   children: ReactElement;
   /** Where it opens; Base UI's default is above. */
   side?: "top" | "right" | "bottom" | "left";
   /** Inside a TooltipGroup, which sets the delays for all of them. */
   grouped?: boolean;
+  /** Opens only when this says yes for the trigger, checked as the pointer
+   * enters or focus lands. OverflowTip uses it to skip text that fits. */
+  guard?: (trigger: HTMLElement) => boolean;
 }) {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const guarded = guard
+    ? {
+        open,
+        onOpenChange: (next: boolean) =>
+          setOpen(next && triggerRef.current !== null && guard(triggerRef.current)),
+      }
+    : {};
+  // Nothing to say, nothing to show: the child as it is.
+  if (content === undefined || content === null || content === "") return children;
   const root = (
-    <BaseTooltip.Root>
+    <BaseTooltip.Root {...guarded}>
       {/* Base UI waits 600ms by default, which is tuned for tooltips that
             repeat a control's own label. Ours carry advice you cannot get any
             other way, so waiting to be sure somebody meant it costs more than
@@ -50,7 +66,7 @@ export function Tooltip({
             re-entered, and started again, so the fade stuttered instead of
             running once. A tenth of a second absorbs that and is still gone
             before anyone reads it as lag. */}
-      <BaseTooltip.Trigger {...(grouped ? {} : ALONE)} render={children} />
+      <BaseTooltip.Trigger ref={triggerRef} {...(grouped ? {} : ALONE)} render={children} />
       <BaseTooltip.Portal>
         {/* Above every dialog, the nested ones (z-[70]) included: a tooltip
               is transient and always explains what is on top of it. */}

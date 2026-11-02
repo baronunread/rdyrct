@@ -36,6 +36,8 @@ import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
 import { Pager } from "../../ui/pagination";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** What an empty table says. It names the filter that matched nothing: with
  * only a status picked there is no search term to quote. */
@@ -181,18 +183,19 @@ function OrgCell({ org, onView }: { org: AdminOrgRow; onView: () => void }) {
     <span className="flex min-w-0 items-center gap-3">
       <LetterTile name={org.name} />
       <span className="flex min-w-0 flex-col gap-0.5 leading-tight">
-        <button
-          type="button"
-          onClick={onView}
-          title={org.name}
-          className="max-w-full cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
-        >
-          {org.name}
-        </button>
+        <OverflowTip content={org.name}>
+          <button
+            type="button"
+            onClick={onView}
+            className="max-w-full cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
+          >
+            {org.name}
+          </button>
+        </OverflowTip>
         {org.ownerEmail ? (
-          <span className="truncate font-mono text-xs text-muted" title={owner}>
-            {org.ownerEmail}
-          </span>
+          <Tooltip content={owner}>
+            <span className="truncate font-mono text-xs text-muted">{org.ownerEmail}</span>
+          </Tooltip>
         ) : (
           <span className="text-xs text-muted">No owner</span>
         )}
@@ -306,9 +309,9 @@ function OrgMembersTable({
           {members.map((m) => (
             <tr key={m.userId}>
               <Td className="font-semibold">{m.name}</Td>
-              <Td className="truncate font-mono text-xs text-muted" title={m.email}>
-                {m.email}
-              </Td>
+              <OverflowTip content={m.email}>
+                <Td className="truncate font-mono text-xs text-muted">{m.email}</Td>
+              </OverflowTip>
               {/* A role is an attribute of the row: text, not a pill. */}
               <Td className="text-muted capitalize">{m.role}</Td>
             </tr>

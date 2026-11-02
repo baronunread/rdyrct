@@ -65,6 +65,8 @@ import { linkStateDetail, linkStateRank } from "./link-state";
 import { LinkStateBadge } from "./link-state-badge";
 import { FilterPill, PHONE, RowMenuTrigger, SectionHeading, fullNumber } from "./admin-kit";
 import { BusyContent, Spinner } from "../../ui/spinner";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** The two columns both tables open with. Destination has no width of its
  * own: every other column is sized, so it takes what is left, which is the
@@ -343,24 +345,24 @@ function LinkRow({
           slugClassName="font-semibold"
         />
       </Td>
-      <Td
-        className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0"
-        title={link.destination}
-      >
-        {/* https is the default, so it is the one scheme left unsaid; an
+      <OverflowTip content={link.destination}>
+        <Td className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0">
+          {/* https is the default, so it is the one scheme left unsaid; an
             http:// destination keeps its scheme, which is worth seeing. */}
-        {link.destination.replace(/^https:\/\//, "")}
-      </Td>
+          {link.destination.replace(/^https:\/\//, "")}
+        </Td>
+      </OverflowTip>
       <Td className={`truncate ${PHONE.meta} max-sm:max-w-full max-sm:before:content-none`}>
         {/* Straight to that organization's links, which is the next question
             after "who owns this". */}
-        <HrefLink
-          href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
-          className="block truncate [@media(hover:hover)]:hover:text-accent [@media(hover:hover)]:hover:underline"
-          title={link.orgName}
-        >
-          {link.orgName}
-        </HrefLink>
+        <OverflowTip content={link.orgName}>
+          <HrefLink
+            href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
+            className="block truncate [@media(hover:hover)]:hover:text-accent [@media(hover:hover)]:hover:underline"
+          >
+            {link.orgName}
+          </HrefLink>
+        </OverflowTip>
       </Td>
       <ReportsCell count={link.reportCount} />
       <Td className={`pl-2 text-right tnum ${PHONE.meta}`} data-label="Clicks">
@@ -580,30 +582,25 @@ function AnonymousLinksTable({
       <tbody className={PHONE.body}>
         {rows.map((link) => (
           <tr key={link.id} className={PHONE.row}>
-            <Td
-              className={`truncate font-mono text-sm font-semibold ${PHONE.main}`}
-              title={`/${link.slug}`}
-            >
-              /{link.slug}
-            </Td>
-            <Td
-              className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0"
-              title={link.destination}
-            >
-              {link.destination}
-            </Td>
+            <OverflowTip content={`/${link.slug}`}>
+              <Td className={`truncate font-mono text-sm font-semibold ${PHONE.main}`}>
+                /{link.slug}
+              </Td>
+            </OverflowTip>
+            <OverflowTip content={link.destination}>
+              <Td className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0">
+                {link.destination}
+              </Td>
+            </OverflowTip>
             {/* Nobody owns it, and no click is recorded against it: both
                     are the product boundary, not missing data. */}
             <Td className={`text-muted ${PHONE.hide}`}>none</Td>
             <Td className="pr-2 max-sm:order-3 max-sm:border-0 max-sm:p-0">
               <LinkStateBadge link={link} />
             </Td>
-            <Td
-              className={`pl-2 text-right text-muted ${PHONE.hide}`}
-              title="Anonymous links record no clicks"
-            >
-              none
-            </Td>
+            <Tooltip content="Anonymous links record no clicks">
+              <Td className={`pl-2 text-right text-muted ${PHONE.hide}`}>none</Td>
+            </Tooltip>
             <Td
               className={`tnum text-xs whitespace-nowrap text-muted ${PHONE.meta}`}
               data-label="Made"
@@ -702,18 +699,19 @@ function AnonymousLinks() {
 function ReportOrg({ report: r }: { report: AdminReportRow }) {
   if (!r.orgId)
     return (
-      <span className="text-muted" title="The address matched no link">
-        no match
-      </span>
+      <Tooltip content="The address matched no link">
+        <span className="text-muted">no match</span>
+      </Tooltip>
     );
   return (
-    <HrefLink
-      href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
-      className="block truncate [@media(hover:hover)]:hover:text-accent [@media(hover:hover)]:hover:underline"
-      title={r.orgName ?? undefined}
-    >
-      {r.orgName}
-    </HrefLink>
+    <OverflowTip content={r.orgName}>
+      <HrefLink
+        href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
+        className="block truncate [@media(hover:hover)]:hover:text-accent [@media(hover:hover)]:hover:underline"
+      >
+        {r.orgName}
+      </HrefLink>
+    </OverflowTip>
   );
 }
 
@@ -728,12 +726,13 @@ function ReportRow({
 }) {
   return (
     <tr className={PHONE.row}>
-      <Td
-        className={`truncate font-mono text-sm font-semibold ${PHONE.main} max-sm:w-[calc(100%-6rem)]`}
-        title={`/${r.slug}`}
-      >
-        /{r.slug}
-      </Td>
+      <OverflowTip content={`/${r.slug}`}>
+        <Td
+          className={`truncate font-mono text-sm font-semibold ${PHONE.main} max-sm:w-[calc(100%-6rem)]`}
+        >
+          /{r.slug}
+        </Td>
+      </OverflowTip>
       <Td className={`truncate ${PHONE.meta} max-sm:before:content-none`}>
         <ReportOrg report={r} />
       </Td>
@@ -741,15 +740,16 @@ function ReportRow({
       <Td className={`first-letter:uppercase ${PHONE.meta} max-sm:before:content-none`}>
         {r.reason}
       </Td>
-      <Td
-        className="truncate text-muted max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0 max-sm:whitespace-normal"
-        title={r.note}
-      >
-        {r.note || "none"}
-      </Td>
-      <Td className={`truncate text-muted ${PHONE.meta}`} data-label="From" title={r.contact}>
-        {r.contact || "none"}
-      </Td>
+      <OverflowTip content={r.note}>
+        <Td className="truncate text-muted max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0 max-sm:whitespace-normal">
+          {r.note || "none"}
+        </Td>
+      </OverflowTip>
+      <OverflowTip content={r.contact}>
+        <Td className={`truncate text-muted ${PHONE.meta}`} data-label="From">
+          {r.contact || "none"}
+        </Td>
+      </OverflowTip>
       <Td
         className={`tnum text-xs whitespace-nowrap text-muted ${PHONE.meta} max-sm:before:content-none`}
       >
@@ -938,13 +938,7 @@ function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear:
   return (
     // Names the organization once, as the chip, so the row says what it is
     // narrowed to. The same height as the search box and the select beside it.
-    <Button
-      variant="outline"
-      onClick={onClear}
-      aria-label={label}
-      title={label}
-      className="max-w-60"
-    >
+    <Button variant="outline" onClick={onClear} aria-label={label} className="max-w-60">
       <span className="truncate">{orgName ?? "Organization"}</span>
       <X size={14} className="shrink-0 text-muted" />
     </Button>

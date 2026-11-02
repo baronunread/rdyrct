@@ -16,6 +16,7 @@ import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { cn } from "../ui/cn";
 import type { AddressDTO, LinkDTO } from "@/shared/types";
+import { Tooltip } from "@/app/ui/tooltip";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -89,13 +90,12 @@ function AliasRow({
           />
           {temp && (
             <>
-              <span
-                className="inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-butter"
-                title={`Temporary. Stops working ${shortDate(address.expiresAt!)}.`}
-              >
-                <Clock size={12} aria-hidden />
-                {timeLeft(address.expiresAt!)}
-              </span>
+              <Tooltip content={`Temporary. Stops working ${shortDate(address.expiresAt!)}.`}>
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-butter">
+                  <Clock size={12} aria-hidden />
+                  {timeLeft(address.expiresAt!)}
+                </span>
+              </Tooltip>
               <button
                 type="button"
                 onClick={onKeep}
@@ -111,12 +111,13 @@ function AliasRow({
       </Td>
       <Td className="hidden lg:table-cell" />
       <Td className="hidden xl:table-cell" />
-      <Td
-        className="tnum py-1.5 text-end text-[13px] whitespace-nowrap text-muted max-sm:px-1"
-        title={`${clicks.toLocaleString("en-US")} click${clicks === 1 ? "" : "s"} in the last 7 days`}
+      <Tooltip
+        content={`${clicks.toLocaleString("en-US")} click${clicks === 1 ? "" : "s"} in the last 7 days`}
       >
-        {clicks > 0 && clicks.toLocaleString("en-US")}
-      </Td>
+        <Td className="tnum py-1.5 text-end text-[13px] whitespace-nowrap text-muted max-sm:px-1">
+          {clicks > 0 && clicks.toLocaleString("en-US")}
+        </Td>
+      </Tooltip>
       <Td className="tnum hidden py-1.5 text-[12.5px] whitespace-nowrap text-muted sm:table-cell">
         {tableDate(address.createdAt)}
       </Td>

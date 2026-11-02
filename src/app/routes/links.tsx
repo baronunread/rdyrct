@@ -348,13 +348,15 @@ export function LinksPage() {
       <PageHeader
         title="Links"
         sub={
-          <span className="tnum" title={limitHint}>
-            <LinkCountLabel
-              count={linkCount}
-              limit={limits.links}
-              unlimited={org.plan === "unlimited"}
-            />
-          </span>
+          <Tooltip content={limitHint}>
+            <span className="tnum">
+              <LinkCountLabel
+                count={linkCount}
+                limit={limits.links}
+                unlimited={org.plan === "unlimited"}
+              />
+            </span>
+          </Tooltip>
         }
         action={
           <LinksActions

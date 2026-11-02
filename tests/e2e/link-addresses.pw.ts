@@ -43,7 +43,7 @@ async function freshOrg(page: Page, name: string): Promise<void> {
   await page.goto("/dashboard");
   // The switcher lives in the shell, so it is a reliable signal that the
   // shell (and whatever it is paired with) has rendered.
-  await expect(page.getByTitle("Switch organization")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch organization" })).toBeVisible();
   if (defaultOrgSpent) {
     await createAdditionalOrg(page, name);
   } else {

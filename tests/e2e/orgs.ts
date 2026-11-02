@@ -15,7 +15,9 @@ export async function expectRedirect(page: Page, slug: string, destination: stri
 /** The org name the sidebar's switcher shows, without the initial drawn
  * beside it (aria-hidden, so not part of the name). */
 export function currentOrgName(page: Page) {
-  return page.getByTitle("Switch organization").locator("span:not([aria-hidden])");
+  return page
+    .getByRole("button", { name: "Switch organization" })
+    .locator("span:not([aria-hidden])");
 }
 
 /** Opens the org switcher and creates another org under the same signed-in
@@ -23,7 +25,7 @@ export function currentOrgName(page: Page) {
  * have already left the no-org state behind by the time they need this.
  * Waits for the switch to settle, for the same reason as createOrg above. */
 export async function createAdditionalOrg(page: Page, name: string) {
-  await page.getByTitle("Switch organization").click();
+  await page.getByRole("button", { name: "Switch organization" }).click();
   await page.getByRole("menuitem", { name: "New organization" }).click();
   const dialog = page.getByRole("dialog", { name: "New organization" });
   await dialog.getByLabel("Name").fill(name);

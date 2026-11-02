@@ -2,6 +2,7 @@ import { forwardRef, useId, useState, type ClipboardEvent, type KeyboardEvent } 
 import { X } from "@/app/ui/icons";
 import { cn } from "../ui/cn";
 import { isEmail, splitEmails } from "../lib/members-data";
+import { OverflowTip } from "@/app/ui/overflow-tip";
 
 /**
  * Several addresses in one box: each one becomes a chip as soon as a comma,
@@ -68,9 +69,11 @@ export const EmailChips = forwardRef<
       <span className="mb-1.5 flex items-center gap-1.5 text-xs text-muted">
         <label htmlFor={inputId}>{label}</label>
         {error && (
-          <span id={reasonId} className="ml-auto truncate text-danger" title={error}>
-            {error}
-          </span>
+          <OverflowTip content={error}>
+            <span id={reasonId} className="ml-auto truncate text-danger">
+              {error}
+            </span>
+          </OverflowTip>
         )}
       </span>
       {/* Clicking anywhere in the box puts the caret in the input, as a real
@@ -141,9 +144,9 @@ function Chip({ email, bad, onRemove }: { email: string; bad: boolean; onRemove:
         bad && "text-danger shadow-[inset_0_0_0_1px_var(--danger)]",
       )}
     >
-      <span className="truncate font-mono text-xs" title={email}>
-        {email}
-      </span>
+      <OverflowTip content={email}>
+        <span className="truncate font-mono text-xs">{email}</span>
+      </OverflowTip>
       <button
         type="button"
         aria-label={`Remove ${email}`}

@@ -31,6 +31,8 @@ import { paginate } from "./util";
 import { Pager } from "../../ui/pagination";
 import type { AdminActionRow, JsonValue, Sort } from "@/shared/types";
 import { lookup } from "@/shared/lookup";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** The kinds of action somebody looks for after an incident. Each matches
  * the action names the Worker records (src/worker/audit.ts). A plan change
@@ -279,19 +281,15 @@ function AuditTable({
                 <span className="tnum text-xs text-muted">{WHEN.format(entry.createdAt)}</span>
               </span>
             </Td>
-            <Td
-              className={`truncate ${PHONE.meta} max-sm:before:content-none`}
-              title={entry.actorEmail ?? undefined}
-            >
-              {entry.who}
-            </Td>
+            <Tooltip content={entry.actorEmail}>
+              <Td className={`truncate ${PHONE.meta} max-sm:before:content-none`}>{entry.who}</Td>
+            </Tooltip>
             <Td className={`truncate font-mono text-xs ${PHONE.meta}`}>{entry.action}</Td>
-            <Td
-              className="truncate text-sm text-muted max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0"
-              title={entry.target}
-            >
-              {entry.target}
-            </Td>
+            <OverflowTip content={entry.target}>
+              <Td className="truncate text-sm text-muted max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0">
+                {entry.target}
+              </Td>
+            </OverflowTip>
             <Td className={`px-2 text-right ${PHONE.menu}`}>
               <button
                 type="button"

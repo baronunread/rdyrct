@@ -1,5 +1,6 @@
 import { displayHost } from "../lib/display-url";
 import { cn } from "../ui/cn";
+import { OverflowTip } from "@/app/ui/overflow-tip";
 
 /**
  * A short link as "host/slug" in mono, the host quiet and the slug in ink.
@@ -29,12 +30,11 @@ export function ShortAddress({
 }) {
   const host = displayHost(new URL(url).host);
   return (
-    <span
-      title={`${host}/${slug}`}
-      className={cn("flex max-w-full min-w-0 font-mono text-xs", className)}
-    >
-      {!hideHost && <span className="min-w-0 truncate text-muted">{host}</span>}
-      <span className={cn("max-w-full shrink-0 truncate", slugClassName)}>/{slug}</span>
-    </span>
+    <OverflowTip content={`${host}/${slug}`}>
+      <span className={cn("flex max-w-full min-w-0 font-mono text-xs", className)}>
+        {!hideHost && <span className="min-w-0 truncate text-muted">{host}</span>}
+        <span className={cn("max-w-full shrink-0 truncate", slugClassName)}>/{slug}</span>
+      </span>
+    </OverflowTip>
   );
 }

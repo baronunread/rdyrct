@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 import { Ellipsis } from "@/app/ui/icons";
 import { cn } from "../../ui/cn";
 import { StableLabel } from "../../ui/stable-label";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 const COUNT = new Intl.NumberFormat("en-US");
 
@@ -67,28 +69,29 @@ export function FilterPill({
   title?: string;
 }) {
   return (
-    <button
-      type="button"
-      title={title}
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-sm whitespace-nowrap transition-[color,background-color,scale] duration-150 ease-out active:scale-[0.97]",
-        on
-          ? "bg-surface-2 font-semibold text-text"
-          : "text-muted [@media(hover:hover)]:hover:text-text",
-      )}
-    >
-      <StableLabel>{label}</StableLabel>
-      {count !== undefined && (
-        <span
-          aria-hidden
-          className={cn("tnum font-medium", on ? "text-muted" : "text-placeholder")}
-        >
-          {fullNumber(count)}
-        </span>
-      )}
-    </button>
+    <Tooltip content={title}>
+      <button
+        type="button"
+        aria-pressed={on}
+        onClick={onClick}
+        className={cn(
+          "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-sm whitespace-nowrap transition-[color,background-color,scale] duration-150 ease-out active:scale-[0.97]",
+          on
+            ? "bg-surface-2 font-semibold text-text"
+            : "text-muted [@media(hover:hover)]:hover:text-text",
+        )}
+      >
+        <StableLabel>{label}</StableLabel>
+        {count !== undefined && (
+          <span
+            aria-hidden
+            className={cn("tnum font-medium", on ? "text-muted" : "text-placeholder")}
+          >
+            {fullNumber(count)}
+          </span>
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -153,13 +156,13 @@ export function TwoLine({
 }) {
   return (
     <span className="flex min-w-0 flex-col gap-0.5 leading-tight">
-      <span className="truncate text-sm font-semibold" title={titleHint}>
-        {title}
-      </span>
+      <OverflowTip content={titleHint}>
+        <span className="truncate text-sm font-semibold">{title}</span>
+      </OverflowTip>
       {sub && (
-        <span className="truncate font-mono text-xs text-muted" title={subHint}>
-          {sub}
-        </span>
+        <OverflowTip content={subHint}>
+          <span className="truncate font-mono text-xs text-muted">{sub}</span>
+        </OverflowTip>
       )}
     </span>
   );

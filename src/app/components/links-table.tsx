@@ -29,6 +29,8 @@ import { ShortAddress } from "./short-address";
 import { SiteLetter, Sparkline } from "./link-marks";
 import { CursorPager } from "../ui/pagination";
 import { morphKey, morphPart, setMorphLink, useIsMorphLink } from "../lib/link-morph";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -131,32 +133,32 @@ function LinkCell({
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="flex min-w-0 items-center gap-2">
-        <button
-          type="button"
-          onClick={open}
-          onPointerEnter={preload}
-          onFocus={preload}
-          {...morphPart("title", morphing)}
-          // A title in Arabic or Hebrew runs right to left: `dir="auto"`
-          // lets it, so it truncates at its own end and keeps its order.
-          dir={link.title ? "auto" : undefined}
-          title={link.title || undefined}
-          className={cn(
-            "min-w-0 cursor-pointer text-start text-sm font-semibold [@media(hover:hover)]:hover:underline",
-            link.title ? "truncate" : "flex",
-          )}
-        >
-          {link.title || (
-            <ShortAddress url={link.url} slug={link.slug} className="text-sm font-normal" />
-          )}
-        </button>
-        {link.suspendedAt && (
-          <span
-            className="shrink-0"
-            title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
+        <OverflowTip content={link.title}>
+          <button
+            type="button"
+            onClick={open}
+            onPointerEnter={preload}
+            onFocus={preload}
+            {...morphPart("title", morphing)}
+            // A title in Arabic or Hebrew runs right to left: `dir="auto"`
+            // lets it, so it truncates at its own end and keeps its order.
+            dir={link.title ? "auto" : undefined}
+            className={cn(
+              "min-w-0 cursor-pointer text-start text-sm font-semibold [@media(hover:hover)]:hover:underline",
+              link.title ? "truncate" : "flex",
+            )}
           >
-            <Badge color="pink">paused</Badge>
-          </span>
+            {link.title || (
+              <ShortAddress url={link.url} slug={link.slug} className="text-sm font-normal" />
+            )}
+          </button>
+        </OverflowTip>
+        {link.suspendedAt && (
+          <Tooltip content="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it.">
+            <span className="shrink-0">
+              <Badge color="pink">paused</Badge>
+            </span>
+          </Tooltip>
         )}
         {onToggle && (
           <button
@@ -198,19 +200,22 @@ function DestinationCell({ destination }: { destination: string }) {
     // Stored destinations are absolute URLs; show anything else as it is.
   }
   return (
-    <a
-      href={destination}
-      target="_blank"
-      rel="noreferrer"
-      title={destination}
-      className="flex min-w-0 items-center gap-2.5 [@media(hover:hover)]:hover:text-accent"
-    >
-      <SiteLetter host={host} />
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-sm">{host.replace(/^www\./, "")}</span>
-        {rest && <span className="truncate font-mono text-[11.5px] text-placeholder">{rest}</span>}
-      </span>
-    </a>
+    <OverflowTip content={destination}>
+      <a
+        href={destination}
+        target="_blank"
+        rel="noreferrer"
+        className="flex min-w-0 items-center gap-2.5 [@media(hover:hover)]:hover:text-accent"
+      >
+        <SiteLetter host={host} />
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-sm">{host.replace(/^www\./, "")}</span>
+          {rest && (
+            <span className="truncate font-mono text-[11.5px] text-placeholder">{rest}</span>
+          )}
+        </span>
+      </a>
+    </OverflowTip>
   );
 }
 
@@ -341,9 +346,11 @@ function LinkRowView({
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="tnum text-sm whitespace-nowrap">{tableDate(link.createdAt)}</span>
             {creator && (
-              <span dir="auto" title={creator} className="truncate text-xs text-placeholder">
-                {creator}
-              </span>
+              <OverflowTip content={creator}>
+                <span dir="auto" className="truncate text-xs text-placeholder">
+                  {creator}
+                </span>
+              </OverflowTip>
             )}
           </span>
         </Td>

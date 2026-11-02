@@ -492,19 +492,20 @@ function AppSidebar({
                 }
               />
             </div>
-            <button
-              type="button"
-              inert={collapsed}
-              onClick={openCommandMenu}
-              aria-label="Search and commands"
-              title="Search and commands"
-              className={cn(
-                "shrink-0 cursor-pointer rounded-md p-0.5 transition-[scale,opacity] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:[&_kbd]:text-text",
-                fade(collapsed),
-              )}
-            >
-              <Shortcut keys={[MOD_KEY, "K"]} className="gap-0.5" />
-            </button>
+            <Tooltip grouped content="Search and commands">
+              <button
+                type="button"
+                inert={collapsed}
+                onClick={openCommandMenu}
+                aria-label="Search and commands"
+                className={cn(
+                  "shrink-0 cursor-pointer rounded-md p-0.5 transition-[scale,opacity] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:[&_kbd]:text-text",
+                  fade(collapsed),
+                )}
+              >
+                <Shortcut keys={[MOD_KEY, "K"]} className="gap-0.5" />
+              </button>
+            </Tooltip>
           </div>
         )}
       </div>

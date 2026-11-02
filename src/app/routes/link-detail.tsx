@@ -53,6 +53,8 @@ import {
 } from "../lib/insights-data";
 import posthog from "../lib/posthog";
 import { PLAN_LIMITS, type LinkDTO, type LinkInput, type LinkStats } from "@/shared/types";
+import { OverflowTip } from "@/app/ui/overflow-tip";
+import { Tooltip } from "@/app/ui/tooltip";
 
 const LINK_RANGES = [PRESET_7D, PRESET_30D, PRESET_365D] as const;
 
@@ -221,21 +223,21 @@ function LinkDetailHeader({
         </span>
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
-            <h1
-              dir={s.title ? "auto" : undefined}
-              className="max-w-full truncate text-lg font-semibold tracking-tight"
-              title={s.title || address}
-              {...morphPart("title")}
-            >
-              {s.title || address}
-            </h1>
-            {link?.suspendedAt && (
-              <span
-                className="shrink-0"
-                title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
+            <OverflowTip content={s.title || address}>
+              <h1
+                dir={s.title ? "auto" : undefined}
+                className="max-w-full truncate text-lg font-semibold tracking-tight"
+                {...morphPart("title")}
               >
-                <Badge color="pink">paused</Badge>
-              </span>
+                {s.title || address}
+              </h1>
+            </OverflowTip>
+            {link?.suspendedAt && (
+              <Tooltip content="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it.">
+                <span className="shrink-0">
+                  <Badge color="pink">paused</Badge>
+                </span>
+              </Tooltip>
             )}
             <span className="flex min-w-0 items-center gap-0.5 self-center">
               <span className="flex min-w-0" {...morphPart("addr")}>

@@ -41,6 +41,7 @@ import {
   type OrgPlan,
   type UserOrg,
 } from "@/shared/types";
+import { OverflowTip } from "@/app/ui/overflow-tip";
 
 function BillingLink({ label = "See plans", primary }: { label?: string; primary?: boolean }) {
   return (
@@ -338,17 +339,18 @@ function Notice({
             <div key={f.label} className="flex max-w-full min-w-0 gap-1.5">
               <dt className="shrink-0 text-muted">{f.label}</dt>
               {/* A long hostname shortens with an ellipsis rather than running
-                  off a phone's edge; the full name is on hover. */}
-              <dd
-                title={f.mono ? f.value : undefined}
-                className={cn(
-                  "tnum min-w-0 font-semibold",
-                  f.over && "text-danger",
-                  f.mono && "truncate font-mono text-[0.8125rem] font-normal",
-                )}
-              >
-                {f.value}
-              </dd>
+                  off a phone's edge; the full name is in a tooltip. */}
+              <OverflowTip content={f.mono ? f.value : undefined}>
+                <dd
+                  className={cn(
+                    "tnum min-w-0 font-semibold",
+                    f.over && "text-danger",
+                    f.mono && "truncate font-mono text-[0.8125rem] font-normal",
+                  )}
+                >
+                  {f.value}
+                </dd>
+              </OverflowTip>
             </div>
           ))}
         </dl>

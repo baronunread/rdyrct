@@ -67,6 +67,7 @@ import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
 import { useSavePendingQrStyle } from "../lib/pending-qr-style";
 import { shouldOfferFirstLink } from "../lib/billing-page";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
@@ -504,14 +505,13 @@ function PaidPlan({
               Change plan
             </Button>
             {canCancel(snapshot) && (
-              <Button
-                variant="ghost"
-                disabled={snapshot.showPortalOverlay}
-                onClick={onPortal}
-                title="Cancels in the subscription portal. Paid features stay until the period ends."
-              >
-                Cancel
-              </Button>
+              <Tooltip content="Cancels in the subscription portal. Paid features stay until the period ends.">
+                <span className="inline-flex">
+                  <Button variant="ghost" disabled={snapshot.showPortalOverlay} onClick={onPortal}>
+                    Cancel
+                  </Button>
+                </span>
+              </Tooltip>
             )}
           </div>
         )}
@@ -626,16 +626,17 @@ function InvoiceRow({ invoice }: { invoice: Invoice }) {
         {status.label}
       </span>
       {invoice.pdfUrl ? (
-        <a
-          href={invoice.pdfUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Download the invoice of ${shortDate(invoice.date)}`}
-          title="Download PDF"
-          className="grid size-8 place-items-center rounded-md text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
-        >
-          <Download size={15} aria-hidden />
-        </a>
+        <Tooltip content="Download PDF">
+          <a
+            href={invoice.pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Download the invoice of ${shortDate(invoice.date)}`}
+            className="grid size-8 place-items-center rounded-md text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          >
+            <Download size={15} aria-hidden />
+          </a>
+        </Tooltip>
       ) : (
         <span />
       )}

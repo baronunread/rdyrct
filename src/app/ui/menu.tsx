@@ -2,6 +2,7 @@ import { Menu as BaseMenu } from "@base-ui/react/menu";
 import type { ReactNode } from "react";
 import { Check, ChevronsUpDown } from "@/app/ui/icons";
 import { cn } from "./cn";
+import { Tooltip } from "./tooltip";
 
 export function Menu({
   trigger,
@@ -15,17 +16,19 @@ export function Menu({
   /** Names an icon-only trigger (aria-label + tooltip). */
   label?: string;
 }) {
+  const button = (
+    <BaseMenu.Trigger
+      className="w-full cursor-pointer"
+      nativeButton={false}
+      render={<div />}
+      aria-label={label}
+    >
+      {trigger}
+    </BaseMenu.Trigger>
+  );
   return (
     <BaseMenu.Root>
-      <BaseMenu.Trigger
-        className="w-full cursor-pointer"
-        nativeButton={false}
-        render={<div />}
-        aria-label={label}
-        title={label}
-      >
-        {trigger}
-      </BaseMenu.Trigger>
+      {label ? <Tooltip content={label}>{button}</Tooltip> : button}
       <BaseMenu.Portal>
         <BaseMenu.Positioner sideOffset={6} align={align} className="z-50">
           {/* Opens at once: a menu used this often should not make anybody

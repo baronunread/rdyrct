@@ -1,6 +1,7 @@
 import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
 import { HrefLink } from "../lib/router-search";
 import { cn } from "./cn";
+import { OverflowTip } from "./overflow-tip";
 
 const badgeColors = {
   muted: "border-border text-muted",
@@ -35,7 +36,7 @@ export function Badge({
 /** A row linking to a link's detail page by slug, with an optional title
  * suffix: the shape repeated across the dashboard's and analytics' link
  * lists (top links, decaying, dead). Truncates instead of wrapping or
- * overflowing; the full text still shows on hover via `title`. */
+ * overflowing; the full text still shows in a tooltip when it is cut off. */
 export function SlugLink({
   to,
   slug,
@@ -49,16 +50,17 @@ export function SlugLink({
 }) {
   const text = title ? `/${slug} · ${title}` : `/${slug}`;
   return (
-    <HrefLink
-      href={to}
-      title={text}
-      className={cn("min-w-0 max-w-full truncate text-accent hover:underline", className)}
-    >
-      {/* Only the identifier wears the mono face, never the sentence it sits
+    <OverflowTip content={text}>
+      <HrefLink
+        href={to}
+        className={cn("min-w-0 max-w-full truncate text-accent hover:underline", className)}
+      >
+        {/* Only the identifier wears the mono face, never the sentence it sits
           in: the title beside it is prose and reads as prose. */}
-      <span className="font-mono">/{slug}</span>
-      {title && <span> · {title}</span>}
-    </HrefLink>
+        <span className="font-mono">/{slug}</span>
+        {title && <span> · {title}</span>}
+      </HrefLink>
+    </OverflowTip>
   );
 }
 

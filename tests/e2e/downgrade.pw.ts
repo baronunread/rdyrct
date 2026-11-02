@@ -75,7 +75,7 @@ test("losing Pro locks the extra org, says why, and lets the owner pick which on
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeHidden();
 
   // The locked org is still in the switcher, marked, rather than gone.
-  await page.getByTitle("Switch organization").click();
+  await page.getByRole("button", { name: "Switch organization" }).click();
   await expect(page.getByRole("menuitem", { name: /Second org/ })).toContainText("Read-only");
   await page.keyboard.press("Escape");
 

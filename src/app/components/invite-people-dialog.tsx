@@ -14,6 +14,7 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { EmailChips } from "./email-chips";
 import { ROLE_OPTIONS, isEmail, splitEmails } from "../lib/members-data";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** What each role can do, said once, where the role is chosen. Without it
  * "viewer" and "member" look like the same word twice. */
@@ -162,20 +163,21 @@ export function InvitePeopleDialog({
         </div>
         {limited && <p className="text-xs text-muted tnum">{seatsLine(needed, seats.left)}</p>}
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <Button
-            type="button"
-            variant="ghost"
-            className="mr-auto pl-2.5"
-            disabled={createInvite.isPending}
-            onClick={() => createInvite.mutate(role)}
-            title="Makes a single-use link, valid 7 days, and copies it"
-          >
-            <BusyContent busy={createInvite.isPending}>
-              <span className="inline-flex items-center gap-1.5">
-                <Link size={15} aria-hidden /> Copy invite link
-              </span>
-            </BusyContent>
-          </Button>
+          <Tooltip content="Makes a single-use link, valid 7 days, and copies it">
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto pl-2.5"
+              disabled={createInvite.isPending}
+              onClick={() => createInvite.mutate(role)}
+            >
+              <BusyContent busy={createInvite.isPending}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Link size={15} aria-hidden /> Copy invite link
+                </span>
+              </BusyContent>
+            </Button>
+          </Tooltip>
           <Button type="button" variant="ghost" onClick={() => close(false)}>
             Cancel
           </Button>

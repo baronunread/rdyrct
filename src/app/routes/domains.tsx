@@ -50,6 +50,7 @@ import { copyToClipboard } from "../lib/clipboard";
 import { DnsRecords } from "../components/dns-records";
 import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
 import posthog from "../lib/posthog";
+import { Tooltip } from "@/app/ui/tooltip";
 
 type Tone = "ok" | "warn" | "bad";
 
@@ -787,9 +788,11 @@ function DomainRow({
     <div className="flex min-h-[60px] items-start gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-mono text-sm font-bold [overflow-wrap:anywhere]" title={d.hostname}>
-            {displayHost(d.hostname)}
-          </span>
+          <Tooltip content={displayHost(d.hostname) === d.hostname ? undefined : d.hostname}>
+            <span className="font-mono text-sm font-bold [overflow-wrap:anywhere]">
+              {displayHost(d.hostname)}
+            </span>
+          </Tooltip>
           {isDefault && <span className="text-xs text-muted">Default</span>}
         </p>
         <DomainDetail
@@ -854,9 +857,13 @@ function DomainDetail({
         {d.rootRedirect ? (
           <>
             No slug goes to{" "}
-            <span className="font-mono [overflow-wrap:anywhere]" title={d.rootRedirect}>
-              {displayUrl(d.rootRedirect)}
-            </span>
+            <Tooltip
+              content={displayUrl(d.rootRedirect) === d.rootRedirect ? undefined : d.rootRedirect}
+            >
+              <span className="font-mono [overflow-wrap:anywhere]">
+                {displayUrl(d.rootRedirect)}
+              </span>
+            </Tooltip>
           </>
         ) : (
           <>
