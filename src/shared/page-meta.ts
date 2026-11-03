@@ -33,6 +33,12 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/rebrandly-alternative",
   "/dub-alternative",
   "/short-io-alternative",
+  "/google-url-shortener",
+  "/whatsapp-qr-code",
+  "/vcard-qr-code",
+  "/wifi-qr-code",
+  "/qr-code-monkey-alternative",
+  "/tinyurl-alternative",
   "/privacy",
   "/terms",
   "/report",
@@ -96,6 +102,59 @@ This generator makes static QR codes: the link or text is stored in the pattern 
 The QR code and optional logo are processed in your browser. rdyrct does not receive or store the value you enter or the logo you choose.
 
 [Open the QR code generator](/qr-code-generator)`,
+  },
+  "/wifi-qr-code": {
+    title: "WiFi QR code generator - share your WiFi password, free",
+    description:
+      "Make a WiFi QR code that joins your network when a guest scans it: name, password and security, with your logo and colors. Free, no account, made in your browser.",
+    markdown: `# WiFi QR code generator
+
+Make a QR code that joins your WiFi network when a guest points a phone camera at it. Enter the network name, the password and the kind of security (WPA, WEP or none), then download a PNG or SVG. No account, and the password never leaves your browser.
+
+The code holds a line such as \`WIFI:T:WPA;S:Cafe guests;P:password;;\`, which iPhone and Android cameras read and offer to join. Change the password and you need a new code.
+
+[Open the WiFi QR code generator](/wifi-qr-code)`,
+  },
+  "/vcard-qr-code": {
+    title: "vCard QR code generator - QR code for business cards, free",
+    description:
+      "Put your contact details in a vCard QR code for a business card or badge: one scan saves you to a phone's contacts. Free, no account, PNG or SVG, made in your browser.",
+    markdown: `# vCard QR code generator for business cards
+
+Put your name, phone, email, company and website in a QR code. One scan offers to save you as a contact on iPhone and Android. The code holds a vCard 3.0 and is made in your browser. No account, no watermark, no expiry.
+
+[Open the vCard QR code generator](/vcard-qr-code)`,
+  },
+  "/whatsapp-qr-code": {
+    title: "WhatsApp QR code generator - open a chat with one scan",
+    description:
+      "Make a WhatsApp QR code that opens a chat with your number, with a message already typed. Free, no account, your logo and colors, PNG or SVG download.",
+    markdown: `# WhatsApp QR code generator
+
+Make a QR code that opens a WhatsApp chat with your number, with an optional message already typed. The code holds a wa.me link, so the person scanning does not need your number saved. Free, no account.
+
+To count scans or change the number later, make a short link to the wa.me address in rdyrct and a QR code for that.
+
+[Open the WhatsApp QR code generator](/whatsapp-qr-code)`,
+  },
+  "/google-url-shortener": {
+    title: "Google URL shortener (goo.gl) shut down: what to use now",
+    description:
+      "What happened to goo.gl: Google stopped new links in 2018 and turned off unused ones on August 25, 2025. Which links still work, and how to move yours.",
+    markdown: `# Google URL shortener (goo.gl): what happened, and what to use now
+
+You cannot make goo.gl links any more: Google stopped taking new ones in 2018. On August 1, 2025 it said links still in use would keep working, and only links with no activity in late 2024, which had shown the notice "This link will no longer work in the near future", would stop. Those stopped on August 25, 2025. Links Google's own apps make, such as Maps shares, keep working.
+
+## Move your links
+
+1. Open each goo.gl link and note where it goes.
+2. Make a new short link to the same place in rdyrct, on your own domain from $4 a month.
+3. Replace the old link on your site, profiles and documents. Make a QR code for anything printed.
+4. Watch the clicks by country, referrer and device.
+
+Sources: [Google, August 1, 2025](https://blog.google/technology/developers/googl-link-shortening-update/), [Google for Developers, July 18, 2024](https://developers.googleblog.com/en/google-url-shortener-links-will-no-longer-be-available/).
+
+[Sign up free](/signup)`,
   },
   "/branded-link-shortener": {
     title: "Branded link shortener - short links on your own domain",
@@ -260,15 +319,17 @@ Accept: application/json, text/event-stream
 What changed in each release. The full text is [CHANGELOG.md](https://github.com/baronunread/rdyrct/blob/main/CHANGELOG.md) in the repository, and every change is a [merged pull request](https://github.com/baronunread/rdyrct/pulls?q=is%3Apr+is%3Amerged).`,
   },
   "/compare": {
-    title: "Compare rdyrct with Bitly, Rebrandly, Dub and Short.io",
+    title: "Compare rdyrct with Bitly, Rebrandly, Dub, Short.io and TinyURL",
     description:
-      "How rdyrct compares with Bitly, Rebrandly, Dub and Short.io on price, custom domains, link limits and analytics, and when each other tool is the better pick.",
+      "How rdyrct compares with Bitly, Rebrandly, Dub, Short.io and TinyURL on price, custom domains, link limits and analytics, and when each is the better pick.",
     markdown: `# Compare rdyrct with other link shorteners
 
 - [rdyrct vs Bitly](/bitly-alternative)
 - [rdyrct vs Rebrandly](/rebrandly-alternative)
 - [rdyrct vs Dub](/dub-alternative)
 - [rdyrct vs Short.io](/short-io-alternative)
+- [rdyrct vs TinyURL](/tinyurl-alternative)
+- [rdyrct vs QR Code Monkey, QR.io and QR Code Generator Pro](/qr-code-monkey-alternative)
 
 Each page compares price, custom domains, link limits and analytics history, and says where the other tool is the better choice.`,
   },
@@ -311,6 +372,26 @@ Dub's pricing page lists no free plan, and its plans start at $90 a month. rdyrc
 Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick when click analytics must never store an IP address, or when you want to host the code yourself.
 
 [Compare in full](/short-io-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/qr-code-monkey-alternative": {
+    title: "QR Code Monkey alternative: rdyrct vs QR.io and QR Code Generator Pro",
+    description:
+      "QR Code Monkey, QR.io and QR Code Generator Pro against rdyrct: prices, downloads, logo codes, and what it costs to count scans. Free generator, no account.",
+    markdown: `# QR Code Monkey alternative
+
+For a static code with your logo, QR Code Monkey and rdyrct's [QR code generator](/qr-code-generator) are both free and need no account. rdyrct's has no ads and sends nothing you type to a server. To count scans or change a code after printing, QR.io charges $39.99 a month ($350 a year) for its one plan, and QR Code Generator Pro has a 14-day trial, then 2 to 250 dynamic codes by plan. rdyrct does it with a short link, free for 30 links, with logo codes from $4 a month.
+
+[Compare in full](/qr-code-monkey-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/tinyurl-alternative": {
+    title: "TinyURL alternative: rdyrct vs TinyURL pricing and limits",
+    description:
+      "rdyrct against TinyURL: what a branded domain costs at each, link and click limits, and when TinyURL's free tool is all you need. Start free, no card.",
+    markdown: `# TinyURL alternative: rdyrct vs TinyURL
+
+TinyURL shortens a link for free, with no account. Its branded domains and analytics start on Pro at $9 a month, with 125 new links a month. rdyrct includes a custom domain and 30 days of click analytics from $4 a month.
+
+[Compare in full](/tinyurl-alternative) or [see rdyrct pricing](/pricing).`,
   },
   "/roadmap": {
     title: "URL shortener roadmap - what rdyrct is building next",

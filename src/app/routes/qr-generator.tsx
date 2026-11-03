@@ -16,7 +16,14 @@
  * end rather than a button that quietly posts somewhere, which is the only
  * version of it that agrees with what the page says about itself.
  */
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { Link } from "@tanstack/react-router";
 import * as v from "valibot";
 import { ArrowRight, ChevronDown, ShieldCheck } from "@/app/ui/icons";
@@ -132,6 +139,76 @@ function CodePanel({ encoded, values }: { encoded: string; values: QrValues }) {
           Your code appears here
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The generator itself: whatever fields say what goes in the code, then the
+ * same pattern, colour and logo controls, the preview, and the downloads.
+ * The QR type pages (routes/qr-types.tsx) bring their own fields and share
+ * the rest, so there is one generator, not one per type.
+ */
+export function QrCard({
+  encoded,
+  values,
+  setValues,
+  name = "qr",
+  children,
+}: {
+  /** What the code holds; empty until the fields say enough. */
+  encoded: string;
+  values: QrValues;
+  setValues: Dispatch<SetStateAction<QrValues>>;
+  /** The downloaded file's name, without the extension. */
+  name?: string;
+  children: ReactNode;
+}) {
+  const setField = <K extends keyof QrValues>(key: K, next: QrValues[K]) =>
+    setValues((current) => ({ ...current, [key]: next }));
+  return (
+    <div className="lit grid w-full max-w-3xl gap-6 rounded-3xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
+      <div className="flex flex-col gap-3">
+        {children}
+
+        {/* The same controls the app uses on a link, in the same order
+            the settings card puts them: shapes beside the preview, then
+            the colors and the logo across the full width. */}
+        <QrPatternFields values={values} setField={setField} isAdmin />
+      </div>
+
+      <CodePanel encoded={encoded} values={values} />
+
+      <QrColorAndLogoFields
+        values={values}
+        setField={setField}
+        isAdmin
+        localLogo
+        className="sm:col-span-2"
+      />
+
+      {/* The card's footer: what the page promises on the left, what it
+          produces on the right. The downloads live here rather than under
+          the code because that row only exists once there is a code, and
+          growing it on the first keystroke pushed the whole page down. */}
+      <div className="flex flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex items-start gap-1.5 text-xs text-muted">
+          <ShieldCheck size={13} className="mt-0.5 shrink-0 text-accent-2" />
+          The code and the logo are handled in your browser. Nothing you type or upload is sent
+          anywhere.
+        </p>
+        <QrDownloadButtons
+          url={encoded}
+          name={name}
+          look={resolveLook(qrPreviewProps(values))}
+          disabled={!encoded}
+          // On a phone the two buttons split the card's width and stand a
+          // finger tall, rather than being a pair of 8px-tall chips in
+          // the corner. Back to their own size once the row is beside the
+          // promise it sits with.
+          className="shrink-0 [&>button]:h-11 [&>button]:flex-1 [&>button]:text-sm sm:[&>button]:h-8 sm:[&>button]:flex-none sm:[&>button]:text-xs"
+        />
+      </div>
     </div>
   );
 }
@@ -283,11 +360,17 @@ const qrFaqs = [
  * wider than the question it hangs under. The list changed width on every
  * click.
  */
-function QrFaq() {
+export function QrFaq({
+  faqs = qrFaqs,
+  title = "QR code questions",
+}: {
+  faqs?: { q: string; a: string }[];
+  title?: string;
+}) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-      <h2 className="text-sm font-bold">QR code questions</h2>
-      {qrFaqs.map(({ q, a }) => (
+      <h2 className="text-sm font-bold">{title}</h2>
+      {faqs.map(({ q, a }) => (
         <details
           key={q}
           className="group rounded-lg border border-border bg-surface px-4 open:border-accent/40"
@@ -302,14 +385,10 @@ function QrFaq() {
           <p className="pb-4 text-sm text-muted">{a}</p>
         </details>
       ))}
-      <FaqJsonLd faqs={qrFaqs} />
+      <FaqJsonLd faqs={faqs} />
     </div>
   );
 }
-
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function QrGeneratorPage() {
   // The header has to know: hardcoding "signed out" showed somebody with a
   // session the Log in and Sign up buttons, which then dropped them on the
@@ -393,9 +472,6 @@ export function QrGeneratorPage() {
     return registerWebMcpTools(tools);
   }, []);
 
-  const setField = <K extends keyof QrValues>(key: K, next: QrValues[K]) =>
-    setValues((current) => ({ ...current, [key]: next }));
-
   const encoded = value.trim();
 
   return (
@@ -424,58 +500,18 @@ export function QrGeneratorPage() {
           </ol>
         </section>
 
-        <div className="lit grid w-full max-w-3xl gap-6 rounded-3xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
-          <div className="flex flex-col gap-3">
-            <label htmlFor="qr-value" className="text-xs font-medium text-muted">
-              Link or text
-            </label>
-            <Input
-              id="qr-value"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="https://example.com/spring-sale"
-              autoComplete="off"
-            />
-
-            {/* The same controls the app uses on a link, in the same order
-                the settings card puts them: shapes beside the preview, then
-                the colors and the logo across the full width. */}
-            <QrPatternFields values={values} setField={setField} isAdmin />
-          </div>
-
-          <CodePanel encoded={encoded} values={values} />
-
-          <QrColorAndLogoFields
-            values={values}
-            setField={setField}
-            isAdmin
-            localLogo
-            className="sm:col-span-2"
+        <QrCard encoded={encoded} values={values} setValues={setValues}>
+          <label htmlFor="qr-value" className="text-xs font-medium text-muted">
+            Link or text
+          </label>
+          <Input
+            id="qr-value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="https://example.com/spring-sale"
+            autoComplete="off"
           />
-
-          {/* The card's footer: what the page promises on the left, what it
-              produces on the right. The downloads live here rather than under
-              the code because that row only exists once there is a code, and
-              growing it on the first keystroke pushed the whole page down. */}
-          <div className="flex flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-start gap-1.5 text-xs text-muted">
-              <ShieldCheck size={13} className="mt-0.5 shrink-0 text-accent-2" />
-              The code and the logo are handled in your browser. Nothing you type or upload is sent
-              anywhere.
-            </p>
-            <QrDownloadButtons
-              url={encoded}
-              name="qr"
-              look={resolveLook(qrPreviewProps(values))}
-              disabled={!encoded}
-              // On a phone the two buttons split the card's width and stand a
-              // finger tall, rather than being a pair of 8px-tall chips in
-              // the corner. Back to their own size once the row is beside the
-              // promise it sits with.
-              className="shrink-0 [&>button]:h-11 [&>button]:flex-1 [&>button]:text-sm sm:[&>button]:h-8 sm:[&>button]:flex-none sm:[&>button]:text-xs"
-            />
-          </div>
-        </div>
+        </QrCard>
 
         <section className="flex w-full max-w-3xl flex-col gap-3 text-sm">
           <h2 className="text-xl font-bold text-balance">Choose PNG or SVG for your QR code</h2>
@@ -501,6 +537,33 @@ export function QrGeneratorPage() {
         <TrackingSection />
 
         <QrFaq />
+
+        <nav
+          aria-label="QR codes for one job"
+          className="flex w-full max-w-3xl flex-col gap-3 text-sm"
+        >
+          <h2 className="text-xl font-bold text-balance">QR codes for one job</h2>
+          <p className="text-muted">
+            The same generator, with the fields each job needs and the text a phone expects.
+          </p>
+          <ul className="flex flex-wrap gap-x-6 gap-y-2">
+            <li>
+              <MarketingLink to="/wifi-qr-code" className="text-accent hover:underline">
+                WiFi QR code
+              </MarketingLink>
+            </li>
+            <li>
+              <MarketingLink to="/vcard-qr-code" className="text-accent hover:underline">
+                vCard QR code for business cards
+              </MarketingLink>
+            </li>
+            <li>
+              <MarketingLink to="/whatsapp-qr-code" className="text-accent hover:underline">
+                WhatsApp QR code
+              </MarketingLink>
+            </li>
+          </ul>
+        </nav>
 
         <section className="flex w-full max-w-3xl flex-col gap-3 text-sm">
           <h2 className="text-xl font-bold text-balance">Prepare your QR code for print</h2>

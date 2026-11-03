@@ -50,6 +50,12 @@ export const RESERVED_SLUGS = new Set([
   "rebrandly-alternative",
   "dub-alternative",
   "short-io-alternative",
+  "google-url-shortener",
+  "whatsapp-qr-code",
+  "vcard-qr-code",
+  "wifi-qr-code",
+  "qr-code-monkey-alternative",
+  "tinyurl-alternative",
   "docs",
   // authenticated app tabs
   "dashboard",

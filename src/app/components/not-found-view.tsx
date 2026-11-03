@@ -8,9 +8,9 @@ import { ShortHostFrame } from "./short-host-frame";
  * app, a plain one there, nothing on a customer's own domain. Give it
  * `HOME_LINK` (not-found-home.ts) for its look.
  */
-export function NotFoundView({ back }: { back?: ReactNode }) {
+export function NotFoundView({ back, madeWith }: { back?: ReactNode; madeWith?: boolean }) {
   return (
-    <ShortHostFrame>
+    <ShortHostFrame madeWith={madeWith}>
       <BrokenHop />
       <p
         aria-hidden="true"

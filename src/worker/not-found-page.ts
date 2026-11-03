@@ -13,6 +13,9 @@
  * plain 404 rather than booting the app on a redirect-only host.
  */
 
+import { MADE_WITH_SLOT } from "../shared/link-pages";
+import { RDYRCT_SITE } from "../shared/site";
+
 export const PAGE_HEADERS = {
   "content-type": "text/html; charset=utf-8",
   // A miss today can be a link tomorrow: never let a cache keep it.
@@ -35,6 +38,32 @@ export async function prerenderedPage(
   return html.includes(`data-page="${name}"`) ? html : null;
 }
 
+/**
+ * Points the "Made with rdyrct" link at rdyrct.com, tagged so the visit
+ * shows up as this page's in analytics, or removes it. It stays only on a
+ * rdyrct.com build and only on our own hosts (`home` is null on a
+ * customer's domain): a fork must not advertise us, and a customer's miss
+ * is not our billboard.
+ */
+export function madeWith(rewriter: HTMLRewriter, home: string | null, page: string) {
+  return rewriter.on(`[data-slot="${MADE_WITH_SLOT}"]`, {
+    element(element) {
+      if (!RDYRCT_SITE || !home) {
+        element.remove();
+        return;
+      }
+      const url = new URL("/", home);
+      url.search = new URLSearchParams({
+        utm_source: "short-link",
+        utm_medium: "referral",
+        utm_campaign: "made-with",
+        utm_content: page,
+      }).toString();
+      element.setAttribute("href", url.toString());
+    },
+  });
+}
+
 export async function notFoundPage(
   assets: Fetcher,
   requestUrl: string,
@@ -44,11 +73,13 @@ export async function notFoundPage(
   if (!html) {
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   }
-  const link = new HTMLRewriter().on("#root a", {
+  const link = new HTMLRewriter().on(`#root a:not([data-slot])`, {
     element(element) {
       if (home) element.setAttribute("href", home);
       else element.remove();
     },
   });
-  return link.transform(new Response(html, { status: 404, headers: PAGE_HEADERS }));
+  return madeWith(link, home, "404").transform(
+    new Response(html, { status: 404, headers: PAGE_HEADERS }),
+  );
 }

@@ -15,6 +15,12 @@ describe("currentNavKey", () => {
       "/compare",
       "/roadmap",
       "/bitly-alternative",
+      "/google-url-shortener",
+      "/whatsapp-qr-code",
+      "/vcard-qr-code",
+      "/wifi-qr-code",
+      "/qr-code-monkey-alternative",
+      "/tinyurl-alternative",
     ]) {
       expect(currentNavKey(path)).toBe("product");
     }
