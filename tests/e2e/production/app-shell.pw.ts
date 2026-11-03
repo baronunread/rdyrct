@@ -17,8 +17,10 @@ async function reloadWithoutScripts(
   path: string,
   storage: Record<string, string>,
 ): Promise<void> {
-  await page.goto("/login");
-  await page.evaluate((entries) => {
+  // Storage is written at document start of the reload itself, before the
+  // head script reads it. Writing it from a page the app is running on
+  // raced that app: its /user answer (signed out) cleared the cache again.
+  await page.addInitScript((entries) => {
     localStorage.clear();
     for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value);
   }, storage);
