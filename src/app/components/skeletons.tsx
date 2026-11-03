@@ -2,13 +2,16 @@ import type { OrgPlan } from "@/shared/types";
 import type { ReactElement, ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
-import { ChevronsUpDown, MenuIcon, Search } from "@/app/ui/icons";
+import { ChevronsUpDown, MenuIcon, PanelLeftClose, Search } from "@/app/ui/icons";
 import { appNavItems } from "./nav-items";
 import { cn } from "../ui/cn";
 import { Card } from "../ui/misc";
 import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
 import { Logo, LogoMark } from "../ui/logo";
 import { shellLayout, useSidebarCollapsed } from "../lib/sidebar";
+import { useShellUser } from "../lib/hooks";
+import { useShellOrgs } from "../lib/current-org";
+import { UserAvatar } from "./user-avatar";
 
 /**
  * Page-level loading skeletons, one per route, used both as the lazy chunk's
@@ -678,47 +681,103 @@ export function InviteSkeleton() {
  * mirror AppShell's sidebar.
  */
 function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
-  const hide = collapsed && "opacity-0";
+  const hide = collapsed ? "opacity-0" : undefined;
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* the mark, then search and fold (shell.tsx, SidebarTop) */}
-      <div className="hidden h-14 items-center px-3 md:flex">
-        <span className="grid size-9 place-items-center">
+      <div className="hidden h-14 items-center gap-1 px-3 md:flex">
+        <span className="grid size-9 shrink-0 place-items-center">
           <LogoMark className="h-[18px]" />
         </span>
+        {/* The fold button's place, drawn so it is there before it works. */}
+        <span className={cn("ml-auto grid size-8 place-items-center text-muted", hide)}>
+          <PanelLeftClose size={16} />
+        </span>
       </div>
+      <OrgRowSkeleton hide={hide} />
+      <NavSkeleton hide={hide} />
+      <AccountSkeleton hide={hide} />
+    </div>
+  );
+}
 
-      {/* org switcher: the initial and name are data */}
-      <div className="px-3 py-2">
-        <div className="flex h-10 w-full min-w-9 items-center gap-2.5 px-1.5">
-          <Skeleton className="size-6 shrink-0 rounded-md" />
-          <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
-            <Skeleton className="h-3.5 w-28" />
-          </span>
-          <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", hide)} />
-        </div>
-      </div>
-
-      {/* nav: real labels and icons, inert until the shell mounts */}
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {appNavItems.map(({ icon: Icon, label }) => (
+/*
+ * The org and the person come from the last /user this browser saw, when it
+ * has one: they draw for real, as the loaded sidebar will, so only a first
+ * visit still shows bars. Chrome only (AGENTS.md, the cache).
+ */
+function OrgRowSkeleton({ hide }: { hide?: string }) {
+  const { org, orgs } = useShellOrgs();
+  return (
+    <div className="px-3 py-2">
+      <div className="flex h-10 w-full min-w-9 items-center gap-2.5 px-1.5 text-sm">
+        {org ? (
           <span
-            key={label}
-            className="flex h-9 min-w-9 items-center gap-2.5 rounded-lg px-2.5 text-sm whitespace-nowrap text-muted [&_svg]:shrink-0"
+            aria-hidden
+            className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
           >
-            <Icon size={15} /> <span className={cn(hide)}>{label}</span>
+            {org.name.trim().charAt(0).toUpperCase()}
           </span>
-        ))}
-      </nav>
+        ) : (
+          <Skeleton className="size-6 shrink-0 rounded-md" />
+        )}
+        <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
+          {org ? (
+            <span className="truncate font-semibold">{org.name}</span>
+          ) : (
+            <Skeleton className="h-3.5 w-28" />
+          )}
+        </span>
+        {/* Only where the loaded sidebar has a menu to open. */}
+        {orgs.length > 1 && (
+          <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", hide)} />
+        )}
+      </div>
+    </div>
+  );
+}
 
-      {/* account: the avatar and name are data */}
-      <div className="mt-auto px-3 py-3">
-        <div className="flex min-w-9 items-center gap-2.5 px-1 py-1.5">
+/** Real labels and icons, inert until the shell mounts, the page being
+ *  opened lit as the shell lights it. Same icon size as the shell's nav
+ *  (16), or the labels move 1px on swap. */
+function NavSkeleton({ hide }: { hide?: string }) {
+  const { pathname } = useLocation();
+  return (
+    <nav className="flex flex-col gap-0.5 px-3 py-2">
+      {appNavItems.map(({ icon: Icon, label, to }) => (
+        <span
+          key={label}
+          className={cn(
+            "flex h-9 min-w-9 items-center gap-2.5 rounded-lg px-2.5 text-sm whitespace-nowrap [&_svg]:shrink-0",
+            pathname === to || pathname.startsWith(`${to}/`)
+              ? "bg-surface font-medium text-text smooth-shadow-ring-xs [&_svg]:text-accent"
+              : "text-muted",
+          )}
+        >
+          <Icon size={16} /> <span className={hide}>{label}</span>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+function AccountSkeleton({ hide }: { hide?: string }) {
+  const user = useShellUser();
+  return (
+    <div className="mt-auto px-3 py-3">
+      <div className="flex min-w-9 items-center gap-2.5 px-1 py-1.5">
+        {user ? (
+          <UserAvatar user={user.user} size={28} />
+        ) : (
           <Skeleton className="size-7 shrink-0 rounded-full" />
-          <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
+        )}
+        <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
+          {user ? (
+            <span className="truncate text-sm font-semibold">{user.user.name}</span>
+          ) : (
             <Skeleton className="h-3 w-2/3" />
-          </span>
-        </div>
+          )}
+        </span>
       </div>
     </div>
   );

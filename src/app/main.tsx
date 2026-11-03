@@ -2,11 +2,13 @@ import { StrictMode, Suspense, lazy } from "react";
 // The shell through one loader, so a sign-in that fetched it ahead of time
 // (routes/auth.tsx) draws it at once instead of its skeleton.
 import {
+  loadShell,
   AppShellPart as AppShell,
   RequireAdminPart as RequireAdmin,
   RequireAuthPart as RequireAuth,
 } from "./lib/shell-loader";
 import { loadWelcome, WelcomePagePart } from "./lib/welcome-loader";
+import { appNavItems } from "./components/nav-items";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import {
   createMemoryHistory,
@@ -437,6 +439,26 @@ export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number])
   await router.load();
 }
 
+/**
+ * A reload of an app page by somebody signed in (index.html's head script
+ * sets data-auth from the cached /user) paints the real shell, from that
+ * cache, instead of its skeleton: the shell's chunk is fetched now, in
+ * parallel with this one finishing, and the first render waits for it. The
+ * wait is capped, so a stalled chunk still gets the skeleton rather than a
+ * blank page. Anyone else renders at once.
+ */
+const SHELL_WAIT_MS = 1500;
+const SHELL_ROOTS = [...appNavItems.map((item) => item.to), "/import", "/admin"];
+
+function renderAfterShell(render: () => void) {
+  const { pathname } = globalThis.location;
+  const inApp = SHELL_ROOTS.some((r) => pathname === r || pathname.startsWith(`${r}/`));
+  if (globalThis.document.documentElement.dataset.auth !== "in" || !inApp) return render();
+  Promise.race([loadShell(), new Promise((resolve) => setTimeout(resolve, SHELL_WAIT_MS))])
+    .catch(() => {})
+    .then(render);
+}
+
 const HYDRATE_WAIT_MS = 3000;
 const root = globalThis.document?.getElementById("root") ?? null;
 if (globalThis.document) globalThis.document.documentElement.dataset.motionReady = "true";
@@ -458,6 +480,6 @@ if (root) {
       .catch(() => {})
       .then(() => hydrateRoot(root, <App />));
   } else {
-    createRoot(root).render(<App />);
+    renderAfterShell(() => createRoot(root).render(<App />));
   }
 }

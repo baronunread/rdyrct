@@ -711,21 +711,24 @@ function domainRowActions(d: DomainDTO, model: DomainsModel, isDefault: boolean)
 /** The record under a domain still waiting on DNS. Once the check finds it
  * the status settles first, then this folds. */
 function SetupFold({ open, children }: { open: boolean; children: ReactNode }) {
+  // Rows from 0fr to 1fr (as the phone menu grows), not a height tween: it
+  // reaches the content's own height without animating a layout property.
+  // The setup stays mounted until the fold has shut, then goes.
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
   return (
-    <AnimatePresence initial={false}>
-      {open && (
-        <m.div
-          key="setup"
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0, transition: { delay: 0.9, duration: 0.3, ease: EASE } }}
-          transition={{ duration: 0.3, ease: EASE, delay: 0.1 }}
-          className="overflow-hidden"
-        >
-          {children}
-        </m.div>
+    <div
+      inert={!open}
+      onTransitionEnd={(e) => {
+        if (!open && e.target === e.currentTarget) setMounted(false);
+      }}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100 delay-100" : "grid-rows-[0fr] opacity-0 delay-[900ms]",
       )}
-    </AnimatePresence>
+    >
+      <div className="min-h-0 overflow-hidden">{mounted && children}</div>
+    </div>
   );
 }
 

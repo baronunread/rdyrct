@@ -572,7 +572,10 @@ function Builder() {
   return (
     // On a phone the sheet takes back most of the hero's gutter, as the QR
     // generator's does.
-    <div className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]">
+    <div
+      data-utm-builder
+      className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]"
+    >
       <div className="flex flex-col gap-4 px-3 pt-3 pb-2 sm:px-3.5">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <AddressField value={form.address} onChange={form.changeAddress} refusal={refusal} />
@@ -582,16 +585,19 @@ function Builder() {
         <UtmFieldsGrid fields={form.fields} setField={form.setField} />
       </div>
 
-      <TaggedOutput tagged={tagged} onNothing={refusal.refuse}>
-        {/* Once made, the row below carries the next step. */}
-        {!made && (
-          <ShortenAction tagged={tagged} shortener={shortener} onNothing={refusal.refuse} />
-        )}
-      </TaggedOutput>
+      {/* The Turnstile slot sits straight above the panel holding Shorten,
+          in a column of its own so its empty box adds no gap. */}
+      <div className="flex flex-col">
+        <TurnstileSlot challenge={shortener.challenge} />
+        <TaggedOutput tagged={tagged} onNothing={refusal.refuse}>
+          {/* Once made, the row below carries the next step. */}
+          {!made && (
+            <ShortenAction tagged={tagged} shortener={shortener} onNothing={refusal.refuse} />
+          )}
+        </TaggedOutput>
+      </div>
 
       {made && <ShortLinkResult link={made} />}
-
-      <TurnstileSlot challenge={shortener.challenge} />
 
       <CaseNote fields={form.fields} onTidy={form.tidyAll} />
     </div>

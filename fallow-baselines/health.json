@@ -380,7 +380,7 @@
         "count": 3
       },
       "crap_moderate": {
-        "count": 6
+        "count": 7
       }
     },
     "src/app/routes/invite.tsx": {
@@ -587,7 +587,6 @@
     "src/app/components/org-card.tsx:hidden coupling",
     "tests/e2e/pages.ts:hidden coupling",
     "playwright.config.ts:hidden coupling",
-    "scripts/prerender-public.tsx:hidden coupling",
     "src/worker/security-headers.ts:hidden coupling",
     "vite.config.ts:hidden coupling",
     "tests/e2e/funnel.pw.ts:hidden coupling",

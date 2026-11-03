@@ -116,6 +116,22 @@
         } catch {}
       })();
     </script>
+    <!--
+      The page's paper before the stylesheet arrives, in the theme the script
+      above chose, so a reload never flashes white. The dev server injects
+      CSS from JavaScript, so there the gap is long; a build links it in the
+      head, and this only matches it. style-src allows inline styles.
+    -->
+    <style>
+      html {
+        background: #f7f4ef;
+        color-scheme: light;
+      }
+      html[data-theme="dark"] {
+        background: #17151f;
+        color-scheme: dark;
+      }
+    </style>
     <!-- rdyrct.com only -->
     <script
       defer

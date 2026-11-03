@@ -52,8 +52,7 @@ const FORMS: GuardedForm[] = [
   {
     name: "UTM builder",
     open: (page) => page.goto("/utm-builder").then(() => undefined),
-    container: (page) =>
-      page.locator("div.flex.flex-col.gap-3").filter({ has: page.getByLabel("Tagged link") }),
+    container: (page) => page.locator("[data-utm-builder]"),
     submit: (card) => card.getByRole("button", { name: "Shorten it" }),
     start: (page) => page.getByLabel("Website URL").fill("https://example.com/slot"),
   },

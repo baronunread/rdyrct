@@ -38,7 +38,7 @@ test("a dead link does not advertise rdyrct", async ({ page }) => {
   const res = await page.goto("/no-such-link-x9");
   expect(res?.status()).toBe(404);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Nothing lives at this link." }),
+    page.getByRole("heading", { level: 1, name: "No link at this address." }),
   ).toBeVisible();
   await expect(page.getByText("Made with rdyrct")).toHaveCount(0);
 });

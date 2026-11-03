@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef } from "react";
 import { cn } from "./cn";
 
 /**
@@ -24,9 +24,11 @@ export function LiveStatus({
   label: string;
   className?: string;
 }) {
-  // Read once: a status that was already settled on arrival has no news.
-  const [doneOnArrival] = useState(done);
-  const [firstLabel] = useState(label);
+  // What it said on arrival, read once and never set: a status already
+  // settled then has no news, and the first label renders still.
+  const arrival = useRef({ done, label }).current;
+  const doneOnArrival = arrival.done;
+  const firstLabel = arrival.label;
   return (
     <span
       className={cn(
