@@ -3,8 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { setPlan } from "./db";
-import { addActiveCustomDomain, createAdditionalOrg, openNewLinkDialog } from "./orgs";
+import { setOrgsOverride, setPlan } from "./db";
+import {
+  addActiveCustomDomain,
+  createAdditionalOrg,
+  createQuickLink,
+  openNewLinkDialog,
+} from "./orgs";
 
 const password = "test-password-123";
 const authFile = join(mkdtempSync(join(tmpdir(), "rdyrct-e2e-")), "auth.json");
@@ -23,9 +28,11 @@ test.beforeAll(async ({ browser }) => {
   const page = await context.newPage();
   const email = `playwright-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  // Pro: the only plan that allows owning more than one org (AGENTS.md),
-  // which every test here needs since they each want a fresh, empty org.
+  // No plan covers more than one org: that is an allowance an admin sets by
+  // hand (Enterprise). Every test here needs it, since each wants a fresh,
+  // empty org. Pro is for the custom domain the alias tests add.
   await setPlan(page, email, "pro");
+  await setOrgsOverride(page, email, 3);
   await context.storageState({ path: authFile });
   await context.close();
 });
@@ -36,41 +43,22 @@ test.beforeAll(async ({ browser }) => {
  * this file runs serially, in one worker. */
 let defaultOrgSpent = false;
 
-/** A fresh, empty org under the shared signed-in user. Pro allows three, and
+/** A fresh, empty org under the shared signed-in user. The allowance is three, and
  * three is what this file uses: the one that came with the account, plus one
  * per remaining test. */
 async function freshOrg(page: Page, name: string): Promise<void> {
   await page.goto("/dashboard");
   // The switcher lives in the shell, so it is a reliable signal that the
   // shell (and whatever it is paired with) has rendered.
-  await expect(page.getByTitle("Switch organization")).toBeVisible();
+  await expect(page.locator("[data-org-switcher]").first()).toBeVisible();
   if (defaultOrgSpent) {
     await createAdditionalOrg(page, name);
   } else {
     defaultOrgSpent = true;
   }
-  // Switching org invalidates the dashboard's queries, which briefly remounts
-  // its form. Wait for that form, not network idle: product analytics can
-  // keep an unrelated request open. createQuickLink retries its fill in case
-  // a final query update replaces the field.
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible();
-}
-
-/** Fills the dashboard's quick-create destination field and submits it,
- * waiting for the "Link created" confirmation dialog. */
-async function createQuickLink(page: Page, destination: string) {
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  const button = page.getByRole("button", { name: "Create link" });
-  // Right after switching org, the dashboard's data queries can still be
-  // settling and remount the form underneath a fill(): keep re-filling
-  // until it actually sticks (and so the submit button un-disables) rather
-  // than trusting a single fill call landed in the final instance.
-  await expect(async () => {
-    await field.fill(destination);
-    await expect(button).toBeEnabled();
-  }).toPass();
-  await button.click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  // Wait for the dashboard's New link, not network idle: product analytics
+  // can keep an unrelated request open.
+  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 }
 
 /** Fills the "New link" dialog with `destination` and submits it, for tests
@@ -87,7 +75,7 @@ async function createLinkExpectingConflict(page: Page, destination: string) {
   return conflict;
 }
 
-test("renaming a custom-domain link leaves a temporary alias, which can be kept forever (#38)", async ({
+test("renaming a custom-domain link leaves a temporary alias, which can be made permanent (#38)", async ({
   page,
 }) => {
   // The custom-domain activation wait below can alone take up to 30s, the
@@ -107,6 +95,11 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
   await page.getByRole("menuitem", { name: hostname }).click();
   await editor.getByPlaceholder("launch-2026").fill("old-slug");
   await editor.getByRole("button", { name: "Create link" }).click();
+  // Creating answers with the "Link created" dialog; close it to reach the table.
+  const created = page.getByRole("dialog", { name: "Link created" });
+  await expect(created).toContainText(`${hostname}/old-slug`);
+  await page.keyboard.press("Escape");
+  await expect(created).toBeHidden();
   await expect(page.getByText(`${hostname}/old-slug`)).toBeVisible();
 
   // Rename the slug from the row's actions menu.
@@ -120,17 +113,53 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
   await renameEditor.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(`${hostname}/new-slug`)).toBeVisible();
 
-  // Expand the alias thread and check the temporary alias it left behind.
-  await page.getByRole("button", { name: /Show \d+ alias/ }).click();
-  const aliasRow = page.getByRole("row", { name: /old-slug/ });
-  await expect(aliasRow.getByText(/Expires in/)).toBeVisible();
+  // A permanent alias too, made after the rename: newer, but the temporary
+  // one still comes first because it asks for a decision.
+  await page
+    .getByRole("row", { name: /new-slug/ })
+    .getByRole("button", { name: "Actions for new-slug" })
+    .click();
+  await page.getByRole("menuitem", { name: "Add another short link" }).click();
+  const aliasDialog = page.getByRole("dialog", { name: "Create alias" });
+  await aliasDialog.getByPlaceholder("promo-2026").fill("kept-slug");
+  await aliasDialog.getByRole("button", { name: "Create alias" }).click();
+  await expect(aliasDialog).toBeHidden();
 
-  // Keep the temporary alias forever, from its own row actions menu.
-  await aliasRow.getByRole("button", { name: "Actions for old-slug" }).click();
-  await page.getByRole("menuitem", { name: "Keep forever" }).click();
-  await expect(page.getByText("Address kept forever")).toBeVisible();
-  await expect(aliasRow.getByText("Permanent alias")).toBeVisible();
-  await expect(aliasRow.getByText(/Expires in/)).not.toBeVisible();
+  // "+2" next to the title opens the aliases as tree rows: slug only (the
+  // host is the link's), temporary first with its time left in hours.
+  const toggle = page.getByRole("button", { name: "Show 2 aliases" });
+  await expect(toggle).toContainText("+2");
+  await toggle.click();
+  const aliasRows = page.locator("tr.alias-row");
+  await expect(aliasRows).toHaveCount(2);
+  await expect(aliasRows.nth(0)).toContainText("/old-slug");
+  await expect(aliasRows.nth(0)).toContainText(/\d+h left/);
+  await expect(aliasRows.nth(0)).not.toContainText(hostname);
+  await expect(aliasRows.nth(1)).toContainText("/kept-slug");
+  await expect(aliasRows.nth(1)).not.toContainText(/left|Keep/);
+  // None of the old repeated labels.
+  await expect(page.getByText(/Permanent alias|Same destination|Alias clicks count/)).toHaveCount(
+    0,
+  );
+
+  // Keep it, inline, by keyboard: the button is a tab stop in the row.
+  const keep = aliasRows.nth(0).getByRole("button", { name: "Keep old-slug for good" });
+  await keep.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Kept old-slug")).toBeVisible();
+  await expect(page.locator("tr.alias-row", { hasText: "/old-slug" })).not.toContainText(
+    /left|Keep/,
+  );
+
+  // The row menu opens from the keyboard and gives focus back on Escape.
+  const menu = page
+    .locator("tr.alias-row", { hasText: "/old-slug" })
+    .getByRole("button", { name: "Actions for old-slug" });
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "Make primary" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeFocused();
 });
 
 test("creating a link to an already-shortened destination offers to reuse it (#38)", async ({
@@ -159,7 +188,8 @@ test("choosing to add to the existing link merges the address instead of forking
 
   const conflict = await createLinkExpectingConflict(page, "https://example.com/merge-page");
   await conflict.getByRole("button", { name: "Add" }).click();
-  await expect(page.getByText("Address added to the existing link")).toBeVisible();
+  // A merge is not a new link, and the dialog says so.
+  await expect(page.getByRole("dialog", { name: "Address added" })).toBeVisible();
 
   // Still one link: the second address became an alias on it, not a fork.
   await page.goto("/links");

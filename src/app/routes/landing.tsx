@@ -2,6 +2,8 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
+import { EnterpriseNote } from "../components/enterprise-note";
+import { SUPPORT_EMAIL } from "@/shared/support";
 import { Check, ChevronDown } from "@/app/ui/icons";
 import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion } from "motion/react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -49,7 +51,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own. Yearly billing saves 10%.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Each plan covers one organization, and only its owner needs a paid plan. Need several organizations or higher limits? Email ${SUPPORT_EMAIL} about Enterprise. Yearly billing saves 10%.`,
   },
   {
     q: "What happens when my links get more clicks than my plan counts?",
@@ -147,8 +149,9 @@ function NoCell({ tier }: { tier?: Tier }) {
 
 /**
  * Where a paid-plan CTA sends people: logged-in users go straight to checkout
- * (/billing?plan=…), everyone else signs up first with that destination as
- * `next`, so the intent survives OTP verification.
+ * (/billing?plan=…). Everyone else signs up first, with /welcome?plan=… as
+ * `next` so the intent survives OTP verification: /welcome opens checkout
+ * before the app ever draws, and Polar sends them back there either way.
  */
 export function usePaidPlanTo() {
   // Through useAudience rather than useCurrentUser directly: this asks the
@@ -159,8 +162,8 @@ export function usePaidPlanTo() {
   // falls back to what this browser was last time instead of "no".
   const { authed } = useAudience();
   return (plan: "hobby" | "pro", interval: "month" | "year" = "month") => {
-    const dest = `/billing?plan=${plan}${interval === "year" ? "&interval=year" : ""}`;
-    return authed ? dest : `/signup?next=${encodeURIComponent(dest)}`;
+    const query = `plan=${plan}${interval === "year" ? "&interval=year" : ""}`;
+    return authed ? `/billing?${query}` : `/signup?next=${encodeURIComponent(`/welcome?${query}`)}`;
   };
 }
 
@@ -372,10 +375,9 @@ function MobilePlans({
       sub: yearly ? "billed yearly" : "",
       highlight: true,
       features: [
-        `${PLAN_LIMITS.pro.orgs} organizations (only the owner pays)`,
         `${formatNumber(PLAN_LIMITS.pro.links)} links`,
         `${PLAN_LIMITS.pro.members} team members`,
-        `${PLAN_LIMITS.pro.domains} custom domains each`,
+        `${PLAN_LIMITS.pro.domains} custom domains`,
         `${PLAN_LIMITS.pro.analyticsDays}-day click analytics`,
         `${formatNumber(PLAN_LIMITS.pro.trackedClicks)} clicks counted a month`,
         "Direct email support",
@@ -606,6 +608,7 @@ function PricingTable({
           </tr>
         </tbody>
       </Table>
+      <EnterpriseNote className="mt-4 text-center" />
     </div>
   );
 }
@@ -965,10 +968,10 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
       />
       <div className="flex flex-col items-center gap-6 text-center">
         <h2 className="text-metal max-w-3xl pb-1 text-4xl font-bold tracking-tight text-balance sm:text-6xl">
-          Your next link, one hop away.
+          Make your first short link.
         </h2>
         <p className="max-w-lg text-pretty text-muted">
-          Your first short link takes a minute on the free plan. No credit card.
+          It takes a minute on the free plan. No credit card.
         </p>
         <HrefLink
           href={ctaTo}
@@ -1079,7 +1082,7 @@ function PricingTeaser() {
       name: "Pro",
       price: planPrice("pro", interval),
       sub: yearly ? "billed yearly" : "",
-      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
+      pitch: `Everything in Hobby, plus ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
       to: paidTo("pro", interval),
       cta: "Start Pro",
       variant: "primary" as const,
@@ -1095,11 +1098,9 @@ function PricingTeaser() {
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
       <div className="mb-8 text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Simple pricing
-        </h2>
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Pricing</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
-          Start free. Upgrade when you outgrow the plan, or self-host and never pay us a cent.
+          Start free. Upgrade when you outgrow the plan, or self-host and pay us nothing.
         </p>
       </div>
 
@@ -1111,7 +1112,8 @@ function PricingTeaser() {
         ))}
       </div>
 
-      <p className="mt-6 text-center text-sm">
+      <EnterpriseNote className="mt-6 text-center" />
+      <p className="mt-2 text-center text-sm">
         <MarketingLink to="/pricing" className="text-accent hover:underline">
           See the full comparison →
         </MarketingLink>
@@ -1120,9 +1122,6 @@ function PricingTeaser() {
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function LandingPage() {
   const { authed, ready, name, ctaTo, ctaLabel } = useAudience();
 

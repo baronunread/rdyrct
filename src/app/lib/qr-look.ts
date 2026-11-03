@@ -1,5 +1,6 @@
 import type { DotType } from "qr-code-styling";
 import {
+  QR_CORNER_STYLES,
   QR_DEFAULT_BG,
   QR_DEFAULT_COLOR,
   QR_DEFAULT_CORNER,
@@ -119,6 +120,59 @@ export interface QrValues {
  */
 export function hasAnyQrValue(values: QrValues): boolean {
   return Object.values(values).some((v) => v !== "");
+}
+
+/** What the QR editor's rows draw with, every value concrete (defaults
+ * applied). */
+export interface QrLookValue {
+  dot: (typeof QR_DOT_STYLES)[number];
+  corner: (typeof QR_CORNER_STYLES)[number];
+  dotColor: string;
+  cornerColor: string;
+  /** A hex, possibly with alpha, or the legacy "transparent". */
+  bg: string;
+  /** The logo's URL, or "" for none. */
+  logo: string;
+  logoSize: number;
+}
+
+/** A change from the rows, in the field names a link and an org both store. */
+export type QrPatch = Partial<{
+  qrStyle: string;
+  qrCorner: string;
+  qrColor: string;
+  qrEyeColor: string;
+  qrBg: string;
+  qrLogo: string;
+  qrLogoSize: number;
+}>;
+
+/** The rows' view of a set of field values: each empty one resolved to its
+ * default. */
+export function qrLookOf(v: QrValues): QrLookValue {
+  const ink = v.qrColor || QR_DEFAULT_COLOR;
+  return {
+    dot: oneOf(QR_DOT_STYLES, v.qrStyle, "rounded"),
+    corner: oneOf(QR_CORNER_STYLES, v.qrCorner, QR_DEFAULT_CORNER),
+    dotColor: ink,
+    cornerColor: v.qrEyeColor || ink,
+    bg: v.qrBg || QR_DEFAULT_BG,
+    logo: v.qrLogo,
+    logoSize: v.qrLogoSize === "" ? QR_DEFAULT_LOGO_SIZE : Number(v.qrLogoSize),
+  };
+}
+
+/** A patch from the rows applied over field values. */
+export function applyQrPatch(v: QrValues, p: QrPatch): QrValues {
+  return {
+    qrStyle: p.qrStyle ?? v.qrStyle,
+    qrCorner: p.qrCorner ?? v.qrCorner,
+    qrColor: p.qrColor ?? v.qrColor,
+    qrEyeColor: p.qrEyeColor ?? v.qrEyeColor,
+    qrBg: p.qrBg ?? v.qrBg,
+    qrLogo: p.qrLogo ?? v.qrLogo,
+    qrLogoSize: p.qrLogoSize === undefined ? v.qrLogoSize : String(p.qrLogoSize),
+  };
 }
 
 export function qrPreviewProps(values: QrValues) {

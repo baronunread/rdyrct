@@ -50,7 +50,8 @@ import {
 } from "./kv";
 import { disabledPage, heldPage, warnPage } from "./link-state-page";
 import { purgeBannedOrgs, settleBannedOrgs } from "./abuse-hold";
-import { notFoundPage } from "./not-found-page";
+import { madeWith, notFoundPage } from "./not-found-page";
+import { appShellPage } from "../shared/app-shell";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
@@ -491,6 +492,35 @@ async function servePrerenderedPage(c: Context<AppEnv>, url: URL): Promise<Respo
   );
 }
 
+/**
+ * An app page (src/shared/app-shell.ts) answered with its prerendered shell:
+ * the sidebar and the page's skeleton as HTML, so a reload paints them
+ * before the bundle runs. Null when this build has none (dev, or a build
+ * from before the shell existed), which falls back to the plain shell.
+ */
+async function serveAppShell(c: Context<AppEnv>, url: URL): Promise<Response | null> {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return null;
+  const page = appShellPage(url.pathname);
+  if (!page) return null;
+  const asset = await c.env.ASSETS.fetch(
+    new Request(new URL(`/_app-shell/${page}.txt`, url.origin), c.req.raw),
+  );
+  if (asset.status !== 200 && asset.status !== 304) return null;
+  // A missing file still answers 200, with index.html (not_found_handling:
+  // single-page-application), and in production that one has the landing
+  // page baked into #root. The shell files are .txt, so HTML means none.
+  if (asset.headers.get("content-type")?.includes("text/html")) return null;
+  const headers = new Headers(asset.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
+  return finalizeSpaResponse(
+    new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers }),
+    url,
+    c.env.SITE_NAME,
+    undefined,
+    true,
+  );
+}
+
 function cacheStaticAsset(response: Response): Response {
   const cached = new Response(response.body, response);
   cached.headers.set("cache-control", STATIC_CACHE);
@@ -502,8 +532,9 @@ function finalizeSpaResponse(
   url: URL,
   siteName: string | undefined,
   status?: 404,
+  appShell = false,
 ): Response {
-  const page = withPageMeta(response, url, siteName);
+  const page = withPageMeta(response, url, siteName, appShell);
   if (page.status !== 200) return page;
   if (!page.headers.get("content-type")?.includes("text/html")) {
     return import.meta.env.DEV ? page : cacheStaticAsset(page);
@@ -536,10 +567,22 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
     const prerendered = await servePrerenderedPage(c, url);
     if (prerendered) return prerendered;
   }
+  if (!status) {
+    const shell = await serveAppShell(c, url);
+    if (shell) return withoutMadeWith(shell);
+  }
   const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
   // A conditional request can be a 304 with no body; only HTML fallback
   // responses need the soft-404 status conversion.
-  return finalizeSpaResponse(assetResponse, url, c.env.SITE_NAME, status);
+  return withoutMadeWith(finalizeSpaResponse(assetResponse, url, c.env.SITE_NAME, status));
+}
+
+/** A self-hosted copy serves the link pages' prerendered HTML here too
+ *  (/link-disabled and its siblings, opened directly), and a fork must not
+ *  advertise us: the same rule madeWith applies on the redirect path. */
+function withoutMadeWith(response: Response): Response {
+  if (RDYRCT_SITE || !response.headers.get("content-type")?.includes("text/html")) return response;
+  return madeWith(new HTMLRewriter(), null, "page").transform(response);
 }
 
 /* ---------------- shared-domain slug redirect ---------------- */
@@ -548,7 +591,11 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 // source as negotiated /pricing so those two documents cannot drift apart.
 // A self-hosted copy opens on the app. The SPA would get there too, a
 // round trip and a bundle later.
-if (!RDYRCT_SITE) app.get("/", (c) => c.redirect("/dashboard", 302));
+if (!RDYRCT_SITE)
+  app.get("/", (c) => {
+    c.get("log")?.set({ route: c.req.path, redirect: { to: "/dashboard", why: "self-hosted" } });
+    return c.redirect("/dashboard", 302);
+  });
 
 app.get("/pricing.md", (c) => {
   if (!RDYRCT_SITE) return serveSpa(c, 404);

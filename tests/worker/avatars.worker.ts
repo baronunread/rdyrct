@@ -6,9 +6,11 @@ import {
   authEnv,
   fetchWorker,
   freeOwnerCookie,
+  jsonBody,
   overrideEnv,
   testDb,
 } from "./support";
+import type { MemberDTO } from "../../src/shared/types";
 import type { Env } from "../../src/worker/env";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
@@ -226,5 +228,76 @@ describe("sweepOrphanQrLogos", () => {
     const count = await sweepOrphanQrLogos(e);
     expect(count).toBe(1);
     expect(deleted).toEqual(["org-1/logo.webp"]);
+  });
+});
+
+describe("GET /api/orgs/:orgId/members/:userId/avatar", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(() => reset());
+
+  /** A second user with a stored picture, in `org`'s members when given. */
+  async function seedPictured(org: string | null) {
+    const statements = [
+      env.DB.prepare(
+        "insert into user (id, name, email, email_verified, image, created_at, updated_at) values ('pic-1', 'Pic', 'pic@example.com', 1, '/api/user/avatar?v=42', 0, 0)",
+      ),
+      env.DB.prepare(
+        "insert into user (id, name, email, email_verified, created_at, updated_at) values ('plain-1', 'Plain', 'plain@example.com', 1, 0, 0)",
+      ),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'plain-1', 'viewer', 0)",
+      ),
+    ];
+    if (org)
+      statements.push(
+        env.DB.prepare(
+          "insert into org_members (org_id, user_id, role, created_at) values (?, 'pic-1', 'member', 0)",
+        ).bind(org),
+      );
+    await env.DB.batch(statements);
+    await env.MEDIA.put(`${AVATAR_PREFIX}pic-1`, PNG_1x1, {
+      httpMetadata: { contentType: "image/png" },
+    });
+  }
+
+  const get = (cookie: string, path: string) =>
+    fetchWorker(new Request(`http://localhost${path}`, { headers: { cookie } }));
+
+  it("points each member's image at the org's route, null without a picture", async () => {
+    const cookie = await freeOwnerCookie();
+    await seedPictured("org-1");
+    const members = await jsonBody<MemberDTO[]>(await get(cookie, "/api/orgs/org-1/members"));
+    const image = Object.fromEntries(members.map((m) => [m.userId, m.image]));
+    expect(image["pic-1"]).toBe("/api/orgs/org-1/members/pic-1/avatar?v=42");
+    expect(image["plain-1"]).toBeNull();
+    expect(image["free-1"]).toBeNull();
+  });
+
+  it("serves a member's picture to the rest of the org, cached like the user's own", async () => {
+    const cookie = await freeOwnerCookie();
+    await seedPictured("org-1");
+    const res = await get(cookie, "/api/orgs/org-1/members/pic-1/avatar?v=42");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG_1x1);
+  });
+
+  it("404s a member with no picture", async () => {
+    const cookie = await freeOwnerCookie();
+    await seedPictured("org-1");
+    expect((await get(cookie, "/api/orgs/org-1/members/plain-1/avatar")).status).toBe(404);
+  });
+
+  it("never serves someone outside the org", async () => {
+    const cookie = await freeOwnerCookie();
+    await env.DB.prepare(
+      "insert into orgs (id, name, created_at) values ('org-2', 'Other', 0)",
+    ).run();
+    await seedPictured("org-2");
+    expect((await get(cookie, "/api/orgs/org-1/members/pic-1/avatar")).status).toBe(404);
+    // Nor through an org the caller is not in.
+    const res = await get(cookie, "/api/orgs/org-2/members/pic-1/avatar");
+    expect(res.ok).toBe(false);
   });
 });

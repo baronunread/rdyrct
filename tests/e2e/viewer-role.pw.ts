@@ -40,10 +40,21 @@ test("a viewer reads the links and the numbers, and is offered no way to change 
   await expect(viewer.getByRole("button", { name: "New link" })).toBeHidden();
 
   await viewer.getByRole("button", { name: /Actions for/ }).click();
-  await expect(viewer.getByRole("menuitem", { name: /View analytics/ })).toBeVisible();
+  await expect(viewer.getByRole("menuitem", { name: "Analytics" })).toBeVisible();
+  await expect(viewer.getByRole("menuitem", { name: "QR code" })).toBeVisible();
   await expect(viewer.getByRole("menuitem", { name: /Edit/ })).toBeHidden();
   await expect(viewer.getByRole("menuitem", { name: /Delete/ })).toBeHidden();
   await viewer.keyboard.press("Escape");
+
+  // Ticking rows is a read too (their QR codes download), but the bar it
+  // brings up offers no Delete.
+  await viewer
+    .getByRole("checkbox", { name: /^Select / })
+    .first()
+    .check();
+  const bar = viewer.getByRole("toolbar", { name: "Selected links" });
+  await expect(bar.getByRole("button", { name: /QR codes/ })).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Delete" })).toBeHidden();
 
   // Analytics is a read, so it stays open to them.
   await viewer.goto("/analytics");

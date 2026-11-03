@@ -52,18 +52,22 @@ export const inviteEmailSchema = v.object({
   role: v.picklist(INVITABLE_ROLES),
 });
 
+/** The auth forms' messages are field reasons: they sit on the right of
+ * the field's label line (rdyrct-design, form errors), so they stay short. */
+const authEmail = v.pipe(v.string(), v.nonEmpty("Required"), v.email("Not a valid email"));
+
 export const loginSchema = v.object({
-  email: v.pipe(v.string(), v.email("Enter a valid email address")),
-  password: v.pipe(v.string(), v.minLength(1, "Enter your password")),
+  email: authEmail,
+  password: v.pipe(v.string(), v.nonEmpty("Required")),
 });
 
 export const signupSchema = v.object({
-  email: v.pipe(v.string(), v.email("Enter a valid email address")),
-  password: v.pipe(v.string(), v.minLength(8, "Password must be at least 8 characters")),
+  email: authEmail,
+  password: v.pipe(v.string(), v.nonEmpty("Required"), v.minLength(8, "At least 8 characters")),
 });
 
 export const forgotSchema = v.object({
-  email: v.pipe(v.string(), v.email("Enter a valid email address")),
+  email: authEmail,
 });
 
 export const otpSchema = v.object({

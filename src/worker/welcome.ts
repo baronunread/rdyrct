@@ -37,11 +37,11 @@ export async function sendWelcomeOnce(
       "Welcome to rdyrct",
       renderEmail(
         {
-          preheader: "Go shorten any link for free right now.",
+          preheader: "You can shorten links for free now.",
           heading: "Thanks for signing up",
           paragraphs: [
             "I'm Andrea, the founder of rdyrct, and I'm glad you're here.",
-            "Go shorten any link for free right now!",
+            "You can shorten links for free now.",
           ],
           hero: {
             sample: {
@@ -50,7 +50,7 @@ export async function sendWelcomeOnce(
             },
           },
           cta: { label: "Shorten a link", url: `${env.APP_URL}/dashboard` },
-          note: "P.S. Got something to say? I read every mail, just hit reply!",
+          note: "P.S. Got something to say? Reply to this email. I read every one.",
           footer: false,
         },
         env.APP_URL,

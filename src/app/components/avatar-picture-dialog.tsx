@@ -66,7 +66,7 @@ function PickView({
       </button>
       <div className="flex items-center justify-between gap-2">
         {hasImage ? (
-          <Button variant="ghost" className="text-danger hover:text-danger" onClick={onRemove}>
+          <Button variant="danger" onClick={onRemove}>
             <Trash2 size={15} /> Remove picture
           </Button>
         ) : (

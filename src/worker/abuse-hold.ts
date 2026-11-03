@@ -32,7 +32,10 @@ export async function isBlockedHost(db: DB, destination: string): Promise<boolea
 
 export async function assertNotBlocked(db: DB, destination: string): Promise<void> {
   if (await isBlockedHost(db, destination))
-    throw new HTTPException(422, { message: "That destination is not allowed on rdyrct." });
+    throw new HTTPException(422, {
+      message: "That destination is not allowed on rdyrct.",
+      cause: { code: "blocked_destination" },
+    });
 }
 
 /**
@@ -94,7 +97,10 @@ export function assertNotOwnShortLink(env: Env, destination: string): void {
   const onAppHost = host === env.APP_HOST?.toLowerCase();
   const looksLikeSlug = segments.length === 1 && !RESERVED_SLUGS.has(segments[0].toLowerCase());
   if (onShortHost || (onAppHost && looksLikeSlug))
-    throw new HTTPException(422, { message: "A link cannot point at another rdyrct short link." });
+    throw new HTTPException(422, {
+      message: "A link cannot point at another rdyrct short link.",
+      cause: { code: "own_short_link" },
+    });
 }
 
 /* ---------------- banned users ---------------- */

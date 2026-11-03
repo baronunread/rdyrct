@@ -103,7 +103,10 @@ export function OtpInput({
         <OTPField.Input
           key={i}
           autoFocus={autoFocus && i === 0}
-          className="h-11 w-full min-w-0 rounded-md border border-border bg-bg text-center text-lg text-text tabular-nums transition-colors focus-visible:border-accent focus-visible:outline-none disabled:opacity-50 data-[filled]:border-accent/60"
+          aria-label={`Digit ${i + 1} of ${length}`}
+          // Lifted like every other input (a ring shadow, no border), 48px
+          // tall, and the focused box ringed in the accent as the mock has it.
+          className="h-12 w-full min-w-0 rounded-[10px] bg-surface text-center text-xl font-semibold text-text tabular-nums smooth-shadow-ring-xs transition-[box-shadow] duration-150 focus-visible:shadow-[0_0_0_1.5px_var(--accent),0_0_0_4px_color-mix(in_oklab,var(--accent)_25%,transparent)] focus-visible:outline-none disabled:opacity-50"
         />
       ))}
     </OTPField.Root>

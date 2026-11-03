@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { bodyLimit } from "hono/body-limit";
 import { eq } from "drizzle-orm";
@@ -136,18 +136,27 @@ avatarRoutes.delete("/", async (c) => {
 });
 
 avatarRoutes.get("/", async (c) => {
-  const log = c.get("log");
-  log.set({ route: "user-avatar" });
+  c.get("log").set({ route: "user-avatar" });
   const user = requireUser(c);
-  log.set({ userId: user.id });
+  return serveAvatar(c, user.id);
+});
 
+/**
+ * A user's picture from R2. The caller has already decided the session may
+ * see it: its own (above), a member of an org it belongs to
+ * (`/api/orgs/:orgId/members/:userId/avatar` in orgs.ts), or the platform
+ * admin (`/api/admin/users/:userId/avatar`). One function, so all cache alike.
+ */
+export async function serveAvatar(c: Context<AppEnv>, userId: string): Promise<Response> {
+  const log = c.get("log");
+  log.set({ userId });
   // Served on every page load (sidebar, org switcher, footer). R2 throttles
   // simultaneous reads of one object (error 10058) and has transient blips
   // (10001); neither is worth a 500 or a Sentry issue, so degrade to a 503
   // the client just retries.
   let obj: R2ObjectBody | null;
   try {
-    obj = await c.env.MEDIA.get(`${AVATAR_PREFIX}${user.id}`);
+    obj = await c.env.MEDIA.get(`${AVATAR_PREFIX}${userId}`);
   } catch (err) {
     log.set({ avatarReadError: String(err) });
     return c.body(null, 503, { "Retry-After": "2", "Cache-Control": "no-store" });
@@ -165,4 +174,4 @@ avatarRoutes.get("/", async (c) => {
   headers.set("etag", obj.httpEtag);
   headers.set("x-content-type-options", "nosniff");
   return new Response(obj.body, { headers });
-});
+}

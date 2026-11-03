@@ -1,20 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addDomainMessage, recheckMessage } from "../src/app/lib/domain-messages";
-
-describe("addDomainMessage", () => {
-  test("active", () => {
-    expect(addDomainMessage("active")).toBe("Domain added successfully");
-  });
-  test("issuing_tls", () => {
-    expect(addDomainMessage("issuing_tls")).toBe(
-      "Domain added, DNS resolved, issuing certificate…",
-    );
-  });
-  test("checking_dns and error both fall back to the checking-DNS message", () => {
-    expect(addDomainMessage("checking_dns")).toBe("Domain added, checking DNS…");
-    expect(addDomainMessage("error")).toBe("Domain added, checking DNS…");
-  });
-});
+import { recheckMessage } from "../src/app/lib/domain-messages";
 
 describe("recheckMessage", () => {
   test("still checking_dns: nudges toward the DNS provider", () => {
@@ -34,13 +19,13 @@ describe("recheckMessage", () => {
     expect(recheckMessage("error", "error")).toBeNull();
   });
 
-  test("newly active: celebrates", () => {
-    expect(recheckMessage("issuing_tls", "active")).toBe("Domain is live!");
+  test("newly active: says so", () => {
+    expect(recheckMessage("issuing_tls", "active")).toBe("Domain is active");
   });
 
   test("DNS just resolved: moves to issuing_tls", () => {
     expect(recheckMessage("checking_dns", "issuing_tls")).toBe(
-      "DNS resolved! Issuing TLS certificate…",
+      "DNS resolved. Issuing TLS certificate…",
     );
   });
 

@@ -97,7 +97,7 @@ export function SameDestinationDialog({
       <div className="flex flex-col gap-4">
         <p className="flex items-start gap-1.5 text-sm">
           {copy.body}
-          <Tooltip content="Adding UTM parameters instead tracks each link on its own, with real numbers for that link. A plain alias just shares its clicks with the one you add it to: sometimes that's exactly what you want.">
+          <Tooltip content="Adding UTM parameters instead tracks each link on its own. A plain alias shares its clicks with the link you add it to.">
             <button
               type="button"
               aria-label="Alias vs. UTM parameters"

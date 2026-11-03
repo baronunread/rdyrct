@@ -57,7 +57,11 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
 
   expect(result).toMatch(/now shows that value/);
   await expect(page.getByLabel("Link or text")).toHaveValue("https://example.com/agent-qr");
-  await expect(page.getByRole("button", { name: "Dot style" })).toContainText("dots");
+  await expect(
+    page
+      .getByRole("group", { name: "Dots", exact: true })
+      .getByRole("button", { name: "Dots", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("img", { name: /QR code for https:\/\/example.com\/agent-qr/ }),
   ).toBeVisible();
@@ -179,7 +183,9 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   expect(created).toMatch(/Created rdyr\.cc\//);
   expect(windowTextLength(created)).toBeLessThanOrEqual(1_500);
   await expect(page).toHaveURL(/\/links$/);
-  await expect(page.getByText(destination)).toBeVisible();
+  // The table splits a destination into host and path; the full URL is the
+  // cell's link target.
+  await expect(page.locator(`a[href="${destination}"]`)).toBeVisible();
 
   const found = await page.evaluate(async () => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "find_links");
@@ -216,7 +222,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   }, slug);
   expect(updated).toMatch(/Updated rdyr\.cc\//);
   await expect(page).toHaveURL(/\/links$/);
-  await expect(page.getByText("https://example.com/agent-moved")).toBeVisible();
+  await expect(page.locator('a[href="https://example.com/agent-moved"]')).toBeVisible();
 
   const deleted = await page.evaluate(async (linkSlug) => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "delete_link");

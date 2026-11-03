@@ -8,8 +8,11 @@
   // preloadFonts in vite.config.ts resolves these package names dynamically;
   // the stylesheet also imports them through /node_modules URLs.
   // portless is run as a command (scripts/dev.ts), never imported.
+  // circle-flags is read through an import.meta.glob of its /node_modules
+  // path (components/source-tile.tsx), which no import statement names.
   "ignoreDependencies": [
     "portless",
+    "circle-flags",
     "tailwindcss",
     "@oxlint/plugins",
     "@fontsource-variable/figtree",
@@ -22,6 +25,12 @@
     "/node_modules/@fontsource-variable/figtree/wght.css",
     "/node_modules/@fontsource/jetbrains-mono/latin-400.css",
     "/node_modules/@fontsource/jetbrains-mono/latin-700.css",
+  ],
+  // Every app page exports a `preload` of the same name on purpose: the
+  // route loaders in main.tsx call whichever one the page's module has
+  // (lib/route-preload.ts).
+  "ignoreExports": [
+    { "file": "src/app/routes/**/*.{ts,tsx}", "exports": ["preload", "preloadAccount"] },
   ],
   // "run" is called by the Cloudflare Workflows runtime, not application code.
   "usedClassMembers": [{ "extends": "WorkflowEntrypoint", "members": ["run"] }],

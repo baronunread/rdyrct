@@ -84,11 +84,34 @@ export async function submitSignup(page: Page, email: string, password: string) 
   await page.getByRole("button", { name: "Sign up" }).click();
 }
 
-export async function verifySignup(page: Page, email: string) {
+/** Types the emailed code into the code screen. */
+export async function enterCode(page: Page, email: string) {
   const otp = await latestOtp(page, email);
   await page.locator("input").first().focus();
   await page.keyboard.insertText(otp);
+}
+
+export async function verifySignup(page: Page, email: string) {
+  await enterCode(page, email);
+  await skipSetup(page);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+}
+
+/**
+ * Past the new organization's setup flow (/welcome) by its skip buttons,
+ * for the specs that sign up through the form but are about something else.
+ * The flow itself is tests/e2e/onboarding.pw.ts.
+ */
+export async function skipSetup(page: Page) {
+  await expect(
+    page.getByRole("heading", { name: "What should we call your organization?" }),
+  ).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Not now" }).click();
+  await page.getByRole("button", { name: "Not now" }).click();
 }
 
 /**
@@ -103,7 +126,7 @@ export async function signUpAndVerify(page: Page, email: string, password: strin
   const res = await page.request.post("/__dev/test-account", { data: { email, password } });
   expect(res.status(), await res.text()).toBe(201);
   await page.goto("/dashboard");
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({
     timeout: 30_000,
   });
 }
@@ -117,7 +140,7 @@ export async function signUpThroughForm(page: Page, email: string, password: str
   // account write and a mail send, and with the suite running in parallel
   // that round trip regularly outlasts five seconds. Every caller of this
   // helper was failing here for that reason and no other.
-  const codeScreen = page.getByRole("heading", { name: "Enter your code" });
+  const codeScreen = page.getByRole("heading", { name: "Check your email" });
   await expect(codeScreen).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(codeScreen).toBeVisible({ timeout: 30_000 });
@@ -125,17 +148,20 @@ export async function signUpThroughForm(page: Page, email: string, password: str
 
   // The URL changes first and the page arrives after it. A fresh account has
   // nothing cached, so the dashboard under the chrome still owes /user, the
-  // org and the stats before it renders anything to act on. The create field
-  // is the signal because it is the one thing the loaded dashboard always
-  // draws: the heading is not, it reads "Shorten your first link" for a new
-  // account and "Dashboard" for one that claimed an anonymous link on the way
-  // in (anon-shortener.pw.ts).
+  // org and the stats before it renders anything to act on. A new account
+  // gets the first-run create field ("Shorten your first link"); one that
+  // claimed an anonymous link on the way in (anon-shortener.pw.ts) gets the
+  // dashboard proper, which has a New link button and no field. Either one
+  // means the page has loaded.
   //
   // Waiting here rather than in each caller is the point: the next assertion
   // in a test carries Playwright's default 5s, which is not a budget for
   // three round trips on a loaded runner. Callers were failing on their own
   // first line for the same reason sign-up above needed 30s.
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(
+    page
+      .getByPlaceholder("https://example.com/launch")
+      .or(page.getByRole("heading", { name: "Dashboard", level: 1 }))
+      .first(),
+  ).toBeVisible({ timeout: 30_000 });
 }

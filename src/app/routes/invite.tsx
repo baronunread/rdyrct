@@ -10,7 +10,7 @@ import { Button } from "../ui/button";
 import { InviteSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
-import { Logo } from "../ui/logo";
+import { AuthPanel, InviteJoinCard } from "../components/auth-panel";
 
 function InviteAuthActions({
   signedIn,
@@ -39,33 +39,6 @@ function InviteAuthActions({
         New here?{" "}
         <HrefLink href={`/signup?next=${encodeURIComponent(here)}`}>Create an account</HrefLink>
       </p>
-    </>
-  );
-}
-
-function InviteDetails({
-  preview,
-  signedIn,
-  accept,
-  onSignIn,
-  here,
-}: {
-  preview: InvitePreview;
-  signedIn: boolean;
-  accept: () => void;
-  onSignIn: () => void;
-  here: string;
-}) {
-  return (
-    <>
-      <p className="text-sm">
-        You have been invited to join{" "}
-        <span className="font-bold text-accent">{preview.orgName}</span> as{" "}
-        <span className="text-accent-2">{preview.role}</span>.
-      </p>
-      <div className="mt-5 flex flex-col gap-2">
-        <InviteAuthActions signedIn={signedIn} accept={accept} onSignIn={onSignIn} here={here} />
-      </div>
     </>
   );
 }
@@ -105,26 +78,32 @@ export function InvitePage() {
 
   const here = `/invite/${token}`;
 
+  // The mock's join screen (auth-panel.tsx), in the same card as sign-in.
+  if (preview.isLoading || currentUser.isLoading)
+    return (
+      <AuthPanel className="text-center">
+        <InviteSkeleton />
+      </AuthPanel>
+    );
+  if (preview.isError || !preview.data)
+    return (
+      <AuthPanel className="text-center">
+        <p className="text-sm text-muted">This invite is invalid or has expired.</p>
+      </AuthPanel>
+    );
   return (
-    <div className="grid min-h-dvh place-items-center px-4">
-      <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center smooth-shadow-ring-sm">
-        <p className="mb-4 text-xl">
-          <Logo />
-        </p>
-        {preview.isLoading || currentUser.isLoading ? (
-          <InviteSkeleton />
-        ) : preview.isError ? (
-          <p className="text-sm text-muted">This invite is invalid or has expired.</p>
-        ) : (
-          <InviteDetails
-            preview={preview.data!}
+    <InviteJoinCard
+      preview={preview.data}
+      actions={
+        <div className="flex flex-col gap-2">
+          <InviteAuthActions
             signedIn={!!currentUser.data}
             accept={accept}
             onSignIn={() => navigate({ href: `/login?next=${encodeURIComponent(here)}` })}
             here={here}
           />
-        )}
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

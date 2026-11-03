@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { signUpThroughForm, subjectsSentTo, verifySignup, submitSignup } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
+import { currentOrgName, ownerWithInviteLink } from "./orgs";
 
 async function blockAuthRequests(page: Page) {
   const counter = { count: 0 };
@@ -39,7 +40,7 @@ test("a sign-up sent before /api/config answers still carries a Turnstile token"
   const email = `slow-config-${Date.now()}@gmail.com`;
   await submitSignup(page, email, "test-password-123");
 
-  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
     timeout: 40_000,
   });
 });
@@ -93,7 +94,7 @@ test.describe("authentication forms", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
     // Signed in and already able to work: the account was given an
     // organization on its first session, so the switcher names one.
-    await expect(page.getByTitle("Switch organization")).not.toHaveText("No organization");
+    await expect(currentOrgName(page)).not.toHaveText("No organization");
   });
 
   // Regression for the case a mode-gated capture missed: someone signs up,
@@ -107,7 +108,7 @@ test.describe("authentication forms", () => {
     const password = "test-password-123";
 
     await submitSignup(page, email, password);
-    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -118,7 +119,7 @@ test.describe("authentication forms", () => {
     await page.evaluate(() => sessionStorage.removeItem("rdyrct:pendingVerify"));
     await page.goto("/login");
     await submitLogin(page, email, password);
-    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -152,7 +153,9 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByLabel("Password")).toHaveValue("password");
-    await expect(page.getByText("Enter a valid email address")).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByLabel("Email")).toBeFocused();
+    await expect(page.getByText("Not a valid email")).toBeVisible();
     expect(authRequests.count).toBe(0);
   });
 
@@ -166,7 +169,8 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByLabel("Password")).toHaveValue("short");
-    await expect(page.getByText("Password must be at least 8 characters")).toBeVisible();
+    await expect(page.getByLabel("Password")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("At least 8 characters")).toBeVisible();
     expect(authRequests.count).toBe(0);
   });
 
@@ -177,12 +181,13 @@ test.describe("authentication forms", () => {
     const email = `forgot-${Date.now()}@gmail.com`;
 
     await page.goto("/login");
-    await page.getByRole("button", { name: "Forgot password?" }).click();
+    await page.getByRole("button", { name: "Forgot it?" }).click();
     await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
 
     await page.getByLabel("Email").fill("person@localhost");
     await page.getByRole("button", { name: "Send reset link" }).click();
-    await expect(page.getByText("Enter a valid email address")).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("Not a valid email")).toBeVisible();
     expect(authRequests.count).toBe(0);
 
     await page.unroute("**/api/auth/**");
@@ -204,12 +209,12 @@ test.describe("authentication forms", () => {
       { key: "rdyrct:pendingVerify", email, next: "/dashboard" },
     );
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
 
     const authRequests = await blockAuthRequests(page);
-    await page.getByRole("button", { name: "Verify & continue" }).click();
+    await page.getByRole("button", { name: "Verify and continue" }).click();
 
-    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
     await expect(page.getByText("Enter a 6-digit code")).toBeVisible();
     expect(authRequests.count).toBe(0);
   });
@@ -255,7 +260,7 @@ test.describe("authentication forms", () => {
     await page.getByRole("button", { name: "Sign up" }).click();
 
     // Exactly what a free address gives: on to the code screen, no hint.
-    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
     await expect(page.getByText("already has an account")).toBeHidden();
 
     // The owner is told, in the one place only they can read.
@@ -270,4 +275,17 @@ test.describe("authentication forms", () => {
       })
       .toBe("notified");
   });
+});
+
+test("signing in from an invite says which organization comes next", async ({ page, browser }) => {
+  const { token } = await ownerWithInviteLink(page, "banner-owner");
+  const context = await browser.newContext();
+  const guest = await context.newPage();
+  await guest.goto(`/login?next=${encodeURIComponent(`/invite/${token}`)}`);
+  await expect(guest.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(guest.getByText(/^Then you join .+ as a (member|viewer|admin)\.$/)).toBeVisible();
+  // "Forgot it?" sits in the password's label row, and leads to the reset.
+  await guest.getByRole("button", { name: "Forgot it?" }).click();
+  await expect(guest.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+  await context.close();
 });

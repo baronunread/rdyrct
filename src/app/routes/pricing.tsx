@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
+import { EnterpriseNote } from "../components/enterprise-note";
 import { PlanChangeSection, PricingSection, usePaidPlanTo } from "./landing";
 import { HrefLink } from "../lib/router-search";
 import { trackCta } from "../lib/track-cta";
@@ -67,7 +68,7 @@ const CARDS = [
     who: "For brands and growing teams",
     plus: "Everything in Hobby, plus",
     points: [
-      `${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.orgs} organizations`,
+      `${formatNumber(PLAN_LIMITS.pro.links)} links`,
       `${PLAN_LIMITS.pro.members} members`,
       `${PLAN_LIMITS.pro.domains} custom domains`,
       "A year of analytics",
@@ -93,6 +94,7 @@ function PlanCards({ match }: { match: StoredPlan | null }) {
           />
         ))}
       </div>
+      <EnterpriseNote />
       <p className="max-w-prose text-sm text-muted">
         Clicks are counted for each organization over the calendar month. Past your plan's count,
         links keep redirecting every visitor; only the counting stops, until the 1st.
@@ -322,9 +324,6 @@ function PlanFinder({
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function PricingPage() {
   const [needs, setNeeds] = useState<Needs>({
     links: 120,

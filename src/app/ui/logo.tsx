@@ -7,7 +7,7 @@ import { cn } from "./cn";
  * public/connector-icon.svg); next to the word, the tile would be a second
  * box around one name.
  */
-function LogoMark({ className }: { className?: string }) {
+export function LogoMark({ className }: { className?: string }) {
   return (
     <svg viewBox="3.6 7 23.6 17.8" aria-hidden="true" className={cn("h-[0.9em] w-auto", className)}>
       <path

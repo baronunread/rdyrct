@@ -1,3 +1,5 @@
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./db/schema";
 import type { Env } from "./env";
 import type { ClickMessage } from "./clicks";
 import { FRESH, type ClickPayload } from "./rollups";
@@ -5,6 +7,8 @@ import { billingEnabled, configureBilling, planNow } from "./plan";
 import { sendEmail } from "./email";
 import { NOTICE_FOOTER, renderEmail } from "./email-layout";
 import { PLAN_LIMITS, orgPlanOf, type OrgPlan } from "@/shared/types";
+import { effectiveLimits } from "@/shared/limits";
+import { loadLimitOverrides, trackedClicksOverrideSql } from "./limit-overrides";
 import {
   CLICK_WARN_SHARE,
   exactCount,
@@ -38,7 +42,13 @@ import { logFailure } from "./log-failure";
 
 /* ---------------- the cap, at flush time ---------------- */
 
-type Allowance = { orgId: string; month: string; plan: string | null; used: number };
+type Allowance = {
+  orgId: string;
+  month: string;
+  plan: string | null;
+  userId: string | null;
+  used: number;
+};
 
 /**
  * Split a flush into the clicks that still fit their org's cap for their
@@ -70,6 +80,7 @@ export async function withinClickCaps(
        select value ->> 0 as org_id, value ->> 1 as month from json_each(?1)
      )
      select k.org_id as orgId, k.month as month, u.plan as plan,
+            u.id as userId,
             coalesce(cu.clicks, 0) as used
      from k
      left join org_members m on m.org_id = k.org_id and m.role = 'owner'
@@ -79,9 +90,16 @@ export async function withinClickCaps(
     .bind(JSON.stringify(keys.map((key) => key.split("|"))))
     .all<Allowance>();
 
+  const overrides = await loadLimitOverrides(
+    drizzle(env.DB, { schema }),
+    results.flatMap((row) => (row.userId ? [row.userId] : [])),
+  );
   const room = new Map<string, number>();
   for (const row of results) {
-    const limit = PLAN_LIMITS[planNow(orgPlanOf(row.plan))].trackedClicks;
+    const limit = effectiveLimits(
+      planNow(orgPlanOf(row.plan)),
+      row.userId ? overrides.get(row.userId) : undefined,
+    ).trackedClicks;
     room.set(`${row.orgId}|${row.month}`, limit - row.used);
   }
   const counted: ClickMessage[] = [];
@@ -177,7 +195,11 @@ export async function sweepClickUsageEmails(env: Env, now = Date.now()): Promise
     `with usage as (
        select cu.org_id as orgId, o.name as name, u.email as email, u.plan as plan,
               cu.clicks as clicks, cu.warned_limit as warnedLimit, cu.capped_limit as cappedLimit,
-              case u.plan when 'hobby' then ?2 when 'pro' then ?3 else ?4 end as lim
+              max(
+                case u.plan when 'hobby' then ?2 when 'pro' then ?3 else ?4 end,
+                -- An account's custom monthly count, when it has one.
+                ${trackedClicksOverrideSql("u")}
+              ) as lim
        from org_click_usage cu
        join orgs o on o.id = cu.org_id and o.deleting_at is null
        join org_members m on m.org_id = cu.org_id and m.role = 'owner'

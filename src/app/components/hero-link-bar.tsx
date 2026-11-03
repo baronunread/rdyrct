@@ -14,14 +14,18 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   type Ref,
+  useId,
 } from "react";
 import { Button } from "../ui/button";
+import { FieldReason, NO_AUTOFILL } from "../ui/field";
+import { invalidAria } from "../ui/invalid-aria";
 import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { CHALLENGE_LABEL } from "../lib/turnstile";
 import { cn } from "../ui/cn";
+import { Tooltip } from "@/app/ui/tooltip";
 
 // A QR code is useful only once a link exists. Keeping the renderer behind
 // that state avoids loading its encoder for everyone who only reads the page.
@@ -61,6 +65,7 @@ export function HeroBar({
   title,
   again = false,
   waiting = false,
+  error,
 }: {
   prefix: ReactNode;
   input: InputHTMLAttributes<HTMLInputElement>;
@@ -74,37 +79,65 @@ export function HeroBar({
   /** A submission waits on the Turnstile challenge above the bar; `busy`
    * is then false, since the button says so instead of spinning. */
   waiting?: boolean;
+  /** Why the address was refused: the bar turns danger and the reason sits
+   * at the end of the field, so nothing under the bar moves. */
+  error?: BarError | null;
 }) {
+  const reasonId = useId();
+  const invalid = invalidAria(error?.reason, reasonId);
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-bg p-1 focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_22%,transparent)] sm:flex-row sm:items-center sm:gap-1.5">
+    // The marked input turns the bar danger: the state lives on the input.
+    <div className="group/bar flex flex-col gap-2 rounded-xl border border-border bg-bg p-1 focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_22%,transparent)] has-[[aria-invalid=true]]:border-danger has-[[aria-invalid=true]]:focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--danger)_18%,transparent)] sm:flex-row sm:items-center sm:gap-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-1">
-        {prefix}
+        {/* On a phone the prefix steps aside while the field is marked, so
+            the reason and what was typed both keep room. */}
+        <span className="contents group-has-[[aria-invalid=true]]/bar:max-sm:hidden">{prefix}</span>
         <input
           ref={inputRef}
           type="text"
           inputMode="url"
           autoComplete="off"
+          {...NO_AUTOFILL}
           autoCapitalize="none"
           spellCheck={false}
           placeholder={again ? "Paste another…" : "Paste a long link…"}
           {...input}
+          {...invalid}
           // The bar draws the focus ring, so the field drops the global one
           // (unlayered in styles.css, hence the !).
           className="h-9 min-w-0 flex-1 bg-transparent px-1 text-base text-text outline-none! placeholder:text-placeholder sm:text-sm"
         />
+        {error && <BarReason id={reasonId} error={error} />}
       </div>
-      <Button
-        variant="primary"
-        type="submit"
-        disabled={disabled}
-        title={title}
-        className="h-9 rounded-lg sm:w-auto"
-      >
-        <BusyContent busy={busy}>
-          <ShortenLabel waiting={waiting} />
-        </BusyContent>
-      </Button>
+      {/* A disabled button takes no pointer events, so the reason sits on
+          a wrapper; grid keeps the button as wide as it was. */}
+      <Tooltip content={title}>
+        <span className="grid">
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={disabled}
+            className="h-9 rounded-lg sm:w-auto"
+          >
+            <BusyContent busy={busy}>
+              <ShortenLabel waiting={waiting} />
+            </BusyContent>
+          </Button>
+        </span>
+      </Tooltip>
     </div>
+  );
+}
+
+/** What was wrong with the address: a few words, and the server's whole
+ * sentence for screen readers and on hover. */
+export type BarError = { reason: string; detail: string };
+
+function BarReason({ id, error }: { id: string; error: BarError }) {
+  return (
+    <span className="max-w-[45%] shrink-0 pr-1.5 text-xs">
+      <FieldReason id={id} reason={error.reason} detail={error.detail} />
+    </span>
   );
 }
 

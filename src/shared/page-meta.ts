@@ -157,10 +157,10 @@ Sources: [Google, August 1, 2025](https://blog.google/technology/developers/goog
 [Sign up free](/signup)`,
   },
   "/branded-link-shortener": {
-    title: "Branded link shortener - short links on your own domain",
+    title: "Custom URL shortener - branded short links on your own domain",
     description:
-      "A branded link shortener for your own domain: chosen slugs, TLS set up for you, QR codes and click analytics. From $4 a month, with a free plan.",
-    markdown: `# Branded link shortener
+      "A custom URL shortener for your own domain: branded short links with words you choose, TLS set up for you, QR codes and click analytics. From $4 a month, with a free plan.",
+    markdown: `# Custom URL shortener
 
 Put short links on your own domain, such as go.yourcompany.com/spring, instead of a generic shortener's. People see who sent the link before they tap it.
 
@@ -244,10 +244,14 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 500,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 5 custom domains, with any slug you choose
-- 3 organizations
+- 1 organization
 - Direct email support
 
 [Start Pro](/signup?next=%2Fbilling%3Fplan%3Dpro)
+
+## Enterprise
+
+Several organizations, custom limits and higher caps, set up by hand. Email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com?subject=Enterprise).
 
 ## Self-hosting
 

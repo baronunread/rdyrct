@@ -1,6 +1,7 @@
 import { Download } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { downloadCsv, statsFilename, statsToCsv, type ExportableStats } from "../lib/csv";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /**
  * Exports the stats already on screen (#78).
@@ -23,16 +24,23 @@ export function ExportCsvButton({
   const empty = ![stats.series, stats.countries, stats.devices, stats.referrers].some(
     (section) => section.length,
   );
-  return (
+  const button = (
     <Button
       variant="outline"
       size="sm"
       disabled={empty}
-      title={empty ? "Nothing to export yet" : undefined}
       onClick={() => downloadCsv(statsFilename(scope, days), statsToCsv(stats))}
     >
       <Download className="size-4" aria-hidden />
       Export CSV
     </Button>
+  );
+  // A disabled button takes no pointer events, so the tip sits on a wrapper.
+  return empty ? (
+    <Tooltip content="Nothing to export yet">
+      <span className="inline-flex">{button}</span>
+    </Tooltip>
+  ) : (
+    button
   );
 }

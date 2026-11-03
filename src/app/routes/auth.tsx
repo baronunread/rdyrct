@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useForm, Controller, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useSearchParams, HrefLink } from "../lib/router-search";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check } from "@/app/ui/icons";
-import { AuthCard, PasswordMeter } from "../components/auth-form";
+import { PasswordMeter } from "../components/auth-form";
+import { AUTH_LINK, AuthHeading, AuthPanel, InviteBanner } from "../components/auth-panel";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
@@ -31,12 +32,16 @@ import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
+import { Field, FieldReason, Input, InvalidMark } from "../ui/field";
+import { invalidAria, type InvalidAria } from "../ui/invalid-aria";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 import type { CurrentUser } from "@/shared/types";
+import { isAppPage, SETUP_ARRIVE, SETUP_FLOW } from "../lib/setup-arrive";
+import { loadShell } from "../lib/shell-loader";
+import { loadWelcome } from "../lib/welcome-loader";
 
 /** Admin routes 404 in-app for non-admins, so a stale `next` pointed at
  * `/admin` (e.g. someone bookmarked it while logged out) shouldn't strand a
@@ -67,46 +72,52 @@ function ForgotView({
   onBack: () => void;
 }) {
   const button = guardedButton(busy, challenge);
-  const toast = useToast();
-  const { register, handleSubmit, getValues } = useForm<ForgotForm>({
+  const {
+    register,
+    handleSubmit,
+    getValues,
+    formState: { errors },
+  } = useForm<ForgotForm>({
     resolver: valibotResolver(forgotSchema),
     defaultValues: { email: initialEmail },
   });
 
-  const onFormSubmit = handleSubmit(
-    (data) => onSubmit(data.email),
-    (errors) => toast(firstFormError(errors, "Enter a valid email address"), "error"),
-  );
+  // A bad address marks the field (react-hook-form focuses it); nothing toasts.
+  const onFormSubmit = handleSubmit((data) => onSubmit(data.email));
 
   return (
-    <AuthCard>
-      <div className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm">
-        <h1 className="font-bold">Reset your password</h1>
-        {sent ? (
-          <p className="text-sm text-muted">
-            If that account exists, we sent a reset link to{" "}
-            <span className="text-text">{getValues("email")}</span>.
-          </p>
-        ) : (
-          <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
-            <Field label="Email">
-              <Input type="email" {...register("email")} required autoComplete="email" />
-            </Field>
-            <TurnstileSlot challenge={challenge} />
-            <Button type="submit" variant="primary" disabled={button.disabled}>
-              <BusyContent busy={button.spinning}>
-                {button.waiting ? CHALLENGE_LABEL : "Send reset link"}
-              </BusyContent>
-            </Button>
-          </form>
-        )}
-        <p className="text-center text-xs text-muted">
-          <Link to="/login" onClick={onBack}>
-            Back to sign in
-          </Link>
+    <AuthPanel>
+      <AuthHeading>Reset your password</AuthHeading>
+      {sent ? (
+        <p className="text-center text-sm text-pretty text-muted">
+          If that account exists, we sent a reset link to{" "}
+          <span className="font-mono text-text">{getValues("email")}</span>.
         </p>
-      </div>
-    </AuthCard>
+      ) : (
+        <form onSubmit={onFormSubmit} noValidate className="flex flex-col gap-4">
+          <Field label="Email" error={errors.email?.message}>
+            <Input
+              type="email"
+              {...register("email")}
+              autoComplete="email"
+              placeholder="you@company.com"
+              className="h-10"
+            />
+          </Field>
+          <TurnstileSlot challenge={challenge} />
+          <Button type="submit" variant="primary" disabled={button.disabled} className="h-10">
+            <BusyContent busy={button.spinning}>
+              {button.waiting ? CHALLENGE_LABEL : "Send reset link"}
+            </BusyContent>
+          </Button>
+        </form>
+      )}
+      <p className="text-center text-xs text-muted">
+        <Link to="/login" onClick={onBack} className={AUTH_LINK}>
+          Back to sign in
+        </Link>
+      </p>
+    </AuthPanel>
   );
 }
 
@@ -146,17 +157,15 @@ function VerifyOtpView({
   const verified = verifyPhase !== "idle";
 
   return (
-    <AuthCard className={verifyPhase === "leaving" ? "auth-card-leaving" : undefined}>
-      <form
-        onSubmit={onFormSubmit}
-        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
-      >
-        <h1 className="font-bold">Enter your code</h1>
-        <p className="text-sm text-muted">
-          We emailed a 6-digit code to <span className="text-text">{email}</span>. It expires in 10
-          minutes.
+    <AuthPanel className={verifyPhase === "leaving" ? "auth-card-leaving" : undefined}>
+      <form onSubmit={onFormSubmit} className="contents">
+        <AuthHeading>Check your email</AuthHeading>
+        <p className="text-center text-sm text-pretty text-muted">
+          We sent a 6-digit code to{" "}
+          <span className="font-mono [overflow-wrap:anywhere] text-text">{email}</span>. It expires
+          in 10 minutes.
         </p>
-        <Field label="Verification code">
+        <div role="group" aria-label="Verification code">
           <Controller
             control={control}
             name="otp"
@@ -173,12 +182,13 @@ function VerifyOtpView({
               />
             )}
           />
-        </Field>
+        </div>
         <Button
           type="submit"
           variant="primary"
           disabled={busy}
           className={cn(
+            "h-10",
             shake.className,
             // `disabled` keeps the button inert through the fade, but its
             // own opacity-50 was washing the checkmark's green out.
@@ -187,23 +197,24 @@ function VerifyOtpView({
           onAnimationEnd={shake.end}
         >
           <BusyContent busy={busy} icon={verified ? <Check className="h-4 w-4" /> : undefined}>
-            Verify & continue
+            Verify and continue
           </BusyContent>
         </Button>
-        <div className="flex items-center justify-between text-xs text-muted">
+        <p className="text-center text-xs text-muted">
           {resent ? (
-            <span>New code sent.</span>
+            <span role="status">New code sent</span>
           ) : (
-            <button type="button" className="hover:text-accent" onClick={onResend}>
-              Resend code
+            <button type="button" className={AUTH_LINK} onClick={onResend}>
+              Send a new code
             </button>
           )}
-          <Link to="/login" onClick={onBack}>
-            Back to sign in
+          <span aria-hidden> · </span>
+          <Link to="/login" onClick={onBack} className={AUTH_LINK}>
+            Use another email
           </Link>
-        </div>
+        </p>
       </form>
-    </AuthCard>
+    </AuthPanel>
   );
 }
 
@@ -236,12 +247,12 @@ const AUTH_MODE_COPY = {
  */
 function SignupSubtitle({ next }: { next: string }) {
   const body = storedAnonLinks().length
-    ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
-    : next.startsWith("/billing")
+    ? "Sign up to keep your link and its clicks."
+    : next.startsWith("/billing") || next.startsWith("/welcome")
       ? "Create your account, then check out. No card needed to create the account."
       : null;
   if (!body) return null;
-  return <p className="-mt-2 text-xs text-muted">{body}</p>;
+  return <p className="-mt-2 text-center text-xs text-pretty text-muted">{body}</p>;
 }
 
 /** Step 3a (#64), once per mount of the signup form. */
@@ -252,23 +263,100 @@ function SignupViewed() {
   return null;
 }
 
-function PasswordHint({
+/**
+ * The password, with "Forgot it?" on the right of its label line on sign-in
+ * (where somebody looks the moment they are stuck) and the strength meter
+ * under it on sign-up. Its own label row rather than Field's, because a
+ * button inside a <label> would hand its clicks to the input.
+ */
+function PasswordField({
   mode,
+  password,
+  error,
+  onForgot,
+  input,
+}: {
+  mode: "login" | "signup";
+  password: string;
+  /** Why the password is wrong: on the label line, like Field's. */
+  error?: string;
+  onForgot: () => void;
+  input: (id: string, aria: InvalidAria) => ReactNode;
+}) {
+  const id = useId();
+  const reasonId = useId();
+  return (
+    <div>
+      <div className="mb-1.5 flex min-h-4 items-center gap-3 text-xs text-muted">
+        <label htmlFor={id} className="shrink-0">
+          Password
+        </label>
+        <span className="ml-auto flex min-w-0 items-center gap-3">
+          {error && <FieldReason id={reasonId} reason={error} />}
+          {mode === "login" && (
+            <button type="button" className={cn(AUTH_LINK, "shrink-0")} onClick={onForgot}>
+              Forgot it?
+            </button>
+          )}
+        </span>
+      </div>
+      {/* The input is the peer: its aria-invalid shows the ×. */}
+      <span className="relative block">
+        {input(id, invalidAria(error, reasonId))}
+        <InvalidMark className="hidden peer-aria-invalid:block" />
+      </span>
+      {mode === "signup" && (
+        <span className="mt-1.5 block text-xs text-muted">
+          <PasswordMeter password={password} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Email and password, each marked with its own reason when it is wrong. */
+function CredentialFields({
+  mode,
+  register,
+  errors,
   password,
   onForgot,
 }: {
   mode: "login" | "signup";
+  register: UseFormRegister<AuthForm>;
+  errors: FieldErrors<AuthForm>;
   password: string;
   onForgot: () => void;
 }) {
-  if (mode === "login") {
-    return (
-      <button type="button" className="text-muted hover:text-accent" onClick={onForgot}>
-        Forgot password?
-      </button>
-    );
-  }
-  return <PasswordMeter password={password} />;
+  return (
+    <>
+      <Field label="Email" error={errors.email?.message}>
+        <Input
+          type="email"
+          {...register("email")}
+          autoComplete="email"
+          placeholder="you@company.com"
+          className="h-10"
+        />
+      </Field>
+      <PasswordField
+        mode={mode}
+        password={password}
+        error={errors.password?.message}
+        onForgot={onForgot}
+        input={(id, aria) => (
+          <Input
+            id={id}
+            type="password"
+            {...register("password")}
+            {...aria}
+            autoComplete={AUTH_MODE_COPY[mode].passwordAutoComplete}
+            className="peer h-10 aria-invalid:pr-8"
+          />
+        )}
+      />
+    </>
+  );
 }
 
 /**
@@ -294,7 +382,7 @@ function GoogleButton({
         type="button"
         onClick={onClick}
         {...off}
-        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
+        className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-surface text-sm font-semibold smooth-shadow-ring-xs transition-[background-color,scale] duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:disabled:hover:bg-surface"
       >
         <GoogleG />
         Continue with Google
@@ -307,7 +395,7 @@ function GoogleButton({
       onClick={onClick}
       {...off}
       aria-label={`Continue as ${email}`}
-      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
+      className="flex h-10 cursor-pointer items-center gap-3 rounded-lg bg-surface px-3 text-sm smooth-shadow-ring-xs transition-[background-color,scale] duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:disabled:hover:bg-surface"
     >
       <GoogleG />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
@@ -384,7 +472,6 @@ function AuthFormView({
 }) {
   const copy = AUTH_MODE_COPY[mode];
   const button = guardedButton(busy, challenge);
-  const toast = useToast();
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
@@ -399,7 +486,13 @@ function AuthFormView({
     }
     onFirstInput();
   };
-  const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
+  const {
+    register,
+    handleSubmit,
+    watch,
+    getValues,
+    formState: { errors },
+  } = useForm<AuthForm>({
     resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
@@ -409,11 +502,15 @@ function AuthFormView({
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
     // to `next`. Same flow on login and signup (account linking handles an
-    // existing email/password account).
+    // existing email/password account). Bound for an app page, it comes back
+    // through /welcome, which draws this card again and hands it over to the
+    // app the way the email code does; the trip through Google is a full
+    // page load, so there is no card left to carry across otherwise.
+    const back = isAppPage(next) ? `/welcome?via=google&next=${encodeURIComponent(next)}` : next;
     void authClient.signIn.social({
       provider: "google",
-      callbackURL: next,
-      newUserCallbackURL: googleSignupUrl(next),
+      callbackURL: back,
+      newUserCallbackURL: googleSignupUrl(back),
     });
   };
 
@@ -423,21 +520,17 @@ function AuthFormView({
     (errors) => {
       if (mode === "signup")
         posthog.capture(SIGNUP_FAILED, { reason: `invalid_${Object.keys(errors).join("_")}` });
-      toast(firstFormError(errors, "Check your email and password"), "error");
+      // The fields carry the reasons; react-hook-form focuses the first.
       shake.start();
     },
   );
 
   return (
-    <AuthCard>
-      <form
-        onSubmit={onFormSubmit}
-        onInput={onInput}
-        noValidate
-        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
-      >
-        <h1 className="font-bold">{copy.title}</h1>
+    <AuthPanel>
+      <form onSubmit={onFormSubmit} onInput={onInput} noValidate className="contents">
+        <AuthHeading>{copy.title}</AuthHeading>
         {mode === "signup" && <SignupSubtitle next={next} />}
+        <InviteBanner next={next} />
         {mode === "signup" && <SignupViewed />}
         {/* Keep the Google row in place while configuration loads. Enable it
             only when this server has Google credentials. */}
@@ -451,32 +544,19 @@ function AuthFormView({
           or
           <span className="h-px flex-1 bg-border" />
         </div>
-        <Field label="Email">
-          <Input type="email" {...register("email")} required autoComplete="email" />
-        </Field>
-        <Field
-          label="Password"
-          hint={
-            <PasswordHint
-              mode={mode}
-              password={password}
-              onForgot={() => onForgot(getValues("email"))}
-            />
-          }
-        >
-          <Input
-            type="password"
-            {...register("password")}
-            required
-            autoComplete={copy.passwordAutoComplete}
-          />
-        </Field>
+        <CredentialFields
+          mode={mode}
+          register={register}
+          errors={errors}
+          password={password}
+          onForgot={() => onForgot(getValues("email"))}
+        />
         {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
           type="submit"
           variant="primary"
           disabled={button.disabled}
-          className={shake.className}
+          className={cn("h-10", shake.className)}
           onAnimationEnd={shake.end}
         >
           <BusyContent busy={button.spinning}>
@@ -485,12 +565,15 @@ function AuthFormView({
         </Button>
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
-          <HrefLink href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>
+          <HrefLink
+            href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}
+            className={AUTH_LINK}
+          >
             {copy.footerLabel}
           </HrefLink>
         </p>
       </form>
-    </AuthCard>
+    </AuthPanel>
   );
 }
 
@@ -526,6 +609,17 @@ function clearPending() {
   }
 }
 
+const morphsInto = (href: string) => !!SETUP_ARRIVE && isAppPage(href);
+const intoFlow = (href: string) => !!SETUP_FLOW && href.startsWith("/welcome?via=email");
+
+/** Leaves the sign-in card for where it was going: into the app as the card
+ * becoming the org switcher (lib/setup-arrive.ts), anywhere else plainly. */
+function arriveAt(navigate: ReturnType<typeof useNavigate>, href: string) {
+  if (intoFlow(href)) void navigate({ href, replace: true, viewTransition: SETUP_FLOW });
+  else if (morphsInto(href)) void navigate({ href, replace: true, viewTransition: SETUP_ARRIVE });
+  else void navigate({ href, replace: true });
+}
+
 interface SubmitDeps {
   goVerify: (email: string) => Promise<void>;
   failSubmit: (message: string) => void;
@@ -543,7 +637,7 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     posthog.capture("user_signed_in");
-    deps.navigate({ href: sanitizeNext(deps.next, isAdmin), replace: true });
+    arriveAt(deps.navigate, sanitizeNext(deps.next, isAdmin));
     return;
   }
   if (signInError.code === "EMAIL_NOT_VERIFIED") {
@@ -620,20 +714,54 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
  * green checkmark so acceptance registers, then the card fades before the
  * page changes. Out here because none of it is state, it is a sequence, and
  * it was the bulk of what made runVerify hard to read. */
+/** Where to go when the preload never answered: the same href, worked out
+ * from whatever user the cache holds by then. */
+function fallbackHref(qc: ReturnType<typeof useQueryClient>, next: string): string {
+  const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+  return sanitizeNext(next, isAdmin);
+}
+
 async function finishVerifiedSignIn(deps: {
   next: string;
   qc: ReturnType<typeof useQueryClient>;
   navigate: ReturnType<typeof useNavigate>;
+  /** Loads a page's data ahead of going there (the route's own loader). */
+  preload: (href: string) => Promise<void>;
   setVerifyPhase: (phase: "idle" | "success" | "leaving") => void;
 }) {
   deps.setVerifyPhase("success");
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  // The beat on the checkmark doubles as the wait for the page behind it:
+  // the user, then that page's data, so the card hands over to a page
+  // already drawn rather than to its skeleton.
+  const ready = deps.qc.refetchQueries({ queryKey: ["user"] }).then(() => {
+    const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+    const href = sanitizeNext(deps.next, isAdmin);
+    return deps
+      .preload(href)
+      .catch(() => {})
+      .then(() => href);
+  });
+  // Never longer than a few seconds: a stalled preload only costs the
+  // hand-over its drawn page, not the sign-in.
+  const bounded = Promise.race([
+    ready,
+    new Promise<string>((resolve) =>
+      setTimeout(() => resolve(fallbackHref(deps.qc, deps.next)), 3000),
+    ),
+  ]);
+  const [dest] = await Promise.all([bounded, new Promise((resolve) => setTimeout(resolve, 900))]);
+  // A new account bound for the app goes by /welcome, where its card
+  // becomes the organization card of the setup flow; the page decides
+  // whether the org gets one.
+  const href = isAppPage(dest) ? `/welcome?via=email&next=${encodeURIComponent(dest)}` : dest;
   clearPending();
-  await deps.qc.refetchQueries({ queryKey: ["user"] });
-  const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
-  deps.setVerifyPhase("leaving");
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  deps.navigate({ href: sanitizeNext(deps.next, isAdmin), replace: true });
+  // Into the app the card itself travels, so it stays put; anywhere else it
+  // fades before the page changes.
+  if (!morphsInto(href) && !intoFlow(href)) {
+    deps.setVerifyPhase("leaving");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  arriveAt(deps.navigate, href);
 }
 
 /** The password-reset flow, which shares nothing with the rest of the page
@@ -699,6 +827,7 @@ function useRedirectWhenSignedIn(deps: {
  * flows, and the post-auth redirect. Everything AuthPage's views need. */
 function useAuthFlow(mode: "login" | "signup") {
   const navigate = useNavigate();
+  const router = useRouter();
   const [params] = useSearchParams();
   const qc = useQueryClient();
   const toast = useToast();
@@ -843,7 +972,22 @@ function useAuthFlow(mode: "login" | "signup") {
         toast,
       });
       if (!established) return false;
-      await finishVerifiedSignIn({ next, qc, navigate, setVerifyPhase });
+      await finishVerifiedSignIn({
+        next,
+        qc,
+        navigate,
+        // The shell's code (main.tsx loads it lazily), and the dashboard's
+        // data: where nearly everybody lands, and the page the card hands
+        // over to with the setup list on it.
+        preload: async (href) => {
+          await Promise.all([
+            loadShell(),
+            loadWelcome(),
+            href === "/dashboard" ? router.preloadRoute({ to: "/dashboard" }) : null,
+          ]);
+        },
+        setVerifyPhase,
+      });
       return true;
     } finally {
       setBusy(false);

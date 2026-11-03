@@ -1,59 +1,90 @@
-import { useState, type FormEvent, type ReactNode, useCallback } from "react";
-import { useForm, type UseFormRegister } from "react-hook-form";
-import { valibotResolver } from "@hookform/resolvers/valibot";
-import { Link } from "@tanstack/react-router";
-import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Trash2, RefreshCw, Star } from "@/app/ui/icons";
-import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
-import { useCurrentOrg } from "../lib/current-org";
 import {
-  PLAN_LIMITS,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
+import * as v from "valibot";
+import { Check, Ellipsis, Pencil, Plus } from "@/app/ui/icons";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  domainsQuery,
+  useCurrentUser,
+  useConfig,
+  useDomains,
+  useDomainMutations,
+  useLinkHost,
+} from "../lib/hooks";
+import { settle, type PageContext } from "../lib/route-preload";
+import { useCurrentOrg } from "../lib/current-org";
+import { resolveDefaultDomainId } from "../lib/default-domain";
+import { ApiError } from "../lib/api";
+import {
+  type PlanLimits,
   type DomainDTO,
   type OrgPlan,
   type OrgRole,
   type UserOrg,
 } from "@/shared/types";
-import { Button, IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
-import { Input } from "../ui/field";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
-import { Badge, Card, PageHeader } from "../ui/misc";
-import { BusyContent } from "../ui/spinner";
-import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
+import { PageHeader } from "../ui/misc";
+import { SettingsGroup } from "../ui/settings-rows";
+import { Spinner } from "../ui/spinner";
+import {
+  DomainsHeaderSkeleton,
+  DomainsPageSkeleton,
+  DomainsSkeleton,
+} from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
-import { LockedPanel } from "../components/over-limit";
+import { FeatureLocked, useOwnerLabel } from "../components/plan-upsell";
 import { domainsBlockedBy } from "../lib/org-limits";
+import { displayUrl, parentDomain } from "../lib/domain-display";
+import { displayHost } from "../lib/display-url";
 import { graceLabel, graceRunning } from "../lib/grace";
-import { CopyButton } from "../ui/copy-button";
-import { Tooltip } from "../ui/tooltip";
+import { relativeDate, shortDate } from "../lib/dates";
+import { LiveStatus } from "../ui/live-status";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
-import { DnsRecords } from "../components/dns-records";
-import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
+import { DnsRecords, RecordLine } from "../components/dns-records";
+import { recheckMessage } from "../lib/domain-messages";
 import posthog from "../lib/posthog";
+import { Tooltip } from "@/app/ui/tooltip";
 
-const domainStatusColor = {
-  checking_dns: "butter",
-  issuing_tls: "accent",
-  active: "mint",
-  error: "pink",
-} satisfies Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink">;
+type Tone = "warn" | "bad";
 
-const domainStatusLabel = {
-  checking_dns: "Checking DNS",
-  issuing_tls: "Issuing TLS",
-  active: "active",
-  error: "Failed",
-} satisfies Record<DomainDTO["status"], string>;
+const TONE_CLASS = {
+  warn: "text-butter",
+  bad: "text-danger",
+} satisfies Record<Tone, string>;
+
+const MONTH_DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
+const monthDay = (ts: number) => MONTH_DAY.format(new Date(ts));
 
 const transitional = (status: DomainDTO["status"]) =>
   status === "checking_dns" || status === "issuing_tls";
 
+/** The house curve (rdyrct-design, motion) for the row and its setup. */
+const EASE = [0.32, 0.72, 0, 1] as const;
+
 function canManageDomains(isPlatformAdmin: boolean, role: OrgRole): boolean {
   return isPlatformAdmin || role === "owner" || role === "admin";
+}
+
+/** Everything the domains page's first frame reads (see
+ * lib/route-preload.ts), for whoever gets the list. Config is already in. */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return canManageDomains(user.user.isAdmin, org.role)
+    ? settle([qc.ensureQueryData(domainsQuery(orgId))])
+    : Promise.resolve();
 }
 
 export function DomainsPage() {
@@ -62,112 +93,39 @@ export function DomainsPage() {
   const currentUser = useCurrentUser();
 
   // The full skeleton only for somebody who is going to get the full page.
-  // A member sees one line saying they have no access, and a free plan sees
-  // an upgrade card, so drawing a form and a domain list for either promises
-  // controls that the page then takes away. Role and plan are both already in
-  // hand: the only thing still loading is whether this is a platform admin,
-  // and that is a handful of people.
+  // A member sees one line saying they have no access, so drawing a domain
+  // list for them promises controls that the page then takes away. A free
+  // plan gets the same page as a paid one (its Add domain offers the plan),
+  // so it gets the same skeleton. The role is already in hand: the only
+  // thing still loading is whether this is a platform admin, and that is a
+  // handful of people.
   if (currentUser.isLoading)
-    return org && canManageDomains(false, org.role) && PLAN_LIMITS[org.plan].domains > 0 ? (
+    return org && canManageDomains(false, org.role) ? (
       <DomainsPageSkeleton />
     ) : (
-      <HeaderSkeleton />
+      <DomainsHeaderSkeleton />
     );
   if (!org) return <NoOrgState />;
 
-  const isAdmin = canManageDomains(!!currentUser.data?.user.isAdmin, org.role);
-
-  return (
-    <div>
-      <PageHeader title="Domains" sub="Serve short links from your own domain" />
-      {!isAdmin ? (
+  // A plan without domains says so to everyone, whoever may manage them:
+  // the lock is about the plan, and the plan is the owner's to change.
+  const canManage = canManageDomains(!!currentUser.data?.user.isAdmin, org.role);
+  if (!canManage && org.limits.domains === 0)
+    return (
+      <div className="mx-auto w-full max-w-[760px]">
+        <PageHeader title="Domains" />
+        <DomainsLocked orgId={orgId} isOwner={false} />
+      </div>
+    );
+  if (!canManage)
+    return (
+      <div className="mx-auto w-full max-w-[760px]">
+        <PageHeader title="Domains" />
         <p className="text-sm text-muted">You don't have access to domains.</p>
-      ) : (
-        <DomainsCard orgId={orgId} plan={org.plan} />
-      )}
-    </div>
-  );
-}
-
-function UpgradeDomainsCard() {
-  return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium text-muted">Custom domains</p>
-        <p className="text-sm text-muted">
-          Use your own domain for short links instead of the shared default. Custom domains are a
-          paid feature.
-        </p>
-        <div>
-          <Link to="/billing" className={buttonClass({ variant: "primary" })}>
-            Upgrade to add a domain
-          </Link>
-        </div>
       </div>
-    </Card>
-  );
-}
+    );
 
-function AddDomainForm({
-  hasDomains,
-  register,
-  onSubmit,
-  pending,
-}: {
-  hasDomains: boolean;
-  register: UseFormRegister<{ hostname: string }>;
-  onSubmit: (e: FormEvent) => void;
-  pending: boolean;
-}) {
-  return (
-    <form
-      className={cn("flex flex-col gap-3", hasDomains ? "border-t border-border pt-4" : "")}
-      onSubmit={onSubmit}
-    >
-      <div>
-        <span className="mb-1.5 block text-xs text-muted">Add a domain</span>
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <Input
-              {...register("hostname")}
-              placeholder="links.example.com"
-              aria-label="Add a domain"
-              inputMode="url"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-            />
-          </div>
-          <Button type="submit" variant="primary" size="sm" disabled={pending} className="w-24">
-            <BusyContent busy={pending}>Add domain</BusyContent>
-          </Button>
-        </div>
-        <span className="mt-1 block text-xs text-muted">
-          After adding, we check for the CNAME record every few seconds. Once detected, we issue a
-          TLS certificate automatically. You can also hit the refresh button to check progress.
-        </span>
-      </div>
-    </form>
-  );
-}
-
-function HowItWorksSteps({ appHost }: { appHost: string }) {
-  return (
-    <aside className="w-full shrink-0 lg:w-72">
-      <p className="text-xs font-medium text-muted">How it works</p>
-      <ol className="mt-3 flex flex-col gap-3">
-        <Step n={1}>
-          At your DNS provider, create a CNAME record pointing a hostname you own (e.g.{" "}
-          <code className="text-text">links.example.com</code>) at{" "}
-          <code className="text-text">{appHost}</code>.
-        </Step>
-        <Step n={2}>Add the hostname below. We detect the CNAME and issue TLS automatically.</Step>
-        <Step n={3}>
-          Your short links go live under your brand. Certificates and renewals are handled for you.
-        </Step>
-      </ol>
-    </aside>
-  );
+  return <DomainsSection orgId={orgId} plan={org.plan} limits={org.limits} />;
 }
 
 function DeleteDomainDialog({
@@ -191,49 +149,52 @@ function DeleteDomainDialog({
       danger
       pending={pending}
     >
-      Delete <span className="font-bold">{deleting?.hostname}</span>? Links still using this domain
-      must be moved or deleted first.
+      Delete <span className="font-mono font-bold">{deleting?.hostname}</span>? Links still using
+      this domain must be moved or deleted first.
     </ConfirmDialog>
   );
 }
 
+/** A refusal the field can own (rdyrct-design, form errors), or null for
+ * one that goes to a toast. */
+function fieldReason(e: Error): string | null {
+  if (!(e instanceof ApiError)) return null;
+  if (e.status === 409) return "Already in use";
+  if (e.status === 400) return e.message.length <= 28 ? e.message : "Not a valid domain";
+  return null;
+}
+
 /**
- * Every write the domains card can make, with its toast and its analytics
- * event. Split out of DomainsCard so that component is about what the page
- * shows and this is about what its buttons do.
+ * Every write the domains page can make, with its toast and its analytics
+ * event. Split out of the page so that component is about what it shows and
+ * this is about what its buttons do.
  */
 function useDomainActions({
-  mutations: { add, refresh, setRootRedirect, remove, setDefault },
-  org,
+  mutations: { add, refresh, retry: retryMutation, setRootRedirect, remove, setDefault },
   toast,
-  reset,
   deleting,
   setDeleting,
-  redirectDraft,
 }: {
   mutations: ReturnType<typeof useDomainMutations>;
-  org: UserOrg | null;
   toast: ReturnType<typeof useToast>;
-  reset: () => void;
   deleting: DomainDTO | null;
   setDeleting: (d: DomainDTO | null) => void;
-  redirectDraft: Record<string, string>;
 }) {
   const copy = (text: string) => copyToClipboard(text, toast);
 
-  const addDomain = useCallback(
-    ({ hostname }: { hostname: string }) => {
-      add.mutate(hostname, {
-        onSuccess: (d) => {
-          posthog.capture("domain_added", { initial_status: d.status });
-          reset();
-          toast(addDomainMessage(d.status));
-        },
-        onError: withErrorToast(toast),
-      });
-    },
-    [add, reset, toast],
-  );
+  /** Adds a domain. A refusal about the name comes back for the field. */
+  const addDomain = (hostname: string, onAdded: () => void, onFieldError: (r: string) => void) =>
+    add.mutate(hostname, {
+      onSuccess: (d) => {
+        posthog.capture("domain_added", { initial_status: d.status });
+        onAdded();
+      },
+      onError: (e) => {
+        const reason = fieldReason(e);
+        if (reason) onFieldError(reason);
+        else withErrorToast(toast)(e);
+      },
+    });
 
   const recheck = (d: DomainDTO) => {
     const oldStatus = d.status;
@@ -246,30 +207,48 @@ function useDomainActions({
     });
   };
 
-  const saveRedirect = (domain: DomainDTO) => {
-    const value = redirectDraft[domain.id] ?? domain.rootRedirect;
+  const retry = (d: DomainDTO) =>
+    retryMutation.mutate(d.id, {
+      onSuccess: () => toast(`Checking ${d.hostname} again`),
+      onError: withErrorToast(toast),
+    });
+
+  /** Saves a root redirect. A refusal about the address comes back for the
+   * field in the row. */
+  const saveRedirect = (
+    d: DomainDTO,
+    rootRedirect: string,
+    onSaved: () => void,
+    onFieldError: (r: string) => void,
+  ) =>
     setRootRedirect.mutate(
-      { id: domain.id, rootRedirect: value },
+      { id: d.id, rootRedirect },
       {
         onSuccess: () => {
           posthog.capture("domain_root_redirect_updated");
-          toast("Root redirect updated");
+          onSaved();
+          toast(
+            rootRedirect
+              ? `${d.hostname} with no slug now opens ${displayUrl(rootRedirect)}`
+              : `${d.hostname} with no slug shows a 404`,
+          );
         },
-        onError: withErrorToast(toast),
+        onError: (e) => {
+          if (e instanceof ApiError && e.status === 400) onFieldError("Not a web address");
+          else withErrorToast(toast)(e);
+        },
       },
     );
-  };
 
-  const toggleDefault = (d: DomainDTO) => {
-    const next = org?.defaultDomainId === d.id ? null : d.id;
-    setDefault.mutate(next, {
+  /** Makes a domain the default, or the shared domain with null. */
+  const makeDefault = (id: string | null, hostname: string) =>
+    setDefault.mutate(id, {
       onSuccess: () => {
-        posthog.capture("domain_default_set", { cleared: next === null });
-        toast(next ? `New links will use ${d.hostname}` : "New links will use the shared domain");
+        posthog.capture("domain_default_set", { cleared: id === null });
+        toast(id ? `New links will use ${hostname}` : "New links will use the shared domain");
       },
       onError: withErrorToast(toast),
     });
-  };
 
   const confirmDelete = () => {
     if (!deleting) return;
@@ -283,35 +262,19 @@ function useDomainActions({
     });
   };
 
-  return { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete };
+  return { copy, addDomain, recheck, retry, saveRedirect, makeDefault, confirmDelete };
 }
 
-function useDomainsCardModel(orgId: string, plan: OrgPlan) {
+function useDomainsModel(orgId: string, limits: PlanLimits) {
   const domains = useDomains(orgId);
-  const { add, refresh, setRootRedirect, remove, setDefault } = useDomainMutations(orgId);
+  const mutations = useDomainMutations(orgId);
   const { org } = useCurrentOrg();
   const config = useConfig();
   const appHost = config.data?.appHost ?? window.location.host;
+  const linkHost = useLinkHost();
   const toast = useToast();
-  const limits = PLAN_LIMITS[plan];
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
-  const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>({});
-  const { register, handleSubmit, reset } = useForm<{ hostname: string }>({
-    resolver: valibotResolver(hostnameSchema),
-    defaultValues: { hostname: "" },
-  });
-
-  const { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete } = useDomainActions(
-    {
-      mutations: { add, refresh, setRootRedirect, remove, setDefault },
-      org,
-      toast,
-      reset,
-      deleting,
-      setDeleting,
-      redirectDraft,
-    },
-  );
+  const actions = useDomainActions({ mutations, toast, deleting, setDeleting });
 
   // A plan with no domains still lists the ones the org already has (#159).
   // Hiding them was the bug: an owner who downgrades and finds an upgrade
@@ -319,549 +282,807 @@ function useDomainsCardModel(orgId: string, plan: OrgPlan) {
   const hasDomains = !!domains.data?.length;
   // A locked org accepts no writes from anyone, its owner included (#160).
   const canWrite = !org?.locked;
-  const submit = handleSubmit(addDomain, (errors) =>
-    toast(errors.hostname?.message ?? "Enter a valid hostname", "error"),
-  );
 
   return {
     domains,
     org,
     appHost,
+    linkHost,
     limits,
     deleting,
     setDeleting,
-    redirectDraft,
-    setRedirectDraft,
-    register,
-    submit,
-    actions: { copy, recheck, saveRedirect, toggleDefault, confirmDelete },
+    actions,
     pending: {
-      adding: add.isPending,
-      refreshing: refresh.isPending,
-      savingRedirect: setRootRedirect.isPending,
-      savingDefault: setDefault.isPending,
-      removing: remove.isPending,
+      adding: mutations.add.isPending,
+      refreshing: mutations.refresh.isPending,
+      retrying: mutations.retry.isPending,
+      savingRedirect: mutations.setRootRedirect.isPending,
+      savingDefault: mutations.setDefault.isPending,
+      removing: mutations.remove.isPending,
     },
     hasDomains,
     canWrite,
   };
 }
 
-type DomainsCardModel = ReturnType<typeof useDomainsCardModel>;
+type DomainsModel = ReturnType<typeof useDomainsModel>;
 
-function DomainsCardContent({ model }: { model: DomainsCardModel }) {
-  const { domains, org, appHost, limits, redirectDraft, actions, pending } = model;
+/** Why a typed hostname cannot be added, before asking the server. */
+function hostnameReason(hostname: string): string | null {
+  if (!hostname) return "Type a domain";
+  return v.safeParse(hostnameSchema, { hostname }).success ? null : "Not a domain";
+}
+
+/**
+ * Add domain, which widens into its own field where it was clicked
+ * (rdyrct-design, "Adding one value grows in place"). Enter or Add submits;
+ * the button never greys out, and a bad name says why inside the field and
+ * shakes it once. Esc, or a click away with nothing typed, puts the button
+ * back. A plan without domains gets none: with no domains the page is the
+ * locked state, and an org that kept domains past a downgrade (#159), or a
+ * read-only one (#160), has its rows and the notice above the page.
+ */
+function AddDomainField({ model }: { model: DomainsModel }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState<string | null>(null);
+  const [shakes, setShakes] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // After a shake remounts the form, so focus lands in the new input rather
+  // than falling to the page with the one that left.
+  useEffect(() => {
+    if (shakes) input.current?.focus();
+  }, [shakes]);
+  if (domainsBlockedBy(model.limits.domains, !model.canWrite) !== null) return null;
+
+  const close = () => {
+    setOpen(false);
+    setValue("");
+    setReason(null);
+  };
+  const refuse = (why: string) => {
+    setReason(why);
+    setShakes((n) => n + 1);
+  };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (model.pending.adding) return;
+    const hostname = value.trim().toLowerCase();
+    const why = hostnameReason(hostname);
+    if (why) return refuse(why);
+    model.actions.addDomain(hostname, close, refuse);
+  };
 
   return (
-    <>
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <Card className="w-full max-w-2xl">
-          <div className="flex flex-col gap-4">
-            <p className="text-xs font-medium text-muted">Custom domains</p>
+    <div
+      className={cn(
+        "relative h-9 rounded-[10px] transition-[width,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-sm:w-full",
+        open
+          ? "w-full bg-surface shadow-[0_0_0_1px_var(--border),0_0_0_4px_color-mix(in_oklab,var(--accent)_16%,transparent)] sm:w-80"
+          : "w-[8.75rem] bg-accent",
+        reason &&
+          "shadow-[0_0_0_1px_var(--danger),0_0_0_4px_color-mix(in_oklab,var(--danger)_14%,transparent)]",
+      )}
+    >
+      <button
+        ref={trigger}
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          // After the field is in the tree and visible.
+          setTimeout(() => input.current?.focus(), 120);
+        }}
+        aria-hidden={open}
+        tabIndex={open ? -1 : 0}
+        className={cn(
+          buttonClass({ variant: "primary", className: "absolute inset-0 w-full" }),
+          "transition-[opacity,scale] duration-150",
+          open && "pointer-events-none opacity-0",
+        )}
+      >
+        <Plus size={15} aria-hidden />
+        Add domain
+      </button>
+      <form
+        onSubmit={submit}
+        noValidate
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          // Back to the button the field grew from, before the field goes
+          // inert, so keyboard focus stays where it was.
+          trigger.current?.focus();
+          close();
+        }}
+        onBlur={(e) => {
+          if (!value.trim() && !e.currentTarget.contains(e.relatedTarget)) close();
+        }}
+        key={shakes}
+        className={cn(
+          "absolute inset-0 flex items-center gap-2 pr-1 pl-3 transition-[opacity,visibility] delay-75 duration-200",
+          open ? "visible opacity-100" : "pointer-events-none invisible opacity-0",
+          shakes > 0 && "motion-safe:animate-shake",
+        )}
+        inert={!open}
+      >
+        <input
+          ref={input}
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setReason(null);
+          }}
+          aria-label="Domain"
+          aria-invalid={reason ? true : undefined}
+          aria-describedby={reason ? "add-domain-reason" : undefined}
+          placeholder="go.yourbrand.com"
+          inputMode="url"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none! placeholder:text-placeholder"
+        />
+        {reason && (
+          <span id="add-domain-reason" className="text-xs whitespace-nowrap text-danger">
+            {reason}
+          </span>
+        )}
+        <button type="submit" className={buttonClass({ variant: "primary", size: "sm" })}>
+          {model.pending.adding ? <Spinner /> : "Add"}
+        </button>
+      </form>
+    </div>
+  );
+}
 
-            {domains.isLoading ? (
-              <DomainsSkeleton />
-            ) : (
-              <div className="flex flex-col gap-4">
-                <DomainList
-                  domains={domains.data}
-                  org={org}
-                  appHost={appHost}
-                  pending={{
-                    refreshing: pending.refreshing,
-                    savingRedirect: pending.savingRedirect,
-                    savingDefault: pending.savingDefault,
-                  }}
-                  redirectDraft={redirectDraft}
-                  onToggleDefault={actions.toggleDefault}
-                  onRecheck={actions.recheck}
-                  onDelete={model.setDeleting}
-                  onRedirectDraft={(id, value) =>
-                    model.setRedirectDraft({ ...redirectDraft, [id]: value })
-                  }
-                  onSaveRedirect={actions.saveRedirect}
-                  onCopy={actions.copy}
-                  canWrite={model.canWrite}
-                />
+/** Domains on a plan without them, before any exist: one locked state. */
+function DomainsLocked({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
+  const owner = useOwnerLabel(orgId);
+  return (
+    <FeatureLocked
+      title="Custom domains are available on Hobby and Pro."
+      line={
+        <>
+          Your short links on a domain you own, like{" "}
+          <span className="font-mono">go.yourbrand.com/spring</span>, with slugs you choose.
+        </>
+      }
+      isOwner={isOwner}
+      ownerNote={`Only ${owner} can upgrade.`}
+    />
+  );
+}
 
-                <DomainsFooter
-                  blockedBy={domainsBlockedBy(limits.domains, !model.canWrite)}
-                  hasDomains={model.hasDomains}
-                  graceEndsAt={org?.graceEndsAt ?? null}
-                  register={model.register}
-                  onSubmit={model.submit}
-                  pending={pending.adding}
-                />
-              </div>
-            )}
-          </div>
-        </Card>
+function DomainsSection({
+  orgId,
+  plan,
+  limits,
+}: {
+  orgId: string;
+  plan: OrgPlan;
+  limits: PlanLimits;
+}) {
+  const model = useDomainsModel(orgId, limits);
+  const defaultHost = defaultHostOf(model.org, model.domains.data, model.linkHost);
 
-        <HowItWorksSteps appHost={appHost} />
+  return (
+    <div className="mx-auto w-full max-w-[760px]">
+      <PageHeader
+        title="Domains"
+        sub={domainsSubtitle(plan, limits.domains, model.domains.data?.length, defaultHost)}
+        action={<AddDomainField model={model} />}
+      />
+      <div className="flex max-w-[760px] flex-col gap-8">
+        <DomainsBody model={model} />
       </div>
-
       <DeleteDomainDialog
         deleting={model.deleting}
         onClose={() => model.setDeleting(null)}
-        onConfirm={actions.confirmDelete}
-        pending={pending.removing}
+        onConfirm={model.actions.confirmDelete}
+        pending={model.pending.removing}
       />
-    </>
+    </div>
   );
 }
 
-function DomainsCard({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
-  const model = useDomainsCardModel(orgId, plan);
-  if (model.limits.domains === 0 && !model.hasDomains) return <UpgradeDomainsCard />;
-  return <DomainsCardContent model={model} />;
+/** The host new links start on: the org's default domain, or the shared one. */
+function defaultHostOf(
+  org: UserOrg | null,
+  domains: DomainDTO[] | undefined,
+  linkHost: string,
+): string {
+  const id = servingDefaultId(org, domains);
+  return domains?.find((d) => d.id === id)?.hostname ?? linkHost;
 }
 
-/** Slide-in/out variants for the status badge swap: skip the motion (and
- * its delay) when the tab isn't visible, so a backgrounded tab doesn't
- * queue up animation work. */
-function statusSlideVariants(tabVisible: boolean) {
-  return {
-    initial: tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 },
-    exit: tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 },
-    duration: tabVisible ? 0.2 : 0,
-  };
+/** The default new links really start on: the stored one while it serves
+ *  (active and unlocked), otherwise none, which is the shared domain. The
+ *  link editor's rule (resolveDefaultDomainId), so the page never marks a
+ *  domain new links will not use. */
+function servingDefaultId(org: UserOrg | null, domains: DomainDTO[] | undefined): string | null {
+  const serving = (domains ?? []).filter((d) => d.status === "active" && d.lockedAt === null);
+  return resolveDefaultDomainId(org?.defaultDomainId, serving);
 }
 
-function RecheckButton({ refreshing, onRecheck }: { refreshing: boolean; onRecheck: () => void }) {
+/** The list, the shared domain last, or the lock before the first domain. */
+function DomainsBody({ model }: { model: DomainsModel }) {
+  const { domains, org } = model;
+  if (domains.isLoading) return <DomainsSkeleton />;
+  if (!model.hasDomains && model.limits.domains === 0)
+    return <DomainsLocked orgId={org?.id ?? ""} isOwner={org?.role === "owner"} />;
+
+  const list = domains.data ?? [];
   return (
-    <IconButton label="Re-check now" disabled={refreshing} onClick={onRecheck}>
-      <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-    </IconButton>
+    <SettingsGroup>
+      <MotionConfig reducedMotion="user">
+        <LazyMotion features={domAnimation}>
+          {/* Rows already here render still; a new one enters at the top. */}
+          <AnimatePresence initial={false}>
+            {list.map((d) => (
+              <m.div
+                key={d.id}
+                initial={{ opacity: 0, y: 6, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                transition={{ duration: 0.35, ease: EASE }}
+                className="first:rounded-t-xl"
+              >
+                <DomainRow domain={d} model={model} />
+              </m.div>
+            ))}
+          </AnimatePresence>
+        </LazyMotion>
+      </MotionConfig>
+      {!model.hasDomains && (
+        <p className="px-4 py-3 text-xs text-pretty text-muted">
+          No domains yet. Add one and your short links read like{" "}
+          <span className="font-mono">go.yourbrand.com/launch</span>, with slugs you choose.
+        </p>
+      )}
+      <SharedDomainRow model={model} />
+    </SettingsGroup>
   );
 }
 
-function DomainStatusBadge({
-  domain: d,
-  refreshing,
-  onRecheck,
-}: {
-  domain: DomainDTO;
-  refreshing: boolean;
-  onRecheck: () => void;
-}) {
-  const { initial, exit, duration } = statusSlideVariants(document.visibilityState === "visible");
+/**
+ * "2 of 5 · new links start on rdyr.cc" under the title. A plan with no
+ * domains that still has some (#159) says why there is no Add domain instead:
+ * the notice above the page and each row's status say the rest.
+ */
+function domainsSubtitle(
+  plan: OrgPlan,
+  cap: number,
+  count: number | undefined,
+  defaultHost: string,
+): ReactNode {
+  if (count === undefined) return undefined;
+  if (cap === 0) return count > 0 ? "Custom domains need a paid plan." : undefined;
+  // A self-hosted instance has no cap to count against.
+  const used =
+    plan === "unlimited" ? (count === 1 ? "1 domain" : `${count} domains`) : `${count} of ${cap}`;
   return (
     <>
-      <AnimatePresence initial={false} mode="popLayout">
-        <m.span
-          key={d.status}
-          initial={initial}
-          animate={{ x: 0, opacity: 1 }}
-          exit={exit}
-          transition={{ duration }}
-          className="inline-flex"
-        >
-          <Badge color={domainStatusColor[d.status]}>{domainStatusLabel[d.status]}</Badge>
-        </m.span>
-      </AnimatePresence>
-      {transitional(d.status) && <RecheckButton refreshing={refreshing} onRecheck={onRecheck} />}
+      <span className="tnum">{used}</span> · new links start on{" "}
+      <span
+        key={defaultHost}
+        className="swap-in inline-flex items-center gap-1.5 rounded-full bg-accent/12 py-px pr-2 pl-1.5 align-[1px] text-text"
+      >
+        <span aria-hidden className="size-1.5 rounded-full bg-accent" />
+        <span className="font-mono text-[13px]">{displayHost(defaultHost)}</span>
+      </span>
     </>
   );
 }
 
-/** One connected domain: status badge (animated on change), DNS/TLS guidance
- * while it's transitional, and the root-redirect editor once it's active. */
-/**
- * Makes this domain the one new links start on, or gives that up (#69).
- *
- * Only offered on a domain that is actually serving: preselecting one still
- * waiting on DNS would hand every new link an address that resolves nowhere,
- * and the server refuses it anyway.
- */
-function DefaultDomainButton({
+/** A state the app is not checking: over the plan, or failed. */
+function StillStatus({ tone, label }: { tone: Tone; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-[13px] whitespace-nowrap tnum">
+      {/* The dot carries the colour; the word stays in ink, because the
+          state colours are under AA as small text on light grounds. */}
+      <span aria-hidden className={cn("size-2 rounded-full bg-current", TONE_CLASS[tone])} />
+      {label}
+    </span>
+  );
+}
+
+/** Where a domain stands, on the right of its row. DNS and the certificate
+ * are checked by the app, so they are a live status that settles on Live. */
+function DomainStatus({
   domain: d,
-  isDefault,
-  pending,
-  onToggle,
+  graceEndsAt,
 }: {
   domain: DomainDTO;
-  isDefault: boolean;
-  pending: boolean;
-  onToggle: () => void;
+  graceEndsAt: number | null;
 }) {
-  if (d.status !== "active") return null;
-  const label = isDefault
-    ? `Stop defaulting to ${d.hostname}`
-    : `Default new links to ${d.hostname}`;
+  if (d.lockedAt !== null)
+    return graceRunning(graceEndsAt) ? (
+      <StillStatus tone="warn" label={`Stops ${monthDay(graceEndsAt!)}`} />
+    ) : (
+      <StillStatus tone="bad" label="Stopped" />
+    );
+  if (d.status === "error") return <StillStatus tone="bad" label="Failed" />;
   return (
-    <Tooltip content={label}>
-      <IconButton label={label} title={undefined} disabled={pending} onClick={onToggle}>
-        <Star size={14} className={isDefault ? "fill-accent text-accent" : ""} />
-      </IconButton>
+    <LiveStatus
+      done={d.status === "active"}
+      label={
+        d.status === "active"
+          ? "Live"
+          : d.status === "issuing_tls"
+            ? "Issuing certificate"
+            : "Checking DNS"
+      }
+    />
+  );
+}
+
+type RowAction = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean };
+
+/** A row's actions, always behind "…" so every row ends in the same place. */
+function RowActions({ hostname, items }: { hostname: string; items: RowAction[] }) {
+  // Keeps the column when there is nothing to offer, so the statuses align.
+  if (items.length === 0) return <div className="w-8" />;
+  const safe = items.filter((item) => !item.danger);
+  const danger = items.filter((item) => item.danger);
+  return (
+    <div className="w-8">
+      <Menu
+        label={`Actions for ${hostname}`}
+        align="end"
+        trigger={
+          <span className={buttonClass({ variant: "ghost", size: "sm", className: "w-8 px-0" })}>
+            <Ellipsis size={16} aria-hidden />
+          </span>
+        }
+      >
+        {safe.map((item) => (
+          <MenuItem key={item.label} onClick={item.onClick} disabled={item.disabled}>
+            {item.label}
+          </MenuItem>
+        ))}
+        {safe.length > 0 && danger.length > 0 && <MenuSeparator />}
+        {danger.map((item) => (
+          <MenuItem key={item.label} onClick={item.onClick} className="text-danger">
+            {item.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </div>
+  );
+}
+
+/**
+ * The marker at the start of a row (rdyrct-design, "The default is a
+ * marker"): filled in the accent with a check on the default, an empty ring
+ * on hover for any other domain that can take it.
+ */
+function DefaultMarker({
+  hostname,
+  isDefault,
+  onPick,
+}: {
+  hostname: string;
+  isDefault: boolean;
+  /** Absent when this row cannot be the default (still checking, over the
+   * plan, a read-only org). */
+  onPick?: () => void;
+}) {
+  const ring = (
+    <span
+      aria-hidden
+      className="size-[15px] scale-90 rounded-full opacity-0 shadow-[inset_0_0_0_1.5px_var(--border)] transition-[opacity,scale,box-shadow] duration-200 group-hover/row:scale-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+    />
+  );
+  const dot = (
+    <span
+      aria-hidden
+      className={cn(
+        "absolute grid size-4 place-items-center rounded-full bg-accent text-bg transition-[opacity,scale,filter] duration-250 ease-[cubic-bezier(0.2,0,0,1)]",
+        isDefault ? "scale-100 opacity-100 blur-[0px]" : "scale-25 opacity-0 blur-[4px]",
+      )}
+    >
+      <Check size={10} stroke={3} />
+    </span>
+  );
+  if (isDefault)
+    return (
+      <Tooltip content="New links start here">
+        <span className="relative grid size-7 shrink-0 place-items-center" aria-label="Default">
+          {dot}
+        </span>
+      </Tooltip>
+    );
+  if (!onPick) return <span className="size-7 shrink-0" />;
+  return (
+    <Tooltip content="Make default">
+      <button
+        type="button"
+        onClick={onPick}
+        aria-label={`Make ${hostname} the default`}
+        className="relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg after:absolute after:-inset-1.5 [@media(hover:hover)]:hover:[&>span:first-child]:shadow-[inset_0_0_0_1.5px_var(--accent)]"
+      >
+        {ring}
+        {dot}
+      </button>
     </Tooltip>
   );
 }
 
 /**
- * What sits under the list: the form on a plan that may add a domain, and
- * the explanation on one that may not (#159).
- *
- * Exactly one of the two, always. A plan with no domains that still holds
- * some needs the second, which is what makes the read-only list make sense
- * rather than look like a bug.
+ * One domain: its default marker, the hostname over one line saying where
+ * it stands, its live status, and what you can do with it. A domain still
+ * waiting on DNS opens its record under the row, which folds away once the
+ * check finds it.
  */
-function DomainsFooter({
-  blockedBy,
-  hasDomains,
-  graceEndsAt,
-  register,
-  onSubmit,
-  pending,
-}: {
-  blockedBy: ReturnType<typeof domainsBlockedBy>;
-  hasDomains: boolean;
-  graceEndsAt: number | null;
-  register: UseFormRegister<{ hostname: string }>;
-  onSubmit: (e: FormEvent) => void;
-  pending: boolean;
-}) {
-  // The banner at the top of the page already tells a locked org why it is
-  // locked, so this only says why the form is gone.
-  if (blockedBy === "lock")
-    return (
-      <LockedPanel
-        title="This organization is locked"
-        reason="You cannot add a domain until it is active again. The domains it already has keep redirecting."
-      />
-    );
-  if (blockedBy === "plan")
-    return (
-      <LockedPanel
-        title="Your custom domains are locked"
-        reason="Custom domains need a paid plan. Nothing was deleted: the DNS record, the certificate and every link on these domains are still here."
-        until={graceEndsAt}
-        cta="Upgrade to keep them"
-      />
-    );
+/** The default row's tint: the accent fading out across its first half. */
+const DEFAULT_TINT =
+  "bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_7%,transparent),transparent_45%)]";
+
+/** What a domain row's "…" offers. Re-checking is a read, so it stays in a
+ * locked org; only writes go. The default is only offered on a domain that
+ * is actually serving (#69): preselecting one still waiting on DNS would
+ * hand every new link an address that resolves nowhere. */
+/** Re-check a domain still checking; try again on one whose check gave up
+ * (its links may use it, so deleting it is no way out). */
+function checkActions(d: DomainDTO, { canWrite, pending, actions }: DomainsModel): RowAction[] {
+  if (transitional(d.status))
+    return [
+      { label: "Re-check now", onClick: () => actions.recheck(d), disabled: pending.refreshing },
+    ];
+  if (canWrite && d.status === "error")
+    return [{ label: "Try again", onClick: () => actions.retry(d), disabled: pending.retrying }];
+  return [];
+}
+
+function domainRowActions(d: DomainDTO, model: DomainsModel, isDefault: boolean): RowAction[] {
+  const { canWrite, pending, actions } = model;
+  const locked = d.lockedAt !== null;
+  const serving = !locked && d.status === "active";
+  const items: RowAction[] = locked ? [] : checkActions(d, model);
+  if (canWrite && serving)
+    items.push({
+      label: isDefault ? `Stop defaulting to ${d.hostname}` : `Default new links to ${d.hostname}`,
+      onClick: () => actions.makeDefault(isDefault ? null : d.id, d.hostname),
+      disabled: pending.savingDefault,
+    });
+  if (canWrite)
+    items.push({ label: "Delete domain", onClick: () => model.setDeleting(d), danger: true });
+  return items;
+}
+
+/** The record under a domain still waiting on DNS. Once the check finds it
+ * the status settles first, then this folds. */
+function SetupFold({ open, children }: { open: boolean; children: ReactNode }) {
+  // Rows from 0fr to 1fr (as the phone menu grows), not a height tween: it
+  // reaches the content's own height without animating a layout property.
+  // The setup stays mounted until the fold has shut (its 900ms wait and
+  // 300ms close), then goes, so its records query stops with it. A timer
+  // rather than transitionend, which never fires under reduced motion.
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
+  useEffect(() => {
+    if (open || !mounted) return;
+    const t = setTimeout(() => setMounted(false), 1250);
+    return () => clearTimeout(t);
+  }, [open, mounted]);
   return (
-    <AddDomainForm
-      hasDomains={hasDomains}
-      register={register}
-      onSubmit={onSubmit}
-      pending={pending}
-    />
+    <div
+      inert={!open}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100 delay-100" : "grid-rows-[0fr] opacity-0 delay-[900ms]",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{mounted && children}</div>
+    </div>
   );
 }
 
-/** Every connected domain, in one animated list. Split out of DomainsCard so
- * that component is about the page's state and this one is about its rows. */
-function DomainList({
-  domains,
-  org,
-  appHost,
-  pending,
-  redirectDraft,
-  onToggleDefault,
-  onRecheck,
-  onDelete,
-  onRedirectDraft,
-  onSaveRedirect,
-  onCopy,
-  canWrite,
-}: {
-  domains: DomainDTO[] | undefined;
-  org: UserOrg | null;
-  appHost: string;
-  pending: { refreshing: boolean; savingRedirect: boolean; savingDefault: boolean };
-  redirectDraft: Record<string, string>;
-  onToggleDefault: (d: DomainDTO) => void;
-  onRecheck: (d: DomainDTO) => void;
-  onDelete: (d: DomainDTO) => void;
-  onRedirectDraft: (id: string, value: string) => void;
-  onSaveRedirect: (d: DomainDTO) => void;
-  onCopy: (text: string) => void;
-  /** False in a locked org, which accepts no writes from anyone (#160). The
-   * list still renders: hiding it is how somebody concludes it was deleted. */
-  canWrite: boolean;
-}) {
+function DomainRow({ domain: d, model }: { domain: DomainDTO; model: DomainsModel }) {
+  const { org, canWrite, pending, actions } = model;
+  const graceEndsAt = org?.graceEndsAt ?? null;
+  const isDefault = servingDefaultId(org, model.domains.data) === d.id;
+  const locked = d.lockedAt !== null;
+  const canPick = canWrite && !locked && d.status === "active" && !pending.savingDefault;
+
   return (
-    <MotionConfig reducedMotion="user">
-      <LazyMotion features={domAnimation}>
-        {(domains ?? []).map((d) => (
-          <DomainRow
-            key={d.id}
-            domain={d}
-            appHost={appHost}
-            refreshing={pending.refreshing}
-            savingRedirect={pending.savingRedirect}
-            isDefault={org?.defaultDomainId === d.id}
-            savingDefault={pending.savingDefault}
-            onToggleDefault={() => onToggleDefault(d)}
-            redirectDraft={redirectDraft[d.id] ?? d.rootRedirect}
-            onRecheck={() => onRecheck(d)}
-            onDelete={() => onDelete(d)}
-            onRedirectDraft={(v) => onRedirectDraft(d.id, v)}
-            onSaveRedirect={() => onSaveRedirect(d)}
-            onCopy={onCopy}
-            graceEndsAt={org?.graceEndsAt ?? null}
-            canWrite={canWrite}
-          />
-        ))}
-      </LazyMotion>
-    </MotionConfig>
+    <div
+      data-domain={d.hostname}
+      className={cn("group/row rounded-[inherit]", isDefault && DEFAULT_TINT)}
+    >
+      <div className="flex min-h-[60px] items-center gap-3 py-3 pr-4 pl-2.5">
+        <DefaultMarker
+          hostname={d.hostname}
+          isDefault={isDefault}
+          onPick={canPick ? () => actions.makeDefault(d.id, d.hostname) : undefined}
+        />
+        <div className="min-w-0 flex-1">
+          <Tooltip content={displayHost(d.hostname) === d.hostname ? undefined : d.hostname}>
+            <p className="font-mono text-sm font-bold [overflow-wrap:anywhere]">
+              {displayHost(d.hostname)}
+            </p>
+          </Tooltip>
+          <DomainLine domain={d} locked={locked} graceEndsAt={graceEndsAt} model={model} />
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <DomainStatus domain={d} graceEndsAt={graceEndsAt} />
+          <RowActions hostname={d.hostname} items={domainRowActions(d, model, isDefault)} />
+        </div>
+      </div>
+      <SetupFold open={!locked && d.status === "checking_dns"}>
+        <DomainSetup domain={d} model={model} />
+      </SetupFold>
+    </div>
   );
 }
 
-/** The badges and controls at the right of a domain's row. Split out of
- * DomainRow so that one is about the row's shape and this is about what state
- * the domain is in and who may change it. */
-function DomainRowActions({
+/** The shared domain, last: always live, the default when nothing else is. */
+function SharedDomainRow({ model }: { model: DomainsModel }) {
+  const { org, canWrite, pending, actions, linkHost } = model;
+  const isDefault = servingDefaultId(org, model.domains.data) === null;
+  return (
+    <div className={cn("group/row rounded-b-xl", isDefault && DEFAULT_TINT)}>
+      <div className="flex min-h-[60px] items-center gap-3 py-3 pr-4 pl-2.5">
+        <DefaultMarker
+          hostname={linkHost}
+          isDefault={isDefault}
+          onPick={
+            canWrite && !pending.savingDefault
+              ? () => actions.makeDefault(null, linkHost)
+              : undefined
+          }
+        />
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-sm font-bold [overflow-wrap:anywhere]">
+            {displayHost(linkHost)}
+          </p>
+          <p className="mt-0.5 text-xs text-muted">Shared by every account · random slugs</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <LiveStatus done label="Live" />
+          <div className="w-8" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailLine({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={cn("mt-0.5 text-xs text-pretty text-muted", className)}>{children}</p>;
+}
+
+/** The one muted line under a hostname. A live domain's is its root
+ * redirect, which edits in place. Exactly one state renders per domain. */
+function DomainLine({
   domain: d,
   locked,
-  refreshing,
-  canWrite,
-  onRecheck,
-  onDelete,
+  graceEndsAt,
+  model,
 }: {
   domain: DomainDTO;
   locked: boolean;
-  refreshing: boolean;
-  canWrite: boolean;
-  onRecheck: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="relative flex items-center gap-1">
-      {locked ? (
-        <Badge color="butter">locked</Badge>
-      ) : (
-        <>
-          {/* The status and its re-check are reads, so they stay in a locked
-              org. Only the two controls that write are hidden. */}
-          <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
-        </>
-      )}
-      {canWrite && (
-        <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
-          <Trash2 size={14} />
-        </IconButton>
-      )}
-    </div>
-  );
-}
-
-function DomainRow({
-  domain: d,
-  appHost,
-  refreshing,
-  savingRedirect,
-  isDefault,
-  savingDefault,
-  redirectDraft,
-  onRecheck,
-  onToggleDefault,
-  onDelete,
-  onRedirectDraft,
-  onSaveRedirect,
-  onCopy,
-  graceEndsAt,
-  canWrite,
-}: {
-  domain: DomainDTO;
-  appHost: string;
-  refreshing: boolean;
-  savingRedirect: boolean;
-  isDefault: boolean;
-  savingDefault: boolean;
-  redirectDraft: string;
-  onRecheck: () => void;
-  onToggleDefault: () => void;
-  onDelete: () => void;
-  onRedirectDraft: (v: string) => void;
-  onSaveRedirect: () => void;
-  onCopy: (text: string) => void;
-  /** When the org's grace period ends, for a locked domain's countdown. */
   graceEndsAt: number | null;
-  canWrite: boolean;
+  model: DomainsModel;
 }) {
-  const locked = d.lockedAt !== null;
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1">
-          {canWrite && !locked && (
-            <DefaultDomainButton
-              domain={d}
-              isDefault={isDefault}
-              pending={savingDefault}
-              onToggle={onToggleDefault}
-            />
-          )}
-          <span className="truncate font-bold" title={d.hostname}>
-            {d.hostname}
-          </span>
-        </div>
-        <DomainRowActions
-          domain={d}
-          locked={locked}
-          refreshing={refreshing}
-          canWrite={canWrite}
-          onRecheck={onRecheck}
-          onDelete={onDelete}
-        />
-      </div>
-
-      {locked ? (
-        <p className="tnum mt-2 text-xs text-muted">
-          {graceRunning(graceEndsAt)
-            ? `Still redirecting until ${new Date(graceEndsAt!).toLocaleDateString()} (${graceLabel(graceEndsAt!)}), then it stops.`
-            : "This domain has stopped redirecting. Upgrading brings it straight back, with no DNS to redo."}
-        </p>
-      ) : (
-        <DomainStatusDetail
-          domain={d}
-          appHost={appHost}
-          redirectDraft={redirectDraft}
-          savingRedirect={savingRedirect}
-          onRedirectDraft={onRedirectDraft}
-          onSaveRedirect={onSaveRedirect}
-          onCopy={onCopy}
-        />
-      )}
-    </div>
-  );
+  if (locked)
+    return (
+      <DetailLine className="tnum">
+        {graceRunning(graceEndsAt)
+          ? `Still redirecting until ${shortDate(graceEndsAt!)} (${graceLabel(graceEndsAt!)}), then it stops.`
+          : "Nothing is deleted. Upgrading brings it back with no DNS to redo."}
+      </DetailLine>
+    );
+  if (d.status === "error")
+    return (
+      <DetailLine>
+        {d.statusReason || "Activation failed. Delete and re-add the domain to try again."}
+      </DetailLine>
+    );
+  if (d.status === "active") return <RootRedirectLine domain={d} model={model} />;
+  if (d.status === "issuing_tls")
+    return <DetailLine>DNS found. The certificate usually takes a few minutes.</DetailLine>;
+  return <DetailLine>Added {relativeDate(d.createdAt)}</DetailLine>;
 }
 
-function TransitionalDomainDetail({
-  domain: d,
-  appHost,
-  onCopy,
-}: {
-  domain: DomainDTO;
-  appHost: string;
-  onCopy: (text: string) => void;
-}) {
-  const checkingDns = d.status === "checking_dns";
-  if (d.validation === "txt") return <MovingDomainDetail domain={d} />;
-  return (
-    <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
-      <p>
-        {checkingDns
-          ? "To activate, create this record at your DNS provider:"
-          : "DNS resolved. Waiting for the TLS certificate to be issued."}
-      </p>
-      {checkingDns && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <code className="rounded bg-bg px-1.5 py-0.5 text-text">
-            {d.hostname} CNAME {appHost}
-          </code>
-          <CopyButton text={appHost} label="Copy CNAME target" onCopy={onCopy} />
-        </div>
-      )}
-      <p>
-        {checkingDns
-          ? "We re-check automatically every few seconds. "
-          : "This usually takes a few minutes. "}
-        Hit the refresh button above to check progress manually.
-      </p>
-    </div>
-  );
-}
+/**
+ * Where a live domain goes with no slug, as its second line (rdyrct-design,
+ * "A single value edits in place"). Clicking it turns the line into a small
+ * field: Enter saves, Esc puts the line back, an empty field means a 404.
+ */
+function RootRedirectLine({ domain: d, model }: { domain: DomainDTO; model: DomainsModel }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(d.rootRedirect);
+  const [reason, setReason] = useState<string | null>(null);
+  const canEdit = model.canWrite;
+  const view = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  // When the field closes (saved, or Esc), focus goes back to the line it
+  // replaced rather than falling to the page with the input that left.
+  useEffect(() => {
+    if (wasEditing.current && !editing) view.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
 
-/** A domain added by an import (#383): ready once its TXT records are in,
- * while it still points at the service the links came from. */
-function MovingDomainDetail({ domain: d }: { domain: DomainDTO }) {
-  const { org } = useCurrentOrg();
+  if (!editing)
+    return (
+      <RootRedirectView
+        domain={d}
+        canEdit={canEdit}
+        buttonRef={view}
+        onEdit={() => {
+          setValue(d.rootRedirect);
+          setReason(null);
+          setEditing(true);
+        }}
+      />
+    );
   return (
-    <div className="mt-3 flex flex-col gap-2 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
-      <p>
-        Moving from another service. Add these TXT records at your DNS provider. We issue the
-        certificate while the domain still points at the old service, then you switch the CNAME.
-      </p>
-      <DnsRecords orgId={org?.id ?? ""} domain={d} showCname={false} />
-    </div>
-  );
-}
-
-function ErrorDomainDetail({ domain: d }: { domain: DomainDTO }) {
-  return (
-    <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-danger/10 p-3 text-xs text-danger">
-      <p>{d.statusReason || "Activation failed. Delete and re-add the domain to try again."}</p>
-    </div>
-  );
-}
-
-function RootRedirectEditor({
-  redirectDraft,
-  savingRedirect,
-  onRedirectDraft,
-  onSaveRedirect,
-}: {
-  redirectDraft: string;
-  savingRedirect: boolean;
-  onRedirectDraft: (v: string) => void;
-  onSaveRedirect: () => void;
-}) {
-  return (
-    <div className="mt-3">
-      <span className="mb-1.5 block text-xs text-muted">Root redirect</span>
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <Input
-            aria-label="Root redirect"
-            value={redirectDraft}
-            onChange={(e) => onRedirectDraft(e.target.value)}
-            placeholder="https://example.com"
-            inputMode="url"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-          />
-        </div>
-        <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>
-          Save
-        </Button>
-      </div>
-      <span className="mt-1 block text-xs text-muted">
-        Where the bare domain (no slug) sends visitors, e.g. your homepage
-      </span>
-    </div>
-  );
-}
-
-/** The section below a domain's status badge: DNS/TLS guidance while
- * transitional, the failure reason on error, or the root-redirect editor
- * once active. Exactly one of these renders per domain. */
-function DomainStatusDetail({
-  domain: d,
-  appHost,
-  redirectDraft,
-  savingRedirect,
-  onRedirectDraft,
-  onSaveRedirect,
-  onCopy,
-}: {
-  domain: DomainDTO;
-  appHost: string;
-  redirectDraft: string;
-  savingRedirect: boolean;
-  onRedirectDraft: (v: string) => void;
-  onSaveRedirect: () => void;
-  onCopy: (text: string) => void;
-}) {
-  if (transitional(d.status))
-    return <TransitionalDomainDetail domain={d} appHost={appHost} onCopy={onCopy} />;
-  if (d.status === "error") return <ErrorDomainDetail domain={d} />;
-  return (
-    <RootRedirectEditor
-      redirectDraft={redirectDraft}
-      savingRedirect={savingRedirect}
-      onRedirectDraft={onRedirectDraft}
-      onSaveRedirect={onSaveRedirect}
+    <RootRedirectForm
+      domain={d}
+      model={model}
+      value={value}
+      reason={reason}
+      onChange={(next) => {
+        setValue(next);
+        setReason(null);
+      }}
+      onReason={setReason}
+      onDone={() => setEditing(false)}
     />
   );
 }
 
-function Step({ n, children }: { n: number; children: ReactNode }) {
+/** The redirect as it is: "go.acme.com/ → acme.com", or the 404 note. */
+function RootRedirectView({
+  domain: d,
+  canEdit,
+  buttonRef,
+  onEdit,
+}: {
+  domain: DomainDTO;
+  canEdit: boolean;
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  onEdit: () => void;
+}) {
   return (
-    <li className="flex gap-2.5 text-xs text-muted">
-      <span className="tnum font-bold text-accent">{n}</span>
-      <span>{children}</span>
-    </li>
+    <button
+      ref={buttonRef}
+      type="button"
+      // The address as stored: the line drops the scheme and a trailing slash.
+      title={d.rootRedirect || undefined}
+      disabled={!canEdit}
+      onClick={onEdit}
+      className="group/root mt-0.5 inline-flex max-w-full cursor-pointer items-center gap-1.5 text-left text-xs text-muted transition-colors disabled:cursor-default [@media(hover:hover)]:hover:text-text"
+    >
+      {d.rootRedirect ? (
+        <>
+          <span className="truncate font-mono">{displayHost(d.hostname)}/</span>
+          <span aria-hidden>→</span>
+          <span className="truncate font-mono">{displayUrl(d.rootRedirect)}</span>
+        </>
+      ) : (
+        <span>
+          No slug shows a 404
+          {canEdit && (
+            <>
+              {" · "}
+              <span className="text-accent">Choose a page</span>
+            </>
+          )}
+        </span>
+      )}
+      {canEdit && (
+        <Pencil
+          size={12}
+          aria-hidden
+          className="shrink-0 opacity-0 transition-opacity group-hover/root:opacity-100"
+        />
+      )}
+      <span className="sr-only">Edit the root redirect</span>
+    </button>
+  );
+}
+
+/** The redirect as a small field in the row: Enter saves, Esc puts the
+ * line back, a refusal says why inside it. */
+function RootRedirectForm({
+  domain: d,
+  model,
+  value,
+  reason,
+  onChange,
+  onReason,
+  onDone,
+}: {
+  domain: DomainDTO;
+  model: DomainsModel;
+  value: string;
+  reason: string | null;
+  onChange: (value: string) => void;
+  onReason: (reason: string) => void;
+  onDone: () => void;
+}) {
+  const reasonId = useId();
+  return (
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        // One save at a time: a second PATCH could land after a newer one
+        // and put back the older address. Save stays pressable (it never
+        // greys out); it shows the spinner instead.
+        if (model.pending.savingRedirect) return;
+        model.actions.saveRedirect(d, value.trim(), onDone, onReason);
+      }}
+      onKeyDown={(e) => e.key === "Escape" && onDone()}
+      className={cn(
+        "swap-in mt-1 flex h-7 max-w-sm items-center gap-1.5 rounded-lg bg-bg pr-0.5 pl-2 shadow-[0_0_0_1px_var(--border),0_0_0_3px_color-mix(in_oklab,var(--accent)_16%,transparent)]",
+        reason &&
+          "shadow-[0_0_0_1px_var(--danger),0_0_0_3px_color-mix(in_oklab,var(--danger)_14%,transparent)]",
+      )}
+    >
+      <span className="font-mono text-xs whitespace-nowrap text-placeholder">→</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={`Where ${d.hostname} with no slug goes`}
+        aria-invalid={reason ? true : undefined}
+        aria-describedby={reason ? reasonId : undefined}
+        placeholder={`https://${parentDomain(d.hostname)}`}
+        inputMode="url"
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        // react-doctor-disable-next-line react-doctor/no-autofocus -- the field replaces the line that was just clicked, so focus belongs in it.
+        autoFocus
+        className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none! placeholder:text-placeholder"
+      />
+      {reason && (
+        <span id={reasonId} role="alert" className="text-[11px] whitespace-nowrap text-danger">
+          {reason}
+        </span>
+      )}
+      <button
+        type="submit"
+        className={buttonClass({ variant: "primary", size: "sm", className: "h-6 px-2" })}
+      >
+        {model.pending.savingRedirect ? <Spinner /> : "Save"}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * The record a domain still needs, under its row: one line saying where it
+ * goes, then the record on one line with one copy button that copies it as
+ * a message for whoever manages the DNS. A domain moving from another
+ * service (#383) lists its TXT records instead.
+ */
+function DomainSetup({ domain: d, model }: { domain: DomainDTO; model: DomainsModel }) {
+  const parent = parentDomain(d.hostname);
+  if (d.validation === "txt")
+    return (
+      <div className="pr-4 pb-4 pl-[3.25rem]">
+        <p className="mb-2 text-xs text-pretty text-muted">
+          Moving from another service. Add these TXT records where{" "}
+          <b className="font-semibold text-text">{parent}</b>'s DNS is managed. We issue the
+          certificate while it still points at the old service, then you switch the CNAME.
+        </p>
+        <DnsRecords orgId={model.org?.id ?? ""} domain={d} showCname={false} />
+      </div>
+    );
+  return (
+    <div className="pr-4 pb-4 pl-[3.25rem]">
+      <p className="mb-2 text-xs text-pretty text-muted">
+        Add this record where <b className="font-semibold text-text">{parent}</b>'s DNS is managed,
+        or send it to whoever looks after it. It usually works within minutes.
+      </p>
+      <RecordLine
+        type="CNAME"
+        name={d.hostname}
+        value={model.appHost}
+        onCopy={model.actions.copy}
+      />
+    </div>
   );
 }

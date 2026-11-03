@@ -15,11 +15,10 @@
  */
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { MarketingPage } from "../components/marketing-page";
-import { MarketingLink } from "../components/marketing-link";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Switch } from "../ui/switch";
-import { QrCard, QrFaq } from "./qr-generator";
+import { QrCard, QrFaq, type QrTypePath } from "./qr-generator";
 import type { QrValues } from "../lib/qr-look";
 import {
   vcardPayload,
@@ -39,18 +38,12 @@ const EMPTY_QR: QrValues = {
   qrLogoSize: "",
 };
 
-const QR_TYPES = [
-  { to: "/qr-code-generator", label: "Link or text" },
-  { to: "/wifi-qr-code", label: "WiFi" },
-  { to: "/vcard-qr-code", label: "vCard" },
-  { to: "/whatsapp-qr-code", label: "WhatsApp" },
-] as const;
-
 function QrTypePage({
   path,
   title,
   intro,
   encoded,
+  label,
   name,
   values,
   setValues,
@@ -58,10 +51,12 @@ function QrTypePage({
   explainer,
   faqs,
 }: {
-  path: (typeof QR_TYPES)[number]["to"];
+  path: QrTypePath;
   title: string;
   intro: string;
   encoded: string;
+  /** The code's accessible name, when its text is not for reading aloud. */
+  label?: string;
   name: string;
   values: QrValues;
   setValues: Dispatch<SetStateAction<QrValues>>;
@@ -70,28 +65,27 @@ function QrTypePage({
   faqs: { q: string; a: string }[];
 }) {
   return (
-    <MarketingPage path={path} title={title} intro={intro}>
-      <div className="flex flex-col items-center gap-12 py-12">
-        <QrCard encoded={encoded} values={values} setValues={setValues} name={name}>
+    <MarketingPage
+      path={path}
+      title={title}
+      intro={intro}
+      hero={
+        <QrCard
+          encoded={encoded}
+          label={label}
+          values={values}
+          setValues={setValues}
+          name={name}
+          current={path}
+        >
           {fields}
         </QrCard>
-
+      }
+    >
+      <div className="flex flex-col items-center gap-12 py-12">
         <section className="flex w-full max-w-3xl flex-col gap-3 text-sm">{explainer}</section>
 
         <QrFaq faqs={faqs} />
-
-        <nav aria-label="Other QR codes" className="flex w-full max-w-3xl flex-col gap-3 text-sm">
-          <h2 className="font-bold">Other QR codes</h2>
-          <ul className="flex flex-wrap gap-x-6 gap-y-2">
-            {QR_TYPES.filter((type) => type.to !== path).map((type) => (
-              <li key={type.to}>
-                <MarketingLink to={type.to} className="text-accent hover:underline">
-                  {type.label} QR code
-                </MarketingLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
       </div>
     </MarketingPage>
   );
@@ -113,29 +107,35 @@ export function WifiQrPage() {
       path="/wifi-qr-code"
       title="WiFi QR code generator"
       intro="Make a QR code that joins your WiFi network when a guest points a phone camera at it. No typing the password, no account, and the password never leaves your browser."
-      encoded={wifiPayload({ ssid: ssid.trim(), password, security, hidden })}
+      // The name as typed, edge spaces included: a network called " Home"
+      // is not "Home". The image is named for the network, since the code
+      // holds the password and a screen reader would read it out.
+      encoded={wifiPayload({ ssid, password, security, hidden })}
+      label={`QR code to join ${ssid.trim()}`}
       name="wifi-qr"
       values={values}
       setValues={setValues}
       fields={
         <>
-          <Field label="Network name">
-            <Input
-              value={ssid}
-              onChange={(e) => setSsid(e.target.value)}
-              placeholder="Cafe guests"
-              autoComplete="off"
-            />
-          </Field>
-          <Field label="Password">
-            <Input
-              value={security === "nopass" ? "" : password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={security === "nopass"}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Network name">
+              <Input
+                value={ssid}
+                onChange={(e) => setSsid(e.target.value)}
+                placeholder="Cafe guests"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Password">
+              <Input
+                value={security === "nopass" ? "" : password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={security === "nopass"}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+          </div>
           <Field label="Security">
             <MenuSelect
               label="Security"
@@ -237,16 +237,18 @@ export function VcardQrPage() {
               />
             </Field>
           </div>
-          {CONTACT_FIELDS.map(([key, label, type, autoComplete]) => (
-            <Field key={key} label={label}>
-              <Input
-                type={type}
-                value={contact[key]}
-                onChange={set(key)}
-                autoComplete={autoComplete}
-              />
-            </Field>
-          ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {CONTACT_FIELDS.map(([key, label, type, autoComplete]) => (
+              <Field key={key} label={label}>
+                <Input
+                  type={type}
+                  value={contact[key]}
+                  onChange={set(key)}
+                  autoComplete={autoComplete}
+                />
+              </Field>
+            ))}
+          </div>
         </>
       }
       explainer={

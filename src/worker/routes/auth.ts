@@ -11,6 +11,8 @@ import { requireUser } from "../guards";
 import { jsonBodyLimit } from "../body-limit";
 import type { AppConfig, CurrentUser } from "@/shared/types";
 import { orgPlanOf } from "@/shared/types";
+import { effectiveLimits, tierOf } from "@/shared/limits";
+import { loadLimitOverrides } from "../limit-overrides";
 import { parseOver } from "../reconcile";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
@@ -35,6 +37,7 @@ async function currentUserFor(
         name: schema.orgs.name,
         role: schema.orgMembers.role,
         ownerPlan: ownerUser.plan,
+        ownerId: ownerUser.id,
         qrLogo: schema.orgs.qrLogo,
         qrStyle: schema.orgs.qrStyle,
         qrColor: schema.orgs.qrColor,
@@ -61,16 +64,29 @@ async function currentUserFor(
     // fields, and adding them there would carry a provider id through every
     // request to serve two booleans on one page.
     db
-      .select({ customerId: schema.user.polarCustomerId, compPlan: schema.user.compPlan })
+      .select({
+        customerId: schema.user.polarCustomerId,
+        compPlan: schema.user.compPlan,
+      })
       .from(schema.user)
       .where(eq(schema.user.id, user.id)),
   ]);
 
+  // The owners' custom limits, and the caller's own for the owned-org cap.
+  const overrides = await loadLimitOverrides(db, [
+    user.id,
+    ...rows.flatMap((r) => (r.ownerId ? [r.ownerId] : [])),
+  ]);
   const orgs = rows.map((r) => ({
     id: r.id,
     name: r.name,
     role: r.role,
     plan: planNow(orgPlanOf(r.ownerPlan)),
+    tier: tierOf(planNow(orgPlanOf(r.ownerPlan)), r.ownerId ? overrides.get(r.ownerId) : undefined),
+    limits: effectiveLimits(
+      planNow(orgPlanOf(r.ownerPlan)),
+      r.ownerId ? overrides.get(r.ownerId) : undefined,
+    ),
     qrLogo: r.qrLogo,
     qrStyle: r.qrStyle,
     qrColor: r.qrColor,
@@ -86,6 +102,8 @@ async function currentUserFor(
   return {
     user: {
       ...user,
+      tier: tierOf(planNow(orgPlanOf(user.plan)), overrides.get(user.id)),
+      limits: effectiveLimits(planNow(orgPlanOf(user.plan)), overrides.get(user.id)),
       hasBillingAccount: Boolean(billingRows[0]?.customerId),
       comped: Boolean(billingRows[0]?.compPlan),
     },

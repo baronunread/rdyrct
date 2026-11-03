@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signOut } from "./pages";
-import { signUpThroughForm } from "./resend";
+import { signUpThroughForm, skipSetup } from "./resend";
 
 // Drives the Google button against the local emulate google service (started
 // by the resend webServer, see playwright.config.ts). When Google isn't
@@ -19,6 +19,12 @@ async function signInWithGoogle(page: Page) {
   await page.goto("/login");
   await page.getByRole("button", { name: /Continue with Google/i }).click();
   await page.getByRole("button", { name: /testuser@gmail\.com/ }).click();
+  // An org with no links gets the setup flow first (onboarding.pw.ts); past
+  // it by its skip buttons, since these tests are about signing in.
+  const flow = page.getByRole("heading", { name: "What should we call your organization?" });
+  const app = page.getByRole("link", { name: "Dashboard" });
+  await expect(flow.or(app).first()).toBeVisible({ timeout: 15_000 });
+  if (await flow.isVisible()) await skipSetup(page);
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -97,6 +103,10 @@ test.describe("Google sign-in", () => {
   }) => {
     await requireGoogle(page);
     await signInWithGoogle(page);
+
+    // Settings names the linked Google account, not just "Connected".
+    await page.goto("/settings");
+    await expect(page.getByTestId("google-account")).toHaveText("testuser@gmail.com");
 
     // Sign out, and the login page now leads with a one-click row for that
     // account instead of the plain button.

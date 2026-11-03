@@ -18,11 +18,21 @@ export type StateInput = {
   suspendReason?: string | null;
   warnedAt?: number | null;
   warnReason?: string | null;
+  /** Open public reports. Anonymous links keep none. */
+  reportCount?: number;
 };
 
 /** Worst first. The index is the sort key, so an ascending sort puts the
  * links that need someone at the top. */
-const ORDER = ["blocked", "suspended", "warning", "risky", "clean", "unscored"] as const;
+const ORDER = [
+  "blocked",
+  "suspended",
+  "reported",
+  "warning",
+  "risky",
+  "clean",
+  "unscored",
+] as const;
 export type LinkState = (typeof ORDER)[number];
 
 /** "web_risk_social_engineering" reads "Google: social engineering". */
@@ -48,8 +58,35 @@ export function linkState(link: StateInput): LinkState {
   const risk = riskState(link.riskScore);
   if (risk === "blocked") return risk;
   if (link.suspendedAt) return "suspended";
+  // Above the warning: a report on a free org's link sets the warning
+  // itself, and "Reported" is the reason, not the side effect.
+  if (link.reportCount) return "reported";
   if (link.warnedAt) return "warning";
   return risk;
+}
+
+/** On a blocklist because Google Web Risk said so, rather than DNS. */
+const flaggedByGoogle = (link: StateInput) =>
+  riskState(link.riskScore) === "blocked" &&
+  link.riskReasons.some((reason) => reason.startsWith("web_risk_"));
+
+/**
+ * The state as the row says it. A link nobody has scored still redirects,
+ * so it reads "Active" like a clean one; the badge's tooltip and colour
+ * keep the difference ("Risk: unscored", a grey dot, not a green one).
+ */
+export function linkStateWord(link: StateInput): string {
+  const state = linkState(link);
+  const words = {
+    blocked: flaggedByGoogle(link) ? "Flagged by Google" : "Blocklisted",
+    suspended: "Suspended",
+    reported: "Reported",
+    warning: "Warning",
+    risky: "Risky",
+    clean: "Active",
+    unscored: "Active",
+  } satisfies Record<LinkState, string>;
+  return words[state];
 }
 
 /** Sort key for the State column: worst first on an ascending sort. */
@@ -67,6 +104,9 @@ export function linkStateDetail(link: StateInput): string {
     link.suspendedAt ? `Suspended: ${why(link.suspendReason)}` : null,
     link.warnedAt ? `Warning: ${why(link.warnReason)}` : null,
     risk === "blocked" ? null : `Risk: ${risk}`,
+    link.reportCount
+      ? `${link.reportCount} open ${link.reportCount === 1 ? "report" : "reports"}`
+      : null,
   ]
     .filter((fact) => fact !== null)
     .join(" · ");

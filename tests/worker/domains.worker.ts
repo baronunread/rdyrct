@@ -59,8 +59,18 @@ async function seedDomain(overrides: Partial<typeof schema.domains.$inferInsert>
   await env.DB.batch([
     env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
     env.DB.prepare(
-      "insert into domains (id, org_id, hostname, status, cf_hostname_id, created_at) values (?, ?, ?, ?, ?, ?)",
-    ).bind(row.id, row.orgId, row.hostname, row.status, row.cfHostnameId, row.createdAt),
+      "insert into domains (id, org_id, hostname, status, status_reason, validation, cf_hostname_id, checking_since, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(
+      row.id,
+      row.orgId,
+      row.hostname,
+      row.status,
+      row.statusReason ?? "",
+      row.validation ?? "http",
+      row.cfHostnameId,
+      row.checkingSince ?? null,
+      row.createdAt,
+    ),
   ]);
   return row;
 }
@@ -199,6 +209,12 @@ describe("probeDomain: one durable step at a time", () => {
     expect(after?.status_reason).toContain("CNAME");
   });
 
+  it("counts the deadline from a retry, not from when the domain was added", async () => {
+    await seedDomain({ createdAt: Date.now() - 25 * 60 * 60 * 1000, checkingSince: Date.now() });
+    const probe = await probeDomain(fakeCfEnv(), "domain-1");
+    expect(probe.state).not.toBe("error");
+  });
+
   it("reports active and error as terminal without re-checking", async () => {
     await seedDomain({ status: "active", cfHostnameId: "cf-1", createdAt: Date.now() });
     expect(await probeDomain(fakeCfEnv(), "domain-1")).toEqual({ state: "active" });
@@ -222,6 +238,11 @@ describe("probeDelaySeconds", () => {
     expect(probeDelaySeconds(0)).toBe(5);
     expect(probeDelaySeconds(6)).toBe(120);
     expect(probeDelaySeconds(50)).toBe(300);
+  });
+
+  it("slows to every 15 minutes after about a day of 5-minute checks", () => {
+    expect(probeDelaySeconds(7 + 287)).toBe(300);
+    expect(probeDelaySeconds(7 + 288)).toBe(900);
   });
 });
 
@@ -265,6 +286,79 @@ describe("domain reads do not mutate", () => {
 
     // No call reached the Cloudflare API from either read route.
     for (const c of cfCalls.mock.calls) expect(String(c[0])).not.toContain("api.cloudflare.com");
+  });
+});
+
+describe("trying a failed domain again", () => {
+  async function retry(cookie: string): Promise<Response> {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/orgs/org-1/domains/domain-1/retry", {
+        method: "POST",
+        headers: { cookie },
+      }),
+      authEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  it("restarts the check with a fresh deadline, keeping the domain", async () => {
+    const cookie = await adminCookie();
+    await seedDomain({
+      status: "error",
+      statusReason: "We never saw the TXT records.",
+      validation: "txt",
+      cfHostnameId: "cf-1",
+      createdAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
+    });
+    const before = Date.now();
+    const res = await retry(cookie);
+    expect(res.status).toBe(200);
+    const body = await res.json<{ status: string; checkUntil: number }>();
+    expect(body.status).toBe("checking_dns");
+    expect(body.checkUntil).toBeGreaterThanOrEqual(before + 7 * 24 * 60 * 60 * 1000);
+
+    const row = await env.DB.prepare(
+      "select status, status_reason, checking_since, cf_hostname_id from domains where id = 'domain-1'",
+    ).first<{
+      status: string;
+      status_reason: string;
+      checking_since: number;
+      cf_hostname_id: string | null;
+    }>();
+    expect(row?.status).toBe("checking_dns");
+    expect(row?.status_reason).toBe("");
+    expect(row?.checking_since).toBeGreaterThanOrEqual(before);
+    // Looked up again by the new activation, in case Cloudflare dropped it.
+    expect(row?.cf_hostname_id).toBeNull();
+  });
+
+  it("refuses a domain beyond the plan, which stays as it is", async () => {
+    const cookie = await adminCookie();
+    await seedDomain({ status: "error", cfHostnameId: "cf-1", createdAt: Date.now() });
+    await env.DB.prepare("update domains set locked_at = 1 where id = 'domain-1'").run();
+    expect((await retry(cookie)).status).toBe(409);
+    expect((await statusOf("domain-1"))?.status).toBe("error");
+  });
+
+  it("does not reach another organization's domain", async () => {
+    const cookie = await adminCookie();
+    await env.DB.prepare(
+      "insert into orgs (id, name, created_at) values ('org-2', 'Other', 0)",
+    ).run();
+    await seedDomain({ status: "error", cfHostnameId: "cf-1", createdAt: Date.now() });
+    await env.DB.prepare("update domains set org_id = 'org-2' where id = 'domain-1'").run();
+    expect((await retry(cookie)).status).toBe(404);
+    expect((await statusOf("domain-1"))?.status).toBe("error");
+  });
+
+  it("refuses a domain that has not failed", async () => {
+    const cookie = await adminCookie();
+    await seedDomain({ cfHostnameId: "cf-1", createdAt: Date.now() });
+    expect((await retry(cookie)).status).toBe(409);
+    expect((await statusOf("domain-1"))?.status).toBe("checking_dns");
   });
 });
 

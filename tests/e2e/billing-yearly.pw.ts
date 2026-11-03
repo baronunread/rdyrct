@@ -24,18 +24,23 @@ test("the yearly toggle drives the checkout interval and the button price", asyn
   await page.goto("/billing");
 
   const proButton = page.getByRole("button", { name: /Upgrade to Pro/ });
-  await expect(proButton).toContainText("$9/mo");
+  // The price sits on the card, above the button: the button only says where it goes.
+  const proCard = page
+    .locator("div")
+    .filter({ has: page.getByRole("heading", { name: "Pro", exact: true }) })
+    .filter({ has: proButton })
+    .last();
+  await expect(proCard).toContainText("$9 a month");
 
   await page.getByRole("button", { name: /^Yearly/ }).click();
-  await expect(proButton).toContainText("$8.10/mo");
+  await expect(proCard).toContainText("$8.10 a month, billed yearly");
 
   await proButton.click();
   await expect.poll(() => checkoutBody).toEqual({ plan: "pro", interval: "year" });
 });
 
 /** Somebody on a paid plan has to be able to tell which cycle they are on,
- * and where to change it: the badge says it, the note under the button says
- * where. */
+ * and where to change it: the plan line says it, Change plan is where. */
 test("a subscriber sees their billing cycle and where to change it", async ({ page }) => {
   const email = `billing-cycle-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
@@ -43,6 +48,31 @@ test("a subscriber sees their billing cycle and where to change it", async ({ pa
 
   await page.goto("/billing");
 
-  await expect(page.getByText("Pro · Yearly")).toBeVisible();
-  await expect(page.getByText("Switch between monthly and yearly")).toBeVisible();
+  await expect(page.getByText("$8.10 a month, billed yearly")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change plan" })).toBeVisible();
+});
+
+/** On the plan you are on, the other cycle is a way to move: Pro monthly
+ * flips the switch to Yearly and gets "Switch to yearly", which opens the
+ * portal, where yearly is a plan change like any other. */
+test("a monthly subscriber can switch the same plan to yearly", async ({ page }) => {
+  const email = `billing-to-yearly-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await setPlan(page, email, "pro", { interval: "month" });
+
+  let portalOpened = false;
+  await page.route("**/api/billing/portal", async (route) => {
+    portalOpened = true;
+    await route.fulfill({ json: { url: "/billing" } });
+  });
+
+  await page.goto("/billing");
+  await page.getByRole("button", { name: "Change plan" }).click();
+  const dialog = page.getByRole("dialog", { name: "Change plan" });
+  await expect(dialog.getByRole("button", { name: "Current plan" })).toBeVisible();
+
+  await dialog.getByRole("button", { name: /^Yearly/ }).click();
+  await expect(dialog.getByRole("button", { name: "Current plan" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Switch to yearly" }).click();
+  await expect.poll(() => portalOpened).toBe(true);
 });

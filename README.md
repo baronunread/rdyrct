@@ -45,7 +45,7 @@ rdyrct is built Cloudflare-first: the entire product runs in a single Worker wit
 - **D1**: SQLite at the edge, source of truth for auth, orgs, links, clicks, and domains.
 - **KV**: slug → destination lookups on the redirect hot path, so a click never waits on D1.
 - **R2**: QR logo images, keyed by org, served immutable and cached.
-- **Cloudflare for SaaS**: custom hostnames for Pro orgs' own short-link domains.
+- **Cloudflare for SaaS**: custom hostnames for paid orgs' own short-link domains.
 - **Workers Rate Limiting**: separate abuse controls for auth, email, writes, uploads, domains, billing, and click recording.
 
 Application layer:
@@ -236,7 +236,7 @@ before the first production deploy.
 Review the [architecture, data flows, and improvement priorities](docs/architecture.md)
 before changing link, domain, logo, or organization delete flows.
 
-**Customer custom domains (Pro):** to let orgs use `links.theirbrand.com`, enable [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/) on the `rdyrct.com` zone, create an originless proxied fallback origin (e.g. `fallback.rdyrct.com AAAA 100::`), and add a Worker route `*/*` pointing at the `rdyrct` worker. The `CF_API_TOKEN` needs permission **Zone → SSL and Certificates → Edit** scoped to the zone. Also verify your sending domain (e.g. `mail.rdyrct.com`) in [Resend](https://resend.com) so transactional email isn't blocked.
+**Customer custom domains (paid plans):** to let orgs use `links.theirbrand.com`, enable [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/) on the `rdyrct.com` zone, create an originless proxied fallback origin (e.g. `fallback.rdyrct.com AAAA 100::`), and add a Worker route `*/*` pointing at the `rdyrct` worker. The `CF_API_TOKEN` needs permission **Zone → SSL and Certificates → Edit** scoped to the zone. Also verify your sending domain (e.g. `mail.rdyrct.com`) in [Resend](https://resend.com) so transactional email isn't blocked.
 
 ---
 

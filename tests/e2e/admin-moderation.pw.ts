@@ -2,7 +2,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";
-import { createQuickLink } from "./orgs";
+import { createQuickLink, expectRedirect } from "./orgs";
 
 /**
  * Admin link moderation through the screen an admin actually uses (#67).
@@ -76,14 +76,23 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   // rather than as a button of its own on every row.
   await row.getByRole("button", { name: `Actions for ${slug}` }).click();
   await page.getByRole("menuitem", { name: "Suspend link" }).click();
-  const dialog = page.getByRole("dialog", { name: "Suspend this link" });
+  // The title names the link, so nobody suspends the wrong one.
+  const dialog = page.getByRole("dialog", { name: new RegExp(`^Suspend .*/${slug}\\?$`) });
   await expect(dialog).toBeVisible();
   // The real promise (#101): KV reaches every location within a minute, not
   // at once.
   await expect(dialog.getByText(/stops within a minute everywhere/)).toBeVisible();
-  // A suspension with no reason is not answerable later, so it is refused.
-  await expect(dialog.getByRole("button", { name: "Suspend link" })).toBeDisabled();
-  await dialog.getByLabel("Reason").fill("phishing report, ticket 412");
+  // A suspension with no reason is not answerable later, so it is refused:
+  // the button stays pressable and the empty field is marked instead.
+  const reason = dialog.getByRole("textbox", { name: "Reason" });
+  await dialog.getByRole("button", { name: "Suspend link" }).click();
+  await expect(reason).toHaveAttribute("aria-invalid", "true");
+  await expect(reason).toBeFocused();
+  await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expectRedirect(page, slug, destination);
+  await reason.fill("phishing report, ticket 412");
+  await expect(reason).not.toHaveAttribute("aria-invalid", "true");
   const suspended = linkPatch(page);
   await dialog.getByRole("button", { name: "Suspend link" }).click();
   expect((await suspended).ok()).toBe(true);
@@ -120,7 +129,13 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
     .getByRole("link", { name: "Audit log" })
     .click();
   await expect(page.getByText("link.suspend").first()).toBeVisible();
-  await expect(page.getByText(/ticket 412/).first()).toBeVisible();
+  // The row says who, what and to whom; the reason opens from the row.
+  await page
+    .getByRole("button", { name: `Open entry: link.suspend, /${slug}` })
+    .first()
+    .click();
+  const entry = page.getByRole("dialog", { name: "Link suspended" });
+  await expect(entry.getByText(/ticket 412/)).toBeVisible();
 });
 
 test("the Links tab is invisible and unreachable for a normal user", async ({ page }) => {
@@ -202,7 +217,10 @@ test("an admin sees a suspended org and restores its links in bulk", async ({ pa
   await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
 
   await page.goto(`/admin/links?org=${link.org_id}`);
-  await page.getByLabel("Filter by status").selectOption("Suspended");
+  await page
+    .getByRole("group", { name: "Link lists" })
+    .getByRole("button", { name: "Suspended", exact: true })
+    .click();
   await page.getByRole("checkbox", { name: "Select all links on this page" }).check();
   await page.getByRole("button", { name: "Restore selected" }).click();
   await expect(page.getByText(/1 link restored/)).toBeVisible({ timeout: 10_000 });
@@ -246,7 +264,7 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   // Scoped to the view switch: the owned table has a Reports column too.
   await page
     .getByRole("group", { name: "Link lists" })
-    .getByRole("button", { name: "Reports", exact: true })
+    .getByRole("button", { name: "Open reports", exact: true })
     .click();
   const row = page.getByRole("row").filter({ hasText: slug });
   await expect(row).toBeVisible({ timeout: 10_000 });

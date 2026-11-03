@@ -110,11 +110,16 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
 
   // Connected apps live under the MCP tab, not the default (API keys) one.
   await page.goto(`${appUrl}/api-keys?tab=mcp`);
-  await expect(page.getByText("Playwright Client")).toBeVisible();
-  await page.getByRole("button", { name: "Revoke Playwright Client" }).click();
+  await expect(
+    page.getByRole("region", { name: "Connected" }).getByText("Playwright Client"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Disconnect Playwright Client" }).click();
   await page.getByRole("button", { name: "Disconnect app" }).click();
-  // Back to zero connections: the connect guide, not a bare empty line.
-  await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
+  // Back to zero connections: the Connected list is gone, the guide stays.
+  await expect(page.getByText("Playwright Client")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Use rdyrct from your AI assistant" }),
+  ).toBeVisible();
 
   const revokedMcpRes = await request.post(`${appUrl}/api/mcp`, {
     headers: {

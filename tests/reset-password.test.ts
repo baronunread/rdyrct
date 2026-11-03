@@ -2,12 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { validateResetPassword } from "../src/app/lib/reset-password";
 
 describe("validateResetPassword", () => {
-  test("rejects a password shorter than 8 characters", () => {
-    expect(validateResetPassword("short", "short")).toBe("Password must be at least 8 characters.");
+  test("marks an empty password as required", () => {
+    expect(validateResetPassword("", "")).toEqual({ password: "Required" });
   });
 
-  test("rejects a confirmation that doesn't match", () => {
-    expect(validateResetPassword("longenough", "different")).toBe("Passwords do not match.");
+  test("marks a password shorter than 8 characters", () => {
+    expect(validateResetPassword("short", "short")).toEqual({ password: "At least 8 characters" });
+  });
+
+  test("marks a confirmation that doesn't match", () => {
+    expect(validateResetPassword("longenough", "different")).toEqual({ confirm: "Does not match" });
   });
 
   test("accepts a valid, matching password pair", () => {

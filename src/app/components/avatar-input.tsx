@@ -3,6 +3,7 @@ import type { User } from "@/shared/types";
 import { Pencil } from "@/app/ui/icons";
 import { UserAvatar } from "./user-avatar";
 import { AvatarPictureDialog } from "./avatar-picture-dialog";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** The account form's picture control: a big avatar with a pencil overlay.
  * The pencil opens a dialog to upload/crop or remove. Nothing reaches the
@@ -13,8 +14,11 @@ export function AvatarInput({
   pendingRemove,
   onPick,
   onRemove,
+  size = 128,
 }: {
   user: User;
+  /** 40 in a settings row. */
+  size?: number;
   /** Data URL of a not-yet-saved crop. */
   pendingUrl?: string;
   /** The saved picture is marked for deletion. */
@@ -30,18 +34,19 @@ export function AvatarInput({
       <div className="group relative">
         <UserAvatar
           user={{ ...user, image: shownImage }}
-          size={128}
-          className="border-2 border-border"
+          size={size}
+          className={size > 64 ? "border-2 border-border" : undefined}
         />
-        <button
-          type="button"
-          aria-label="Change picture"
-          title="Change picture"
-          onClick={() => setOpen(true)}
-          className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-bg/55 text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
-        >
-          <Pencil size={22} />
-        </button>
+        <Tooltip content="Change picture">
+          <button
+            type="button"
+            aria-label="Change picture"
+            onClick={() => setOpen(true)}
+            className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-bg/55 text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+          >
+            <Pencil size={size > 64 ? 22 : 14} />
+          </button>
+        </Tooltip>
       </div>
 
       {open && (

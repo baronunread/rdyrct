@@ -29,7 +29,7 @@ test("rdyrct.com's pages are not there", async ({ page }) => {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(404);
     await expect(
-      page.getByRole("heading", { level: 1, name: "Nothing lives at this link." }),
+      page.getByRole("heading", { level: 1, name: "No link at this address." }),
     ).toBeVisible();
   }
 });
@@ -38,9 +38,15 @@ test("a dead link does not advertise rdyrct", async ({ page }) => {
   const res = await page.goto("/no-such-link-x9");
   expect(res?.status()).toBe(404);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Nothing lives at this link." }),
+    page.getByRole("heading", { level: 1, name: "No link at this address." }),
   ).toBeVisible();
   await expect(page.getByText("Made with rdyrct")).toHaveCount(0);
+});
+
+test("a link page opened directly does not advertise rdyrct either", async ({ request }) => {
+  // The prerendered page served as it is, not through a link's redirect.
+  const html = await (await request.get("/link-disabled")).text();
+  expect(html).not.toContain("Made with rdyrct");
 });
 
 test("nothing in the page reports to rdyrct.com or claims its address", async ({ request }) => {

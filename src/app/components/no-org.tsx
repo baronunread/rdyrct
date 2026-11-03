@@ -30,14 +30,14 @@ import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { orgNameSchema } from "../lib/schemas";
+import { ORG_LIMIT_MESSAGE } from "@/shared/support";
 
 type OrgNameForm = { name: string };
 
-/** The org-limit refusal gets the upgrade line; everything else says what the
+/** The org-limit refusal points at Enterprise; everything else says what the
  * server said. */
 function createErrorMessage(cause: unknown): string {
-  if (cause instanceof ApiError && cause.code === "org_limit")
-    return "Upgrade to Pro to create more organizations";
+  if (cause instanceof ApiError && cause.code === "org_limit") return ORG_LIMIT_MESSAGE;
   return errorMessage(cause);
 }
 
@@ -84,7 +84,7 @@ export function NoOrgState() {
         <div>
           <h1 className="font-bold">Create an organization</h1>
           <p className="mt-1 text-sm text-muted">
-            Links, domains and teammates live in an organization. Name it whatever you like.
+            Links, domains and teammates belong to an organization. Name it whatever you like.
           </p>
         </div>
         <Field label="Name">

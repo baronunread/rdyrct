@@ -15,13 +15,15 @@
  * anonymous shortener the landing page uses. Nothing leaves the browser
  * until that button is pressed.
  */
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, ShieldCheck } from "@/app/ui/icons";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowRight, Copy } from "@/app/ui/icons";
 import { EMPTY_UTM, UTM_KEYS, buildDestination, resolveUtm, stripUtmParams } from "@/shared/utm";
 import type { UtmFields } from "@/shared/utm";
-import { Button } from "../ui/button";
+import { Button, IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { CopyButton } from "../ui/copy-button";
+import { cn } from "../ui/cn";
+import { useSlideTo } from "../ui/tab-underline";
 import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -57,16 +59,18 @@ const FIELD_COPY = {
     tip: "The campaign, launch or promotion the link belongs to.",
   },
   utmTerm: {
-    label: "Term (optional)",
+    label: "Term",
+    optional: true,
     placeholder: "running-shoes",
     tip: "The keyword a paid search ad was bought for.",
   },
   utmContent: {
-    label: "Content (optional)",
+    label: "Content",
+    optional: true,
     placeholder: "header-button",
     tip: "Tells apart two links in the same campaign, such as two ads or two buttons.",
   },
-} satisfies Record<UtmKey, { label: string; placeholder: string; tip: string }>;
+} satisfies Record<UtmKey, { label: string; optional?: true; placeholder: string; tip: string }>;
 
 const FIELDS = UTM_KEYS.map(([param, key]) => ({ param, key, ...FIELD_COPY[key] }));
 
@@ -135,6 +139,82 @@ const ELSEWHERE = {
   cap: { href: "/signup", label: "Sign up to shorten it" },
 } as const;
 
+/** Each parameter's colour, in the fields' order, shared by the tagged link
+ *  so a value there reads as the field it came from. */
+const PARAM_TONE = {
+  utmSource: "text-mint",
+  utmMedium: "text-sky",
+  utmCampaign: "text-accent",
+  utmTerm: "text-butter",
+  utmContent: "text-pink",
+} satisfies Record<UtmKey, string>;
+
+/** Where links usually go, as the source and medium most teams use for
+ *  each: one tap fills both. */
+const PRESETS = [
+  { label: "Newsletter", source: "newsletter", medium: "email" },
+  { label: "Instagram", source: "instagram", medium: "social" },
+  { label: "LinkedIn", source: "linkedin", medium: "social" },
+  { label: "Google Ads", source: "google", medium: "cpc" },
+  { label: "Print QR", source: "print", medium: "qr" },
+] as const;
+
+/**
+ * The presets as a segmented control: one pill that slides to whichever
+ * preset the fields match, and none when they match none. On a phone the
+ * five wrap onto two lines, where a sliding pill cannot follow, so the
+ * chosen one is shaded instead.
+ */
+function Presets({
+  fields,
+  onPick,
+}: {
+  fields: UtmFields;
+  onPick: (preset: (typeof PRESETS)[number]) => void;
+}) {
+  const track = useRef<HTMLDivElement>(null);
+  const pill = useSlideTo<HTMLSpanElement>(track, '[aria-pressed="true"]');
+  return (
+    <div className="min-w-0">
+      <span className="mb-1.5 flex min-h-4 items-center text-xs text-muted">Start from</span>
+      {/* Radii nest: an 11px track, 2px of padding, 9px segments. */}
+      <div
+        ref={track}
+        role="group"
+        aria-label="Start from"
+        className="relative flex gap-0.5 rounded-[11px] bg-bg p-0.5 max-sm:flex-wrap sm:w-fit"
+      >
+        <span
+          ref={pill}
+          aria-hidden
+          data-still=""
+          className="pointer-events-none absolute inset-y-0.5 left-0 rounded-[9px] bg-surface-2 smooth-shadow-ring-xs transition-[translate,width,opacity] duration-200 ease-out data-[still]:transition-none max-sm:hidden motion-reduce:transition-none"
+        />
+        {PRESETS.map((preset) => {
+          const on = fields.utmSource === preset.source && fields.utmMedium === preset.medium;
+          return (
+            <button
+              key={preset.label}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onPick(preset)}
+              className={cn(
+                // 34px inside the 2px track: as tall as the URL field beside it.
+                "relative h-[34px] cursor-pointer rounded-[9px] px-3 text-sm whitespace-nowrap transition-[color,background-color] duration-150 ease-out max-sm:h-10",
+                on
+                  ? "text-text max-sm:bg-surface-2"
+                  : "text-muted [@media(hover:hover)]:hover:text-text",
+              )}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function UtmFieldsGrid({
   fields,
   setField,
@@ -143,9 +223,12 @@ function UtmFieldsGrid({
   setField: (key: UtmKey, value: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {FIELDS.map(({ key, param, label, placeholder, tip }) => (
-        <Field key={key} label={label} tip={tip} hint={<span className="font-mono">{param}</span>}>
+    // Five across only where a field has room for its name and its tip.
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {FIELDS.map(({ key, param, label, placeholder, tip, ...rest }) => (
+        // The parameter name sits in the tip rather than on the label line:
+        // beside a name, a tip mark and "optional" it ran into the next field.
+        <Field key={key} label={label} optional={"optional" in rest} tip={`${param}: ${tip}`}>
           <Input
             value={fields[key]}
             onChange={(e) => setField(key, e.target.value)}
@@ -159,26 +242,84 @@ function UtmFieldsGrid({
   );
 }
 
-/** The case check: a quiet note with the fix, not an error. A value with a
- *  capital or a space still works, it just reports apart from its twin. */
-function CaseNote({ fields, onTidy }: { fields: UtmFields; onTidy: () => void }) {
-  const untidy = FIELDS.filter(({ key }) => fields[key] !== tidy(fields[key]));
-  if (untidy.length === 0) return null;
+/** The tagged link, each value in its field's colour, or what to do first. */
+function TaggedText({ tagged }: { tagged: string | null }) {
+  if (!tagged) return <span className="font-sans text-muted">Paste a link to start.</span>;
+  const { search, hash } = new URL(tagged);
+  const tone = (param: string) => {
+    const key = UTM_KEYS.find(([p]) => p === param)?.[1];
+    return key ? PARAM_TONE[key] : "text-text";
+  };
+  // Split on the text itself rather than re-encoding the parameters, so
+  // what shows is exactly `tagged`, character for character: the address,
+  // the query (none for a link with no tags yet), then any #fragment, which
+  // URLs put after the query.
+  const base = tagged.slice(0, tagged.length - search.length - hash.length);
+  const pairs = search ? search.slice(1).split("&") : [];
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-surface-2 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-muted">
-        Analytics tools count &ldquo;Email&rdquo; and &ldquo;email&rdquo; as two values. Check{" "}
-        {untidy.map(({ param }, i) => (
-          <span key={param}>
-            {i > 0 && ", "}
-            <span className="font-mono text-text">{param}</span>
-          </span>
-        ))}
-        .
-      </p>
-      <Button variant="outline" size="sm" onClick={onTidy} className="shrink-0">
-        Use lowercase and hyphens
-      </Button>
+    <>
+      <span className="text-muted">{base}</span>
+      {pairs.map((pair, i) => (
+        <QueryPair key={pair.split("=")[0]} pair={pair} lead={i === 0 ? "?" : "&"} tone={tone} />
+      ))}
+      {hash && <span className="text-muted">{hash}</span>}
+    </>
+  );
+}
+
+/** One `name=value` of the query: the name quiet, the value in its field's
+ *  colour, keyed on the value so a changed one fades in. */
+function QueryPair({
+  pair,
+  lead,
+  tone,
+}: {
+  pair: string;
+  lead: string;
+  tone: (param: string) => string;
+}) {
+  // Split at the first "=" only: a value may hold another.
+  const [name, value] = pair.split(/=(.*)/s);
+  return (
+    <span>
+      <span className="text-placeholder">
+        {lead}
+        {name}
+        {value === undefined ? "" : "="}
+      </span>
+      <span key={value} className={cn(tone(name), "motion-safe:animate-value-in")}>
+        {value}
+      </span>
+    </span>
+  );
+}
+
+/** The line under the link: the case check when a value strays from one
+ *  spelling, otherwise what the page does with what you type. A value with
+ *  a capital or a space still works, it just reports apart from its twin. */
+function CaseNote({ fields, onTidy }: { fields: UtmFields; onTidy: () => void }) {
+  // Edge spaces alone are no second spelling: the link leaves them out.
+  const untidy = FIELDS.find(({ key }) => fields[key].trim() !== tidy(fields[key]));
+  return (
+    <div className="flex min-h-8 flex-col items-start justify-between gap-1 px-3 pb-1.5 text-xs sm:flex-row sm:items-center sm:gap-3 sm:px-3.5">
+      {untidy ? (
+        <>
+          <p className="min-w-0 text-butter">
+            &ldquo;{fields[untidy.key].trim()}&rdquo; and its lowercase twin report as two values.
+          </p>
+          <button
+            type="button"
+            onClick={onTidy}
+            className="relative shrink-0 cursor-pointer font-semibold text-butter after:absolute after:-inset-2.5 [@media(hover:hover)]:hover:underline"
+          >
+            Use lowercase and hyphens
+          </button>
+        </>
+      ) : (
+        <p className="text-muted">
+          Built in your browser. Nothing you type is sent anywhere unless you shorten it.
+        </p>
+      )}
     </div>
   );
 }
@@ -188,32 +329,32 @@ function CaseNote({ fields, onTidy }: { fields: UtmFields; onTidy: () => void })
 function ShortLinkResult({ link }: { link: AnonLink }) {
   const toast = useToast();
   return (
-    <div className="flex flex-col gap-3 border-t border-dashed border-border pt-4">
-      <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5">
+    // Its own row under the tagged link, not in its place: change a tag
+    // afterwards and the line above shows the new link while this one still
+    // says what was shortened.
+    <div className="flex flex-col gap-2 rounded-[14px] bg-bg p-1.5 pl-4 motion-safe:animate-value-in sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 flex-col py-1">
         <a
           href={link.url}
           target="_blank"
           rel="noreferrer"
           aria-label="Your short link"
-          className="min-w-0 flex-1 truncate font-mono text-sm hover:text-accent"
+          className="truncate font-mono text-sm text-accent [@media(hover:hover)]:hover:underline"
         >
           {link.url.replace(/^https?:\/\//, "")}
         </a>
+        <span className="text-xs text-muted">Works for 24 hours. Sign up to keep it.</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
         <CopyButton
           text={link.url}
           label={`Copy ${link.url}`}
           onCopy={(text) => copyToClipboard(text, toast)}
         />
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="min-w-52 flex-1 text-sm text-muted">
-          This link works for 24 hours. Sign up to keep it and see which campaign each click came
-          from.
-        </p>
         <HrefLink
           href="/signup"
           onClick={() => trackCta("utm_page_signup")}
-          className={buttonClass({ variant: "primary", size: "sm" })}
+          className={buttonClass({ variant: "primary", className: "max-sm:flex-1" })}
         >
           Keep this link <ArrowRight size={14} />
         </HrefLink>
@@ -259,7 +400,16 @@ function useShortener(tagged: string | null, onMade: (link: AnonLink) => void) {
 
 type Shortener = ReturnType<typeof useShortener>;
 
-function ShortenAction({ tagged, shortener }: { tagged: string | null; shortener: Shortener }) {
+function ShortenAction({
+  tagged,
+  shortener,
+  onNothing,
+}: {
+  tagged: string | null;
+  shortener: Shortener;
+  /** With no link to shorten it says why, on the field, like Copy. */
+  onNothing: () => void;
+}) {
   const { busy, blocker, shorten, challenge } = shortener;
   const button = guardedButton(busy, challenge);
   if (blocker) {
@@ -277,8 +427,9 @@ function ShortenAction({ tagged, shortener }: { tagged: string | null; shortener
   return (
     <Button
       variant="outline"
-      onClick={() => tagged && void shorten(tagged)}
-      disabled={!tagged || button.disabled}
+      onClick={() => (tagged ? void shorten(tagged) : onNothing())}
+      // Only while the request or the bot check is under way.
+      disabled={button.disabled}
     >
       <BusyContent busy={button.spinning}>
         {button.waiting ? CHALLENGE_LABEL : "Shorten it"}
@@ -287,44 +438,41 @@ function ShortenAction({ tagged, shortener }: { tagged: string | null; shortener
   );
 }
 
-/** The tagged link and its copy button, there before it has anything to
- *  show so the card does not grow on the first keystroke. */
+/** The tagged link on its panel, with Copy and Shorten beside it (under it
+ *  on a phone, where beside it the link wrapped every twenty characters).
+ *  There before it has anything to show, so the card does not grow on the
+ *  first keystroke. */
 function TaggedOutput({
   tagged,
-  slot,
+  onNothing,
   children,
 }: {
   tagged: string | null;
-  /** The Turnstile slot, directly above the buttons, shown while there is a
-   * shorten button for it to sit over. */
-  slot?: ReactNode;
+  /** Copy is never disabled: with no link to copy it says why, on the field. */
+  onNothing: () => void;
   children: ReactNode;
 }) {
   const toast = useToast();
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs text-muted">Your tagged link</p>
+    // 14px inside the sheet's 20px with its 6px of padding.
+    <div className="flex flex-col gap-2 rounded-[14px] bg-bg bg-[radial-gradient(100%_140%_at_0%_0%,color-mix(in_oklab,var(--accent)_8%,transparent),transparent_60%)] p-1.5 pl-4 sm:flex-row sm:items-center">
       <output
         aria-label="Tagged link"
-        className="block min-h-16 rounded-lg bg-surface-2 px-3 py-2.5 font-mono text-sm break-all"
+        className="block min-h-10 min-w-0 flex-1 py-2 font-mono text-sm leading-relaxed break-all"
       >
-        {tagged ?? <span className="font-sans text-muted">Enter a website URL to start.</span>}
+        <TaggedText tagged={tagged} />
       </output>
-      {children && slot}
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex shrink-0 items-center gap-1.5 max-sm:[&>a]:flex-1 max-sm:[&>button:last-child]:flex-1">
         {tagged ? (
           <CopyButton
             text={tagged}
-            label="Copy tagged link"
-            display="button"
+            label="Copy link"
             onCopy={(text) => copyToClipboard(text, toast)}
-          >
-            Copy link
-          </CopyButton>
+          />
         ) : (
-          <Button variant="primary" disabled>
-            Copy link
-          </Button>
+          <IconButton label="Copy link" onClick={onNothing}>
+            <Copy size={12} />
+          </IconButton>
         )}
         {children}
       </div>
@@ -332,58 +480,132 @@ function TaggedOutput({
   );
 }
 
-function Builder() {
+/** Why the address field cannot be tagged, or null when it can. */
+function addressReason(address: string): string | null {
+  if (!address.trim()) return "Paste a link first";
+  return webAddress(address) ? null : "Not a web address";
+}
+
+/** The address and the five tags, with the edits the builder offers: a
+ *  pasted tagged link fills the fields from its own parameters (so editing
+ *  a tagged link is the same as building one), a preset sets source and
+ *  medium, and the case fix tidies every value at once. */
+function useUtmForm() {
   const [address, setAddress] = useState("");
   const [fields, setFields] = useState<UtmFields>(EMPTY_UTM);
-  const [made, setMade] = useState<AnonLink | null>(null);
-  const tagged = taggedUrl(address, fields);
-  const shortener = useShortener(tagged, setMade);
-
-  // A pasted link that is already tagged fills the fields from its own
-  // parameters, so editing a tagged link is the same as building one.
-  const changeAddress = (value: string) => {
-    const split = splitTagged(value, fields);
-    setAddress(split?.address ?? value);
-    if (split) setFields(split.fields);
+  return {
+    address,
+    fields,
+    changeAddress: (value: string) => {
+      const split = splitTagged(value, fields);
+      setAddress(split?.address ?? value);
+      if (split) setFields(split.fields);
+    },
+    setField: (key: UtmKey, value: string) =>
+      setFields((current) => ({ ...current, [key]: value })),
+    pickPreset: ({ source, medium }: (typeof PRESETS)[number]) =>
+      setFields((current) => ({ ...current, utmSource: source, utmMedium: medium })),
+    tidyAll: () =>
+      setFields((current) => {
+        const next = { ...current };
+        for (const { key } of FIELDS) next[key] = tidy(current[key]);
+        return next;
+      }),
   };
-  const setField = (key: UtmKey, value: string) =>
-    setFields((current) => ({ ...current, [key]: value }));
-  const tidyAll = () =>
-    setFields((current) => {
-      const next = { ...current };
-      for (const { key } of FIELDS) next[key] = tidy(current[key]);
-      return next;
-    });
+}
 
+/** Copy or Shorten with nothing to act on marks the address field, rather
+ *  than being a greyed-out button that never says why: the reason in its
+ *  label row, one shake, and focus. Any edit clears it. */
+function useAddressRefusal(address: string) {
+  const [reason, setReason] = useState<string | null>(null);
+  const [shakes, setShakes] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  // After the shake remounts the field, so focus lands in the new input,
+  // not the one that just left the page.
+  useEffect(() => {
+    if (shakes) input.current?.focus();
+  }, [shakes]);
+  return {
+    reason,
+    shakes,
+    input,
+    clear: () => setReason(null),
+    refuse: () => {
+      setReason(addressReason(address));
+      setShakes((n) => n + 1);
+    },
+  };
+}
+
+function AddressField({
+  value,
+  onChange,
+  refusal,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  refusal: ReturnType<typeof useAddressRefusal>;
+}) {
   return (
-    <div className="lit flex flex-col gap-6 rounded-3xl border border-border bg-surface p-6 sm:p-8">
-      <Field label="Website URL">
+    <Field label="Website URL" error={refusal.reason ?? undefined}>
+      <div key={refusal.shakes} className={cn(refusal.reason && "motion-safe:animate-shake")}>
         <Input
+          ref={refusal.input}
           type="text"
           inputMode="url"
-          value={address}
-          onChange={(e) => changeAddress(e.target.value)}
+          value={value}
+          onChange={(e) => {
+            refusal.clear();
+            onChange(e.target.value);
+          }}
           placeholder="https://example.com/spring-sale"
           autoComplete="off"
           spellCheck={false}
         />
-      </Field>
+      </div>
+    </Field>
+  );
+}
 
-      <UtmFieldsGrid fields={fields} setField={setField} />
+function Builder() {
+  const form = useUtmForm();
+  const refusal = useAddressRefusal(form.address);
+  const [made, setMade] = useState<AnonLink | null>(null);
+  const tagged = taggedUrl(form.address, form.fields);
+  const shortener = useShortener(tagged, setMade);
 
-      <CaseNote fields={fields} onTidy={tidyAll} />
+  return (
+    // On a phone the sheet takes back most of the hero's gutter, as the QR
+    // generator's does.
+    <div
+      data-utm-builder
+      className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]"
+    >
+      <div className="flex flex-col gap-4 px-3 pt-3 pb-2 sm:px-3.5">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <AddressField value={form.address} onChange={form.changeAddress} refusal={refusal} />
+          <Presets fields={form.fields} onPick={form.pickPreset} />
+        </div>
 
-      <TaggedOutput tagged={tagged} slot={<TurnstileSlot challenge={shortener.challenge} />}>
-        {/* Once made, the result below carries the next step. */}
-        {!made && <ShortenAction tagged={tagged} shortener={shortener} />}
-      </TaggedOutput>
+        <UtmFieldsGrid fields={form.fields} setField={form.setField} />
+      </div>
+
+      {/* The Turnstile slot sits straight above the panel holding Shorten,
+          in a column of its own so its empty box adds no gap. */}
+      <div className="flex flex-col">
+        <TurnstileSlot challenge={shortener.challenge} />
+        <TaggedOutput tagged={tagged} onNothing={refusal.refuse}>
+          {/* Once made, the row below carries the next step. */}
+          {!made && (
+            <ShortenAction tagged={tagged} shortener={shortener} onNothing={refusal.refuse} />
+          )}
+        </TaggedOutput>
+      </div>
 
       {made && <ShortLinkResult link={made} />}
 
-      <p className="flex items-start gap-1.5 text-xs text-muted">
-        <ShieldCheck size={13} className="mt-0.5 shrink-0 text-accent-2" />
-        The link is built in your browser. Nothing you type is sent anywhere unless you shorten it.
-      </p>
+      <CaseNote fields={form.fields} onTidy={form.tidyAll} />
     </div>
   );
 }
@@ -394,16 +616,11 @@ export function UtmBuilderPage() {
     <MarketingPage
       path="/utm-builder"
       title="UTM builder"
-      intro="Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the link, or shorten it. No account."
+      intro="Tag a link so Google Analytics and other tools can tell which campaign sent each visitor. No account, and nothing leaves your browser until you shorten it."
+      hero={<Builder />}
     >
       {/* The hero closes its own frame; this one starts on the same line. */}
       <div className="-mt-px mb-16 border-x border-border/70">
-        <FrameRow className="px-4 py-8 sm:px-10 sm:py-12">
-          <div className="mx-auto max-w-4xl">
-            <Builder />
-          </div>
-        </FrameRow>
-
         <FrameRow className="grid gap-10 px-6 py-12 sm:px-10 md:grid-cols-2 md:py-16">
           <section className="flex flex-col gap-4">
             <h2 className="text-2xl font-bold tracking-tight text-balance">

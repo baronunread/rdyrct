@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
 import { QR_CORNER_STYLES, QR_DEFAULT_CORNER } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
-import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
+import QRCodeStyling, {
+  type CornerSquareType,
+  type CornerDotType,
+  type Options,
+} from "qr-code-styling";
 import { Button } from "../ui/button";
 import { Download } from "@/app/ui/icons";
 import { eccFor, hasTransparency, imageOptionsFor, resolveLook, type QrLook } from "../lib/qr-look";
@@ -70,6 +74,7 @@ export function QrDownloadButtons({
   look,
   className,
   disabled,
+  prominent,
 }: {
   url: string;
   name: string;
@@ -79,6 +84,9 @@ export function QrDownloadButtons({
   /** For callers that keep the row in place while there is nothing to
    * download yet, rather than letting it appear and shove the page down. */
   disabled?: boolean;
+  /** The page's one primary action (the free generator): PNG in the
+   * accent and named in full, SVG beside it in outline. */
+  prominent?: boolean;
 }) {
   const resolved = look ?? resolveLook({});
   const toast = useToast();
@@ -93,30 +101,42 @@ export function QrDownloadButtons({
       toast("Could not make the file. Try again.", "error");
     }
   };
+  const style = prominent ? PROMINENT : PLAIN;
   return (
     <div className={cn("flex gap-2", className)}>
       {/* Named in full for assistive tech: these can sit beside a link
           rather than under the code, where "PNG" alone says nothing about
           what is being downloaded. */}
       <Button
-        size="sm"
+        size={style.size}
+        variant={style.png}
         disabled={disabled}
         aria-label="Download QR code as PNG"
         onClick={() => void download("png")}
       >
-        <Download size={13} /> PNG
+        <Download size={style.icon} /> {style.pngLabel}
       </Button>
       <Button
-        size="sm"
+        size={style.size}
+        variant={style.svg}
         disabled={disabled}
         aria-label="Download QR code as SVG"
         onClick={() => void download("svg")}
       >
-        <Download size={13} /> SVG
+        <Download size={style.icon} /> SVG
       </Button>
     </div>
   );
 }
+
+const PLAIN = { size: "sm", png: undefined, svg: undefined, icon: 13, pngLabel: "PNG" } as const;
+const PROMINENT = {
+  size: "md",
+  png: "primary",
+  svg: "outline",
+  icon: 15,
+  pngLabel: "Download PNG",
+} as const;
 
 // qr-code-styling takes margin in pixels, so a fixed value would shrink the
 // quiet zone to nothing relative to a 1024px code. Held as a ratio of the
@@ -140,6 +160,27 @@ const MARGIN_RATIO = 8 / 208;
  */
 const PREVIEW_RENDER_SIZE = 1024;
 
+/** The error correction a drawing needs: the logo's, or room for one. */
+const levelFor = (look: QrLook, roomForLogo = false) => (roomForLogo ? "H" : eccFor(look));
+
+/** Everything a preview redraws with. Fixed size, unlike the container: the
+ *  drawing is always PREVIEW_RENDER_SIZE and CSS decides how big it looks,
+ *  so a resize cannot strand it at a stale scale. The correction level comes
+ *  along, so a logo added after the first draw gets the level the download
+ *  uses, or the preview is a different code from the file. */
+function previewUpdate(url: string, look: QrLook, roomForLogo?: boolean): Partial<Options> {
+  return {
+    width: PREVIEW_RENDER_SIZE,
+    height: PREVIEW_RENDER_SIZE,
+    margin: Math.round(PREVIEW_RENDER_SIZE * MARGIN_RATIO),
+    data: url,
+    image: look.logo,
+    qrOptions: { errorCorrectionLevel: levelFor(look, roomForLogo) },
+    imageOptions: imageOptionsFor(look),
+    ...looksOptions(look),
+  };
+}
+
 function makeQR(url: string, size: number, look: QrLook, roomForLogo = false) {
   const qr = new QRCodeStyling({
     width: size,
@@ -148,7 +189,7 @@ function makeQR(url: string, size: number, look: QrLook, roomForLogo = false) {
     data: url,
     image: look.logo,
     margin: Math.round(size * MARGIN_RATIO),
-    qrOptions: { errorCorrectionLevel: roomForLogo ? "H" : eccFor(look) },
+    qrOptions: { errorCorrectionLevel: levelFor(look, roomForLogo) },
     imageOptions: imageOptionsFor(look),
     ...looksOptions(look),
   });
@@ -177,8 +218,11 @@ export function QRPreview({
   logoSize,
   downloadName,
   roomForLogo,
+  label,
 }: {
   url: string;
+  /** The image's accessible name; "QR code for" its text by default. */
+  label?: string;
   /** Draw the code at the error correction a logo needs even with no logo,
    * for a caller that lays its own logo over the middle. The modules come out
    * the same as the code with a logo, so the two can crossfade. */
@@ -213,18 +257,7 @@ export function QRPreview({
       qr.current = makeQR(url, PREVIEW_RENDER_SIZE, look, roomForLogo);
       qr.current.append(holder.current);
     } else {
-      qr.current.update({
-        // Fixed, unlike the container: the drawing is always PREVIEW_RENDER_SIZE
-        // and CSS decides how big it looks, so `size` never reaches the
-        // generator and a resize cannot strand it at a stale scale.
-        width: PREVIEW_RENDER_SIZE,
-        height: PREVIEW_RENDER_SIZE,
-        margin: Math.round(PREVIEW_RENDER_SIZE * MARGIN_RATIO),
-        data: url,
-        image: look.logo,
-        imageOptions: imageOptionsFor(look),
-        ...looksOptions(look),
-      });
+      qr.current.update(previewUpdate(url, look, roomForLogo));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
@@ -240,7 +273,7 @@ export function QRPreview({
         // screen reader. The code encodes the URL, which is the useful thing
         // to announce.
         role="img"
-        aria-label={`QR code for ${url}`}
+        aria-label={label ?? `QR code for ${url}`}
         // The drawing is PREVIEW_RENDER_SIZE regardless; these make it fill
         // whatever box `size` asks for.
         className={cn(

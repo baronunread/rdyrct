@@ -1,4 +1,5 @@
 import { tooltip } from "@tanstack/charts/tooltip";
+import type { ChartPoint, ChartTooltipAnchorContext } from "@tanstack/charts";
 
 /**
  * What every chart's tooltip eases with. A tooltip anchored to the pointer is
@@ -8,7 +9,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
  * cursor. Left unset, a chart falls back to the renderer's default tween,
  * which is slow enough to read as drag.
  */
-export const followSpring = { type: "spring", stiffness: 170, damping: 22, mass: 1 } as const;
+const followSpring = { type: "spring", stiffness: 170, damping: 22, mass: 1 } as const;
 
 /**
  * The one tooltip every chart in the app uses: parked beside the pointer,
@@ -23,6 +24,33 @@ export const pointerTooltip = {
   placement: "auto",
   offset: 16,
   motion: followSpring,
-  className:
-    "pointer-events-none rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg",
+  className: "pointer-events-none",
+} as const;
+
+/** Room the tooltip card takes above its anchor: its height (two lines)
+ * plus pointerTooltip's offset, with a little to spare. */
+const ROOM_ABOVE = 64;
+
+/** The pointer, held low enough under the plot's top that the card always
+ * fits above it. */
+function abovePointer(
+  points: readonly ChartPoint[],
+  context: ChartTooltipAnchorContext,
+): { x: number; y: number } | null {
+  const at = context.pointer ?? points[0];
+  if (!at) return null;
+  return { x: at.x, y: Math.max(at.y, context.plot.y + ROOM_ABOVE) };
+}
+
+/**
+ * The tooltip for a chart read left to right (clicks by day, by hour): up
+ * and to the right of the cursor, following it on both axes, and to the left
+ * only near the right edge. It never flips from below the cursor to above it
+ * (crossing the middle of the plot used to jump it about 67px): near the top
+ * it stops and waits there instead.
+ */
+export const seriesTooltip = {
+  ...pointerTooltip,
+  anchor: abovePointer,
+  placement: ["top-right", "top-left"],
 } as const;

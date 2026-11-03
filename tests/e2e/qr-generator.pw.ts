@@ -163,21 +163,23 @@ test("styling the code is free here, and stays in the browser", async ({ page })
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/styled");
 
-  for (const control of ["Dot style", "Corner style", "Dot color", "Eye color", "Background"]) {
-    await expect(page.getByRole("button", { name: control })).toBeVisible();
+  // The same rows as the app's QR editor: shapes, the three colours, a logo.
+  for (const group of ["Dots", "Corners", "Colours"]) {
+    await expect(page.getByRole("group", { name: group, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("button", { name: "Upload a logo image" })).toBeVisible();
-
-  // The logo-size advice is a tip on the label, not two lines under the
-  // field: worth reading once, not on every visit.
-  await expect(page.getByText(/hides more of the dots/)).toHaveCount(0);
-  await page.getByRole("button", { name: "About logo size" }).hover();
-  await expect(page.getByText(/hides more of the dots/)).toBeVisible();
+  for (const chip of ["Dots", "Corners", "Background"]) {
+    await expect(page.getByRole("button", { name: new RegExp(`^${chip} colour`) })).toBeVisible();
+  }
+  await expect(page.getByRole("button", { name: "Upload", exact: true })).toBeVisible();
 
   // Change one and the code redraws rather than erroring.
-  await page.getByRole("button", { name: "Dot style" }).click();
-  await page.getByRole("menuitem", { name: "dots" }).click();
-  await expect(page.getByRole("button", { name: /PNG/ })).toBeVisible();
+  const dots = page.getByRole("group", { name: "Dots", exact: true });
+  await dots.getByRole("button", { name: "Square", exact: true }).click();
+  await expect(dots.getByRole("button", { name: "Square", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByRole("button", { name: /PNG/ })).toBeEnabled();
 
   expect(appPosts(page, posted)).toEqual([]);
 });
@@ -196,7 +198,7 @@ test("the page says what it is built on, and carries its own title", async ({ pa
   // The libraries doing the work are named and linked.
   await expect(page.getByRole("link", { name: "qr-code-styling" })).toBeVisible();
   await expect(page.getByRole("link", { name: "SVGO" })).toBeVisible();
-  await expect(page.getByText(/free as in beer/i)).toBeVisible();
+  await expect(page.getByText(/should be free and open source/i)).toBeVisible();
 });
 
 test("a logo lands in the middle of the code instead of blanking it", async ({ page }) => {
@@ -211,7 +213,9 @@ test("a logo lands in the middle of the code instead of blanking it", async ({ p
   await expect(code.locator("svg image")).toHaveCount(0);
 
   await page.setInputFiles('input[type="file"]', "tests/e2e/fixtures/logo.png");
-  await expect(page.getByText("Logo added")).toBeVisible({ timeout: 20_000 });
+  // The logo row names the file and offers to replace it.
+  await expect(page.getByText("logo.png")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Replace" })).toBeVisible();
 
   // The logo is in, and the code is still a code: dots as well as the image.
   await expect(code.locator("svg image")).toHaveCount(1, { timeout: 20_000 });

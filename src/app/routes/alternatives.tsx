@@ -20,6 +20,8 @@ import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
 import { MarketingLink } from "../components/marketing-link";
+import { EndBand, FrameSection, FramedSections } from "../components/marketing-kit";
+import { FaqList } from "../components/faq-list";
 import { trackCta } from "../lib/track-cta";
 import { formatNumber } from "../lib/numbers";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
@@ -149,7 +151,7 @@ const ALTERNATIVES = {
       "QR codes counted next to links, with 1,500 of each a month on Professional.",
     ],
     weWin: [
-      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains per organization and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 or more.`,
+      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 or more.`,
       `${PLAN_LIMITS.pro.analyticsDays} days of click history on Pro.`,
       "No watermark on QR codes, and no IP address stored on any click.",
       "Teammates on every plan, from 3 on Free. Rebrandly's Free plan has none.",
@@ -182,7 +184,7 @@ const ALTERNATIVES = {
       ],
       [
         "Can I use more than one organization?",
-        `Pro includes ${PLAN_LIMITS.pro.orgs} organizations on one subscription. Only the owner pays.`,
+        `Each plan covers one organization, and only its owner pays. For several organizations, email us about Enterprise.`,
       ],
     ],
     blog: { href: "/blog/rebrandly-alternatives", label: "More on Rebrandly alternatives" },
@@ -382,8 +384,7 @@ function PlansSection({
   note: string;
 }) {
   return (
-    <section className="flex flex-col gap-6 pb-12">
-      <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">{heading}</h2>
+    <FrameSection title={heading}>
       <Table minWidth={headers.length > 3 ? "min-w-2xl" : "min-w-xl"} className={LIT_TABLE}>
         <thead>
           <tr>
@@ -416,55 +417,48 @@ function PlansSection({
         </tbody>
       </Table>
       <p className="text-xs text-muted">{note}</p>
-    </section>
+    </FrameSection>
   );
 }
 
 function Questions({ faq, blog }: Pick<Alternative, "faq" | "blog">) {
   return (
-    <section className="mx-auto flex max-w-3xl flex-col gap-6 pb-12">
-      <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Questions</h2>
-      {faq.map(([question, answer]) => (
-        <div key={question}>
-          <h3 className="font-bold">{question}</h3>
-          <p className="mt-1 text-muted">{answer}</p>
-        </div>
-      ))}
+    <FrameSection title="Questions">
+      <FaqList faqs={faq.map(([q, a]) => ({ q, a }))} />
       {blog && (
         <p className="text-sm">
-          <a href={blog.href} className="text-accent hover:underline">
+          <a href={blog.href} className="text-accent underline underline-offset-4">
             {blog.label}
           </a>
         </p>
       )}
-    </section>
+    </FrameSection>
   );
 }
 
 function SignupBand({ children }: { children?: ReactNode }) {
   return (
-    <section className="flex flex-col items-start gap-4 border-t border-border py-16">
-      <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-        Try it free. Move over when you are ready.
-      </h2>
-      <div className="flex flex-wrap items-center gap-4">
-        <Link
-          to="/signup"
-          onClick={() => trackCta("alternative_page_signup")}
-          className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
-        >
-          Sign up free
-        </Link>
-        {children}
-      </div>
-      <p className="text-xs text-muted">
-        No credit card. Every plan is on our{" "}
-        <Link to="/pricing" className="text-accent hover:underline">
-          pricing page
-        </Link>
-        .
-      </p>
-    </section>
+    <EndBand
+      title="Try it free. Move over when you are ready."
+      note={
+        <>
+          No credit card. Every plan is on our{" "}
+          <Link to="/pricing" className="text-accent underline underline-offset-4">
+            pricing page
+          </Link>
+          .
+        </>
+      }
+    >
+      <Link
+        to="/signup"
+        onClick={() => trackCta("alternative_page_signup")}
+        className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+      >
+        Sign up free
+      </Link>
+      {children}
+    </EndBand>
   );
 }
 
@@ -478,63 +472,59 @@ function AlternativePage({ data }: { data: Alternative }) {
   ] as const;
   return (
     <MarketingPage path={data.path} title={data.title} intro={data.intro}>
-      <section className="mx-auto flex max-w-3xl flex-col gap-4 py-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          The short answer
-        </h2>
-        <p className="text-muted">{data.answer}</p>
-      </section>
+      <FramedSections>
+        <FrameSection title="The short answer">
+          <p className="max-w-3xl text-pretty text-muted">{data.answer}</p>
+        </FrameSection>
 
-      <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          rdyrct and {data.name}
-        </h2>
-        <Table minWidth="min-w-xl" className={LIT_TABLE}>
-          <thead>
-            <tr>
-              <Th></Th>
-              <Th className="bg-accent/5">rdyrct</Th>
-              <Th>{data.name}</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {glance.map(([label, key]) => (
-              <tr key={key}>
-                <Td className="font-bold">{label}</Td>
-                <Td className="bg-accent/5">{RDYRCT_ROWS[key]}</Td>
-                <Td className="text-muted">{data.theirs[key]}</Td>
+        <FrameSection title={`rdyrct and ${data.name}`}>
+          <Table minWidth="min-w-xl" className={LIT_TABLE}>
+            <thead>
+              <tr>
+                <Th></Th>
+                <Th className="bg-accent/5">rdyrct</Th>
+                <Th>{data.name}</Th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
-        <p className="text-xs text-muted">
-          {data.name} figures from {data.pricingUrl}, {CHECKED}. rdyrct figures from our pricing
-          page.
-        </p>
-      </section>
+            </thead>
+            <tbody>
+              {glance.map(([label, key]) => (
+                <tr key={key}>
+                  <Td className="font-bold">{label}</Td>
+                  <Td className="bg-accent/5">{RDYRCT_ROWS[key]}</Td>
+                  <Td className="text-muted">{data.theirs[key]}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <p className="text-xs text-muted">
+            {data.name} figures from {data.pricingUrl}, {CHECKED}. rdyrct figures from our pricing
+            page.
+          </p>
+        </FrameSection>
 
-      <section className="grid gap-10 pb-12 sm:grid-cols-2">
-        <div className="flex flex-col gap-3">
-          <h2 className="text-xl font-bold tracking-tight">
-            Where {data.name} is the better choice
-          </h2>
-          <BulletList items={data.theyWin} />
-        </div>
-        <div className="flex flex-col gap-3">
-          <h2 className="text-xl font-bold tracking-tight">Where rdyrct is the better choice</h2>
-          <BulletList items={data.weWin} />
-        </div>
-      </section>
+        <FrameSection className="grid gap-10 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-bold tracking-tight">
+              Where {data.name} is the better choice
+            </h2>
+            <BulletList items={data.theyWin} />
+          </div>
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-bold tracking-tight">Where rdyrct is the better choice</h2>
+            <BulletList items={data.weWin} />
+          </div>
+        </FrameSection>
 
-      <PlansSection
-        heading={`${data.name} plans`}
-        headers={["Plan", "Price", "What it includes"]}
-        rows={data.plans}
-        note={data.planNote}
-      />
+        <PlansSection
+          heading={`${data.name} plans`}
+          headers={["Plan", "Price", "What it includes"]}
+          rows={data.plans}
+          note={data.planNote}
+        />
 
-      <Questions faq={data.faq} blog={data.blog} />
-      <SignupBand />
+        <Questions faq={data.faq} blog={data.blog} />
+        <SignupBand />
+      </FramedSections>
     </MarketingPage>
   );
 }
@@ -635,98 +625,95 @@ function QrAlternativePage() {
       title="QR Code Monkey alternative"
       intro="QR Code Monkey, QR.io and QR Code Generator Pro against rdyrct: what a code costs, what you can download, and what it takes to count scans."
     >
-      <section className="mx-auto flex max-w-3xl flex-col gap-4 py-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          The short answer
-        </h2>
-        <p className="text-muted">
-          For a static code with your logo, QR Code Monkey and our{" "}
-          <MarketingLink to="/qr-code-generator" className="text-accent hover:underline">
-            QR code generator
-          </MarketingLink>{" "}
-          are both free and need no account. Ours has no ads and sends nothing you type to a server.
-          QR Code Monkey has more download formats. To count scans or change a code after printing,
-          QR.io charges $39.99 a month for one plan. rdyrct does it with a short link, free for{" "}
-          {PLAN_LIMITS.free.links} links, with logo codes from {PLAN_PRICES.hobby} a month.
-        </p>
-      </section>
+      <FramedSections>
+        <FrameSection title="The short answer">
+          <p className="max-w-3xl text-pretty text-muted">
+            For a static code with your logo, QR Code Monkey and our{" "}
+            <MarketingLink to="/qr-code-generator" className="text-accent hover:underline">
+              QR code generator
+            </MarketingLink>{" "}
+            are both free and need no account. Ours has no ads and sends nothing you type to a
+            server. QR Code Monkey has more download formats. To count scans or change a code after
+            printing, QR.io charges $39.99 a month for one plan. rdyrct does it with a short link,
+            free for {PLAN_LIMITS.free.links} links, with logo codes from {PLAN_PRICES.hobby} a
+            month.
+          </p>
+        </FrameSection>
 
-      <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          rdyrct and three QR generators
-        </h2>
-        <Table minWidth="min-w-3xl" className={LIT_TABLE}>
-          <thead>
-            <tr>
-              <Th></Th>
-              <Th className="bg-accent/5">rdyrct</Th>
-              {QR_TOOLS.map((tool) => (
-                <Th key={tool}>{tool}</Th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {QR_ROWS.map(([label, ours, theirs]) => (
-              <tr key={label}>
-                <Td className="font-bold">{label}</Td>
-                <Td className="bg-accent/5">{ours}</Td>
-                {theirs.map((value, i) => (
-                  <Td key={QR_TOOLS[i]} className="text-muted">
-                    {value}
-                  </Td>
+        <FrameSection title="rdyrct and three QR generators">
+          <Table minWidth="min-w-3xl" className={LIT_TABLE}>
+            <thead>
+              <tr>
+                <Th></Th>
+                <Th className="bg-accent/5">rdyrct</Th>
+                {QR_TOOLS.map((tool) => (
+                  <Th key={tool}>{tool}</Th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </Table>
-        <p className="text-xs text-muted">
-          Figures from qrcode-monkey.com, qr.io/pricing and qr-code-generator.com/pricing, {CHECKED}
-          . rdyrct figures from our pricing page.
-        </p>
-      </section>
+            </thead>
+            <tbody>
+              {QR_ROWS.map(([label, ours, theirs]) => (
+                <tr key={label}>
+                  <Td className="font-bold">{label}</Td>
+                  <Td className="bg-accent/5">{ours}</Td>
+                  {theirs.map((value, i) => (
+                    <Td key={QR_TOOLS[i]} className="text-muted">
+                      {value}
+                    </Td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <p className="text-xs text-muted">
+            Figures from qrcode-monkey.com, qr.io/pricing and qr-code-generator.com/pricing,{" "}
+            {CHECKED}. rdyrct figures from our pricing page.
+          </p>
+        </FrameSection>
 
-      <section className="grid gap-10 pb-12 sm:grid-cols-2">
-        <div className="flex flex-col gap-3">
-          <h2 className="text-xl font-bold tracking-tight">
-            Where the others are the better choice
-          </h2>
-          <BulletList
-            items={[
-              "QR Code Monkey downloads PDF and EPS as well as PNG and SVG, and has colour gradients, templates and a logo gallery.",
-              "QR.io has unlimited dynamic codes and scans on one plan, plus landing pages and bulk creation.",
-              "QR Code Generator Pro has 22 types of QR code, landing pages, and bulk creation from a CSV file.",
-            ]}
-          />
-        </div>
-        <div className="flex flex-col gap-3">
-          <h2 className="text-xl font-bold tracking-tight">Where rdyrct is the better choice</h2>
-          <BulletList
-            items={[
-              "The free generator has no ads, no account and no watermark, and the code is made in your browser.",
-              `Codes you can repoint and count from free, and logo codes for tracked links from ${PLAN_PRICES.hobby} a month, against $39.99 at QR.io.`,
-              "Scans counted by country, device and time, never with an IP address.",
-              "Short links, QR codes and your own domain in one account, with teammates on every plan.",
-            ]}
-          />
-        </div>
-      </section>
+        <FrameSection className="grid gap-10 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-bold tracking-tight">
+              Where the others are the better choice
+            </h2>
+            <BulletList
+              items={[
+                "QR Code Monkey downloads PDF and EPS as well as PNG and SVG, and has colour gradients, templates and a logo gallery.",
+                "QR.io has unlimited dynamic codes and scans on one plan, plus landing pages and bulk creation.",
+                "QR Code Generator Pro has 22 types of QR code, landing pages, and bulk creation from a CSV file.",
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-bold tracking-tight">Where rdyrct is the better choice</h2>
+            <BulletList
+              items={[
+                "The free generator has no ads, no account and no watermark, and the code is made in your browser.",
+                `Codes you can repoint and count from free, and logo codes for tracked links from ${PLAN_PRICES.hobby} a month, against $39.99 at QR.io.`,
+                "Scans counted by country, device and time, never with an IP address.",
+                "Short links, QR codes and your own domain in one account, with teammates on every plan.",
+              ]}
+            />
+          </div>
+        </FrameSection>
 
-      <PlansSection
-        heading="Their plans"
-        headers={["Tool", "Plan", "Price", "What it includes"]}
-        rows={QR_PLANS}
-        note="QR Code Generator Pro's page loads its prices for your region in the browser and showed none to our reader, so check them there. It quotes them before VAT. QR.io offers a 7-day money-back guarantee."
-      />
+        <PlansSection
+          heading="Their plans"
+          headers={["Tool", "Plan", "Price", "What it includes"]}
+          rows={QR_PLANS}
+          note="QR Code Generator Pro's page loads its prices for your region in the browser and showed none to our reader, so check them there. It quotes them before VAT. QR.io offers a 7-day money-back guarantee."
+        />
 
-      <Questions faq={QR_FAQ} />
-      <SignupBand>
-        <MarketingLink
-          to="/qr-code-generator"
-          className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
-        >
-          Make a QR code now
-        </MarketingLink>
-      </SignupBand>
+        <Questions faq={QR_FAQ} />
+        <SignupBand>
+          <MarketingLink
+            to="/qr-code-generator"
+            className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
+          >
+            Make a QR code now
+          </MarketingLink>
+        </SignupBand>
+      </FramedSections>
     </MarketingPage>
   );
 }
@@ -758,44 +745,49 @@ function CompareIndex() {
       title="Compare rdyrct with other link shorteners"
       intro="What each costs once you want links on your own domain, and when the other tool is the better pick."
     >
-      <section className="grid gap-4 py-12 sm:grid-cols-2">
-        {COMPARE_CARDS.map((tool) => (
-          <Link
-            key={tool.path}
-            to={tool.path}
-            className="lit group flex flex-col gap-5 rounded-3xl border border-border bg-surface p-6 transition-colors hover:border-accent/40"
-          >
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight">vs {tool.name}</h2>
-              <p className="mt-1 text-muted">{tool.blurb}</p>
-            </div>
-            <dl className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1 rounded-md bg-surface-2 p-3">
-                <dt className="text-sm text-muted">{tool.name}</dt>
-                <dd className="font-medium text-balance">{tool.theirPrice}</dd>
+      <FramedSections>
+        <FrameSection className="grid gap-4 sm:grid-cols-2">
+          {COMPARE_CARDS.map((tool) => (
+            <Link
+              key={tool.path}
+              to={tool.path}
+              className="lit group flex flex-col gap-5 rounded-3xl border border-border bg-surface p-6 transition-colors hover:border-accent/40"
+            >
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">vs {tool.name}</h2>
+                <p className="mt-1 text-muted">{tool.blurb}</p>
               </div>
-              <div className="flex flex-col gap-1 rounded-md border border-accent/30 bg-accent/5 p-3">
-                <dt className="text-sm text-muted">rdyrct</dt>
-                <dd className="font-medium text-balance">{tool.ourPrice}</dd>
-              </div>
-            </dl>
-            <span className="mt-auto inline-flex items-center gap-1.5 font-medium text-accent">
-              View comparison
-              <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-            </span>
-          </Link>
-        ))}
-      </section>
-      <section className="flex flex-col items-start gap-3 border-t border-border py-12">
-        <h2 className="text-xl font-bold tracking-tight">Not on the list?</h2>
-        <p className="text-muted">
-          Tell us which tool you are leaving and we will add it.{" "}
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
-            Write to support
-          </a>
-          .
-        </p>
-      </section>
+              <dl className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1 rounded-md bg-surface-2 p-3">
+                  <dt className="text-sm text-muted">{tool.name}</dt>
+                  <dd className="font-medium text-balance">{tool.theirPrice}</dd>
+                </div>
+                <div className="flex flex-col gap-1 rounded-md border border-accent/30 bg-accent/5 p-3">
+                  <dt className="text-sm text-muted">rdyrct</dt>
+                  <dd className="font-medium text-balance">{tool.ourPrice}</dd>
+                </div>
+              </dl>
+              <span className="mt-auto inline-flex items-center gap-1.5 font-medium text-accent">
+                View comparison
+                <ArrowRight
+                  size={16}
+                  className="transition-transform group-hover:translate-x-0.5"
+                />
+              </span>
+            </Link>
+          ))}
+        </FrameSection>
+        <FrameSection className="items-start gap-3">
+          <h2 className="text-xl font-bold tracking-tight">Not on the list?</h2>
+          <p className="text-muted">
+            Tell us which tool you are leaving and we will add it.{" "}
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
+              Write to support
+            </a>
+            .
+          </p>
+        </FrameSection>
+      </FramedSections>
     </MarketingPage>
   );
 }

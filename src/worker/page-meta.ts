@@ -171,7 +171,7 @@ export function markdownPage(url: URL, accept: string | null | undefined): Respo
 
 /** The same links index.html's fallback ends on, so every page a crawler
  * reads still leads to the others. */
-const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/wifi-qr-code">WiFi QR code generator</a> <a href="/vcard-qr-code">vCard QR code generator</a> <a href="/whatsapp-qr-code">WhatsApp QR code generator</a> <a href="/utm-builder">UTM builder</a> <a href="/branded-link-shortener">Branded link shortener</a> <a href="/google-url-shortener">Google URL shortener (goo.gl)</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
+const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/wifi-qr-code">WiFi QR code generator</a> <a href="/vcard-qr-code">vCard QR code generator</a> <a href="/whatsapp-qr-code">WhatsApp QR code generator</a> <a href="/utm-builder">UTM builder</a> <a href="/branded-link-shortener">Custom URL shortener</a> <a href="/google-url-shortener">Google URL shortener (goo.gl)</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
 
 /**
  * What a client that never runs JavaScript reads in this page's body.
@@ -215,12 +215,19 @@ function crawlerBody(meta: PageMeta, url: URL): string {
  * `siteName` (SITE_NAME, else the host it answers on) instead of our tagline,
  * the way a self-hosted Shlink or Umami carries its instance's name.
  */
-export function withPageMeta(response: Response, url: URL, siteName?: string): Response {
+export function withPageMeta(
+  response: Response,
+  url: URL,
+  siteName?: string,
+  /** The body is the prerendered app shell (scripts/prerender-app-shell.tsx),
+   *  whose root is the page as it should first paint: keep it. */
+  appShell = false,
+): Response {
   const meta = pageMeta(url);
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
   if (!RDYRCT_SITE) {
     const rewriter = new HTMLRewriter().on("title", new Text(siteName || url.hostname));
-    if (url.pathname !== "/") rewriter.on("#root", new EmptyRoot());
+    if (url.pathname !== "/" && !appShell) rewriter.on("#root", new EmptyRoot());
     return rewriter.transform(response);
   }
   // The build bakes the landing page into index.html, which is also the shell
@@ -228,7 +235,7 @@ export function withPageMeta(response: Response, url: URL, siteName?: string): R
   // marketing page until the bundle replaces it. Pages that are not prerendered
   // ship an empty root instead.
   if (!meta) {
-    if (url.pathname === "/") return response;
+    if (url.pathname === "/" || appShell) return response;
     return new HTMLRewriter().on("#root", new EmptyRoot()).transform(response);
   }
 

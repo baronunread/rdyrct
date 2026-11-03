@@ -36,6 +36,7 @@ import { cn } from "../ui/cn";
 import { Logo } from "../ui/logo";
 import { currentNavKey, MAIN_LINKS, PRODUCT_LINKS } from "./marketing-nav";
 import { MenuButton, PhoneMenu } from "./phone-menu";
+import { Tooltip } from "@/app/ui/tooltip";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
   const hydrated = useHydrated();
@@ -301,16 +302,17 @@ function AuthActions() {
       {/* The hero never says the product is open source, and it is one of
           the page's strongest claims. An icon with no star count: a low
           number reads as a weekend project (see SelfHostSection). */}
-      <a
-        href={GITHUB_URL}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="rdyrct on GitHub"
-        title="rdyrct on GitHub"
-        className="hidden size-9 place-items-center rounded-full text-muted transition-colors hover:text-text sm:grid"
-      >
-        <Github size={18} />
-      </a>
+      <Tooltip content="rdyrct on GitHub">
+        <a
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="rdyrct on GitHub"
+          className="hidden size-9 place-items-center rounded-full text-muted transition-colors hover:text-text sm:grid"
+        >
+          <Github size={18} />
+        </a>
+      </Tooltip>
       <span data-auth-control="in">
         <PillCta to="/dashboard">Dashboard</PillCta>
       </span>

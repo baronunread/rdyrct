@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from "react";
+import { settle } from "../lib/route-preload";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
+import { linkedAccountsQuery, otherSessionsQuery } from "../lib/account-security";
 import type { User, UserOrg } from "@/shared/types";
 import { AvatarInput } from "../components/avatar-input";
 import { uploadUserAvatar, deleteUserAvatar } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
-import { Switch } from "../ui/switch";
-import { Card, PageHeader } from "../ui/misc";
+import { Input } from "../ui/field";
+import { Segmented } from "../ui/segmented";
+import { SigningInGroup } from "../components/signing-in-group";
+import { PageHeader } from "../ui/misc";
+import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -137,54 +141,61 @@ function useAccountForm(user: User | undefined) {
   };
 }
 
-function AccountCard({ user }: { user: User | undefined }) {
+const THEMES = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+] as const;
+
+/** Name and picture save together, from the Save beside the name: the
+ * picture is part of how you are named to your teammates. */
+function AccountGroup({ user }: { user: User | undefined }) {
   const [theme, toggleTheme] = useTheme();
   const { register, currentName, pic, save, isSubmitting, dirty } = useAccountForm(user);
 
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-start sm:gap-6">
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
-              <Field label="Your name">
-                <Input {...register("name")} />
-              </Field>
-              <Field label="Email">
-                <Input value={user?.email ?? ""} disabled readOnly className="font-mono text-xs" />
-              </Field>
-            </div>
-            {user && (
-              <AvatarInput
-                // Blobatar tracks the name being typed; the image wins over it.
-                user={{ ...user, name: currentName.trim() || user.name }}
-                pendingUrl={pic.url}
-                pendingRemove={pic.remove}
-                onPick={pic.pick}
-                onRemove={pic.clear}
-              />
-            )}
-          </div>
-          <div>
-            <Button variant="primary" onClick={save} disabled={!dirty || isSubmitting}>
-              <BusyContent busy={isSubmitting}>Save</BusyContent>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
-          <div>
-            <p className="text-sm">Dark mode</p>
-            <p className="text-xs text-muted">Also on the account menu, bottom left.</p>
-          </div>
-          <Switch
-            label="Dark mode"
-            checked={theme === "dark"}
-            onCheckedChange={(on) => on !== (theme === "dark") && toggleTheme()}
+    <SettingsGroup title="Account">
+      <SettingsRow label="Name">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+          className="flex w-full items-center gap-2 sm:w-auto"
+        >
+          {user && (
+            <AvatarInput
+              size={32}
+              // Blobatar tracks the name being typed; the image wins over it.
+              user={{ ...user, name: currentName.trim() || user.name }}
+              pendingUrl={pic.url}
+              pendingRemove={pic.remove}
+              onPick={pic.pick}
+              onRemove={pic.clear}
+            />
+          )}
+          <Input
+            {...register("name")}
+            aria-label="Your name"
+            autoComplete="name"
+            className="min-w-0 flex-1 sm:w-56 sm:flex-none"
           />
-        </div>
-      </div>
-    </Card>
+          <Button type="submit" disabled={!dirty || isSubmitting}>
+            <BusyContent busy={isSubmitting}>Save</BusyContent>
+          </Button>
+        </form>
+      </SettingsRow>
+      <SettingsRow label="Email">
+        <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{user?.email}</span>
+      </SettingsRow>
+      <SettingsRow label="Theme">
+        <Segmented
+          label="Theme"
+          items={THEMES}
+          value={theme === "dark" ? "dark" : "light"}
+          onChange={(next) => next !== theme && toggleTheme()}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -214,22 +225,33 @@ function useDeleteAccountFlow() {
   return { open, setOpen, pending, deleteAccount };
 }
 
-function DeleteAccountCard({ disabled, onDelete }: { disabled: boolean; onDelete: () => void }) {
+/** "Also deletes Copper Kettle Kitchen, which you own." Named while
+ * there are few enough to name. */
+function deleteAccountHint(owned: UserOrg[]): string {
+  if (owned.length === 0) return "Organizations you only belong to are left alone.";
+  if (owned.length === 1) return `Also deletes ${owned[0].name}, which you own.`;
+  if (owned.length === 2)
+    return `Also deletes ${owned[0].name} and ${owned[1].name}, which you own.`;
+  return `Also deletes the ${owned.length} organizations you own.`;
+}
+
+function DeleteAccountGroup({
+  disabled,
+  owned,
+  onDelete,
+}: {
+  disabled: boolean;
+  owned: UserOrg[];
+  onDelete: () => void;
+}) {
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium text-danger">Danger zone</p>
-        <p className="text-sm text-muted">
-          Permanently delete your account, and every organization you own with it. Organizations you
-          only belong to are left alone.
-        </p>
-        <div>
-          <Button variant="danger" onClick={onDelete} disabled={disabled}>
-            Delete account
-          </Button>
-        </div>
-      </div>
-    </Card>
+    <SettingsGroup danger>
+      <SettingsRow label="Delete account" hint={deleteAccountHint(owned)}>
+        <Button variant="danger" onClick={onDelete} disabled={disabled} aria-label="Delete account">
+          Delete
+        </Button>
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -251,7 +273,7 @@ function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
         This permanently deletes your account and the{" "}
         {orgs.length === 1 ? "organization" : `${orgs.length} organizations`} you own:
       </p>
-      <ul className="flex flex-col gap-1 rounded-xl border border-border bg-surface-2 px-4 py-3">
+      <ul className="flex flex-col gap-1 rounded-xl bg-surface-2 px-4 py-3">
         {orgs.map((org) => (
           <li key={org.id} className="text-sm font-semibold text-text">
             {org.name}
@@ -266,6 +288,16 @@ function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
   );
 }
 
+/** Everything Settings' first frame reads beyond the user (see
+ * lib/route-preload.ts): the "Signing in" group's two lists. */
+/** Settings reads only the account, never an org, so all of it preloads
+ * through preloadAccount, which also runs for somebody with no org left. */
+export function preloadAccount(qc: QueryClient) {
+  return settle([qc.ensureQueryData(linkedAccountsQuery), qc.ensureQueryData(otherSessionsQuery)]);
+}
+
+export const preload = () => Promise.resolve();
+
 export function SettingsPage() {
   const currentUser = useCurrentUser();
   const deleteAccountFlow = useDeleteAccountFlow();
@@ -278,12 +310,14 @@ export function SettingsPage() {
   if (currentUser.isLoading) return <SettingsSkeleton />;
 
   return (
-    <div>
-      <PageHeader title="Settings" sub="Your account" />
-      <div className="flex flex-col gap-4">
-        <AccountCard user={currentUser.data?.user} />
-        <DeleteAccountCard
+    <div className="mx-auto w-full max-w-[760px]">
+      <PageHeader title="Settings" />
+      <div className="flex max-w-[760px] flex-col gap-8">
+        <AccountGroup user={currentUser.data?.user} />
+        <SigningInGroup />
+        <DeleteAccountGroup
           disabled={accountDeleteDisabled}
+          owned={ownedOrgs}
           onDelete={() => deleteAccountFlow.setOpen(true)}
         />
       </div>

@@ -4,51 +4,6 @@ import { copyToClipboard } from "../lib/clipboard";
 import { useMcpUrl } from "../lib/mcp-url";
 import { useToast } from "../ui/toast";
 
-/** The endpoint and header an MCP client's "Add custom connector" form asks
- * for, as one paste instead of two fields copied separately, for a client
- * that takes a bearer key rather than doing OAuth itself. Takes the real
- * key right after minting; everywhere else (docs, an already-closed banner)
- * a reader fills in their own. Outline, not primary: it sits beside a real
- * primary action (Create key) on the API keys tab and the accent has one
- * job. */
-export function McpSetupCopyButton({ apiKey }: { apiKey?: string }) {
-  const toast = useToast();
-  const url = useMcpUrl();
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() =>
-        void copyToClipboard(
-          `URL: ${url}\nHeader: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`,
-          toast,
-        ).catch(() => {})
-      }
-    >
-      <Copy size={14} /> Copy MCP setup
-    </Button>
-  );
-}
-
-/** Just the endpoint, for the MCP tab's connect guide: an OAuth client
- * discovers and drives the auth flow itself once it has the URL, so there
- * is no header to paste alongside it (contrast McpSetupCopyButton, above,
- * for a client that instead takes a scoped API key as a bearer header). */
-export function McpUrlCopyButton() {
-  const toast = useToast();
-  const url = useMcpUrl();
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => void copyToClipboard(url, toast).catch(() => {})}
-      className="shrink-0"
-    >
-      <Copy size={14} /> Copy URL
-    </Button>
-  );
-}
-
 // Coding agents (Claude Code, Cursor, etc.) can be told to wire up a remote
 // MCP server themselves rather than walking a person through settings
 // screens by hand. The prompt has to cover both paths a client can take,

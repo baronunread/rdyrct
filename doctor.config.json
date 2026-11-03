@@ -1,11 +1,15 @@
 {
-  "$schema": "https://www.react.doctor/schema.json",
   "ignore": {
-    "files": [".oxlint/anti-slop/**"],
     "overrides": [
       {
-        "files": ["package.json"],
-        "rules": ["deslop/unused-dev-dependency"]
+        "//": "A page module exports `preload` beside its component: main.tsx's pageLoader imports the page's chunk and calls it, so the data starts with the code.",
+        "files": ["src/app/routes/**"],
+        "rules": ["react-doctor/only-export-components"]
+      },
+      {
+        "//": "usePaletteBody ranks every result kind in one list (fallow-ignore beside it says the same); react-doctor has no next-line directive that can share the line above with fallow's.",
+        "files": ["src/app/components/command-menu.tsx"],
+        "rules": ["react-doctor/no-high-complexity-react-function"]
       }
     ]
   }

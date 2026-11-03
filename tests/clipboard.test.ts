@@ -16,6 +16,13 @@ describe("copyToClipboard", () => {
     expect(toast).toHaveBeenCalledWith("Copied to clipboard");
   });
 
+  test("names a copied URL, without its scheme", async () => {
+    stubClipboard(async () => {});
+    const toast = mock();
+    await copyToClipboard("https://go.example.com/menu", toast);
+    expect(toast).toHaveBeenCalledWith("Copied", "info", { code: "go.example.com/menu" });
+  });
+
   test("uses a custom success message when given", async () => {
     stubClipboard(async () => {});
     const toast = mock();

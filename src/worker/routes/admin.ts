@@ -1,6 +1,20 @@
 import { Hono } from "hono";
-import type { JsonValue } from "../../shared/types";
-import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
+import type { JsonValue, LimitOverrides } from "../../shared/types";
+import { effectiveLimits, tierOf } from "../../shared/limits";
+import {
+  type LimitSetting,
+  countLimitHoldersByPlan,
+  loadAllLimitSettings,
+  loadLimitOverrides,
+  saveLimitOverrides,
+} from "../limit-overrides";
+import {
+  optionalFlag,
+  optionalText,
+  limitsBodySchema,
+  parseBody,
+  parseOptionalBody,
+} from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
@@ -9,7 +23,6 @@ import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../guards";
 import { isDisposableEmail } from "../util";
 import {
-  PLAN_LIMITS,
   type AdminUsage,
   type AdminOrgRow,
   type AdminOrgDetail,
@@ -18,7 +31,7 @@ import {
   type OrgPlan,
   orgPlanOf,
 } from "@/shared/types";
-import { fillSeries, computeDelta, deleteOrg } from "./orgs";
+import { fillSeries, computeDelta, deleteOrg, memberLastActiveAt } from "./orgs";
 import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { reconcileUser } from "../reconcile";
@@ -28,16 +41,17 @@ import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
 import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
-
-// An org's effective plan is its owner's plan (billing is per-user). A single
-// correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
-// so it must stay quoted here.
-const ownerPlan = sql<OrgPlan>`coalesce((
-  select "user".plan from org_members
-  join "user" on "user".id = org_members.user_id
-  where org_members.org_id = orgs.id and org_members.role = 'owner'
-  limit 1
-), 'free')`;
+import {
+  adminAvatarUrl,
+  linksByCreator,
+  orgPlanState,
+  orgPlanStateColumns,
+  ownerPlan,
+  usageForRange,
+  usageRange,
+} from "../admin-usage";
+import { computeWindows } from "../rollups";
+import { serveAvatar } from "./avatars";
 
 const ownerName = sql<string | null>`(
   select "user".name from org_members
@@ -143,9 +157,20 @@ function cumulativeSeries(
   return result;
 }
 
-function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
-  const planCounts = { free: 0, hobby: 0, pro: 0 };
+function computePlanCounts(
+  planCountRows: { plan: string; n: number }[],
+  limitHolderRows: { plan: string; n: number }[],
+) {
+  const planCounts = { free: 0, hobby: 0, pro: 0, enterprise: 0 };
   for (const r of planCountRows) planCounts[orgPlanOf(r.plan)] = r.n;
+  // An account on a paid plan with custom limits is Enterprise, not Pro: move
+  // it out of its plan's count into its own.
+  for (const r of limitHolderRows) {
+    const plan = orgPlanOf(r.plan);
+    if (plan !== "hobby" && plan !== "pro") continue;
+    planCounts[plan] -= r.n;
+    planCounts.enterprise += r.n;
+  }
   return planCounts;
 }
 
@@ -186,6 +211,8 @@ export function computeBusinessMetrics(rows: {
   compedUserRows: { n: number }[];
   subscriptionRows: SubscriptionCountRow[];
   planCountRows: { plan: string; n: number }[];
+  /** Users with custom limits, by plan: the paid ones are Enterprise. */
+  limitHolderRows: { plan: string; n: number }[];
   signups7dRows: { n: number }[];
   signups7dPrevRows: { n: number }[];
   wauRows: { n: number }[];
@@ -195,7 +222,7 @@ export function computeBusinessMetrics(rows: {
   // plan, which is a different question from how many people pay.
   const paidPlanUsers = firstCount(rows.paidPlanUsers);
   const compedUsers = firstCount(rows.compedUserRows);
-  const planCounts = computePlanCounts(rows.planCountRows);
+  const planCounts = computePlanCounts(rows.planCountRows, rows.limitHolderRows);
   const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
   // "Paid users" is who actually pays, so comps come out: a comp grants
   // access but is not a paying customer (#82).
@@ -262,13 +289,14 @@ type CapPressureRow = {
   id: string;
   name: string;
   plan: OrgPlan;
+  ownerId: string | null;
   linkCount: number;
   memberCount: number;
   domainCount: number;
 };
 
 // Orgs at >=80% of any plan limit.
-function findCapPressure(orgs: CapPressureRow[]) {
+function findCapPressure(orgs: CapPressureRow[], overrides: Map<string, LimitOverrides>) {
   const capPressure: Array<{
     orgId: string;
     orgName: string;
@@ -278,7 +306,10 @@ function findCapPressure(orgs: CapPressureRow[]) {
     domainsPct: number;
   }> = [];
   for (const orgRow of orgs) {
-    const limits = PLAN_LIMITS[orgRow.plan];
+    const limits = effectiveLimits(
+      orgRow.plan,
+      orgRow.ownerId ? overrides.get(orgRow.ownerId) : undefined,
+    );
     const linksPct = Math.round((orgRow.linkCount / Math.max(1, limits.links)) * 100);
     const membersPct = Math.round((orgRow.memberCount / Math.max(1, limits.members)) * 100);
     const domainsPct = Math.round((orgRow.domainCount / Math.max(1, limits.domains)) * 100);
@@ -335,9 +366,9 @@ adminRoutes.get("/usage", async (c) => {
   const log = c.get("log");
   log.set({ route: "usage" });
   const db = c.var.db;
-  const days = 30;
+  const days = usageRange(c.req.query("days"));
+  log.set({ usageDays: days });
   const cumDays = 90;
-  const since = Date.now() - days * 24 * 60 * 60 * 1000;
   const since7 = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const since14d = Date.now() - 14 * 24 * 60 * 60 * 1000;
   const since24h = Date.now() - 24 * 60 * 60 * 1000;
@@ -348,15 +379,12 @@ adminRoutes.get("/usage", async (c) => {
     clicks,
     clicks7d,
     paidPlanUsers,
-    seriesRows,
-    signupRows,
-    topOrgRows,
-    topLinkRows,
+    range,
     planCountRows,
+    limitHolderRows,
     signups7dRows,
     signups7dPrevRows,
     wauRows,
-    botSeriesRows,
     userCreationRows,
     orgCreationRows,
     anomaly24hRows,
@@ -376,57 +404,14 @@ adminRoutes.get("/usage", async (c) => {
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(ne(schema.user.plan, "free")),
-    // click series (30d)
-    db
-      .select({ day, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(gte(schema.clicks.ts, since))
-      .groupBy(day),
-    // signup series (30d)
-    db
-      .select({
-        day: userDay,
-        clicks: sql<number>`count(*)`,
-      })
-      .from(schema.user)
-      .where(gte(schema.user.createdAt, new Date(since)))
-      .groupBy(userDay),
-    // top orgs (30d) with plan
-    db
-      .select({
-        id: schema.orgs.id,
-        name: schema.orgs.name,
-        clicks: sql<number>`count(*)`,
-        plan: ownerPlan,
-      })
-      .from(schema.clicks)
-      .innerJoin(schema.orgs, eq(schema.clicks.orgId, schema.orgs.id))
-      .where(gte(schema.clicks.ts, since))
-      .groupBy(schema.clicks.orgId)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5),
-    // top links (30d)
-    db
-      .select({
-        id: schema.links.id,
-        slug: schema.links.slug,
-        domain: schema.domains.hostname,
-        orgName: schema.orgs.name,
-        clicks: sql<number>`count(*)`,
-      })
-      .from(schema.clicks)
-      .innerJoin(schema.links, eq(schema.clicks.linkId, schema.links.id))
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-      .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
-      .where(gte(schema.clicks.ts, since))
-      .groupBy(schema.clicks.linkId)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5),
+    // everything that follows the picked range
+    usageForRange(db, days),
     // plan distribution
     db
       .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
       .from(schema.user)
       .groupBy(schema.user.plan),
+    countLimitHoldersByPlan(db),
     // signups 7d (current)
     db
       .select({ n: sql<number>`count(*)` })
@@ -447,12 +432,6 @@ adminRoutes.get("/usage", async (c) => {
       .select({ n: sql<number>`count(distinct user_id)` })
       .from(schema.session)
       .where(gte(schema.session.updatedAt, new Date(since7))),
-    // bot clicks per day (30d)
-    db
-      .select({ day, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(gte(schema.clicks.ts, since), eq(schema.clicks.device, "bot")))
-      .groupBy(day),
     // user creation all-time (for cumulative)
     db
       .select({
@@ -517,6 +496,7 @@ adminRoutes.get("/usage", async (c) => {
     compedUserRows,
     subscriptionRows,
     planCountRows,
+    limitHolderRows,
     signups7dRows,
     signups7dPrevRows,
     wauRows,
@@ -528,8 +508,6 @@ adminRoutes.get("/usage", async (c) => {
   const cumulativeOrgs = cumulativeSeries(orgCreationRows, cumDays);
 
   // ── Health row ──
-
-  const botSeries = fillSeries(botSeriesRows, days);
 
   const anomalyCandidates = findAnomalies(anomaly24hRows, anomaly14dRows);
   const anomalyNames = await resolveAnomalyNames(db, anomalyCandidates);
@@ -543,6 +521,7 @@ adminRoutes.get("/usage", async (c) => {
       id: schema.orgs.id,
       name: schema.orgs.name,
       plan: ownerPlan,
+      ownerId,
       linkCount: sql<number>`(
         select count(*) from links where links.org_id = orgs.id
       )`,
@@ -554,12 +533,17 @@ adminRoutes.get("/usage", async (c) => {
       )`,
     })
     .from(schema.orgs);
-  const capPressure = findCapPressure(allOrgs);
+  const capPressure = findCapPressure(
+    allOrgs,
+    await loadLimitOverrides(
+      db,
+      allOrgs.flatMap((o) => (o.ownerId ? [o.ownerId] : [])),
+    ),
+  );
 
   // Table size and growth projection
   const tableSize = clicks[0]?.n ?? 0;
-  const tableGrowth = fillSeries(seriesRows, days);
-  const tableProjectedDays = projectTableGrowth(seriesRows, tableSize);
+  const tableProjectedDays = projectTableGrowth(range.series, tableSize);
 
   return c.json({
     users: totalUsers,
@@ -568,13 +552,7 @@ adminRoutes.get("/usage", async (c) => {
     clicks: tableSize,
     clicks7d: clicks7d[0]?.n ?? 0,
     payingUsers,
-    series: fillSeries(seriesRows, days),
-    signups: fillSeries(signupRows, days),
-    topOrgs: topOrgRows.map((o) => ({
-      ...o,
-      plan: orgPlanOf(o.plan),
-    })),
-    topLinks: topLinkRows,
+    ...range,
     planCounts,
     payingSubscribers,
     compedUsers,
@@ -584,11 +562,10 @@ adminRoutes.get("/usage", async (c) => {
     wau,
     cumulativeUsers,
     cumulativeOrgs,
-    botSeries,
     anomalies,
     capPressure,
     tableSize,
-    tableGrowth,
+    tableGrowth: range.series,
     tableProjectedDays,
     webRisk: await webRiskUsage(db),
   } satisfies AdminUsage);
@@ -626,12 +603,18 @@ adminRoutes.get("/orgs", async (c) => {
         order by suspend_reason like 'Held with its organization%', suspended_at
         limit 1
       )`,
-      clicks: sql<number>`(
-        select count(*) from clicks where clicks.org_id = orgs.id
-      )`,
+      // From the rollups (#26), like every other click figure.
+      ...orgPlanStateColumns(computeWindows(30).since30),
     })
-    .from(schema.orgs);
-  return c.json(rows satisfies AdminOrgRow[]);
+    .from(schema.orgs)
+    .leftJoin(schema.orgEntitlements, eq(schema.orgEntitlements.orgId, schema.orgs.id));
+  const now = Date.now();
+  return c.json(
+    rows.map(({ overJson, entitlementGraceEndsAt, firstDomainLock, ...row }) => ({
+      ...row,
+      ...orgPlanState({ overJson, entitlementGraceEndsAt, firstDomainLock }, now),
+    })) satisfies AdminOrgRow[],
+  );
 });
 
 adminRoutes.get("/orgs/:orgId", async (c) => {
@@ -658,6 +641,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
         // A downgrade demoted this member to viewer (#161), rather than
         // anybody choosing it. Worth seeing from admin too.
         demoted: sql<boolean>`${schema.orgMembers.previousRole} is not null`,
+        lastActiveAt: memberLastActiveAt,
       })
       .from(schema.orgMembers)
       .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
@@ -721,43 +705,57 @@ adminRoutes.delete("/orgs/:orgId", async (c) => {
 adminRoutes.get("/users", async (c) => {
   const log = c.get("log");
   log.set({ route: "users" });
-  const rows = await c.var.db
-    .select({
-      id: schema.user.id,
-      name: schema.user.name,
-      email: schema.user.email,
-      isAdmin: schema.user.isAdmin,
-      banned: schema.user.banned,
-      emailVerified: schema.user.emailVerified,
-      plan: schema.user.plan,
-      subscriptionPlan: schema.user.subscriptionPlan,
-      subscriptionStatus: schema.user.subscriptionStatus,
-      cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
-      currentPeriodEnd: schema.user.polarSubscriptionCurrentPeriodEnd,
-      compPlan: schema.user.compPlan,
-      compReason: schema.user.compReason,
-      compGrantedAt: schema.user.compGrantedAt,
-      // Who granted the comp, by email: an admin reading this list wants a
-      // person, not an id. Null once that admin's account is gone.
-      compGrantedBy: sql<string | null>`(
+  const db = c.var.db;
+  const [rows, links, settings] = await Promise.all([
+    db
+      .select({
+        id: schema.user.id,
+        name: schema.user.name,
+        email: schema.user.email,
+        isAdmin: schema.user.isAdmin,
+        image: schema.user.image,
+        banned: schema.user.banned,
+        emailVerified: schema.user.emailVerified,
+        plan: schema.user.plan,
+        subscriptionPlan: schema.user.subscriptionPlan,
+        subscriptionStatus: schema.user.subscriptionStatus,
+        cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+        currentPeriodEnd: schema.user.polarSubscriptionCurrentPeriodEnd,
+        compPlan: schema.user.compPlan,
+        compReason: schema.user.compReason,
+        compGrantedAt: schema.user.compGrantedAt,
+        // Who granted the comp, by email: an admin reading this list wants a
+        // person, not an id. Null once that admin's account is gone.
+        compGrantedBy: sql<string | null>`(
         select grantor.email from "user" as grantor
         where grantor.id = "user".comp_granted_by
       )`,
-      createdAt: schema.user.createdAt,
-      orgCount: sql<number>`(
+        createdAt: schema.user.createdAt,
+        orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
       )`,
-      // literal "user".id: interpolated columns render unqualified inside
-      // correlated subqueries and bind to the wrong table
-      lastSeen: sql<number | null>`(
-        select max(session.updated_at) from session
-        where session.user_id = "user".id
+        // literal "user".id: interpolated columns render unqualified inside
+        // correlated subqueries and bind to the wrong table. last_seen_at
+        // outlives the sessions a sign-out deletes (memberLastActiveAt).
+        lastSeen: sql<number | null>`(
+        select max(t) from (
+          select session.updated_at as t from session where session.user_id = "user".id
+          union all
+          select "user".last_seen_at
+        )
       )`,
-    })
-    .from(schema.user);
+      })
+      .from(schema.user),
+    linksByCreator(db),
+    loadAllLimitSettings(db),
+  ]);
+  const emails = new Map(rows.map((r) => [r.id, r.email]));
   return c.json(
     rows.map((r) => ({
       ...r,
+      image: adminAvatarUrl(r.id, r.image),
+      links: links.get(r.id) ?? 0,
+      ...limitFields(r.plan, settings.get(r.id), emails),
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
       compGrantedAt: r.compGrantedAt?.getTime() ?? null,
@@ -765,6 +763,22 @@ adminRoutes.get("/users", async (c) => {
     })) satisfies AdminUserRow[],
   );
 });
+
+/** What the users list says about an account's custom limits: the limits, the
+ * note, and the email of the admin who set them. Nothing when there are none. */
+function limitFields(
+  plan: OrgPlan,
+  setting: LimitSetting | undefined,
+  emails: Map<string, string>,
+) {
+  const has = setting && Object.keys(setting.overrides).length > 0;
+  return {
+    tier: tierOf(plan, setting?.overrides),
+    limitOverrides: has ? setting.overrides : null,
+    limitNote: has ? setting.note : null,
+    limitSetBy: has && setting.setBy ? (emails.get(setting.setBy) ?? null) : null,
+  };
+}
 
 function validateIsAdminPatch(
   value: boolean | null | undefined,
@@ -814,6 +828,12 @@ const userPatchSchema = v.object({
   reason: optionalText,
   blockHosts: v.optional(v.fallback(v.array(v.string()), []), []),
 });
+
+/** Somebody's uploaded picture, for the Users list. /api/user/avatar
+ * answers only the signed-in account, so this serves the same object by id;
+ * it sits behind requireAdmin like everything here, so anybody else gets the
+ * 404 every admin route gives. */
+adminRoutes.get("/users/:userId/avatar", (c) => serveAvatar(c, c.req.param("userId")));
 
 /** Destination hosts in the orgs a user owns, for the ban dialog to offer. */
 adminRoutes.get("/users/:userId/hosts", async (c) =>
@@ -900,6 +920,9 @@ async function writeComp(
       compGrantedBy: comp?.grantedBy ?? null,
       compGrantedAt: comp ? new Date() : null,
       plan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
+      // The comp's own entry records this change, so the audit log is level
+      // with it and reconcileUser finds no Polar change to log.
+      auditedPlan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
     })
     .where(eq(schema.user.id, targetId));
   if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
@@ -964,6 +987,42 @@ adminRoutes.delete("/users/:userId/comp", async (c) => {
     action: "user.comp_revoke",
     targetType: "user",
     targetId: c.req.param("userId")!,
+  });
+  return c.json({ ok: true });
+});
+
+/**
+ * Set or clear a user's custom limits: the Enterprise arrangement, done by
+ * hand. An override only raises (the effective value is the higher of it and
+ * the plan's), so removing one locks what no longer fits and adding one
+ * unlocks it, which is what the reconcile after the write does.
+ */
+adminRoutes.put("/users/:userId/limits", async (c) => {
+  const log = c.get("log");
+  const targetId = c.req.param("userId");
+  log.set({ userId: targetId });
+  const body = parseBody(
+    limitsBodySchema,
+    await c.req.json<JsonValue>().catch((): JsonValue => null),
+  );
+  // No keys is the same as none: store null, not "{}".
+  const overrides = body.overrides && Object.keys(body.overrides).length ? body.overrides : null;
+  const note = body.note || null;
+  if (!(await saveLimitOverrides(c.var.db, targetId, overrides, { note, setBy: c.var.user!.id })))
+    throw new HTTPException(404, { message: "User not found" });
+  await reconcileUser(c.env, c.var.db, targetId);
+  log.audit({
+    action: "admin.limits",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "user", id: targetId },
+    outcome: "success",
+  });
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "user.limits",
+    targetType: "user",
+    targetId,
+    detail: { overrides, note },
   });
   return c.json({ ok: true });
 });

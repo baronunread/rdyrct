@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Button } from "./button";
-import { Dialog } from "./dialog";
+import { Dialog, type DialogSize } from "./dialog";
+import { BusyContent } from "./spinner";
 
 export function ConfirmDialog({
   title,
@@ -11,6 +12,8 @@ export function ConfirmDialog({
   danger,
   pending,
   confirmDisabled,
+  size,
+  initialFocus,
   children,
 }: {
   title: string;
@@ -18,13 +21,23 @@ export function ConfirmDialog({
   onClose: () => void;
   onConfirm: () => void;
   confirmLabel: string;
+  /** The danger button instead of the primary one. */
   danger?: boolean;
   pending?: boolean;
   confirmDisabled?: boolean;
+  size?: DialogSize;
+  /** Focus this on open instead of the close button (a typed check). */
+  initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={title}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={title}
+      size={size}
+      initialFocus={initialFocus}
+    >
       <div className="flex flex-col gap-4">
         <div className="text-sm">{children}</div>
         <div className="flex justify-end gap-2">
@@ -36,7 +49,7 @@ export function ConfirmDialog({
             disabled={pending || confirmDisabled}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            <BusyContent busy={!!pending}>{confirmLabel}</BusyContent>
           </Button>
         </div>
       </div>

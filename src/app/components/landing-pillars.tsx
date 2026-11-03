@@ -57,9 +57,9 @@ export function Manifesto() {
   return (
     <FrameRow className="bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[14px_14px] px-6 py-16 sm:px-10 md:py-24">
       <p className="mx-auto max-w-2xl text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-        A short link is a promise to whoever taps it.{" "}
+        A short link should show who sent it.{" "}
         <span className="text-muted">
-          It should look like you, go straight to your page, and still work the day you stop paying.
+          It should go straight to your page and keep working after you stop paying.
         </span>
       </p>
     </FrameRow>
@@ -228,7 +228,7 @@ function Available({ at, step, children }: { at: number; step: number; children:
 export function LinksPillar() {
   return (
     <Pillar
-      lead="Links that look like you."
+      lead="Branded short links."
       rest="Put your own domain in front and pick words people remember."
       action={<PillarLink to="/pricing">See plans with a domain</PillarLink>}
       features={[
@@ -252,7 +252,7 @@ export function LinksPillar() {
         {
           icon: Pencil,
           title: "Words you choose",
-          body: "go.acme.com/spring, not a string nobody trusts.",
+          body: "go.acme.com/spring instead of random letters.",
           steps: 7,
           scene: (step) => (
             <div className="flex flex-col gap-2 p-4">

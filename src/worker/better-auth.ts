@@ -42,6 +42,27 @@ const TURNSTILE_GUARDED_PATHS = {
   "/request-password-reset": "password-reset",
 } satisfies Record<string, TurnstileScope>;
 
+const IdTokenClaims = v.object({ email: v.pipe(v.string(), v.email()) });
+
+/**
+ * The address in an OpenID id token's payload, or null when there is no
+ * token or it names none. Not a signature check, and it needs none: the
+ * token came straight from Google's token endpoint over TLS in the same
+ * OAuth exchange better-auth just finished, and the address is only shown
+ * back to the account's own holder.
+ */
+export function googleEmailOf(idToken: string | null | undefined): string | null {
+  const payload = idToken?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const claims = v.safeParse(IdTokenClaims, JSON.parse(json));
+    return claims.success ? claims.output.email.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Gives an account an organization if it has none.
  *
@@ -389,6 +410,11 @@ function buildAuth(env: Env) {
     // trusted provider, so an unverified Google account still links to a
     // verified local one — acceptable, since Google is the trusted IdP.
     account: {
+      // The linked Google address, for the Signing in group on Settings.
+      // Written only by the account hooks below, from the id token.
+      additionalFields: {
+        email: { type: "string", required: false, input: false },
+      },
       accountLinking: {
         enabled: true,
         trustedProviders: ["google"],
@@ -601,6 +627,23 @@ function buildAuth(env: Env) {
       }),
     },
     databaseHooks: {
+      // Google's id token names the address the account signed in with: kept
+      // on link (create) and refreshed on each later sign-in (update, which
+      // carries the new tokens). A password account has no id token.
+      account: {
+        create: {
+          before: async (account) => {
+            const email = googleEmailOf(account.idToken);
+            return email ? { data: { ...account, email } } : undefined;
+          },
+        },
+        update: {
+          before: async (account) => {
+            const email = googleEmailOf(account.idToken);
+            return email ? { data: { ...account, email } } : undefined;
+          },
+        },
+      },
       user: {
         create: {
           // The superadmin is pinned by secret: the account signing up with

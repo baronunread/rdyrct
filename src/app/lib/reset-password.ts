@@ -2,11 +2,15 @@ import type { useNavigate } from "@tanstack/react-router";
 import { authClient } from "./auth-client";
 import { friendlyAuthError } from "./auth-errors";
 
-/** Same manual, in-field-order checks as the sign-up form. Returns the
- * first validation error, or null when the fields are ready to submit. */
-export function validateResetPassword(password: string, confirm: string): string | null {
-  if (password.length < 8) return "Password must be at least 8 characters.";
-  if (confirm !== password) return "Passwords do not match.";
+export type ResetErrors = { password?: string; confirm?: string };
+
+/** Same in-field-order checks as the sign-up form. Returns the reason each
+ * field is wrong, short enough for its label line, or null when both are
+ * ready to submit. */
+export function validateResetPassword(password: string, confirm: string): ResetErrors | null {
+  if (!password) return { password: "Required" };
+  if (password.length < 8) return { password: "At least 8 characters" };
+  if (confirm !== password) return { confirm: "Does not match" };
   return null;
 }
 
@@ -16,6 +20,7 @@ export async function submitResetPassword({
   token,
   toast,
   navigate,
+  markFields,
   failSubmit,
   setBusy,
 }: {
@@ -24,12 +29,15 @@ export async function submitResetPassword({
   token: string;
   toast: (message: string) => void;
   navigate: ReturnType<typeof useNavigate>;
+  /** A field is wrong: mark it rather than toast. */
+  markFields: (errors: ResetErrors) => void;
+  /** Anything no one field owns, such as an expired link. */
   failSubmit: (message: string) => void;
   setBusy: (busy: boolean) => void;
 }) {
-  const validationError = validateResetPassword(password, confirm);
-  if (validationError) {
-    failSubmit(validationError);
+  const invalid = validateResetPassword(password, confirm);
+  if (invalid) {
+    markFields(invalid);
     return;
   }
   setBusy(true);

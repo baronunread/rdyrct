@@ -16,7 +16,9 @@ export function wifiPayload(wifi: {
   security: WifiSecurity;
   hidden: boolean;
 }): string {
-  if (!wifi.ssid) return "";
+  if (!wifi.ssid.trim()) return "";
+  // A secured network with no password scans to a code no phone can join.
+  if (wifi.security !== "nopass" && !wifi.password) return "";
   const escape = (value: string) => value.replace(/([\\;,:"])/g, "\\$1");
   const password = wifi.security === "nopass" ? "" : `P:${escape(wifi.password)};`;
   const hidden = wifi.hidden ? "H:true;" : "";
@@ -68,8 +70,12 @@ export function vcardPayload(contact: Contact): string {
 }
 
 /** A wa.me link: the number in international form with only its digits, and
- *  an optional message WhatsApp types into the chat. */
+ *  an optional message WhatsApp types into the chat. Only a number written
+ *  internationally (a leading +, then digits, spaces and the usual
+ *  punctuation) counts: "07700 900123" would make a link to the wrong
+ *  country, and "ext 42" would join the extension onto the number. */
 export function whatsappPayload(phone: string, message: string): string {
+  if (!/^\+[\d\s().-]+$/.test(phone.trim())) return "";
   const digits = phone.replace(/\D/g, "");
   if (digits.length < 7) return "";
   const text = message.trim();

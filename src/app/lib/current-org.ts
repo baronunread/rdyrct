@@ -37,6 +37,13 @@ function subscribeToOrg(l: () => void) {
   return () => listeners.delete(l);
 }
 
+/** The org a list resolves to: the stored one while it is still in the
+ * list, otherwise the first. One rule for the hook below and for the route
+ * loaders, which pick the org before any component has mounted. */
+export function pickOrg(orgs: UserOrg[], storedId: string | null = getCurrentOrgId()) {
+  return orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
+}
+
 /**
  * Which of these is the current one, and remember it.
  *
@@ -47,7 +54,7 @@ function subscribeToOrg(l: () => void) {
  */
 function usePickOrg(orgs: UserOrg[]) {
   const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId, () => null);
-  const org = orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
+  const org = pickOrg(orgs, storedId);
 
   const orgId = org?.id ?? null;
   useEffect(() => {
@@ -57,9 +64,11 @@ function usePickOrg(orgs: UserOrg[]) {
   return { org, orgs, setOrg: setCurrentOrgId };
 }
 
-/** The current org as the app knows it: waits for the checked answer. */
-export function useCurrentOrg() {
-  const currentUser = useCurrentUser();
+/** The current org as the app knows it: waits for the checked answer.
+ * `enabled: false` asks nothing, for a public page that only needs the
+ * hook's shape (a stranger's /user would 401). */
+export function useCurrentOrg(enabled = true) {
+  const currentUser = useCurrentUser(enabled);
   return usePickOrg(currentUser.data?.orgs ?? []);
 }
 

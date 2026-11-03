@@ -5,6 +5,11 @@
  * because no page was about them: the blog post is an article, and the search
  * wants a product.
  *
+ * The heading leads with "custom URL shortener", the same search with ten
+ * times the volume (1,300 US searches a month against 140 for "branded link
+ * shortener", Google Ads data, November 2026). "Branded" stays in the intro
+ * and the title, and the address stays put so no link to it breaks.
+ *
  * So the page answers what someone choosing one needs: what it takes to put
  * links on their own domain, what it costs, and what changes for the people
  * who click. Figures come from PLAN_LIMITS and PLAN_PRICES so they cannot
@@ -12,6 +17,8 @@
  */
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
+import { EndBand, FrameSection, FramedSections } from "../components/marketing-kit";
+import { FaqList } from "../components/faq-list";
 import { trackCta } from "../lib/track-cta";
 import { formatNumber } from "../lib/numbers";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
@@ -76,100 +83,88 @@ export function BrandedLinkShortenerPage() {
   return (
     <MarketingPage
       path={PATH}
-      title="Branded link shortener"
-      intro="Short links on your own domain, with words you choose. People can see who sent a link before they tap it."
+      title="Custom URL shortener"
+      intro="A branded link shortener on your own domain, with words you choose after the slash. People can see who sent a link before they tap it."
     >
-      <section className="mx-auto flex max-w-3xl flex-col gap-4 py-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Why brand a short link
-        </h2>
-        <p className="text-muted">
-          A link on a generic shortener could lead anywhere, so people hesitate before they tap it,
-          and spam filters treat it the same way. A link on your own domain says who sent it, and
-          the words after the slash say what is behind it. With rdyrct that costs{" "}
-          {PLAN_PRICES.hobby} a month, certificate included.
-        </p>
-      </section>
+      <FramedSections>
+        <FrameSection title="Why brand a short link">
+          <p className="max-w-3xl text-pretty text-muted">
+            A link on a generic shortener could lead anywhere, so people hesitate before they tap
+            it, and spam filters treat it the same way. A link on your own domain says who sent it,
+            and the words after the slash say what is behind it. With rdyrct that costs{" "}
+            {PLAN_PRICES.hobby} a month, certificate included.
+          </p>
+        </FrameSection>
 
-      <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Set up in three steps
-        </h2>
-        <ol className="grid gap-6 sm:grid-cols-3">
-          {STEPS.map((step, index) => (
-            <li key={step.title} className="flex flex-col gap-2">
-              <span className="tnum text-sm text-muted">{index + 1}</span>
-              <h3 className="font-bold">{step.title}</h3>
-              <p className="text-muted">{step.body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          What it costs
-        </h2>
-        <Table minWidth="min-w-xl" className="lit rounded-3xl border border-border">
-          <thead>
-            <tr>
-              <Th>Plan</Th>
-              <Th>Price</Th>
-              <Th>Branded links</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {PLANS.map(([plan, price, includes]) => (
-              <tr key={plan}>
-                <Td className="font-bold">{plan}</Td>
-                <Td className="tnum whitespace-nowrap">{price}</Td>
-                <Td className="text-muted">{includes}</Td>
-              </tr>
+        <FrameSection title="Set up in three steps">
+          <ol className="grid gap-6 sm:grid-cols-3">
+            {STEPS.map((step, index) => (
+              <li key={step.title} className="flex flex-col gap-2">
+                <span className="tnum text-sm font-bold text-accent">{index + 1}</span>
+                <h3 className="font-bold">{step.title}</h3>
+                <p className="text-pretty text-muted">{step.body}</p>
+              </li>
             ))}
-          </tbody>
-        </Table>
-        <p className="text-sm text-muted">
-          Coming from another tool? See{" "}
-          <Link to="/rebrandly-alternative" className="text-accent hover:underline">
-            rdyrct and Rebrandly
-          </Link>{" "}
-          or{" "}
-          <Link to="/compare" className="text-accent hover:underline">
-            every comparison
-          </Link>
-          .
-        </p>
-      </section>
+          </ol>
+        </FrameSection>
 
-      <section className="mx-auto flex max-w-3xl flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Questions</h2>
-        {FAQ.map(([question, answer]) => (
-          <div key={question}>
-            <h3 className="font-bold">{question}</h3>
-            <p className="mt-1 text-muted">{answer}</p>
-          </div>
-        ))}
-      </section>
+        <FrameSection title="What it costs">
+          <Table minWidth="min-w-xl" className="lit rounded-3xl border border-border">
+            <thead>
+              <tr>
+                <Th>Plan</Th>
+                <Th>Price</Th>
+                <Th>Branded links</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {PLANS.map(([plan, price, includes]) => (
+                <tr key={plan}>
+                  <Td className="font-bold">{plan}</Td>
+                  <Td className="tnum whitespace-nowrap">{price}</Td>
+                  <Td className="text-muted">{includes}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <p className="text-sm text-muted">
+            Coming from another tool? See{" "}
+            <Link to="/rebrandly-alternative" className="text-accent underline underline-offset-4">
+              rdyrct and Rebrandly
+            </Link>{" "}
+            or{" "}
+            <Link to="/compare" className="text-accent underline underline-offset-4">
+              every comparison
+            </Link>
+            .
+          </p>
+        </FrameSection>
 
-      <section className="flex flex-col items-start gap-4 border-t border-border py-16">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Put your first link on your own domain.
-        </h2>
-        <Link
-          to="/signup"
-          onClick={() => trackCta("branded_page_signup")}
-          className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+        <FrameSection title="Questions">
+          <FaqList faqs={FAQ.map(([q, a]) => ({ q, a }))} />
+        </FrameSection>
+
+        <EndBand
+          title="Put your first link on your own domain."
+          note={
+            <>
+              Start free, add a domain when you need one. Every plan is on our{" "}
+              <Link to="/pricing" className="text-accent underline underline-offset-4">
+                pricing page
+              </Link>
+              .
+            </>
+          }
         >
-          Sign up free
-        </Link>
-        <p className="text-xs text-muted">
-          Start free, add a domain when you need one. Every plan is on our{" "}
-          <Link to="/pricing" className="text-accent hover:underline">
-            pricing page
+          <Link
+            to="/signup"
+            onClick={() => trackCta("branded_page_signup")}
+            className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+          >
+            Sign up free
           </Link>
-          .
-        </p>
-      </section>
+        </EndBand>
+      </FramedSections>
     </MarketingPage>
   );
 }

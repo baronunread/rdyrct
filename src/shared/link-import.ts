@@ -279,6 +279,22 @@ export interface LinkImportDTO {
   failures: { line: number; host: string; slug: string; reason: string }[];
 }
 
+/** One finished import, as the page's "Past imports" lists it. */
+interface PastImport {
+  id: string;
+  service: string;
+  imported: number;
+  exists: number;
+  failed: number;
+  /** Epoch ms the import finished. */
+  finishedAt: number;
+}
+
+/** GET /link-import/history: the org's finished imports, newest first. */
+export interface LinkImportHistory {
+  imports: PastImport[];
+}
+
 /** What the Worker makes of one row. `ready` will import, `exists` is already
  * here exactly (a retry, or an earlier import), `imported` just was. */
 export interface ImportVerdict {

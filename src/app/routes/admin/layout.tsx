@@ -4,26 +4,42 @@
  * The sidebar carries one "Platform" entry, not four. Four put "Links" in the
  * sidebar twice, once for the current organization's links and once for every
  * link on the instance, which is the kind of collision that makes somebody
- * click the wrong one during an incident. The four sections live here instead,
- * as tabs, where their labels are unambiguous because everything around them
- * is platform-wide.
+ * click the wrong one during an incident. The five sections live here instead,
+ * as tabs under one fixed title, where their labels are unambiguous because
+ * everything around them is platform-wide. Switching tabs moves nothing above
+ * them: the title, the subtitle and the tabs stay put, and only the section
+ * below changes.
  */
-import { Suspense } from "react";
-import { Link, Outlet } from "@tanstack/react-router";
-import { Activity, Building2, Link2, ScrollText, UserCog } from "@/app/ui/icons";
-import { RouteSkeleton } from "../../components/skeletons";
+import { Suspense, useRef } from "react";
+import { TabUnderline } from "../../ui/tab-underline";
+import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { AdminSectionSkeleton } from "../../components/skeletons";
 import { useConfig } from "../../lib/hooks";
+import { Segmented } from "../../ui/segmented";
+import { useUsageRange, RANGE_ITEMS } from "./usage-range";
+import { StableLabel } from "../../ui/stable-label";
 
+// The mock's order: who is on the instance before what they made.
 const TABS = [
-  { to: "/admin", end: true, icon: Activity, label: "Usage" },
-  { to: "/admin/links", end: false, icon: Link2, label: "Links" },
-  { to: "/admin/orgs", end: false, icon: Building2, label: "Organizations" },
-  { to: "/admin/users", end: false, icon: UserCog, label: "Users" },
-  { to: "/admin/audit", end: false, icon: ScrollText, label: "Audit log" },
+  { to: "/admin", end: true, label: "Usage" },
+  { to: "/admin/users", end: false, label: "Users" },
+  { to: "/admin/orgs", end: false, label: "Organizations" },
+  { to: "/admin/links", end: false, label: "Links" },
+  { to: "/admin/audit", end: false, label: "Audit log" },
 ] as const;
+
+/** The usage range lives in the header, on the right of the title, so it
+ * is in the same place whichever card is being read. Only on Usage. */
+function RangeControl() {
+  const [range, setRange] = useUsageRange();
+  return <Segmented label="Range" items={RANGE_ITEMS} value={range} onChange={setRange} />;
+}
 
 export function AdminLayout() {
   const config = useConfig().data;
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const onUsage = pathname === "/admin" || pathname === "/admin/";
+  const bar = useRef<HTMLElement>(null);
   // No email and no Google: nobody proves they own the address they sign up
   // with. Fine on a private instance, wrong on a public one.
   const unverified = config && !config.emailEnabled && !config.googleEnabled;
@@ -36,28 +52,47 @@ export function AdminLayout() {
           turn verification on.
         </p>
       )}
-      <nav
-        aria-label="Platform sections"
-        className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px"
-      >
-        {TABS.map(({ to, end, icon: Icon, label }) => (
-          <Link
-            key={to}
-            to={to}
-            activeOptions={{ exact: end }}
-            className="flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors"
-            activeProps={{ className: "border-accent text-text" }}
-            inactiveProps={{ className: "border-transparent text-muted hover:text-text" }}
-          >
-            <Icon size={15} /> {label}
-          </Link>
-        ))}
-      </nav>
+      {/* Held still while one tab changes to another (styles.css, platform). */}
+      <div data-platform-head className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-balance">Platform</h1>
+            <p className="mt-1 text-sm text-pretty text-muted">
+              Everything, across all organizations.
+            </p>
+          </div>
+          {onUsage && <RangeControl />}
+        </div>
+        {/* Underline tabs, drawn as inset shadows so the hairline adds nothing
+            to the box (rdyrct-design, "Depth from layered shadows"). */}
+        <nav
+          ref={bar}
+          aria-label="Platform sections"
+          className="relative flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
+        >
+          {TABS.map(({ to, end, label }) => (
+            <Link
+              key={to}
+              to={to}
+              activeOptions={{ exact: end, includeSearch: false }}
+              className="shrink-0 pb-2.5 text-sm whitespace-nowrap transition-colors"
+              activeProps={{
+                className: "font-semibold text-text",
+                "aria-current": "page",
+              }}
+              inactiveProps={{ className: "text-muted [@media(hover:hover)]:hover:text-text" }}
+            >
+              <StableLabel>{label}</StableLabel>
+            </Link>
+          ))}
+          <TabUnderline bar={bar} className="h-0.5" />
+        </nav>
+      </div>
       {/* Local to the section, not just the shell's outer one: without it, a
           tab whose chunk hasn't downloaded yet suspends past this nav too,
           so switching tabs used to blank the nav bar itself, not just the
           content below it. */}
-      <Suspense fallback={<RouteSkeleton />}>
+      <Suspense fallback={<AdminSectionSkeleton />}>
         <Outlet />
       </Suspense>
     </div>

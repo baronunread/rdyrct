@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "./button";
+import { cn } from "./cn";
 import { openConsentBanner, useConsentBannerVisible } from "../lib/consent";
 import { grantAnalyticsConsent, revokeAnalyticsConsent } from "../lib/posthog";
 import { RDYRCT_SITE } from "@/shared/site";
@@ -19,12 +20,12 @@ export function ConsentBanner() {
     <div
       role="region"
       aria-label="Cookie consent"
-      className="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl bg-surface/95 p-4 text-xs text-muted smooth-shadow-ring-xl backdrop-blur"
+      data-consent-banner
+      className="fixed right-4 bottom-4 z-50 max-w-xs max-sm:left-4 max-sm:max-w-none rounded-xl bg-surface/95 p-4 text-xs text-muted smooth-shadow-ring-xl backdrop-blur"
     >
       <p className="leading-relaxed">
-        rdyrct uses a strictly-necessary cookie to keep you signed in. We'd also like to use PostHog
-        to understand how the product is used, no advertising. If you accept, what you did on this
-        page so far is sent too.
+        A cookie keeps you signed in. With your consent we also use PostHog to see how rdyrct is
+        used, including this visit. No advertising.
         <PrivacyLink />
       </p>
       <div className="mt-3 flex gap-2">
@@ -44,23 +45,24 @@ export function ConsentBanner() {
 /** Reopens the banner, to withdraw or give consent after the first answer. */
 export function CookieSettingsButton({ className }: { className?: string }) {
   return (
-    <button type="button" onClick={openConsentBanner} className={className}>
+    // A button that reads as a link: Tailwind v4 gives buttons the default
+    // cursor, so the pointer has to be asked for.
+    <button type="button" onClick={openConsentBanner} className={cn("cursor-pointer", className)}>
       Cookie settings
     </button>
   );
 }
 
 function PrivacyLink() {
-  const className = "text-accent hover:underline";
+  const className =
+    "text-accent underline decoration-accent/40 underline-offset-2 [@media(hover:hover)]:hover:decoration-accent";
   if (RDYRCT_SITE) {
     return (
       <>
         {" "}
-        See our{" "}
-        <Link to="/privacy" className={className}>
-          Privacy Policy
+        <Link to="/privacy" hash="cookies" className={className}>
+          Privacy policy
         </Link>
-        .
       </>
     );
   }
@@ -68,11 +70,9 @@ function PrivacyLink() {
   return (
     <>
       {" "}
-      See our{" "}
       <a href={OPERATOR_PRIVACY_URL} className={className}>
-        Privacy Policy
+        Privacy policy
       </a>
-      .
     </>
   );
 }

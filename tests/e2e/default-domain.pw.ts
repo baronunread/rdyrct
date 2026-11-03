@@ -32,9 +32,15 @@ test("new links start on the org's default domain, with the slug field unlocked 
   await page.keyboard.press("Escape");
 
   await page.goto("/domains");
-  await page.getByRole("button", { name: `Default new links to ${hostname}` }).click();
+  await page.getByRole("button", { name: `Make ${hostname} the default` }).click();
   await expect(page.getByText(`New links will use ${hostname}`)).toBeVisible();
-  await expect(page.getByRole("button", { name: `Stop defaulting to ${hostname}` })).toBeVisible();
+  // The header names it, and the marker moves to its row.
+  await expect(page.getByText("new links start on", { exact: false })).toContainText(hostname);
+  await expect(page.getByRole("button", { name: `Make ${hostname} the default` })).toHaveCount(0);
+
+  // Organization says the same, in its Default domain row.
+  await page.goto("/organization");
+  await expect(page.getByRole("button", { name: "Default domain" })).toContainText(hostname);
 
   // After: the domain is preselected and the slug can be typed.
   const editor = await openNewLinkDialog(page);
@@ -45,11 +51,14 @@ test("new links start on the org's default domain, with the slug field unlocked 
   await editor.getByPlaceholder("https://example.com/launch").fill("https://example.com/launch");
   await slug.fill("chosen-by-default");
   await editor.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByText(`${hostname}/chosen-by-default`)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Link created" })).toContainText(
+    `${hostname}/chosen-by-default`,
+  );
 
   // Giving the default up sends new links back to the shared domain.
   await page.goto("/domains");
-  await page.getByRole("button", { name: `Stop defaulting to ${hostname}` }).click();
+  await page.getByRole("button", { name: `Actions for ${hostname}` }).click();
+  await page.getByRole("menuitem", { name: `Stop defaulting to ${hostname}` }).click();
   await expect(page.getByText("New links will use the shared domain")).toBeVisible();
 
   const after = await openNewLinkDialog(page);

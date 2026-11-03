@@ -39,7 +39,7 @@ function planLine(plan: StoredPlan): string {
 
 const PRICING = [
   ...ORG_PLANS.map(planLine),
-  "Only the organization owner needs a paid plan; one subscription covers every organization they own.",
+  "Every plan covers one organization, and only its owner needs a paid plan. Enterprise (several organizations, higher limits) is set up by hand: email support@mail.rdyrct.com.",
   "Clicks are counted per organization per calendar month. Past a plan's count, links keep redirecting and only the counting stops until the next month.",
   "rdyrct is open source and self-hosts on your own Cloudflare account with everything Pro has, minus email support.",
 ].join("\n");

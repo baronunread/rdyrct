@@ -55,7 +55,12 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   const dialog = page.getByRole("dialog", { name: "Ban user" });
   // Says what it will do before it does it, and needs a reason.
   await expect(dialog.getByText(/deleted in 90 days/)).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Ban user" })).toBeDisabled();
+  // An empty reason marks the field and bans nobody.
+  const reason = dialog.getByRole("textbox", { name: "Reason" });
+  await dialog.getByRole("button", { name: "Ban user" }).click();
+  await expect(reason).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
   // Nothing is blocked unless picked, and a site everyone uses cannot be.
   const scamBox = dialog.getByRole("checkbox", { name: host });
   await expect(scamBox).not.toBeChecked();

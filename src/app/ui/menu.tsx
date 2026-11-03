@@ -2,6 +2,7 @@ import { Menu as BaseMenu } from "@base-ui/react/menu";
 import type { ReactNode } from "react";
 import { Check, ChevronsUpDown } from "@/app/ui/icons";
 import { cn } from "./cn";
+import { Tooltip } from "./tooltip";
 
 export function Menu({
   trigger,
@@ -15,17 +16,19 @@ export function Menu({
   /** Names an icon-only trigger (aria-label + tooltip). */
   label?: string;
 }) {
+  const button = (
+    <BaseMenu.Trigger
+      className="w-full cursor-pointer"
+      nativeButton={false}
+      render={<div />}
+      aria-label={label}
+    >
+      {trigger}
+    </BaseMenu.Trigger>
+  );
   return (
     <BaseMenu.Root>
-      <BaseMenu.Trigger
-        className="w-full cursor-pointer"
-        nativeButton={false}
-        render={<div />}
-        aria-label={label}
-        title={label}
-      >
-        {trigger}
-      </BaseMenu.Trigger>
+      {label ? <Tooltip content={label}>{button}</Tooltip> : button}
       <BaseMenu.Portal>
         <BaseMenu.Positioner sideOffset={6} align={align} className="z-50">
           {/* Opens at once: a menu used this often should not make anybody
@@ -83,8 +86,22 @@ export function MenuNote({ children }: { children: ReactNode }) {
   );
 }
 
+/** A hairline across the whole menu, edge to edge. */
 export function MenuSeparator() {
-  return <BaseMenu.Separator className="my-1 h-px bg-border" />;
+  return <BaseMenu.Separator className="-mx-1 my-1 h-px bg-border" />;
+}
+
+/** Who a menu belongs to, at its top: a name over an identifier (the account
+ * menu's name and email). Not an item, so arrow keys skip it. */
+export function MenuHeader({ title, detail }: { title: ReactNode; detail?: ReactNode }) {
+  return (
+    <BaseMenu.Group>
+      <BaseMenu.GroupLabel className="flex max-w-64 min-w-0 flex-col px-2 pt-2 pb-1.5">
+        <span className="truncate text-sm font-semibold text-text">{title}</span>
+        {detail && <span className="truncate font-mono text-xs text-muted">{detail}</span>}
+      </BaseMenu.GroupLabel>
+    </BaseMenu.Group>
+  );
 }
 
 /**

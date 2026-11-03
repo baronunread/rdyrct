@@ -24,6 +24,8 @@ export const user = sqliteTable("user", {
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   // Suspended by a platform admin: sessions are wiped and sign-in is refused.
   banned: integer("banned", { mode: "boolean" }).notNull().default(false),
+  // Last signed-in request, to the hour (migration 0048).
+  lastSeenAt: integer("last_seen_at"),
   // Billing lives on the user, not the org: one Free/Hobby/Pro subscription
   // per person. An org's effective limits are its owner's plan (see plan.ts).
   //
@@ -33,6 +35,11 @@ export const user = sqliteTable("user", {
   // Anything that sets it by hand puts entitlement out of step with billing,
   // which is the bug #81 fixed.
   plan: text("plan", { enum: ["free", "hobby", "pro"] })
+    .notNull()
+    .default("free"),
+  // The plan the admin audit log last recorded (migration 0050). Differing
+  // from `plan` means a change nobody has logged yet: reconcileUser logs it.
+  auditedPlan: text("audited_plan", { enum: ["free", "hobby", "pro"] })
     .notNull()
     .default("free"),
   // What Polar says: written by the webhook, never by an admin. Null means no
@@ -74,6 +81,35 @@ export const user = sqliteTable("user", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+// Custom limits an admin set for one account (the Enterprise arrangement): one
+// row per limit that differs from the plan. Read and written only through
+// worker/limit-overrides.ts; effectiveLimits applies them.
+export const limitOverrides = sqliteTable(
+  "limit_overrides",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    limitKey: text("limit_key", {
+      enum: [
+        "orgs",
+        "links",
+        "members",
+        "domains",
+        "qr_custom",
+        "analytics_days",
+        "tracked_clicks",
+      ],
+    }).notNull(),
+    // qr_custom is 0 or 1.
+    value: integer("value").notNull(),
+    note: text("note"),
+    setBy: text("set_by"),
+    setAt: integer("set_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.limitKey] })],
+);
+
 export const session = sqliteTable(
   "session",
   {
@@ -111,6 +147,8 @@ export const account = sqliteTable(
     }),
     scope: text("scope"),
     password: text("password"),
+    /** A Google account's address, from its id token (migration 0049). */
+    email: text("email"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
@@ -304,6 +342,9 @@ export const domains = sqliteTable(
     // entry and the Cloudflare hostname all stay, so an upgrade restores it
     // with no re-verification. Null means fine.
     lockedAt: integer("locked_at"),
+    // When the current check started, if not at creation: "Try again" on a
+    // failed domain restarts its deadline from here (migration 0052).
+    checkingSince: integer("checking_since"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [index("idx_domains_org").on(t.orgId)],

@@ -149,6 +149,20 @@ export async function makePlatformAdmin(page: Page, email: string) {
   );
 }
 
+/** Gives a user a custom limit on organizations owned, the row an admin sets
+ * from /admin/users. For tests that need more orgs than the plan gives and
+ * are not about that flow. */
+export async function setOrgsOverride(page: Page, email: string, orgs: number) {
+  await expectOneRowChanged(
+    page,
+    `INSERT INTO limit_overrides (user_id, limit_key, value, note, set_at)
+     SELECT id, 'orgs', ?, 'e2e fixture', unixepoch() * 1000 FROM user WHERE email = ?
+     ON CONFLICT (user_id, limit_key) DO UPDATE SET value = excluded.value`,
+    [orgs, email],
+    `no user with email ${email}`,
+  );
+}
+
 /** Gives a user paid access the way an admin comp does: no subscription
  * behind it, and no revenue. */
 export async function compUser(

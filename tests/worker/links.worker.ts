@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
-async function postLink(cookie: string, body: JsonValue): Promise<Response> {
+async function postLink(cookie: string, body: JsonValue, testEnv = authEnv()): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/orgs/org-1/links", {
@@ -12,7 +13,7 @@ async function postLink(cookie: string, body: JsonValue): Promise<Response> {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-    authEnv(),
+    testEnv,
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -108,5 +109,45 @@ describe("link quota usage returned by mutations (#100)", () => {
     const removed = await jsonBody<{ quotaUsage: number; quotaUsageAt: number }>(deleted);
     expect(removed.quotaUsage).toBe(0);
     expect(removed.quotaUsageAt).toBeGreaterThanOrEqual(updated.quotaUsageAt);
+  });
+});
+
+describe("POST /orgs/:orgId/links: a refused destination or slug says which, by code", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(reset);
+
+  async function codeOf(body: JsonValue): Promise<string | undefined> {
+    const cookie = await freeOwnerCookie();
+    const res = await postLink(cookie, body);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    return (await jsonBody<{ code?: string }>(res)).code;
+  }
+
+  it.each([
+    ["bad_destination", { destination: "copperkettle winter menu" }],
+    ["shortener_destination", { destination: "https://bit.ly/abc" }],
+    ["bad_slug", { destination: "https://example.com", slug: "no spaces" }],
+    ["reserved_slug", { destination: "https://example.com", slug: "login" }],
+    ["slug_locked", { destination: "https://example.com", slug: "chosen" }],
+  ])("%s", async (code, body) => {
+    expect(await codeOf(body)).toBe(code);
+  });
+
+  it("own_short_link", async () => {
+    const cookie = await freeOwnerCookie();
+    const res = await postLink(
+      cookie,
+      { destination: "https://go.short.test/abc123" },
+      { ...authEnv(), SHARED_LINK_HOST: "go.short.test" },
+    );
+    expect(res.status).toBe(422);
+    expect((await jsonBody<{ code?: string }>(res)).code).toBe("own_short_link");
+  });
+
+  it("blocked_destination", async () => {
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, created_at) values ('evil.example', 0)",
+    ).run();
+    expect(await codeOf({ destination: "https://evil.example/page" })).toBe("blocked_destination");
   });
 });

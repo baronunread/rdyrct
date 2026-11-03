@@ -7,19 +7,25 @@ import {
   type SelectHTMLAttributes,
   type ReactNode,
 } from "react";
-import { ChevronDown, Info } from "@/app/ui/icons";
+import { ChevronDown, Info, X } from "@/app/ui/icons";
 import { cn } from "./cn";
+import { OverflowTip } from "./overflow-tip";
 import { Tooltip } from "./tooltip";
 
 // Lifted by a ring shadow rather than bordered (rdyrct-design, "The app's
 // surfaces"). Invalid draws the danger ring; focus draws the accent ring and
-// its soft halo, and focus wins over invalid so you can see where you are.
+// its soft halo. A field that is both keeps the danger ring and takes a
+// danger halo, so the mark does not vanish the moment focus lands on it.
 const inputClass =
-  "h-9 w-full rounded-lg bg-surface px-3 text-sm text-text smooth-shadow-ring-xs transition-[box-shadow] duration-150 placeholder:text-placeholder aria-invalid:shadow-[0_0_0_1.5px_var(--danger)] focus-visible:shadow-[0_0_0_1.5px_var(--accent),0_0_0_4px_color-mix(in_oklab,var(--accent)_25%,transparent)] focus-visible:outline-none disabled:opacity-50";
+  "h-9 w-full rounded-lg bg-surface px-3 text-sm text-text smooth-shadow-ring-xs transition-[box-shadow] duration-150 placeholder:text-placeholder aria-invalid:shadow-[0_0_0_1.5px_var(--danger)] focus-visible:shadow-[0_0_0_1.5px_var(--accent),0_0_0_4px_color-mix(in_oklab,var(--accent)_25%,transparent)] aria-invalid:focus-visible:shadow-[0_0_0_1.5px_var(--danger),0_0_0_4px_color-mix(in_oklab,var(--danger)_18%,transparent)] focus-visible:outline-none disabled:opacity-50";
 
-/** What a Field tells the control inside it: whether it is in error, and the
- * id of the reason, so the control can point at it. */
-const FieldState = createContext<{ invalid: boolean; describedBy?: string }>({ invalid: false });
+/** What a Field tells the control inside it: whether it is in error, the id
+ * of the reason so the control can point at it, and that it sits in a Field
+ * at all (which is what gives an Input room for the × mark). */
+const FieldState = createContext<{ invalid: boolean; describedBy?: string; inField: boolean }>({
+  invalid: false,
+  inField: false,
+});
 
 /** The ARIA a control inside a Field should carry. */
 function useFieldAria() {
@@ -27,10 +33,69 @@ function useFieldAria() {
   return invalid ? { "aria-invalid": true, "aria-describedby": describedBy } : {};
 }
 
+/**
+ * The × inside a field that is wrong: the shape that says so without the
+ * colour (rdyrct-design: semantic colour never carries meaning alone). Place
+ * it in a `relative` box around the input; the input needs `pr-8`.
+ */
+export function InvalidMark({ className }: { className?: string }) {
+  return (
+    <X
+      aria-hidden
+      size={15}
+      className={cn(
+        "pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-danger",
+        className,
+      )}
+    />
+  );
+}
+
+/**
+ * A text input. Inside a Field it always sits in its own small box, so the ×
+ * can appear when the field is marked without the input moving (it is never
+ * remounted, so it keeps focus and what was typed).
+ */
+/**
+ * Keeps password managers (Bitwarden, 1Password, LastPass, Dashlane) off a
+ * field. They ignore autocomplete="off" and guess from the label, so a link
+ * title, an org name or a teammate's address gets offered the user's own
+ * name, email or card. Each reads its own attribute.
+ */
+export const NO_AUTOFILL = {
+  "data-bwignore": true,
+  "data-1p-ignore": true,
+  "data-lpignore": "true",
+  "data-form-type": "other",
+} as const;
+
+/** An input with no autocomplete token (or "off") asks for something the
+ * browser cannot know, so password managers stay away; one with a token
+ * (email, name, new-password...) is the user's own and keeps autofill. */
+const autofillProps = (autoComplete: string | undefined) =>
+  !autoComplete || autoComplete === "off" ? NO_AUTOFILL : undefined;
+
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => (
-    <input ref={ref} className={cn(inputClass, className)} {...useFieldAria()} {...props} />
-  ),
+  ({ className, ...props }, ref) => {
+    const { invalid, inField } = useContext(FieldState);
+    const aria = useFieldAria();
+    const input = (
+      <input
+        ref={ref}
+        className={cn(inputClass, invalid && "pr-8", className)}
+        {...autofillProps(props.autoComplete)}
+        {...aria}
+        {...props}
+      />
+    );
+    if (!inField) return input;
+    return (
+      <span className="relative block min-w-0">
+        {input}
+        {invalid && <InvalidMark />}
+      </span>
+    );
+  },
 );
 Input.displayName = "Input";
 
@@ -72,29 +137,69 @@ function FieldTip({ label, tip }: { label: string; tip: string }) {
   );
 }
 
-const VALID = { invalid: false };
+const VALID = { invalid: false, inField: true };
+
+/**
+ * The reason a field is wrong, on the right of its label line: a small × and
+ * a few words. A longer explanation rides along for screen readers and on
+ * hover, so the line itself never wraps and nothing below it moves.
+ */
+export function FieldReason({
+  id,
+  reason,
+  detail,
+}: {
+  id: string;
+  reason: string;
+  detail?: string;
+}) {
+  const longer = detail && detail !== reason ? detail : undefined;
+  const row = (
+    <span id={id} className="ml-auto flex min-w-0 items-center gap-1 text-danger">
+      <X aria-hidden size={11} stroke={2.5} className="shrink-0" />
+      {longer ? (
+        <span className="truncate">{reason}</span>
+      ) : (
+        <OverflowTip content={reason}>
+          <span className="truncate">{reason}</span>
+        </OverflowTip>
+      )}
+      {longer && <span className="sr-only">. {longer}</span>}
+    </span>
+  );
+  return longer ? <Tooltip content={longer}>{row}</Tooltip> : row;
+}
 
 /** The label line: the name, its tip, and on the right the reason it is
  * wrong, so an error never pushes the form down. */
 function FieldLabelRow({
   label,
+  optional,
   tip,
+  aside,
   error,
+  errorDetail,
   reasonId,
 }: {
   label: string;
+  optional?: boolean;
   tip?: string;
+  aside?: ReactNode;
   error?: string;
+  errorDetail?: string;
   reasonId: string;
 }) {
   return (
-    <span className="mb-1.5 flex items-center gap-1.5 text-xs text-muted">
-      {label}
+    <span className="mb-1.5 flex min-h-4 items-center gap-1.5 text-xs text-muted">
+      <span className="shrink-0">
+        {label}
+        {optional && <span className="text-placeholder"> · optional</span>}
+      </span>
       {tip && <FieldTip label={label} tip={tip} />}
-      {error && (
-        <span id={reasonId} className="ml-auto truncate text-danger" title={error}>
-          {error}
-        </span>
+      {error ? (
+        <FieldReason id={reasonId} reason={error} detail={errorDetail} />
+      ) : (
+        aside && <span className="ml-auto">{aside}</span>
       )}
     </span>
   );
@@ -102,13 +207,18 @@ function FieldLabelRow({
 
 export function Field({
   label,
+  optional,
   hint,
   tip,
+  aside,
   error,
+  errorDetail,
   className,
   children,
 }: {
   label: string;
+  /** Adds "· optional" after the label, quietly. */
+  optional?: boolean;
   hint?: ReactNode;
   /**
    * Advice about the field, behind an info mark on the label.
@@ -118,20 +228,35 @@ export function Field({
    * while a hint is read on every visit and starts to crowd the form.
    */
   tip?: string;
+  /** Something small on the right of the label line ("Forgot it?"). An
+   * error takes its place while the field is marked. Keep it out of the
+   * label's own click target: it is rendered inside the label, so a link or
+   * button here should stop the click from reaching the input if needed. */
+  aside?: ReactNode;
   /**
    * Why the value is wrong, set after a submit. It sits on the right of the
    * label line, so marking a field never pushes the form down (rdyrct-design,
    * form errors). Keep it short: "Needs https://", "Already taken".
    */
   error?: string;
+  /** The longer explanation of `error`, for screen readers and on hover. */
+  errorDetail?: string;
   className?: string;
   children: ReactNode;
 }) {
   const reasonId = useId();
-  const state = error ? { invalid: true, describedBy: reasonId } : VALID;
+  const state = error ? { invalid: true, describedBy: reasonId, inField: true } : VALID;
   return (
     <label className={cn("block min-w-0", className)}>
-      <FieldLabelRow label={label} tip={tip} error={error} reasonId={reasonId} />
+      <FieldLabelRow
+        label={label}
+        optional={optional}
+        tip={tip}
+        aside={aside}
+        error={error}
+        errorDetail={errorDetail}
+        reasonId={reasonId}
+      />
       <FieldState.Provider value={state}>{children}</FieldState.Provider>
       {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>

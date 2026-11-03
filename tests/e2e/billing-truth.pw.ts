@@ -11,20 +11,27 @@ const ENTITLING = Object.entries(SUBSCRIPTION_ACCESS)
 
 const password = "test-password-123";
 
-/** The number on one /admin stat card. */
-async function stat(page: Page, label: string): Promise<number> {
-  const card = page.getByText(label, { exact: true }).locator("..");
-  const text = (await card.textContent()) ?? "";
-  return Number(text.replace(label, "").replace(/[^0-9.-]/g, "")) || 0;
+const digits = (text: string | null) => Number((text ?? "").replace(/[^0-9]/g, ""));
+
+/** The "Paid" figure on /admin: people who pay, comps excluded. Its value is
+ * the first figure in the button; the share beside it is not. */
+async function paidUsers(page: Page): Promise<number> {
+  const figure = page
+    .getByRole("group", { name: "Figure to chart" })
+    .getByRole("button", { name: /^Paid/ });
+  return digits(await figure.locator(".tnum").first().textContent());
 }
 
-/** The comped count, which sits in the plan-mix card's footnote rather than
- * on a card of its own: a comp is not a fourth plan, it is how some of the
- * paid rows were paid for. */
-async function compedCount(page: Page): Promise<number> {
-  const line = await page.getByText(/\d+ comped/).textContent();
-  return Number(/(\d+) comped/.exec(line ?? "")?.[1] ?? NaN);
+/** The plan-mix footnote: "5 comped. 7% pay. 24 subscriptions." A comp is
+ * not a fourth plan, it is how some of the paid rows were paid for, so it is
+ * counted there rather than on a figure of its own. */
+async function footnote(page: Page, noun: RegExp): Promise<number> {
+  const line = (await page.getByText(/ comped\./).textContent()) ?? "";
+  const match = new RegExp(`([\\d,]+) ${noun.source}`).exec(line);
+  return match ? digits(match[1]) : NaN;
 }
+const compedCount = (page: Page) => footnote(page, /comped/);
+const subscriberCount = (page: Page) => footnote(page, /subscriptions?/);
 
 /**
  * The three /admin counts a comp could wrongly move, each against the rows it
@@ -39,7 +46,7 @@ async function compedCount(page: Page): Promise<number> {
 async function expectCountsMatchRows(page: Page) {
   await expect(async () => {
     await page.goto("/admin");
-    await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
+    await expect(page.getByText(/ subscriptions?\./)).toBeVisible();
     const [rows] = await queryRows<{ paying: number; subscribers: number; comped: number }>(
       page,
       `select
@@ -48,8 +55,8 @@ async function expectCountsMatchRows(page: Page) {
             and subscription_status in (${ENTITLING})) as subscribers,
          (select count(*) from user where comp_plan is not null) as comped`,
     );
-    expect(await stat(page, "Paid users")).toBe(Number(rows.paying));
-    expect(await stat(page, "Subscribers")).toBe(Number(rows.subscribers));
+    expect(await paidUsers(page)).toBe(Number(rows.paying));
+    expect(await subscriberCount(page)).toBe(Number(rows.subscribers));
     expect(await compedCount(page)).toBe(Number(rows.comped));
   }).toPass({ timeout: 30_000 });
 }
@@ -80,13 +87,18 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
 
   await expectCountsMatchRows(page);
 
-  // Comp the admin's own account. The reason is required, so the button
-  // stays disabled until it is filled in.
+  // Comp the admin's own account. The reason is required: pressing the
+  // button without one marks the field and grants nothing.
   await page.goto("/admin/users");
   await adminRow.getByRole("button", { name: `Actions for` }).click();
   await page.getByRole("menuitem", { name: "Comp a paid plan" }).click();
   const dialog = page.getByRole("dialog", { name: /^Comp / });
-  await expect(dialog.getByRole("button", { name: "Grant comp" })).toBeDisabled();
+  const reasonField = dialog.getByRole("textbox", { name: "Reason" });
+  await dialog.getByRole("button", { name: "Grant comp" }).click();
+  await expect(reasonField).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(page.getByText("Comp granted")).toHaveCount(0);
   await dialog.getByLabel("Reason").fill("Design partner");
   await dialog.getByRole("button", { name: "Grant comp" }).click();
 

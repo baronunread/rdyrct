@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAwaitWebhook } from "../lib/await-webhook";
+import { settle } from "../lib/route-preload";
 import { NotFound } from "./not-found";
 import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
@@ -10,9 +12,15 @@ import {
   m,
   useReducedMotion,
 } from "motion/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  billingDetailsQuery,
+  clickUsageQuery,
+  domainsQuery,
+  linkQuotaUsageQuery,
+  membersQuery,
+  useBillingDetails,
   useCurrentUser,
   useLinkQuotaUsage,
   useClickUsage,
@@ -21,6 +29,7 @@ import {
   useCheckout,
   usePortal,
   useConfirmCheckout,
+  userQuery,
 } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
@@ -29,14 +38,31 @@ import {
   PLAN_PRICES,
   PLAN_PRICES_YEARLY,
   YEARLY_DISCOUNT_LABEL,
+  type AccountTier,
+  type BillingDetails,
   type ClickUsage,
+  type Invoice,
+  type PaymentCard,
   type OrgPlan,
   type PlanLimits,
 } from "@/shared/types";
-import { clickUsageLevel, exactCount, nearSentence, reachedSentence } from "@/shared/click-usage";
-import { lookup } from "@/shared/lookup";
+import {
+  clickUsageLevel,
+  exactCount,
+  nearSentence,
+  reachedSentence,
+  resetDay,
+} from "@/shared/click-usage";
+import { Check, Download } from "@/app/ui/icons";
 import { Button } from "../ui/button";
-import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
+import { cn } from "../ui/cn";
+import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
+import { PageHeader } from "../ui/misc";
+import { Segmented } from "../ui/segmented";
+import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
+import { EnterpriseNote } from "../components/enterprise-note";
+import { RDYRCT_SITE } from "@/shared/site";
+import { SUPPORT_EMAIL } from "@/shared/support";
 import { BusyContent } from "../ui/spinner";
 import { Skeleton } from "../ui/skeleton";
 import { BillingSkeleton } from "../components/skeletons";
@@ -44,7 +70,9 @@ import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+import { useSavePendingQrStyle } from "../lib/pending-qr-style";
 import { shouldOfferFirstLink } from "../lib/billing-page";
+import { Tooltip } from "@/app/ui/tooltip";
 
 /** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
@@ -52,16 +80,10 @@ type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
 /** How a subscription is billed. Yearly is 10% cheaper per month. */
 type BillingInterval = "month" | "year";
 
-/** The upgrade-button label's price suffix for a plan at an interval. No
- * "billed yearly" here: the toggle right above the buttons already says
- * that, and the fixed button height (h-9) has no room for a wrapped third
- * line on the narrow two-up mobile layout. */
-function priceSuffix(plan: "hobby" | "pro", interval: BillingInterval): string {
-  return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
-}
-
 type PlanActionSnapshot = {
   plan: OrgPlan;
+  tier: AccountTier;
+  limits: PlanLimits;
   hasBillingAccount: boolean;
   comped: boolean;
   checkoutPlan: "hobby" | "pro" | null;
@@ -80,12 +102,14 @@ type PlanActionCommands = {
 
 type UsageSnapshot = {
   plan: OrgPlan;
-  org: { id: string; name: string; plan: OrgPlan } | null;
+  org: { id: string; name: string; plan: OrgPlan; limits: PlanLimits } | null;
   linkQuotaCount: number | undefined;
   clickUsage: ClickUsage | undefined;
   memberCount: number;
   domainCount: number;
   ownedOrgs: number;
+  /** How many orgs this account may own: its plan's cap or a custom one. */
+  ownedOrgLimit: number;
   loading: boolean;
 };
 
@@ -130,78 +154,237 @@ const PLAN_LABEL = {
   unlimited: "Unlimited (Self-hosted instance)",
 } satisfies Record<OrgPlan, string>;
 
-const PLAN_FEATURES = [
-  ["Links", `${PLAN_LIMITS.free.links}`, `${PLAN_LIMITS.hobby.links}`, `${PLAN_LIMITS.pro.links}`],
-  [
-    "Members",
-    `${PLAN_LIMITS.free.members}`,
-    `${PLAN_LIMITS.hobby.members}`,
-    `${PLAN_LIMITS.pro.members}`,
-  ],
-  [
-    "Domains",
-    `${PLAN_LIMITS.free.domains}`,
-    `${PLAN_LIMITS.hobby.domains}`,
-    `${PLAN_LIMITS.pro.domains}`,
-  ],
-  [
-    "Org. you own",
-    `${PLAN_LIMITS.free.orgs}`,
-    `${PLAN_LIMITS.hobby.orgs}`,
-    `${PLAN_LIMITS.pro.orgs}`,
-  ],
-  ["QR codes", "Yes", "Yes", "Yes"],
-  ["QR logo & colors", "No", "Yes", "Yes"],
-  [
-    "Analytics",
-    `${PLAN_LIMITS.free.analyticsDays}d`,
-    `${PLAN_LIMITS.hobby.analyticsDays}d`,
-    `${PLAN_LIMITS.pro.analyticsDays}d`,
-  ],
-  [
-    "Clicks counted a month",
-    exactCount(PLAN_LIMITS.free.trackedClicks),
-    exactCount(PLAN_LIMITS.hobby.trackedClicks),
-    exactCount(PLAN_LIMITS.pro.trackedClicks),
-  ],
-] as const;
+/** The plans anybody can pick, in order, so "up" and "down" mean something. */
+const PLAN_ORDER = ["free", "hobby", "pro"] as const;
+type SellablePlan = (typeof PLAN_ORDER)[number];
 
-function PlanFeatureComparison() {
+/** What a plan gets, as the short lines its card lists. Read off PLAN_LIMITS,
+ * so the card can never promise more than the caps allow. */
+function planFeatures(plan: SellablePlan): string[] {
+  const limits = PLAN_LIMITS[plan];
+  return [
+    `${exactCount(limits.links)} links`,
+    `${limits.members} members`,
+    ...(limits.domains === 0
+      ? []
+      : [limits.domains === 1 ? "1 custom domain" : `${limits.domains} custom domains`]),
+    ...(limits.orgs > 1 ? [`${limits.orgs} organizations`] : []),
+    `${limits.analyticsDays} days of analytics`,
+    `${exactCount(limits.trackedClicks)} clicks a month`,
+    ...(limits.qrCustom ? ["QR logo and colors"] : []),
+  ];
+}
+
+function planPrice(plan: SellablePlan, interval: BillingInterval): string {
+  if (plan === "free") return "$0";
+  return interval === "year" ? PLAN_PRICES_YEARLY[plan] : PLAN_PRICES[plan];
+}
+
+const INTERVAL_ITEMS = [
+  { id: "month", label: "Monthly" },
+  { id: "year", label: `Yearly, ${YEARLY_DISCOUNT_LABEL.toLowerCase()}` },
+] as const satisfies readonly { id: BillingInterval; label: string }[];
+
+function IntervalSwitch({
+  interval,
+  onChange,
+}: {
+  interval: BillingInterval;
+  onChange: (next: BillingInterval) => void;
+}) {
   return (
-    <div className="my-3 text-xs tnum">
-      <Table>
-        <thead>
-          <tr>
-            <Th />
-            <Th>Free</Th>
-            <Th className="text-accent">Hobby</Th>
-            <Th className="text-accent">Pro</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {PLAN_FEATURES.map(([label, free, hobby, pro]) => (
-            <tr key={label}>
-              <Td className="text-muted">{label}</Td>
-              <Td>{free}</Td>
-              <Td className="text-accent">{hobby}</Td>
-              <Td className="text-accent">{pro}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
+    <Segmented label="Billing cycle" items={INTERVAL_ITEMS} value={interval} onChange={onChange} />
+  );
+}
+
+/** One plan, side by side with the others: its price at the chosen cycle,
+ * what it gets, and the one button that moves to it. */
+function PlanCard({
+  plan,
+  current,
+  interval,
+  action,
+}: {
+  plan: SellablePlan;
+  current: boolean;
+  interval: BillingInterval;
+  action: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-xl bg-surface p-4",
+        current
+          ? "shadow-[0_0_0_1.5px_var(--accent),0_1px_2px_rgb(0_0_0/0.06)]"
+          : "smooth-shadow-ring-xs",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="font-semibold">{PLAN_LABEL[plan]}</h3>
+        {current && <span className="text-xs text-muted">Your plan</span>}
+      </div>
+      <p className="tnum">
+        <span className="text-xl font-semibold">{planPrice(plan, interval)}</span>{" "}
+        <span className="text-sm text-muted">
+          {plan !== "free" && interval === "year" ? "a month, billed yearly" : "a month"}
+        </span>
+      </p>
+      <ul className="flex flex-col gap-1.5 text-sm tnum">
+        {planFeatures(plan).map((feature) => (
+          <li key={feature} className="flex items-center gap-2">
+            <Check size={14} aria-hidden="true" className="shrink-0 text-accent-2" />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-auto pt-1 [&>button]:w-full">{action}</div>
     </div>
   );
 }
 
-/** The cancel-scheduled and still-confirming status notes above the plan
- * actions; either, both, or neither can show depending on account state. */
-function CancelScheduledNotice({ plan, periodEnd }: { plan: OrgPlan; periodEnd: number }) {
+function CurrentPlanButton() {
+  return (
+    <Button variant="outline" disabled>
+      Current plan
+    </Button>
+  );
+}
+
+/** Free: the three plans, with checkout one click away. Pro is the one
+ * primary button on the screen. */
+function FreePlans({
+  checkoutPlan,
+  shake,
+  onUpgrade,
+}: {
+  checkoutPlan: "hobby" | "pro" | null;
+  shake: Shake;
+  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void;
+}) {
+  const [interval, setInterval] = useState<BillingInterval>("month");
+  const busy = checkoutPlan !== null;
+  const upgradeButton = (target: "hobby" | "pro") => (
+    <Button
+      variant={target === "pro" ? "primary" : "outline"}
+      disabled={busy}
+      className={shake[target].className}
+      onAnimationEnd={shake[target].end}
+      onClick={() => onUpgrade(target, interval)}
+    >
+      <BusyContent busy={checkoutPlan === target}>Upgrade to {PLAN_LABEL[target]}</BusyContent>
+    </Button>
+  );
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <h2 className="text-sm font-medium text-muted">Plans</h2>
+          <p className="text-xs text-muted">Covers every organization you own.</p>
+        </div>
+        <IntervalSwitch interval={interval} onChange={setInterval} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <PlanCard plan="free" current interval={interval} action={<CurrentPlanButton />} />
+        <PlanCard
+          plan="hobby"
+          current={false}
+          interval={interval}
+          action={upgradeButton("hobby")}
+        />
+        <PlanCard plan="pro" current={false} interval={interval} action={upgradeButton("pro")} />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * A subscriber's plans, behind "Change plan". A plan changes in the
+ * subscription portal, never through a second checkout (that would be a second
+ * subscription), so every button here opens the portal. The cycle switch only
+ * shows the prices, and on the plan you are on, the other cycle's button
+ * opens the portal too: that is where monthly becomes yearly.
+ */
+function ChangePlanDialog({
+  open,
+  onOpenChange,
+  snapshot,
+  onPortal,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  snapshot: PlanActionSnapshot;
+  onPortal: () => void;
+}) {
+  const currentInterval = snapshot.interval ?? "month";
+  const [interval, setInterval] = useState<BillingInterval>(currentInterval);
+  const currentRank = PLAN_ORDER.findIndex((plan) => plan === snapshot.plan);
+  const toPortal = () => {
+    onOpenChange(false);
+    onPortal();
+  };
+  const moveTo = (plan: SellablePlan) => {
+    const up = PLAN_ORDER.indexOf(plan) > currentRank;
+    return (
+      <Button variant={up && plan === "pro" ? "primary" : "outline"} onClick={toPortal}>
+        {up ? "Upgrade" : "Switch"} to {PLAN_LABEL[plan]}
+      </Button>
+    );
+  };
+  // The plan you are on, at the other cycle: yearly is its own Polar
+  // product, so moving to it is a plan change like any other.
+  const ownCard = () =>
+    interval === currentInterval ? (
+      <CurrentPlanButton />
+    ) : (
+      <Button variant="primary" onClick={toPortal}>
+        Switch to {interval === "year" ? "yearly" : "monthly"}
+      </Button>
+    );
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Change plan" size="xl" bare>
+      <div className="flex flex-col gap-4 max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <DialogTitle>Change plan</DialogTitle>
+          <div className="flex items-center gap-3">
+            <IntervalSwitch interval={interval} onChange={setInterval} />
+            <DialogClose className="-mr-1.5" />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {PLAN_ORDER.map((plan) => (
+            <PlanCard
+              key={plan}
+              plan={plan}
+              current={plan === snapshot.plan}
+              interval={interval}
+              action={plan === snapshot.plan ? ownCard() : moveTo(plan)}
+            />
+          ))}
+        </div>
+        <p className="text-xs text-pretty text-muted">
+          Switching down deletes nothing. Past the new plan's limits you can't add more until you
+          make room, extra organizations go read-only, and extra domains stop after 30 days. Plan
+          changes open in the subscription portal.
+        </p>
+      </div>
+    </Dialog>
+  );
+}
+
+/** What to call the account's plan: Enterprise when it has custom limits. */
+function planName(snapshot: PlanActionSnapshot): string {
+  return snapshot.tier === "enterprise" ? "Enterprise" : PLAN_LABEL[snapshot.plan];
+}
+
+/** The cancel-scheduled and still-confirming status notes; either, both, or
+ * neither can show depending on account state. */
+function CancelScheduledNotice({ name, periodEnd }: { name: string; periodEnd: number }) {
   return (
     // Ink, not a caution colour: the sentence carries the warning, and
     // --butter is under AA as text on cream.
     <p className="text-sm text-text">
-      Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features
-      remain available until then.
+      Your {name} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features remain
+      available until then.
     </p>
   );
 }
@@ -221,19 +404,17 @@ function ConfirmingPaymentNotice() {
  *
  * `initial={false}` keeps that to the arrival: a note already true when the
  * page loads is simply there, with nothing to watch.
+ *
+ * Renders no wrapper of its own, so each note is a direct child of whatever
+ * holds it: a row in the plan card, or an item in the page column.
  */
 function PlanStatusNotes({
-  plan,
-  comped,
-  cancelAtPeriodEnd,
-  periodEnd,
-  confirmTimedOut,
+  snapshot,
+  inset,
 }: {
-  plan: OrgPlan;
-  comped: boolean;
-  cancelAtPeriodEnd: boolean;
-  periodEnd: number | null;
-  confirmTimedOut: boolean;
+  snapshot: PlanActionSnapshot;
+  /** Pad each note as a row of the card it sits in. */
+  inset?: boolean;
 }) {
   const reduced = useReducedMotion();
   const grow = reduced
@@ -243,12 +424,16 @@ function PlanStatusNotes({
         animate: { opacity: 1, height: "auto" as const },
         exit: { opacity: 0, height: 0 },
       };
+  const pad = inset ? "px-4 py-3" : "";
+  const { plan, comped, cancelAtPeriodEnd, periodEnd, confirmTimedOut } = snapshot;
   return (
     <LazyMotion features={domAnimation}>
       <AnimatePresence initial={false}>
         {showsCancelNotice(cancelAtPeriodEnd, periodEnd, comped) && (
           <m.div key="cancel" {...grow} transition={{ duration: 0.2 }} className="overflow-hidden">
-            <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
+            <div className={pad}>
+              <CancelScheduledNotice name={planName(snapshot)} periodEnd={periodEnd} />
+            </div>
           </m.div>
         )}
         {showsConfirmingNotice(confirmTimedOut, plan) && (
@@ -258,157 +443,13 @@ function PlanStatusNotes({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <ConfirmingPaymentNotice />
+            <div className={pad}>
+              <ConfirmingPaymentNotice />
+            </div>
           </m.div>
         )}
       </AnimatePresence>
     </LazyMotion>
-  );
-}
-
-/** Monthly / yearly switch. Yearly carries the discount label so the saving
- * is visible before a plan is picked. The active option's fill is one pill
- * that never unmounts: `layoutId` alone does not animate here, because a
- * plain conditional render swaps the old and new pill in the same commit
- * with no exit phase for Framer to measure a "from" rect (that needs
- * AnimatePresence, overkill for two buttons). Measuring the target button's
- * own rect and tweening one persistent element to it sidesteps that. */
-function BillingCycleToggle({
-  interval,
-  onChange,
-  disabled,
-}: {
-  interval: BillingInterval;
-  onChange: (next: BillingInterval) => void;
-  disabled: boolean;
-}) {
-  const reduced = useReducedMotion();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const buttonRefs = useRef<Record<BillingInterval, HTMLButtonElement | null>>({
-    month: null,
-    year: null,
-  });
-  const [pillRect, setPillRect] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  } | null>(null);
-
-  useLayoutEffect(() => {
-    const btn = buttonRefs.current[interval];
-    const container = containerRef.current;
-    if (!btn || !container) return;
-    const b = btn.getBoundingClientRect();
-    const c = container.getBoundingClientRect();
-    // clientLeft/Top: an absolute child is placed from the padding box, so the
-    // container's 1px border has to come off or the pill sits 1px low.
-    setPillRect({
-      left: b.left - c.left - container.clientLeft,
-      top: b.top - c.top - container.clientTop,
-      width: b.width,
-      height: b.height,
-    });
-  }, [interval]);
-
-  return (
-    <LazyMotion features={domAnimation}>
-      <div
-        ref={containerRef}
-        className="relative flex w-fit items-center gap-1 rounded-md border border-border bg-surface p-1 text-xs"
-      >
-        {pillRect && (
-          <m.span
-            className="absolute rounded bg-accent"
-            initial={false}
-            animate={pillRect}
-            transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 35 }}
-          />
-        )}
-        {(["month", "year"] as const).map((value) => (
-          <button
-            key={value}
-            ref={(el) => {
-              buttonRefs.current[value] = el;
-            }}
-            type="button"
-            disabled={disabled}
-            aria-pressed={interval === value}
-            onClick={() => onChange(value)}
-            className={
-              "relative rounded px-2 py-1 font-medium transition-colors disabled:opacity-50 " +
-              (interval === value ? "text-bg" : "text-muted hover:text-text")
-            }
-          >
-            {value === "month" ? "Monthly" : `Yearly · ${YEARLY_DISCOUNT_LABEL}`}
-          </button>
-        ))}
-      </div>
-    </LazyMotion>
-  );
-}
-
-function FreeUpgradeButtons({
-  checkoutPlan,
-  shake,
-  onUpgrade,
-}: {
-  checkoutPlan: "hobby" | "pro" | null;
-  shake: Shake;
-  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void;
-}) {
-  const [interval, setInterval] = useState<BillingInterval>("month");
-  const busy = checkoutPlan !== null;
-  return (
-    <div className="flex flex-col gap-3">
-      <BillingCycleToggle interval={interval} onChange={setInterval} disabled={busy} />
-      <div className="grid grid-cols-2 gap-3">
-        <Button
-          variant="primary"
-          disabled={busy}
-          className={shake.hobby.className}
-          onAnimationEnd={shake.hobby.end}
-          onClick={() => onUpgrade("hobby", interval)}
-        >
-          <BusyContent busy={checkoutPlan === "hobby"}>
-            Upgrade to Hobby · {priceSuffix("hobby", interval)}
-          </BusyContent>
-        </Button>
-        <Button
-          variant="primary"
-          disabled={busy}
-          className={shake.pro.className}
-          onAnimationEnd={shake.pro.end}
-          onClick={() => onUpgrade("pro", interval)}
-        >
-          <BusyContent busy={checkoutPlan === "pro"}>
-            Upgrade to Pro · {priceSuffix("pro", interval)}
-          </BusyContent>
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ManageSubscriptionButton({
-  showPortalOverlay,
-  shake,
-  onPortal,
-}: {
-  showPortalOverlay: boolean;
-  shake: Shake;
-  onPortal: () => void;
-}) {
-  return (
-    <Button
-      variant="primary"
-      disabled={showPortalOverlay}
-      className={shake.portal.className}
-      onAnimationEnd={shake.portal.end}
-      onClick={onPortal}
-    >
-      <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
-    </Button>
   );
 }
 
@@ -417,115 +458,264 @@ function ManageSubscriptionButton({
  * on how they got the plan: comped, or a subscription that arrived without a
  * customer id. Thanking the second group for a gift nobody gave them would be
  * false (#81). */
-function NoBillingAccountNote({ plan, comped }: { plan: OrgPlan; comped: boolean }) {
+function NoBillingAccountNote({ name, comped }: { name: string; comped: boolean }) {
   return (
-    <p className="text-sm text-muted">
+    <p className="px-4 py-3 text-sm text-pretty text-muted">
       {comped
         ? // Not "nothing to pay": the comp is what grants the plan, and it
           // says nothing about whether a subscription is still charging
           // somewhere. Only support can see both and answer that.
-          `You have ${PLAN_LABEL[plan]} for free, with our thanks. There is no billing account linked, so the subscription portal cannot open. Email support if you want anything changed.`
+          `You have ${name} for free, with our thanks. There is no billing account linked, so the subscription portal cannot open. Email support if you want anything changed.`
         : "No billing account is linked to this plan, so the subscription portal cannot open. Email support and we will link it."}
     </p>
   );
 }
 
-/** The one control the plan card offers: upgrade buttons on free, the portal
- * button on a paid plan that has an account, and an explanation when it does
- * not. */
-function PlanActionControl({
+const MONTH_DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
+
+/** "$9 a month, renews Nov 14" while a subscription runs on; just the price
+ * once a cancel is scheduled, since the note below says its own date. A comp
+ * pays and renews nothing. */
+function renewalLine(snapshot: PlanActionSnapshot): string | null {
+  // Enterprise is priced by hand: the plan's list price would be a wrong figure.
+  if (!snapshot.hasBillingAccount || snapshot.comped || snapshot.tier === "enterprise") return null;
+  if (snapshot.plan !== "hobby" && snapshot.plan !== "pro") return null;
+  const price =
+    snapshot.interval === "year"
+      ? `${PLAN_PRICES_YEARLY[snapshot.plan]} a month, billed yearly`
+      : `${PLAN_PRICES[snapshot.plan]} a month`;
+  if (snapshot.cancelAtPeriodEnd || snapshot.periodEnd == null) return price;
+  return `${price}, renews ${MONTH_DAY.format(new Date(snapshot.periodEnd))}`;
+}
+
+/** Cancelling happens in the portal; offered while there is something to
+ * cancel. A scheduled cancel is undone there too, from Manage. */
+function canCancel(snapshot: PlanActionSnapshot): boolean {
+  return canChangePlan(snapshot) && !snapshot.cancelAtPeriodEnd;
+}
+
+/** Whether "Change plan" can do anything: only a subscription the portal can
+ * change. Not for a comp, which would still outrank whatever it changed to. */
+function canChangePlan(snapshot: PlanActionSnapshot): boolean {
+  // Enterprise is arranged by hand: nothing to switch to in the portal.
+  return snapshot.hasBillingAccount && !snapshot.comped && snapshot.tier !== "enterprise";
+}
+
+/** A paid plan: what it is, what it costs and when it renews, the way to
+ * change or cancel it, and what it is being used for, in one card. */
+function PaidPlan({
   snapshot,
-  commands,
+  usage,
+  onChangePlan,
+  onPortal,
 }: {
   snapshot: PlanActionSnapshot;
-  commands: PlanActionCommands;
+  usage: UsageSnapshot;
+  onChangePlan: () => void;
+  onPortal: () => void;
 }) {
-  if (snapshot.plan === "free")
-    return (
-      <FreeUpgradeButtons
-        checkoutPlan={snapshot.checkoutPlan}
-        shake={commands.shake}
-        onUpgrade={commands.onUpgrade}
-      />
-    );
-  if (!snapshot.hasBillingAccount)
-    return <NoBillingAccountNote plan={snapshot.plan} comped={snapshot.comped} />;
+  const renewal = renewalLine(snapshot);
   return (
-    <ManageSubscriptionButton
-      showPortalOverlay={snapshot.showPortalOverlay}
-      shake={commands.shake}
-      onPortal={commands.onPortal}
-    />
-  );
-}
-
-function PlanComparison({ plan }: { plan: OrgPlan }) {
-  return plan === "free" ? <PlanFeatureComparison /> : null;
-}
-
-const PLAN_CHANGE_HINT = {
-  hobby:
-    "Want Pro? Change your plan, or switch between monthly and yearly, in the subscription portal.",
-  pro: "Switch between monthly and yearly in the subscription portal.",
-};
-
-function PlanChangeHint({ snapshot }: { snapshot: PlanActionSnapshot }) {
-  const hint =
-    snapshot.hasBillingAccount && !snapshot.comped && lookup(PLAN_CHANGE_HINT, snapshot.plan);
-  return hint ? <p className="mt-2 text-xs text-muted">{hint}</p> : null;
-}
-
-const INTERVAL_LABEL = { month: "Monthly", year: "Yearly" } as const;
-
-/** The plan badge: "Pro · Yearly" for a subscriber, just the plan for free or comped. */
-function planBadgeLabel({ plan, comped, interval }: PlanActionSnapshot): string {
-  const cycle = comped || !interval ? "" : ` · ${INTERVAL_LABEL[interval]}`;
-  return PLAN_LABEL[plan] + (plan === "free" ? "" : cycle);
-}
-
-function PlanActions({
-  snapshot,
-  commands,
-}: {
-  snapshot: PlanActionSnapshot;
-  commands: PlanActionCommands;
-}) {
-  return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-muted">Plan</p>
-          <Badge color={snapshot.plan === "free" ? "muted" : "mint"}>
-            {planBadgeLabel(snapshot)}
-          </Badge>
+    <SettingsGroup>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-base font-semibold">{planName(snapshot)}</span>
+            {renewal && <span className="text-sm text-muted tnum">{renewal}</span>}
+          </p>
+          <p className="mt-0.5 text-xs text-muted">Covers every organization you own.</p>
         </div>
-        <p className="text-sm text-muted">
-          Billing is per account: your plan applies to every organization you own.
-        </p>
-        <PlanStatusNotes
-          plan={snapshot.plan}
-          comped={snapshot.comped}
-          cancelAtPeriodEnd={snapshot.cancelAtPeriodEnd}
-          periodEnd={snapshot.periodEnd}
-          confirmTimedOut={snapshot.confirmTimedOut}
-        />
-        <PlanComparison plan={snapshot.plan} />
-        <div>
-          <PlanActionControl snapshot={snapshot} commands={commands} />
-          {/* Not for a comped Hobby: the portal changes the subscription, and
-              the comp would still outrank whatever it changed to. */}
-          <PlanChangeHint snapshot={snapshot} />
-        </div>
+        {canChangePlan(snapshot) && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onChangePlan}>
+              Change plan
+            </Button>
+            {canCancel(snapshot) && (
+              <Tooltip content="Cancels in the subscription portal. Paid features stay until the period ends.">
+                <span className="inline-flex">
+                  <Button variant="ghost" disabled={snapshot.showPortalOverlay} onClick={onPortal}>
+                    Cancel
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+          </div>
+        )}
       </div>
-    </Card>
+      <PlanStatusNotes snapshot={snapshot} inset />
+      {!snapshot.hasBillingAccount && (
+        <NoBillingAccountNote name={planName(snapshot)} comped={snapshot.comped} />
+      )}
+      <UsageInPlan usage={usage} />
+      {snapshot.tier === "enterprise" && <EnterpriseTerms limits={snapshot.limits} />}
+    </SettingsGroup>
   );
 }
 
-function UsageLine({ label, count, limit }: { label: string; count: number; limit: number }) {
+/** The card and the invoices, as Polar holds them (`BillingDetails`). The
+ * portal buttons stay beside them as the way to change anything, and are all
+ * that is left when Polar did not answer. */
+function PaymentGroups({
+  snapshot,
+  commands,
+  details,
+}: {
+  snapshot: PlanActionSnapshot;
+  commands: PlanActionCommands;
+  details: BillingDetails | undefined;
+}) {
+  if (!snapshot.hasBillingAccount) return null;
+  const portalButton = (label: string) => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={snapshot.showPortalOverlay}
+      className={commands.shake.portal.className}
+      onAnimationEnd={commands.shake.portal.end}
+      onClick={commands.onPortal}
+    >
+      <BusyContent busy={snapshot.showPortalOverlay}>{label}</BusyContent>
+    </Button>
+  );
+  const card = details?.card;
   return (
-    <p className="text-sm text-muted tnum">
-      {label} {exactCount(count)} / {exactCount(limit)}
-    </p>
+    <>
+      <SettingsGroup title="Payment">
+        <SettingsRow label="Card" hint={card ? undefined : "Kept by Polar, our payment provider."}>
+          {card && <CardFace card={card} />}
+          {portalButton("Update")}
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsGroup title="Invoices">
+        {details?.invoices.map((invoice) => (
+          <InvoiceRow key={invoice.id} invoice={invoice} />
+        ))}
+        {details?.invoices.length ? (
+          <SettingsRow label="Older invoices and receipts" hint="In the subscription portal.">
+            {portalButton("View invoices")}
+          </SettingsRow>
+        ) : (
+          <SettingsRow
+            label="Every invoice and receipt"
+            hint="In the subscription portal, as PDFs."
+          >
+            {portalButton("View invoices")}
+          </SettingsRow>
+        )}
+      </SettingsGroup>
+    </>
+  );
+}
+
+/** The brands whose names are not just their id with a capital letter. */
+const CARD_BRANDS = new Map([
+  ["amex", "American Express"],
+  ["diners", "Diners Club"],
+  ["jcb", "JCB"],
+  ["unionpay", "UnionPay"],
+]);
+
+/** "Visa · Ending 4242, expires 08/28". The brand as a word, not a logo:
+ * the CSP allows no remote image and a drawn logo would be a trademark. */
+function CardFace({ card }: { card: PaymentCard }) {
+  const brand =
+    CARD_BRANDS.get(card.brand) ?? card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
+  const mm = String(card.expMonth).padStart(2, "0");
+  const yy = String(card.expYear).slice(-2);
+  return (
+    <span className="flex items-center gap-2 text-sm tnum">
+      <span className="shrink-0 rounded-[5px] bg-surface-2 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap">
+        {brand}
+      </span>
+      Ending {card.last4}, expires {mm}/{yy}
+    </span>
+  );
+}
+
+const INVOICE_STATUS = {
+  paid: { label: "Paid", dot: "bg-accent-2" },
+  open: { label: "Open", dot: "bg-butter" },
+  refunded: { label: "Refunded", dot: "bg-muted" },
+  credit: { label: "Credit", dot: "bg-muted" },
+} satisfies Record<Invoice["status"], { label: string; dot: string }>;
+
+function InvoiceRow({ invoice }: { invoice: Invoice }) {
+  const status = INVOICE_STATUS[invoice.status];
+  return (
+    <div className="grid min-h-11 grid-cols-[1fr_auto_2rem] items-center gap-x-4 px-4 py-2 text-sm sm:grid-cols-[1fr_5rem_5rem_5rem_2rem]">
+      <span className="tnum whitespace-nowrap">{shortDate(invoice.date)}</span>
+      <span className="text-muted max-sm:hidden">
+        {invoice.plan ? PLAN_LABEL[invoice.plan] : ""}
+      </span>
+      <span className="text-right tnum">{formatMoney(invoice.amountCents, invoice.currency)}</span>
+      <span className="inline-flex items-center gap-1.5 text-xs max-sm:hidden">
+        <span aria-hidden className={cn("size-1.5 rounded-full", status.dot)} />
+        {status.label}
+      </span>
+      {invoice.pdfUrl ? (
+        <Tooltip content="Download PDF">
+          <a
+            href={invoice.pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Download the invoice of ${shortDate(invoice.date)}`}
+            className="grid size-8 place-items-center rounded-md text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          >
+            <Download size={15} aria-hidden />
+          </a>
+        </Tooltip>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+function formatMoney(cents: number, currency: string): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
+}
+
+/** One figure against its cap: "184 of 3,000" over a thin bar. Over the cap,
+ * the figure and the bar turn to the danger colour; the figure already says
+ * by how much. */
+function UsageRow({
+  label,
+  hint,
+  count,
+  limit,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  count: number;
+  limit: number;
+  children?: ReactNode;
+}) {
+  const over = count > limit;
+  const share = limit > 0 ? Math.min(1, count / limit) : 1;
+  return (
+    <div className="px-4 py-3">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[13rem_1fr_9rem]">
+        <p className="text-sm">
+          {label}
+          {hint && <span className="text-xs text-muted"> · {hint}</span>}
+        </p>
+        <div
+          aria-hidden="true"
+          className="col-span-2 row-start-2 h-1.5 overflow-hidden rounded-full bg-surface-2 sm:col-span-1 sm:row-start-auto"
+        >
+          <div
+            className={cn("h-full rounded-full", over ? "bg-danger" : "bg-accent")}
+            style={{ width: `${Math.max(2, share * 100)}%` }}
+          />
+        </div>
+        <p className="text-right text-sm tnum">
+          <span className={cn("font-semibold", over && "text-danger")}>{exactCount(count)}</span>{" "}
+          <span className="text-muted">of {exactCount(limit)}</span>
+        </p>
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -534,70 +724,116 @@ function UsageLine({ label, count, limit }: { label: string; count: number; limi
  * cap. The links keep working either way, and the line says so before it
  * says anything else.
  */
-function ClickUsageLine({ usage }: { usage: ClickUsage }) {
+function ClickUsageRow({ usage }: { usage: ClickUsage }) {
   const level = clickUsageLevel(usage.clicks, usage.limit);
+  const now = Date.now();
   return (
-    <>
-      <UsageLine label="Clicks counted this month" count={usage.clicks} limit={usage.limit} />
+    <UsageRow
+      label="Clicks counted"
+      hint={`resets ${resetDay(now)}`}
+      count={usage.clicks}
+      limit={usage.limit}
+    >
       {level !== "under" && (
-        <p className="max-w-prose text-sm">
+        <p className="mt-2 max-w-prose text-sm text-pretty">
           {level === "reached" && <span className="font-semibold">Limit reached. </span>}
-          {level === "reached"
-            ? reachedSentence(usage.limit, Date.now())
-            : nearSentence(usage.limit, Date.now())}
+          {level === "reached" ? reachedSentence(usage.limit, now) : nearSentence(usage.limit, now)}
         </p>
       )}
-    </>
+    </UsageRow>
   );
 }
 
-/**
- * The three lines the usage card is waiting on.
- *
- * Each bar sits in a box the height of the text it replaces (text-sm, a 20px
- * line) inside the same `gap-1` column as the real lines. Before, three 14px
- * bars in a `gap-3` column stood in for three 20px lines in a `gap-1` one, so
- * the card resized under the "Orgs you own" line that renders throughout.
- */
-function UsageMeterSkeleton() {
+/** The rows the usage card is waiting on, each the height of the row it
+ * stands in for, so nothing moves when the figures arrive. */
+function UsageRowsSkeleton() {
   return (
     <>
-      {[32, 36, 28, 52].map((w) => (
-        <span key={w} className="flex h-5 items-center">
+      {[24, 28, 20, 40].map((w) => (
+        <div key={w} className="flex h-11 items-center px-4">
           <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
-        </span>
+        </div>
       ))}
     </>
   );
 }
 
 function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: PlanLimits }) {
-  if (snapshot.loading) return <UsageMeterSkeleton />;
+  if (snapshot.loading) return <UsageRowsSkeleton />;
   return (
     <>
-      <UsageLine label="Links" count={snapshot.linkQuotaCount ?? 0} limit={limits.links} />
-      <UsageLine label="Members" count={snapshot.memberCount} limit={limits.members} />
-      <UsageLine label="Domains" count={snapshot.domainCount} limit={limits.domains} />
-      {snapshot.clickUsage && <ClickUsageLine usage={snapshot.clickUsage} />}
+      <UsageRow label="Links" count={snapshot.linkQuotaCount ?? 0} limit={limits.links} />
+      <UsageRow label="Members" count={snapshot.memberCount} limit={limits.members} />
+      {/* Free has no custom domains: "0 of 0" says nothing. */}
+      {(limits.domains > 0 || snapshot.domainCount > 0) && (
+        <UsageRow label="Custom domains" count={snapshot.domainCount} limit={limits.domains} />
+      )}
+      {snapshot.clickUsage && <ClickUsageRow usage={snapshot.clickUsage} />}
     </>
   );
 }
 
-function UsageMeter({ snapshot }: { snapshot: UsageSnapshot }) {
-  if (!snapshot.org) return null;
-  const limits = PLAN_LIMITS[snapshot.org.plan];
+/** What an Enterprise account has beyond the meters: the limits that are not
+ * counted against, and who to ask to change any of them. */
+function EnterpriseTerms({ limits }: { limits: PlanLimits }) {
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-1">
-        <p className="mb-2 text-xs font-medium text-muted">Usage: {snapshot.org.name}</p>
-        <UsageRows snapshot={snapshot} limits={limits} />
-        <UsageLine
-          label="Orgs you own"
+    <>
+      <SettingsRow label="Analytics history">
+        <span className="text-sm tnum">{limits.analyticsDays} days</span>
+      </SettingsRow>
+      <SettingsRow label="QR logo and colors">
+        <span className="text-sm">{limits.qrCustom ? "Yes" : "No"}</span>
+      </SettingsRow>
+      <SettingsRow label="Change your limits">
+        {RDYRCT_SITE ? (
+          <a
+            href={`mailto:${SUPPORT_EMAIL}?subject=Enterprise limits`}
+            className="text-sm text-accent hover:underline"
+          >
+            Contact us
+          </a>
+        ) : (
+          <span className="text-sm text-muted">Ask this instance's administrator</span>
+        )}
+      </SettingsRow>
+    </>
+  );
+}
+
+/** The organizations meter is worth a row only where there is more than
+ * one to have (Enterprise), or more owned than the plan covers (a downgrade
+ * in its grace period). "1 of 1" says nothing. */
+function showsOrgs(usage: UsageSnapshot): boolean {
+  return usage.ownedOrgLimit > 1 || usage.ownedOrgs > usage.ownedOrgLimit;
+}
+
+/** The plan's meters, as rows of the plan card. */
+function UsageInPlan({ usage }: { usage: UsageSnapshot }) {
+  if (!usage.org) return null;
+  return (
+    <>
+      <UsageRows snapshot={usage} limits={usage.org.limits} />
+      {showsOrgs(usage) && (
+        <UsageRow label="Organizations" count={usage.ownedOrgs} limit={usage.ownedOrgLimit} />
+      )}
+    </>
+  );
+}
+
+function UsageGroup({ snapshot }: { snapshot: UsageSnapshot }) {
+  if (!snapshot.org) return null;
+  const limits = snapshot.org.limits;
+  return (
+    <SettingsGroup title="Usage" hint={snapshot.org.name}>
+      <UsageRows snapshot={snapshot} limits={limits} />
+      {showsOrgs(snapshot) && (
+        <UsageRow
+          label="Organizations you own"
           count={snapshot.ownedOrgs}
-          limit={PLAN_LIMITS[snapshot.plan].orgs}
+          limit={snapshot.ownedOrgLimit}
         />
-      </div>
-    </Card>
+      )}
+    </SettingsGroup>
   );
 }
 
@@ -678,7 +914,7 @@ function CelebrationOverlay({
             <span aria-hidden="true" className="text-5xl">
               🎉
             </span>
-            <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
+            <p className="text-xl font-bold text-accent">You’re on {PLAN_LABEL[plan]}.</p>
             {onFirstLink ? (
               <Button variant="primary" onClick={onFirstLink}>
                 Shorten your first link
@@ -693,58 +929,6 @@ function CelebrationOverlay({
       )}
     </AnimatePresence>
   );
-}
-
-const WEBHOOK_POLL_MS = 2000;
-const WEBHOOK_POLL_TRIES = 5;
-
-/**
- * Waits for a Polar webhook to land, by asking the server again.
- *
- * Polar sends the browser back before it delivers the webhook, so both
- * returns (from checkout and from the subscription portal) read the row as it
- * was. One refetch races the delivery, so keep asking while `waiting` until
- * `arrived`, then give up rather than poll forever.
- *
- * The callbacks live in a ref: they close over state setters that change
- * every render, and re-running the interval on each of those would reset the
- * try count and make "give up" unreachable.
- */
-function useAwaitWebhook({
-  waiting,
-  arrived,
-  onArrived,
-  onGaveUp,
-}: {
-  waiting: boolean;
-  arrived: boolean;
-  onArrived: () => void;
-  onGaveUp: () => void;
-}) {
-  const qc = useQueryClient();
-  const callbacks = useRef({ onArrived, onGaveUp });
-  useEffect(() => {
-    callbacks.current = { onArrived, onGaveUp };
-  });
-
-  useEffect(() => {
-    if (!waiting) return;
-    if (arrived) {
-      callbacks.current.onArrived();
-      return;
-    }
-    let tries = 0;
-    const id = window.setInterval(() => {
-      tries += 1;
-      if (tries > WEBHOOK_POLL_TRIES) {
-        window.clearInterval(id);
-        callbacks.current.onGaveUp();
-        return;
-      }
-      void qc.refetchQueries({ queryKey: ["user"] });
-    }, WEBHOOK_POLL_MS);
-    return () => window.clearInterval(id);
-  }, [waiting, arrived, qc]);
 }
 
 /** Confetti and the overlay that goes with it, for four seconds. */
@@ -997,7 +1181,7 @@ function billingOverlayState(
 ) {
   return {
     show: checkoutPlan !== null || showPortalOverlay || confirming,
-    message: confirming ? "Confirming your upgrade…" : "Redirecting to Polar…",
+    message: confirming ? "Confirming your payment with Polar…" : "Redirecting to Polar…",
   };
 }
 
@@ -1007,9 +1191,13 @@ function billingOverlayState(
  * Every one of them is optional on the user, and defaulting each at the point
  * of use turned the page into a list of `?? false`.
  */
+const FREE_TIER: AccountTier = "free";
+
 const NO_ACCOUNT_YET = {
   hasBillingAccount: false,
   comped: false,
+  tier: FREE_TIER,
+  limits: PLAN_LIMITS.free,
   polarSubscriptionCancelAtPeriodEnd: false,
   polarSubscriptionCurrentPeriodEnd: null,
   polarSubscriptionInterval: null,
@@ -1029,6 +1217,8 @@ function useBillingAccount() {
     periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
     interval: subscription.polarSubscriptionInterval,
     ownedOrgs: ownedOrgCount(currentUser.data?.orgs),
+    tier: subscription.tier,
+    limits: subscription.limits,
   };
 }
 
@@ -1040,7 +1230,11 @@ function quotaCount(quota: { count: number } | undefined): number | undefined {
   return quota?.count;
 }
 
-function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapshot {
+function useBillingUsageSnapshot(
+  plan: OrgPlan,
+  ownedOrgs: number,
+  ownedOrgLimit: number,
+): UsageSnapshot {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
@@ -1055,6 +1249,7 @@ function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapsho
     memberCount: itemCount(memberData),
     domainCount: itemCount(domainData),
     ownedOrgs,
+    ownedOrgLimit,
     loading: [linksPending, membersPending, domainsPending, clicksPending].includes(true),
   };
 }
@@ -1073,16 +1268,23 @@ function firstLinkAction(
 
 function useBillingPageModel() {
   const account = useBillingAccount();
+  const details = useBillingDetails(account.hasBillingAccount);
   const flow = useCheckoutFlow();
-  const usage = useBillingUsageSnapshot(flow.plan, account.ownedOrgs);
+  const usage = useBillingUsageSnapshot(flow.plan, account.ownedOrgs, account.limits.orgs);
   const navigate = useNavigate();
   const dismissCelebration = () => flow.setShowCelebration(false);
 
   return {
-    loading: account.isLoading,
+    // Waits for the card and invoices too, so the payment rows arrive whole
+    // rather than as portal buttons that turn into a list. A Polar failure
+    // ends the wait and leaves the buttons.
+    loading: account.isLoading || (account.hasBillingAccount && details.isPending),
+    details: details.data,
     planActions: {
       snapshot: {
         plan: flow.plan,
+        tier: account.tier,
+        limits: account.limits,
         hasBillingAccount: account.hasBillingAccount,
         comped: account.comped,
         checkoutPlan: flow.checkoutPlan,
@@ -1109,22 +1311,80 @@ function useBillingPageModel() {
   };
 }
 
+/** The card and invoices belong to the account, not an org, and the page
+ * opens org-less too: preloaded here, for an account Polar bills. */
+export function preloadAccount(qc: QueryClient) {
+  const billed = qc.getQueryData(userQuery.queryKey)?.user.hasBillingAccount ?? false;
+  return settle([billed ? qc.ensureQueryData(billingDetailsQuery(true)) : undefined]);
+}
+
+/** Everything the billing page's first frame reads (see
+ * lib/route-preload.ts): the usage it sets against the plan. */
+export function preload(qc: QueryClient, orgId: string) {
+  return settle([
+    qc.ensureQueryData(linkQuotaUsageQuery(orgId)),
+    qc.ensureQueryData(membersQuery(orgId)),
+    qc.ensureQueryData(domainsQuery(orgId)),
+    qc.ensureQueryData(clickUsageQuery(orgId)),
+  ]);
+}
+
 export function BillingPage() {
   const model = useBillingPageModel();
+  // Checkout comes back here: a QR style tried on Free is saved as soon as
+  // the webhook puts its org on a paid plan.
+  useSavePendingQrStyle();
   const { data: current } = useCurrentUser();
+  const [changingPlan, setChangingPlan] = useState(false);
   // A self-hosted instance sells nothing.
   if (current?.user.plan === "unlimited") return <NotFound />;
 
   // The shell cache is deliberately not an authority for plan or billing
   // state. Rendering its free defaults here made the paid page flash first.
-  if (model.loading) return <BillingSkeleton />;
+  // The fresh /user answer may land before the rest: it only picks the
+  // skeleton's shape, never what the page says.
+  if (model.loading) return <BillingSkeleton plan={current?.user.plan} />;
+
+  const { snapshot, commands } = model.planActions;
+  const free = snapshot.plan === "free";
 
   return (
-    <div>
-      <PageHeader title="Billing" sub="Your subscription" />
-      <div className="flex flex-col gap-4">
-        <PlanActions {...model.planActions} />
-        <UsageMeter snapshot={model.usage} />
+    <div className="mx-auto w-full max-w-[760px]">
+      <PageHeader
+        title="Billing"
+        sub={free ? "You’re on Free. Upgrade any time, cancel any time." : undefined}
+      />
+      <div className="flex max-w-[760px] flex-col gap-8">
+        {free ? (
+          <>
+            <PlanStatusNotes snapshot={snapshot} />
+            <UsageGroup snapshot={model.usage} />
+            <FreePlans
+              checkoutPlan={snapshot.checkoutPlan}
+              shake={commands.shake}
+              onUpgrade={commands.onUpgrade}
+            />
+            <EnterpriseNote />
+          </>
+        ) : (
+          <>
+            <PaidPlan
+              snapshot={snapshot}
+              usage={model.usage}
+              onChangePlan={() => setChangingPlan(true)}
+              onPortal={commands.onPortal}
+            />
+            <PaymentGroups snapshot={snapshot} commands={commands} details={model.details} />
+            {canChangePlan(snapshot) && (
+              <ChangePlanDialog
+                open={changingPlan}
+                onOpenChange={setChangingPlan}
+                snapshot={snapshot}
+                onPortal={commands.onPortal}
+              />
+            )}
+          </>
+        )}
       </div>
 
       <LazyMotion features={domAnimation}>
