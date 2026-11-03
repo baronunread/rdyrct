@@ -31,7 +31,8 @@ import {
   createRootRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { AppShellSkeleton, ShellSlots } from "../src/app/components/skeletons";
+import { AppShellSkeleton } from "../src/app/components/skeletons";
+import { ShellSlots } from "../src/app/components/shell-slots";
 import { APP_SHELL_PAGES } from "../src/shared/app-shell";
 
 const dir = "dist/client";

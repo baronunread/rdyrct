@@ -1,5 +1,6 @@
 import type { OrgPlan } from "@/shared/types";
-import { createContext, useContext, type ReactElement, type ReactNode } from "react";
+import { useContext, type ReactElement, type ReactNode } from "react";
+import { ShellSlots } from "./shell-slots";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
 import { ChevronsUpDown, MenuIcon, PanelLeftClose, Search } from "@/app/ui/icons";
@@ -706,13 +707,6 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
  * has one: they draw for real, as the loaded sidebar will, so only a first
  * visit still shows bars. Chrome only (AGENTS.md, the cache).
  */
-/**
- * The build's prerendered shell (scripts/prerender-app-shell.tsx) has no
- * user to draw, so where the org and the person go it leaves slots that
- * styles.css fills from CSS variables the head script in index.html sets
- * from the same cache, before the first paint. In the app, false.
- */
-export const ShellSlots = createContext(false);
 
 function OrgRowSkeleton({ hide }: { hide?: string }) {
   const { org, orgs } = useShellOrgs();
