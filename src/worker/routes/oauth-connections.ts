@@ -85,6 +85,8 @@ oauthConnectionRoutes.get("/", requireUser, async (c) => {
       row.createdAt?.getTime() ?? 0,
     ),
   }));
+  const log = c.get("log");
+  log.set({ oauthConnections: { count: connections.length } });
   return c.json(connections);
 });
 
@@ -98,6 +100,8 @@ oauthConnectionRoutes.delete("/:consentId", requireUser, async (c) => {
     .from(schema.oauthConsent)
     .where(and(eq(schema.oauthConsent.id, consentId), eq(schema.oauthConsent.userId, user.id)));
   const consent = rows[0];
+  const log = c.get("log");
+  log.set({ oauthConnection: { consentId, clientId: consent?.clientId, found: !!consent } });
   if (!consent) throw new HTTPException(404, { message: "Connection not found" });
 
   await db.batch([
@@ -120,7 +124,6 @@ oauthConnectionRoutes.delete("/:consentId", requireUser, async (c) => {
     db.delete(schema.oauthConsent).where(eq(schema.oauthConsent.id, consentId)),
   ]);
 
-  const log = c.get("log");
   log.audit({
     action: "oauth_connection.revoke",
     actor: { type: "user", id: user.id },

@@ -548,7 +548,11 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 // source as negotiated /pricing so those two documents cannot drift apart.
 // A self-hosted copy opens on the app. The SPA would get there too, a
 // round trip and a bundle later.
-if (!RDYRCT_SITE) app.get("/", (c) => c.redirect("/dashboard", 302));
+if (!RDYRCT_SITE)
+  app.get("/", (c) => {
+    c.get("log")?.set({ route: c.req.path, redirect: { to: "/dashboard", why: "self-hosted" } });
+    return c.redirect("/dashboard", 302);
+  });
 
 app.get("/pricing.md", (c) => {
   if (!RDYRCT_SITE) return serveSpa(c, 404);

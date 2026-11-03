@@ -355,6 +355,7 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
+// react-doctor-disable-next-line react-doctor/only-export-components -- the entry module, not a component file: scripts/prerender-public.tsx imports these to render each public page.
 export const PRERENDER_ROUTES = [...PRERENDERED_PUBLIC_PATHS] as const;
 
 // Before the router: the page loaders fill this cache.
@@ -432,6 +433,7 @@ export function App() {
   );
 }
 
+// react-doctor-disable-next-line react-doctor/only-export-components -- read by scripts/prerender-public.tsx, as PRERENDER_ROUTES is.
 export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number]) {
   if (!router.state.matches.length) await router.load();
   await router.preloadRoute({ to: path });
