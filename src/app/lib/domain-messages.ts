@@ -1,11 +1,5 @@
 import type { DomainDTO } from "@/shared/types";
 
-export function addDomainMessage(status: DomainDTO["status"]): string {
-  if (status === "active") return "Domain added";
-  if (status === "issuing_tls") return "Domain added, DNS resolved, issuing certificate…";
-  return "Domain added, checking DNS…";
-}
-
 /** The recheck toast: null when there's nothing worth telling the user
  * (e.g. still checking_dns with no change). */
 export function recheckMessage(

@@ -85,7 +85,7 @@ The kit is `src/app/ui/`. Use what is there before adding anything.
 
 Rules that come up every time:
 
-- **A form error marks the field and says why in its label row.** On submit, every bad field gets the danger outline, a short reason sits on the right of that field's label line ("Needs https://", "Already taken", "Required"), the field carries `aria-invalid="true"` and `aria-describedby` pointing at the reason, and focus moves to the first bad field. Nothing below the field, so nothing shifts. A reason too long for the label row goes in the description for screen readers and a tooltip. Not a toast: a form error is about a field, and a toast can be missed or time out.
+- **A form error marks the field and says why in its label row.** On submit, every bad field gets the danger outline, a short reason sits on the right of that field's label line ("Needs https://", "Already taken", "Required"), the field carries `aria-invalid="true"` and `aria-describedby` pointing at the reason, and focus moves to the first bad field. Nothing below the field, so nothing shifts. A reason too long for the label row goes in the description for screen readers and a tooltip. Not a toast: a form error is about a field, and a toast can be missed or time out. A field with no label row (one grown in place from a button, or edited in a row) puts the reason inside itself, at the right end before its button, and shakes once.
 - **Toasts are for outcomes, not for form errors.** "Link created", "Copied", a request that failed for a reason no field owns. Routine ones use `role="status"`; only an urgent failure uses `role="alert"`.
 - **Submit stays enabled.** Validate on submit, then mark the fields. A greyed-out button that never says why is a dead end.
 - **Loading**: a page-level skeleton that mirrors the route's layout (`components/skeletons.tsx`), never a spinner. `Spinner` is for an in-flight button, and a button never says `…`.
@@ -107,6 +107,9 @@ The app is built from depth and nesting, not lines. These are the decisions behi
 - **Charts are smooth and honest.** A monotone cubic curve (it never overshoots a point, so it never dips below zero between two empty days), a faint fill to a zero baseline, direct labels, dates as "Oct 5". A hover guide and a small tooltip instead of a legend.
 - **Tables earn two lines.** The name in bold over its identifier in mono, the number right-aligned and tabular, row actions in a fixed column that appears on hover. A filter row with counts above a long table.
 - **Creating is a dialog.** "New link" is a header button with the `C` shortcut, not a form parked on the page. The form is one column with UTM tags inline; the QR preview, the short link and the full destination sit in a side column with "Customize QR", which opens the QR editor in the same dialog. QR defaults on Organization use the same editor rows.
+- **Adding one value grows in place.** When the whole form is a single field (a domain), the header button widens into that field where it was clicked, with the submit button inside it; Esc or a click away with nothing typed puts the button back. The new item enters at the top of its list, its row first and its details 100ms later. Anything with a second field is a dialog.
+- **The default is a marker, not a pill.** Where one item in a list is the default (the domain new links start on), each row starts with a round marker: filled in the accent with a check on the default, an empty ring on hover for the others, crossfading when it moves. The page header names the default once. "Default" is an attribute, so it never takes a `Badge`.
+- **A single value edits in place.** A row's one setting (a domain's root redirect) is its second line; clicking it turns the line into a small field with Save, Enter saves, Esc puts the line back.
 - **⌘K finds and does.** Recent links, pages and actions in one list, the match in the accent, the keys shown in the footer.
 - **One primary button per screen.** A second action is secondary or quiet.
 - **Over the plan is one notice.** A single line of facts ("Links 184 of 30 · Members 23 of 3 · Domain stops Nov 6") with one action, above the page title. Never stacked banners.
@@ -163,7 +166,7 @@ The first screen a new account meets. Each one names what will appear and offers
 
 ## Motion
 
-Default to stillness. Motion explains a state change, preserves continuity, or confirms an action. Never gate reading behind an animation, reveal every section on scroll, or add parallax, marquees, blinking cursors or pulsing indicators.
+Default to stillness. Motion explains a state change, preserves continuity, or confirms an action. Never gate reading behind an animation, reveal every section on scroll, or add parallax, marquees, blinking cursors or pulsing indicators. The one pulse allowed is the live status below, and only while something is being checked right now.
 
 The base experience is complete without motion, and `prefers-reduced-motion` is honoured everywhere (`MotionConfig reducedMotion="user"` is already in place on the landing page).
 
@@ -177,6 +180,7 @@ The interface rules, from interfaces.dev's cheat sheet:
 - **CSS transitions for interactions** (they can reverse mid-way); keyframes only for one-time sequences. Transitions are off while the theme switches (already done in `lib/theme.ts`).
 - **Hover only where there is hover:** wrap hover styles in `@media (hover: hover)`.
 - **Frequent interactions are instant or very fast;** nothing animates on page load unless it is the point.
+- **A live status is a dot, the way Vercel shows a deploy.** For something the app is checking right now and will settle on its own (a domain's DNS, a payment Polar has not confirmed, an assistant still connecting): an 8px amber dot with a soft halo and a slow ripple (1.8s, scaling to about 2.8x as it fades), beside a short present-tense label ("Checking DNS") with a faint shimmer across it. When it settles, the dot turns mint with a glow, one ring bursts out and fades (0.8s), and the label crossfades to the result ("Live"). A row that is already settled when the page loads is still: no burst, no ripple. Under reduced motion the dot and label change with no ripple, shimmer or burst. Not for anything waiting on a person (an invite, a paused link): those are a plain `Badge`.
 
 **The landing's feature cards loop** (`FeatureCard` in `components/landing-pillars.tsx`): each plays the product doing what its title says, a step every 700ms, with CSS transitions between steps (reversible, opacity, scale, a little blur). They start in their finished state, which is what the prerendered page and reduced motion show, play only while half on screen, and are `aria-hidden` because the title and line say the same thing. A new card is a list of steps whose last one is finished.
 

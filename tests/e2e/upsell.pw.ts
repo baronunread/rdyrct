@@ -29,7 +29,7 @@ test("free plan: Domains is one locked state, and See plans leads to the plans",
   await expect(page).toHaveURL(/\/billing$/);
 });
 
-test("paid plan: the empty state with its example, and Add domain opens the add form", async ({
+test("paid plan: the empty state and the shared domain, and Add domain grows into its field", async ({
   page,
 }) => {
   const email = `upsell-paid-${Date.now()}@gmail.com`;
@@ -37,11 +37,20 @@ test("paid plan: the empty state with its example, and Add domain opens the add 
   await setPlan(page, email);
   await page.goto("/domains");
 
-  await expect(page.getByText("No domains yet")).toBeVisible();
-  await expect(page.getByTestId("domain-example")).toBeVisible();
+  await expect(page.getByText("No domains yet", { exact: false })).toBeVisible();
+  // The shared domain is the default until a custom one takes over.
+  await expect(page.getByText("Shared by every account · random slugs")).toBeVisible();
   await expect(page.getByTestId("feature-locked")).toHaveCount(0);
   await page.getByRole("button", { name: "Add domain" }).click();
-  await expect(page.getByRole("dialog", { name: "Add a domain" })).toBeVisible();
+  const field = page.getByRole("textbox", { name: "Domain", exact: true });
+  await expect(field).toBeFocused();
+  // Add stays live: a bad name says why inside the field, no dialog.
+  await field.fill("not a domain");
+  await field.press("Enter");
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("Not a domain", { exact: true })).toBeVisible();
+  await field.press("Escape");
+  await expect(page.getByRole("button", { name: "Add domain" })).toBeVisible();
 });
 
 test("free plan: QR defaults can be tried, and Upgrade to save opens the plan picker", async ({

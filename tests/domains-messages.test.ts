@@ -1,20 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addDomainMessage, recheckMessage } from "../src/app/lib/domain-messages";
-
-describe("addDomainMessage", () => {
-  test("active", () => {
-    expect(addDomainMessage("active")).toBe("Domain added");
-  });
-  test("issuing_tls", () => {
-    expect(addDomainMessage("issuing_tls")).toBe(
-      "Domain added, DNS resolved, issuing certificate…",
-    );
-  });
-  test("checking_dns and error both fall back to the checking-DNS message", () => {
-    expect(addDomainMessage("checking_dns")).toBe("Domain added, checking DNS…");
-    expect(addDomainMessage("error")).toBe("Domain added, checking DNS…");
-  });
-});
+import { recheckMessage } from "../src/app/lib/domain-messages";
 
 describe("recheckMessage", () => {
   test("still checking_dns: nudges toward the DNS provider", () => {

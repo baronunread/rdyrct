@@ -177,6 +177,8 @@
   --text-3xs: 10px;
   --text-4xs: 9px;
   --animate-shake: shake 300ms ease;
+  /* a value that just changed: in from a soft blur, not a snap */
+  --animate-value-in: value-in 250ms cubic-bezier(0.2, 0, 0, 1);
   /* one letter per step: only even in a monospace font */
   --animate-type-6: type 540ms steps(6) both;
   /* above dialogs (z-50): toasts must stay visible over an open modal */
@@ -316,6 +318,111 @@
 @media (prefers-reduced-motion: no-preference) {
   .swap-in {
     animation: swap-in 150ms ease-out;
+  }
+}
+
+/* A live status (ui/live-status.tsx; rdyrct-design, "A live status is a
+   dot"): an amber dot that ripples and a shimmering label while the app is
+   checking, a mint dot with one burst once it settles. Still under reduced
+   motion, and still for a status that was settled when the page opened. */
+/* In a layer so a caller's utilities (size, weight, colour) win. */
+@layer components {
+  .live-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+  .live-status-dot {
+    position: relative;
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--butter);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--butter) 18%, transparent);
+    transition:
+      background-color 450ms cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 450ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  .live-status-dot::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    opacity: 0;
+  }
+  .live-status-done {
+    color: var(--text);
+  }
+  .live-status-done .live-status-dot {
+    background: var(--accent-2);
+    box-shadow:
+      0 0 0 3px color-mix(in oklab, var(--accent-2) 16%, transparent),
+      0 0 10px color-mix(in oklab, var(--accent-2) 45%, transparent);
+  }
+}
+
+@keyframes live-status-ping {
+  0% {
+    opacity: 0.7;
+  }
+  75%,
+  100% {
+    scale: 2.8;
+    opacity: 0;
+  }
+}
+@keyframes live-status-burst {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    scale: 3.4;
+    opacity: 0;
+  }
+}
+@keyframes live-status-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@keyframes live-status-label-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-status:not(.live-status-done) .live-status-dot::before {
+    animation: live-status-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  .live-status-done:not(.live-status-settled) .live-status-dot::before {
+    animation: live-status-burst 0.8s cubic-bezier(0, 0, 0.2, 1) 1 forwards;
+  }
+  .live-status:not(.live-status-done) .live-status-label {
+    background: linear-gradient(90deg, var(--muted) 35%, var(--text) 50%, var(--muted) 65%) 0 0 /
+      250% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: live-status-shimmer 2.4s linear infinite;
+  }
+  .live-status-label.is-new {
+    animation: live-status-label-in 200ms cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
+@keyframes value-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
   }
 }
 
@@ -921,6 +1028,28 @@ body {
   }
   [id] {
     scroll-margin-top: 5.5rem;
+  }
+
+  /* A <details> (every FAQ) grows open and shut instead of jumping. The
+     answer's box animates from 0 to its own height, which needs
+     interpolate-size; a browser without it opens at once, as before. */
+  @media (prefers-reduced-motion: no-preference) {
+    details {
+      interpolate-size: allow-keywords;
+    }
+    details::details-content {
+      block-size: 0;
+      opacity: 0;
+      overflow-y: clip;
+      transition:
+        block-size 250ms cubic-bezier(0.2, 0, 0, 1),
+        opacity 200ms ease-out,
+        content-visibility 250ms allow-discrete;
+    }
+    details[open]::details-content {
+      block-size: auto;
+      opacity: 1;
+    }
   }
 }
 

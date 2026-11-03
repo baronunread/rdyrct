@@ -163,7 +163,9 @@ test("Organization waits for fresh ownership before showing destructive controls
     page,
     "/organization",
     "organization-page-skeleton",
-    page.getByRole("button", { name: "Delete organization" }),
+    // An owner with one organization cannot delete it: the danger zone
+    // points at deleting the account instead.
+    page.getByRole("link", { name: "Go to Settings" }),
   );
 });
 

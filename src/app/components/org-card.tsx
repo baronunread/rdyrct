@@ -3,7 +3,7 @@ import type { LinkDTO, OrgPlan, RecentClick } from "@/shared/types";
 import { countryName } from "../lib/places";
 import { useCurrentUser } from "../lib/hooks";
 import { cn } from "../ui/cn";
-import { Badge } from "../ui/misc";
+import { LiveStatus } from "../ui/live-status";
 import { Spinner } from "../ui/spinner";
 import { QRPreview } from "./qr";
 
@@ -154,7 +154,7 @@ function Domain({ domain, set, paid }: { domain: string; set: boolean; paid: boo
       {!set && !paid && (
         <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">Paid</span>
       )}
-      {set && <Badge color="butter">Checking DNS</Badge>}
+      {set && <LiveStatus done={false} label="Checking DNS" />}
     </span>
   );
 }

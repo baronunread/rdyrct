@@ -10,9 +10,9 @@ import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { CopyButton } from "../ui/copy-button";
-import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { ChartColumn, Link2, Pencil, Search } from "../ui/icons";
+import { LiveStatus } from "../ui/live-status";
 import { copyToClipboard } from "../lib/clipboard";
 import { useMcpUrl } from "../lib/mcp-url";
 import {
@@ -309,9 +309,12 @@ function WaitRow({
       role="status"
       className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-surface-2 px-3 py-2.5"
     >
-      <Spinner />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">Waiting for the connection…</p>
+        <LiveStatus
+          done={false}
+          label="Waiting for the connection"
+          className="text-sm font-semibold"
+        />
         <p className="text-xs text-pretty text-muted">
           Finish signing in and approving access in your AI tool. It shows up under Connected on its
           own.

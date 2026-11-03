@@ -488,7 +488,20 @@ function AppSidebar({
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} phone={phone} />
 
         <div className="mt-auto">
-          {!collapsed && <SetupChecklist org={org} phone={phone} />}
+          {/* Laid out at the open sidebar's width whatever the rail is
+              doing, and faded rather than removed: mounted or unmounted
+              with the width, it was squeezed into the rail on the way and
+              its words wrapped a line at a time. */}
+          <div
+            inert={collapsed}
+            className={cn(
+              "transition-opacity duration-150",
+              !phone && "w-60 shrink-0",
+              collapsed && "opacity-0",
+            )}
+          >
+            <SetupChecklist org={org} phone={phone} />
+          </div>
           {phone ? (
             <div className="px-3 py-3">
               <AccountMenu

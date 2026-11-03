@@ -41,7 +41,7 @@ import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Select } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
-import { Badge, PageHeader, Table, Td, Th } from "../ui/misc";
+import { PageHeader, Table, Td, Th } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { Segmented } from "../ui/segmented";
 import { useToast } from "../ui/toast";
@@ -51,6 +51,7 @@ import { LockedPanel } from "../components/over-limit";
 import { NoOrgState } from "../components/no-org";
 import { DnsRecords } from "../components/dns-records";
 import { CopyButton } from "../ui/copy-button";
+import { LiveStatus } from "../ui/live-status";
 import { copyToClipboard } from "../lib/clipboard";
 
 const TITLE = "Import links";
@@ -862,9 +863,7 @@ function DomainRow({
           </span>
         </div>
         {domain ? (
-          <Badge color={domain.status === "active" ? "mint" : "butter"}>
-            {domainState(domain)}
-          </Badge>
+          <LiveStatus done={domain.status === "active"} label={domainState(domain)} />
         ) : (
           <HostActions
             orgId={orgId}
@@ -897,7 +896,7 @@ function DomainRow({
 
 function domainState(domain: DomainDTO) {
   if (domain.status === "active") return "Ready";
-  return domain.validation === "txt" ? "Waiting for TXT records" : "Waiting for DNS";
+  return domain.validation === "txt" ? "Checking TXT records" : "Checking DNS";
 }
 
 /** What can be done about a domain the org does not have yet. */
@@ -1245,9 +1244,10 @@ function SwitchStep({
             <li key={host} className="flex flex-col gap-3 px-4 py-3">
               <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
                 <span className="font-mono text-sm break-all">{host}</span>
-                <Badge color={ready ? "mint" : "butter"}>
-                  {ready ? "Ready to switch" : "Waiting for the TXT records"}
-                </Badge>
+                <LiveStatus
+                  done={ready}
+                  label={ready ? "Ready to switch" : "Checking TXT records"}
+                />
               </div>
               {ready ? (
                 <>

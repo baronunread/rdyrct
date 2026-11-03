@@ -32,10 +32,11 @@ test("new links start on the org's default domain, with the slug field unlocked 
   await page.keyboard.press("Escape");
 
   await page.goto("/domains");
-  await page.getByRole("button", { name: `Actions for ${hostname}` }).click();
-  await page.getByRole("menuitem", { name: `Default new links to ${hostname}` }).click();
+  await page.getByRole("button", { name: `Make ${hostname} the default` }).click();
   await expect(page.getByText(`New links will use ${hostname}`)).toBeVisible();
-  await expect(page.getByText("Default", { exact: true })).toBeVisible();
+  // The header names it, and the marker moves to its row.
+  await expect(page.getByText("new links start on", { exact: false })).toContainText(hostname);
+  await expect(page.getByRole("button", { name: `Make ${hostname} the default` })).toHaveCount(0);
 
   // Organization says the same, in its Default domain row.
   await page.goto("/organization");

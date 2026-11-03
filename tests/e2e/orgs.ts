@@ -38,10 +38,12 @@ export async function createAdditionalOrg(page: Page, name: string) {
 export async function addCustomDomain(page: Page, hostname = `e2e-${Date.now()}.example.com`) {
   await page.goto("/domains");
   await page.getByRole("button", { name: "Add domain" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add a domain" });
-  await dialog.getByRole("textbox", { name: "Domain" }).fill(hostname);
-  await dialog.getByRole("button", { name: "Add domain" }).click();
-  await expect(dialog).toBeHidden();
+  const field = page.getByRole("textbox", { name: "Domain", exact: true });
+  await field.fill(hostname);
+  await field.press("Enter");
+  // The field closes back into the button, and the domain is a row.
+  await expect(field).toBeHidden();
+  await expect(page.getByText(hostname, { exact: true }).first()).toBeVisible();
   return hostname;
 }
 
@@ -53,7 +55,9 @@ export async function addCustomDomain(page: Page, hostname = `e2e-${Date.now()}.
  * take most of the default budget. */
 export async function addActiveCustomDomain(page: Page, hostname?: string) {
   const added = await addCustomDomain(page, hostname);
-  await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 30_000 });
+  // The shared domain's row says Live too, so wait on this domain's row.
+  const row = page.locator(`[data-domain="${added}"]`);
+  await expect(row.getByText("Live", { exact: true })).toBeVisible({ timeout: 30_000 });
   return added;
 }
 

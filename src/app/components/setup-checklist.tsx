@@ -15,8 +15,8 @@ import { countryName } from "../lib/places";
 import { relativeDate } from "../lib/dates";
 import { Check, Target } from "../ui/icons";
 import { MenuItem } from "../ui/menu";
-import { Badge } from "../ui/misc";
 import { cn } from "../ui/cn";
+import { LiveStatus } from "../ui/live-status";
 
 /**
  * What is left of a new organization's setup, in the sidebar above the
@@ -130,7 +130,7 @@ function domainStep(domains: DomainDTO[]): Step {
       title: `Point ${pending.hostname} at rdyrct`,
       done: false,
       detail: <Go to="/domains">One DNS record. We check on our own.</Go>,
-      status: <Badge color="butter">Checking DNS</Badge>,
+      status: <LiveStatus done={false} label="Checking DNS" />,
     };
   return {
     title: "Use your own domain",
@@ -163,7 +163,10 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
       <Popover.Root key={pathname}>
         <Popover.Trigger
           data-setup-checklist
-          className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[10px] bg-surface px-3 py-2.5 text-left smooth-shadow-ring-xs transition-[box-shadow,scale] duration-150 ease-out active:scale-[0.98] [@media(hover:hover)]:hover:smooth-shadow-ring-sm"
+          // Hover lightens the surface rather than swapping shadows: the two
+          // ring shadows have different layer counts, which cannot animate
+          // between and made the edge flicker.
+          className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[10px] bg-surface px-3 py-2.5 text-left smooth-shadow-ring-xs transition-[background-color,scale] duration-150 ease-out active:scale-[0.98] [@media(hover:hover)]:hover:bg-surface-2"
         >
           <span className="flex items-baseline justify-between gap-2 text-sm font-semibold">
             Finish setting up
