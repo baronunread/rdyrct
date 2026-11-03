@@ -56,7 +56,7 @@ test("the WhatsApp page draws a wa.me link and leads to the others", async ({ pa
 
 test("the main generator links to each QR type", async ({ page }) => {
   await page.goto("/qr-code-generator");
-  const types = page.getByRole("navigation", { name: "QR codes for one job" });
+  const types = page.getByRole("navigation", { name: "Other QR codes" });
   await expect(
     types.getByRole("link", { name: "vCard QR code for business cards" }),
   ).toHaveAttribute("href", "/vcard-qr-code");

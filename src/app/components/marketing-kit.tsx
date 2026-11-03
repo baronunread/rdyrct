@@ -89,3 +89,72 @@ export function PageHero({
     </div>
   );
 }
+
+/**
+ * The frame below a page's hero: every section between the same two rails,
+ * each opened by a crossed rule, the last one closed. The hero closes its
+ * own frame, so this one starts on the same line.
+ */
+export function FramedSections({ children }: { children: ReactNode }) {
+  return (
+    <div className="-mt-px mb-16 border-x border-border/70">
+      {children}
+      <FrameRow />
+    </div>
+  );
+}
+
+/** One section of the frame: its heading and content on the page's one left
+ *  edge. Prose keeps its own measure inside (`max-w-3xl`); tables and grids
+ *  take the full width. */
+export function FrameSection({
+  title,
+  children,
+  className,
+}: {
+  title?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <FrameRow className={cn("flex flex-col gap-6 px-6 py-12 sm:px-10 md:py-16", className)}>
+      {title && (
+        <h2 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+          {title}
+        </h2>
+      )}
+      {children}
+    </FrameRow>
+  );
+}
+
+/** Where a framed page ends: the dark band, as wide as the column, with the
+ *  claim, the one call to action and a line under it. */
+export function EndBand({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note?: ReactNode;
+  /** The call to action, and at most one quieter second. */
+  children: ReactNode;
+}) {
+  return (
+    <FrameRow className="p-3 sm:p-4">
+      <section className="ink-band relative isolate overflow-hidden rounded-3xl px-6 py-14 sm:px-10 md:py-20">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[14px_14px] mask-[radial-gradient(60%_80%_at_30%_50%,#000,transparent)]"
+        />
+        <div className="flex flex-col items-start gap-5">
+          <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
+            {title}
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">{children}</div>
+          {note && <p className="text-sm text-muted">{note}</p>}
+        </div>
+      </section>
+    </FrameRow>
+  );
+}

@@ -4,15 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, useLinkHost } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
-import {
-  QR_CORNER_STYLES,
-  QR_DEFAULT_BG,
-  QR_DEFAULT_COLOR,
-  QR_DEFAULT_CORNER,
-  QR_DEFAULT_LOGO_SIZE,
-  QR_DOT_STYLES,
-} from "@/shared/types";
-import { oneOf } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { SettingsGroup } from "../ui/settings-rows";
 import { PlanPickerDialog, useOwnerLabel } from "./plan-upsell";
@@ -24,8 +15,15 @@ import {
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview } from "./qr";
-import { QrContrastNote, QrEditorRows, type QrLookValue, type QrPatch } from "./qr-pickers";
-import { hasAnyQrValue, qrPreviewProps, type QrValues } from "../lib/qr-look";
+import { QrContrastNote, QrEditorRows } from "./qr-pickers";
+import {
+  applyQrPatch,
+  hasAnyQrValue,
+  qrLookOf as lookOf,
+  qrPreviewProps,
+  type QrPatch,
+  type QrValues,
+} from "../lib/qr-look";
 import { orgQrFrom } from "../lib/org-qr";
 import { canAdminOrg } from "../lib/org-limits";
 import posthog from "../lib/posthog";
@@ -57,20 +55,6 @@ function initialQrValues(org?: Org): QrValues {
   };
 }
 
-/** What the code is drawn with: every value concrete. */
-function lookOf(v: QrValues): QrLookValue {
-  const ink = v.qrColor || QR_DEFAULT_COLOR;
-  return {
-    dot: oneOf(QR_DOT_STYLES, v.qrStyle, "rounded"),
-    corner: oneOf(QR_CORNER_STYLES, v.qrCorner, QR_DEFAULT_CORNER),
-    dotColor: ink,
-    cornerColor: v.qrEyeColor || ink,
-    bg: v.qrBg || QR_DEFAULT_BG,
-    logo: v.qrLogo,
-    logoSize: v.qrLogoSize === "" ? QR_DEFAULT_LOGO_SIZE : Number(v.qrLogoSize),
-  };
-}
-
 const same = (a: QrValues, b: QrValues) =>
   // SAFETY: both are QrValues, so they share one fixed set of keys.
   (Object.keys(a) as (keyof QrValues)[]).every((k) => a[k] === b[k]);
@@ -84,16 +68,7 @@ function useQrDefaultsForm(orgId: string, org: Org, tried: QrValues | null = nul
   const [values, setValues] = useState<QrValues>(() => tried ?? saved);
   const [savingQr, setSavingQr] = useState(false);
 
-  const apply = (p: QrPatch) =>
-    setValues((v) => ({
-      qrStyle: p.qrStyle ?? v.qrStyle,
-      qrCorner: p.qrCorner ?? v.qrCorner,
-      qrColor: p.qrColor ?? v.qrColor,
-      qrEyeColor: p.qrEyeColor ?? v.qrEyeColor,
-      qrBg: p.qrBg ?? v.qrBg,
-      qrLogo: p.qrLogo ?? v.qrLogo,
-      qrLogoSize: p.qrLogoSize === undefined ? v.qrLogoSize : String(p.qrLogoSize),
-    }));
+  const apply = (p: QrPatch) => setValues((v) => applyQrPatch(v, p));
 
   const save = async () => {
     setSavingQr(true);

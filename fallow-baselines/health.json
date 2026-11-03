@@ -91,7 +91,7 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/app/components/link-marks.tsx": {
@@ -141,27 +141,26 @@
         "count": 1
       }
     },
-    "src/app/components/qr-color-field.tsx": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/app/components/qr-defaults-card.tsx": {
       "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
         "count": 2
-      }
-    },
-    "src/app/components/qr-logo-input.tsx": {
+      },
       "crap_moderate": {
         "count": 1
       }
     },
     "src/app/components/qr-pickers.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
       "crap_high": {
-        "count": 3
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/components/qr.tsx": {
@@ -372,16 +371,16 @@
     },
     "src/app/routes/domains.tsx": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
       },
       "crap_critical": {
         "count": 3
       },
       "crap_high": {
-        "count": 2
+        "count": 3
       },
       "crap_moderate": {
-        "count": 2
+        "count": 6
       }
     },
     "src/app/routes/invite.tsx": {
@@ -414,7 +413,7 @@
         "count": 3
       },
       "crap_moderate": {
-        "count": 4
+        "count": 3
       }
     },
     "src/app/routes/links.tsx": {
@@ -457,10 +456,10 @@
         "count": 1
       },
       "crap_high": {
-        "count": 1
+        "count": 2
       },
       "crap_moderate": {
-        "count": 3
+        "count": 2
       }
     },
     "src/app/routes/welcome.tsx": {
@@ -482,6 +481,11 @@
     "src/app/ui/field.tsx": {
       "crap_moderate": {
         "count": 2
+      }
+    },
+    "src/app/ui/live-status.tsx": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/ui/otp.tsx": {
@@ -560,14 +564,16 @@
     "src/app/ui/command.tsx:dead code",
     "src/app/routes/admin/audit.tsx:hidden coupling",
     "src/app/lib/current-org.ts:high impact",
-    "src/app/lib/insights-data.ts:high impact",
     "src/worker/abuse.ts:hidden coupling",
     "src/app/lib/posthog.ts:hidden coupling",
+    "src/app/lib/insights-data.ts:high impact",
     "src/app/lib/use-shake.ts:high impact",
     "src/app/lib/setup.ts:hidden coupling",
     "src/app/routes/welcome.tsx:hidden coupling",
-    "src/app/lib/mcp-url.ts:high impact",
+    "src/app/ui/dialog.tsx:hidden coupling",
+    "src/app/ui/menu.tsx:hidden coupling",
     "src/app/components/link-editor.tsx:complexity",
+    "src/app/lib/mcp-url.ts:high impact",
     "src/app/routes/admin/orgs.tsx:hidden coupling",
     "src/app/routes/link-import.tsx:complexity",
     "src/app/routes/admin/users.tsx:hidden coupling",
@@ -576,19 +582,19 @@
     "src/worker/routes/billing.ts:hidden coupling",
     "src/app/components/command-menu.tsx:complexity",
     "src/app/routes/admin/links.tsx:hidden coupling",
-    "tests/consent.test.ts:hidden coupling",
     "src/worker/routes/admin-links.ts:hidden coupling",
-    "tests/e2e/pages.ts:hidden coupling",
+    "tests/consent.test.ts:hidden coupling",
     "src/app/components/org-card.tsx:hidden coupling",
-    "scripts/prerender-public.tsx:hidden coupling",
+    "tests/e2e/pages.ts:hidden coupling",
     "playwright.config.ts:hidden coupling",
+    "scripts/prerender-public.tsx:hidden coupling",
     "src/worker/security-headers.ts:hidden coupling",
     "vite.config.ts:hidden coupling",
     "tests/e2e/funnel.pw.ts:hidden coupling",
     "src/app/routes/terms.tsx:hidden coupling",
     "src/app/components/landing-pillars.tsx:hidden coupling",
-    "tests/e2e/production/csp.pw.ts:hidden coupling",
     "src/app/routes/privacy.tsx:hidden coupling",
+    "tests/e2e/production/csp.pw.ts:hidden coupling",
     "tests/worker/admin-moderation.worker.ts:hidden coupling",
     "tests/worker/billing.worker.ts:hidden coupling",
     "tests/e2e/landing-sections.pw.ts:hidden coupling",

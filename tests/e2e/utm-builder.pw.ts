@@ -12,7 +12,11 @@ test("builds a tagged link, tidies its case, and copies it", async ({ page, cont
   await expect(page.getByRole("heading", { level: 1, name: "UTM builder" })).toBeVisible();
 
   const output = page.getByRole("status", { name: "Tagged link" });
-  await expect(output).toHaveText("Enter a website URL to start.");
+  await expect(output).toHaveText("Paste a link to start.");
+
+  // Copy is never disabled: with nothing to copy it marks the field.
+  await page.getByRole("button", { name: "Copy link" }).click();
+  await expect(page.getByText("Paste a link first")).toBeVisible();
 
   // No scheme is fine, and a pasted link that is already tagged fills the
   // fields from its own parameters.
@@ -23,6 +27,20 @@ test("builds a tagged link, tidies its case, and copies it", async ({ page, cont
     "https://example.com/spring?ref=mail",
   );
   await expect(page.getByPlaceholder("newsletter")).toHaveValue("Newsletter");
+
+  // A preset fills source and medium together; editing one lets it go.
+  await page.getByRole("button", { name: "LinkedIn" }).click();
+  await expect(page.getByPlaceholder("newsletter")).toHaveValue("linkedin");
+  await expect(page.getByPlaceholder("email")).toHaveValue("social");
+  await expect(page.getByRole("button", { name: "LinkedIn" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByPlaceholder("newsletter").fill("Newsletter");
+  await expect(page.getByRole("button", { name: "LinkedIn" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
 
   await page.getByPlaceholder("email").fill("Email Blast");
   await page.getByPlaceholder("spring-sale", { exact: true }).fill("spring-sale");

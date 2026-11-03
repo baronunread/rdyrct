@@ -22,12 +22,12 @@ import { useToast } from "../ui/toast";
 import { useCurrentOrg } from "../lib/current-org";
 import { readPreparedQrLogo, uploadPreparedQrLogo } from "../lib/qr-logo-file";
 import { qrContrast, toHex6 } from "../lib/qr-contrast";
-import { hasTransparency } from "../lib/qr-look";
+import { hasTransparency, type QrLookValue, type QrPatch } from "../lib/qr-look";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 import { Tooltip } from "@/app/ui/tooltip";
 
-export type DotStyle = (typeof QR_DOT_STYLES)[number];
-export type CornerStyle = (typeof QR_CORNER_STYLES)[number];
+type DotStyle = (typeof QR_DOT_STYLES)[number];
+type CornerStyle = (typeof QR_CORNER_STYLES)[number];
 
 const DOT_NAMES = {
   rounded: "Rounded",
@@ -221,30 +221,6 @@ function QrRow({
   );
 }
 
-/** What the code is drawn with, every value concrete (defaults applied). */
-export interface QrLookValue {
-  dot: DotStyle;
-  corner: CornerStyle;
-  dotColor: string;
-  cornerColor: string;
-  /** A hex, possibly with alpha, or the legacy "transparent". */
-  bg: string;
-  /** The logo's URL, or "" for none. */
-  logo: string;
-  logoSize: number;
-}
-
-/** A change, in the field names a link and an org both store. */
-export type QrPatch = Partial<{
-  qrStyle: string;
-  qrCorner: string;
-  qrColor: string;
-  qrEyeColor: string;
-  qrBg: string;
-  qrLogo: string;
-  qrLogoSize: number;
-}>;
-
 /** The logo row: which file it is, with Replace and Remove, and its size;
  * or an Upload button when there is none. A drop on the row sets it. No
  * on/off switch: switching off threw the file away, so switching back on
@@ -269,20 +245,25 @@ function LogoRow({
   disabled?: boolean;
   onChange: (patch: QrPatch, fileName?: string) => void;
 }) {
-  const { org } = useCurrentOrg();
+  // A logo kept in the browser needs no org, and the free generator has a
+  // visitor with no account to ask about.
+  const { org } = useCurrentOrg(!localOnly);
   const toast = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
+  // Where a picked file goes: kept in the browser, or the org's bucket once
+  // the org is known.
+  const prepare = localOnly
+    ? readPreparedQrLogo
+    : org && ((file: File) => uploadPreparedQrLogo(org.id, file));
+
   const take = async (file: File | undefined) => {
-    if (!file || !org || busy || disabled) return;
+    if (!file || !prepare || busy || disabled) return;
     setBusy(true);
     try {
-      const logo = localOnly
-        ? await readPreparedQrLogo(file)
-        : await uploadPreparedQrLogo(org.id, file);
-      onChange({ qrLogo: logo }, file.name);
+      onChange({ qrLogo: await prepare(file) }, file.name);
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {

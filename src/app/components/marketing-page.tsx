@@ -25,12 +25,15 @@ export function MarketingPage({
   path,
   title,
   intro,
+  hero,
   children,
 }: {
   /** Canonical path, for the head tags. Same string the route uses. */
   path: string;
   title: string;
   intro: ReactNode;
+  /** A tool that opens the page inside the hero, under the intro. */
+  hero?: ReactNode;
   children: ReactNode;
 }) {
   const { authed } = useAudience();
@@ -45,7 +48,9 @@ export function MarketingPage({
           <LandingHeader authed={authed} />
 
           <main>
-            <PageHero title={title} intro={intro} />
+            <PageHero title={title} intro={intro}>
+              {hero}
+            </PageHero>
 
             {children}
           </main>

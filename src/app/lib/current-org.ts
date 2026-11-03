@@ -64,9 +64,11 @@ function usePickOrg(orgs: UserOrg[]) {
   return { org, orgs, setOrg: setCurrentOrgId };
 }
 
-/** The current org as the app knows it: waits for the checked answer. */
-export function useCurrentOrg() {
-  const currentUser = useCurrentUser();
+/** The current org as the app knows it: waits for the checked answer.
+ * `enabled: false` asks nothing, for a public page that only needs the
+ * hook's shape (a stranger's /user would 401). */
+export function useCurrentOrg(enabled = true) {
+  const currentUser = useCurrentUser(enabled);
   return usePickOrg(currentUser.data?.orgs ?? []);
 }
 

@@ -11,10 +11,8 @@ test("the branded link page says what a domain costs and leads to sign-up", asyn
   await expect(
     page.getByRole("contentinfo").getByRole("link", { name: "Branded links" }),
   ).toHaveAttribute("href", "/branded-link-shortener");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Branded link shortener" }),
-  ).toBeVisible();
-  await expect(page).toHaveTitle(/Branded link shortener/);
+  await expect(page.getByRole("heading", { level: 1, name: "Custom URL shortener" })).toBeVisible();
+  await expect(page).toHaveTitle(/Custom URL shortener/);
 
   const plans = page.getByRole("table");
   await expect(plans.getByRole("row", { name: /Hobby/ })).toContainText("$4 a month");

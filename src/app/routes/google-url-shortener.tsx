@@ -10,6 +10,8 @@
  */
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
+import { EndBand, FrameSection, FramedSections } from "../components/marketing-kit";
+import { FaqList } from "../components/faq-list";
 import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
@@ -89,97 +91,92 @@ export function GoogleUrlShortenerPage() {
       title="Google URL shortener (goo.gl): what happened, and what to use now"
       intro="Google shut down its URL shortener and turned off goo.gl links nobody was using. Here is what still works, and how to move your links somewhere you control."
     >
-      <section className="mx-auto flex max-w-3xl flex-col gap-4 py-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          The short answer
-        </h2>
-        <p className="text-muted">
-          You cannot make goo.gl links any more, and you have not been able to since 2018. Links
-          that were still getting clicks in late 2024 keep working. Links that were not stopped on
-          August 25, 2025, and will not come back. If you need a link shortener now, make new links
-          on a service you can leave, ideally on a domain you own.
-        </p>
-      </section>
+      <FramedSections>
+        <FrameSection title="The short answer">
+          <p className="max-w-3xl text-pretty text-muted">
+            You cannot make goo.gl links any more, and you have not been able to since 2018. Links
+            that were still getting clicks in late 2024 keep working. Links that were not stopped on
+            August 25, 2025, and will not come back. If you need a link shortener now, make new
+            links on a service you can leave, ideally on a domain you own.
+          </p>
+        </FrameSection>
 
-      <section className="grid gap-10 pb-12 sm:grid-cols-[1fr_2fr]">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          What Google did, and when
-        </h2>
-        <ol className="flex flex-col gap-4 border-l border-border pl-6">
-          {TIMELINE.map(([when, what]) => (
-            <li key={when}>
-              <p className="font-bold">{when}</p>
-              <p className="mt-1 text-muted">{what}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="pb-12">
-        <h2 className="mb-6 text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Move your goo.gl links to rdyrct <span className="text-muted">in four steps.</span>
-        </h2>
-        <ol className="grid gap-6 border-t border-border sm:grid-cols-2 lg:grid-cols-4">
-          {MOVE_STEPS.map(([title, body], index) => (
-            <li key={title} className="pt-5 pr-6">
-              <span className="tnum text-sm font-bold text-accent">{index + 1}</span>
-              <p className="mt-1 font-bold">{title}</p>
-              <p className="mt-1 text-sm text-muted">{body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="mx-auto flex max-w-3xl flex-col gap-4 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Why your own domain matters
-        </h2>
-        <p className="text-muted">
-          A goo.gl link belonged to Google, so when Google stopped, so did the link, on every flyer
-          and in every old email. A link on a domain you own, such as go.yourcompany.com/menu, keeps
-          its address whichever service sits behind it. rdyrct includes one custom domain on Hobby (
-          {PLAN_PRICES.hobby} a month) and {PLAN_LIMITS.pro.domains} on Pro ({PLAN_PRICES.pro}), and
-          it is open source, so you can run it yourself.
-        </p>
-      </section>
-
-      <section className="mx-auto flex max-w-3xl flex-col gap-6 pb-12">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Questions</h2>
-        {FAQ.map(([question, answer]) => (
-          <div key={question}>
-            <h3 className="font-bold">{question}</h3>
-            <p className="mt-1 text-muted">{answer}</p>
-          </div>
-        ))}
-        <div className="flex flex-col gap-1 text-xs text-muted">
-          <p>Sources:</p>
-          <ul className="flex flex-col gap-1">
-            {SOURCES.map(([href, label]) => (
-              <li key={href}>
-                <a href={href} rel="noreferrer" className="text-accent hover:underline">
-                  {label}
-                </a>
+        <FrameSection className="grid gap-10 sm:grid-cols-[1fr_2fr]">
+          <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+            What Google did, and when
+          </h2>
+          <ol className="flex flex-col gap-4 border-l border-border pl-6">
+            {TIMELINE.map(([when, what]) => (
+              <li key={when}>
+                <p className="font-bold">{when}</p>
+                <p className="mt-1 text-pretty text-muted">{what}</p>
               </li>
             ))}
-          </ul>
-        </div>
-      </section>
+          </ol>
+        </FrameSection>
 
-      <section className="flex flex-col items-start gap-4 border-t border-border py-16">
-        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-          Make the new links somewhere you can leave.
-        </h2>
-        <Link
-          to="/signup"
-          onClick={() => trackCta("googl_page_signup")}
-          className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+        <FrameSection
+          title={
+            <>
+              Move your goo.gl links to rdyrct <span className="text-muted">in four steps.</span>
+            </>
+          }
         >
-          Sign up free
-        </Link>
-        <p className="text-xs text-muted">
-          No credit card. {PLAN_LIMITS.free.links} links on the free plan.
-        </p>
-      </section>
+          <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {MOVE_STEPS.map(([title, body], index) => (
+              <li key={title} className="pr-6">
+                <span className="tnum text-sm font-bold text-accent">{index + 1}</span>
+                <p className="mt-1 font-bold">{title}</p>
+                <p className="mt-1 text-sm text-pretty text-muted">{body}</p>
+              </li>
+            ))}
+          </ol>
+        </FrameSection>
+
+        <FrameSection title="Why your own domain matters">
+          <p className="max-w-3xl text-pretty text-muted">
+            A goo.gl link belonged to Google, so when Google stopped, so did the link, on every
+            flyer and in every old email. A link on a domain you own, such as
+            go.yourcompany.com/menu, keeps its address whichever service sits behind it. rdyrct
+            includes one custom domain on Hobby ({PLAN_PRICES.hobby} a month) and{" "}
+            {PLAN_LIMITS.pro.domains} on Pro ({PLAN_PRICES.pro}), and it is open source, so you can
+            run it yourself.
+          </p>
+        </FrameSection>
+
+        <FrameSection title="Questions">
+          <FaqList faqs={FAQ.map(([q, a]) => ({ q, a }))} />
+          <div className="flex flex-col gap-1 text-xs text-muted">
+            <p>Sources:</p>
+            <ul className="flex flex-col gap-1">
+              {SOURCES.map(([href, label]) => (
+                <li key={href}>
+                  <a
+                    href={href}
+                    rel="noreferrer"
+                    className="text-accent underline underline-offset-4"
+                  >
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </FrameSection>
+
+        <EndBand
+          title="Make the new links somewhere you can leave."
+          note={`No credit card. ${PLAN_LIMITS.free.links} links on the free plan.`}
+        >
+          <Link
+            to="/signup"
+            onClick={() => trackCta("googl_page_signup")}
+            className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+          >
+            Sign up free
+          </Link>
+        </EndBand>
+      </FramedSections>
     </MarketingPage>
   );
 }

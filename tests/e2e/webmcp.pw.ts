@@ -57,7 +57,11 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
 
   expect(result).toMatch(/now shows that value/);
   await expect(page.getByLabel("Link or text")).toHaveValue("https://example.com/agent-qr");
-  await expect(page.getByRole("button", { name: "Dot style" })).toContainText("dots");
+  await expect(
+    page
+      .getByRole("group", { name: "Dots", exact: true })
+      .getByRole("button", { name: "Dots", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("img", { name: /QR code for https:\/\/example.com\/agent-qr/ }),
   ).toBeVisible();

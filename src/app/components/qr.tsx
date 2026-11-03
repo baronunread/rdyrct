@@ -70,6 +70,7 @@ export function QrDownloadButtons({
   look,
   className,
   disabled,
+  prominent,
 }: {
   url: string;
   name: string;
@@ -79,6 +80,9 @@ export function QrDownloadButtons({
   /** For callers that keep the row in place while there is nothing to
    * download yet, rather than letting it appear and shove the page down. */
   disabled?: boolean;
+  /** The page's one primary action (the free generator): PNG in the
+   * accent and named in full, SVG beside it in outline. */
+  prominent?: boolean;
 }) {
   const resolved = look ?? resolveLook({});
   const toast = useToast();
@@ -93,30 +97,42 @@ export function QrDownloadButtons({
       toast("Could not make the file. Try again.", "error");
     }
   };
+  const style = prominent ? PROMINENT : PLAIN;
   return (
     <div className={cn("flex gap-2", className)}>
       {/* Named in full for assistive tech: these can sit beside a link
           rather than under the code, where "PNG" alone says nothing about
           what is being downloaded. */}
       <Button
-        size="sm"
+        size={style.size}
+        variant={style.png}
         disabled={disabled}
         aria-label="Download QR code as PNG"
         onClick={() => void download("png")}
       >
-        <Download size={13} /> PNG
+        <Download size={style.icon} /> {style.pngLabel}
       </Button>
       <Button
-        size="sm"
+        size={style.size}
+        variant={style.svg}
         disabled={disabled}
         aria-label="Download QR code as SVG"
         onClick={() => void download("svg")}
       >
-        <Download size={13} /> SVG
+        <Download size={style.icon} /> SVG
       </Button>
     </div>
   );
 }
+
+const PLAIN = { size: "sm", png: undefined, svg: undefined, icon: 13, pngLabel: "PNG" } as const;
+const PROMINENT = {
+  size: "md",
+  png: "primary",
+  svg: "outline",
+  icon: 15,
+  pngLabel: "Download PNG",
+} as const;
 
 // qr-code-styling takes margin in pixels, so a fixed value would shrink the
 // quiet zone to nothing relative to a 1024px code. Held as a ratio of the

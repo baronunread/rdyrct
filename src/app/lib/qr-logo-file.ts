@@ -1,12 +1,8 @@
 /**
  * Turning a picked image into the logo a QR code carries: an optimized SVG
  * stays vector, anything else becomes a compressed square WebP, and the
- * result goes to the organization's bucket.
- *
- * The same steps as `components/qr-logo-input.tsx` (the dropzone the free
- * generator still uses), pulled out so the compact logo control in the QR
- * editor rows can share them. TODO(lead): make qr-logo-input.tsx import
- * these and drop its own copy.
+ * result goes to the organization's bucket, or stays in the browser for
+ * the free generator (`readPreparedQrLogo`).
  */
 import { QR_LOGO_MAX_BYTES, QR_LOGO_MAX_DIMENSION } from "@/shared/types";
 import { uploadQrLogo } from "./api";
