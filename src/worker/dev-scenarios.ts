@@ -224,7 +224,7 @@ function hopPage(scenario: Scenario, row: { email: string; orgId: string }, targ
 localStorage.setItem("rdyrct:currentOrg", ${inScript(row.orgId)});
 localStorage.setItem("rdyrct:consent:v2", "rejected");
 localStorage.setItem("rdyrct:consent:v2:at", String(Date.now()));
-localStorage.removeItem("rdyrct:user:v1");
+localStorage.removeItem("rdyrct:user:v2");
 location.replace(${inScript(target)});
 </script>Signing in as ${esc(row.email)}…`;
 }

@@ -108,9 +108,26 @@
         // Resolve browser hints before paint. The keys of two ended hero copy
         // tests are dropped.
         try {
-          const user = JSON.parse(localStorage.getItem("rdyrct:user:v1") || "null");
-          if (user?.user?.id && Array.isArray(user.orgs))
-            document.documentElement.dataset.auth = "in";
+          const root = document.documentElement;
+          const user = JSON.parse(localStorage.getItem("rdyrct:user:v2") || "null");
+          if (user?.user?.id && Array.isArray(user.orgs)) {
+            root.dataset.auth = "in";
+            // The prerendered app shell's org and person, from the same cache
+            // the sidebar draws from (styles.css, data-shell-slot).
+            const id = localStorage.getItem("rdyrct:currentOrg");
+            const org = user.orgs.find((o) => o.id === id) || user.orgs[0];
+            const name = String(org?.name || "").trim();
+            root.style.setProperty("--shell-org-name", JSON.stringify(name));
+            root.style.setProperty(
+              "--shell-org-initial",
+              JSON.stringify(name.charAt(0).toUpperCase()),
+            );
+            root.style.setProperty(
+              "--shell-user-name",
+              JSON.stringify(String(user.user.name || "")),
+            );
+          }
+          if (localStorage.getItem("sidebar") === "collapsed") root.dataset.sidebar = "collapsed";
           localStorage.removeItem("rdyrct:hero-variant:v1");
           localStorage.removeItem("rdyrct:hero-variant:v2");
         } catch {}

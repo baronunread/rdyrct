@@ -1477,3 +1477,28 @@ svg.ts-chart:focus-visible {
 .rdyrct-color-picker .react-colorful__interactive:focus .react-colorful__pointer {
   transform: translate(-50%, -50%) scale(1.15);
 }
+
+/* The prerendered app shell (scripts/prerender-app-shell.tsx): hidden unless
+   the head script in index.html found a cached session, so a signed-out
+   visitor never sees a sidebar on the way to the login page; the stored
+   sidebar width of the two; and the org and the person written in from the
+   same cache, which the build could not know. React replaces all of it with
+   the same skeleton on mount. */
+[data-shell-static],
+[data-shell-width] {
+  display: contents;
+}
+html:not([data-auth="in"]) [data-shell-static],
+html[data-sidebar="collapsed"] [data-shell-width="open"],
+html:not([data-sidebar="collapsed"]) [data-shell-width="folded"] {
+  display: none;
+}
+[data-shell-slot="org-initial"]::after {
+  content: var(--shell-org-initial, "");
+}
+[data-shell-slot="org-name"]::after {
+  content: var(--shell-org-name, "");
+}
+[data-shell-slot="user-name"]::after {
+  content: var(--shell-user-name, "");
+}

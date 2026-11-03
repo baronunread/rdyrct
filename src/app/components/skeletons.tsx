@@ -1,5 +1,5 @@
 import type { OrgPlan } from "@/shared/types";
-import type { ReactElement, ReactNode } from "react";
+import { createContext, useContext, type ReactElement, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
 import { ChevronsUpDown, MenuIcon, PanelLeftClose, Search } from "@/app/ui/icons";
@@ -706,27 +706,24 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
  * has one: they draw for real, as the loaded sidebar will, so only a first
  * visit still shows bars. Chrome only (AGENTS.md, the cache).
  */
+/**
+ * The build's prerendered shell (scripts/prerender-app-shell.tsx) has no
+ * user to draw, so where the org and the person go it leaves slots that
+ * styles.css fills from CSS variables the head script in index.html sets
+ * from the same cache, before the first paint. In the app, false.
+ */
+export const ShellSlots = createContext(false);
+
 function OrgRowSkeleton({ hide }: { hide?: string }) {
   const { org, orgs } = useShellOrgs();
+  const slots = useContext(ShellSlots);
+  const name = slots ? null : (org?.name.trim() ?? "");
   return (
     <div className="px-3 py-2">
       <div className="flex h-10 w-full min-w-9 items-center gap-2.5 px-1.5 text-sm">
-        {org ? (
-          <span
-            aria-hidden
-            className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
-          >
-            {org.name.trim().charAt(0).toUpperCase()}
-          </span>
-        ) : (
-          <Skeleton className="size-6 shrink-0 rounded-md" />
-        )}
+        <OrgInitialSkeleton name={name} />
         <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
-          {org ? (
-            <span className="truncate font-semibold">{org.name}</span>
-          ) : (
-            <Skeleton className="h-3.5 w-28" />
-          )}
+          <OrgNameSkeleton name={name} />
         </span>
         {/* Only where the loaded sidebar has a menu to open. */}
         {orgs.length > 1 && (
@@ -735,6 +732,28 @@ function OrgRowSkeleton({ hide }: { hide?: string }) {
       </div>
     </div>
   );
+}
+
+const ORG_INITIAL =
+  "grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg";
+
+/** `name`: the org's, "" when no org is cached yet (a bar), or null for the
+ *  build's slot the head script fills. */
+function OrgInitialSkeleton({ name }: { name: string | null }) {
+  if (name === null)
+    return <span aria-hidden data-shell-slot="org-initial" className={ORG_INITIAL} />;
+  if (!name) return <Skeleton className="size-6 shrink-0 rounded-md" />;
+  return (
+    <span aria-hidden className={ORG_INITIAL}>
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function OrgNameSkeleton({ name }: { name: string | null }) {
+  if (name === null) return <span data-shell-slot="org-name" className="truncate font-semibold" />;
+  if (!name) return <Skeleton className="h-3.5 w-28" />;
+  return <span className="truncate font-semibold">{name}</span>;
 }
 
 /** Real labels and icons, inert until the shell mounts, the page being
@@ -763,6 +782,7 @@ function NavSkeleton({ hide }: { hide?: string }) {
 
 function AccountSkeleton({ hide }: { hide?: string }) {
   const user = useShellUser();
+  const slots = useContext(ShellSlots);
   return (
     <div className="mt-auto px-3 py-3">
       <div className="flex min-w-9 items-center gap-2.5 px-1 py-1.5">
@@ -772,7 +792,9 @@ function AccountSkeleton({ hide }: { hide?: string }) {
           <Skeleton className="size-7 shrink-0 rounded-full" />
         )}
         <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
-          {user ? (
+          {slots ? (
+            <span data-shell-slot="user-name" className="truncate text-sm font-semibold" />
+          ) : user ? (
             <span className="truncate text-sm font-semibold">{user.user.name}</span>
           ) : (
             <Skeleton className="h-3 w-2/3" />
@@ -786,8 +808,11 @@ function AccountSkeleton({ hide }: { hide?: string }) {
 /** First paint of the authenticated app: real sidebar chrome + skeleton
  * content. Layout classes mirror AppShell so the swap doesn't shift,
  * folded sidebar included. */
-export function AppShellSkeleton() {
-  const collapsed = useSidebarCollapsed();
+export function AppShellSkeleton({ folded }: { folded?: boolean } = {}) {
+  // The build renders both widths and lets the head script pick one; the app
+  // reads the stored choice.
+  const stored = useSidebarCollapsed();
+  const collapsed = folded ?? stored;
   const layout = shellLayout(collapsed);
   return (
     <div className="flex min-h-dvh" data-testid="app-shell-skeleton">

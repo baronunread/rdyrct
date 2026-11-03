@@ -51,6 +51,7 @@ import {
 import { disabledPage, heldPage, warnPage } from "./link-state-page";
 import { purgeBannedOrgs, settleBannedOrgs } from "./abuse-hold";
 import { madeWith, notFoundPage } from "./not-found-page";
+import { appShellPage } from "../shared/app-shell";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
@@ -491,6 +492,31 @@ async function servePrerenderedPage(c: Context<AppEnv>, url: URL): Promise<Respo
   );
 }
 
+/**
+ * An app page (src/shared/app-shell.ts) answered with its prerendered shell:
+ * the sidebar and the page's skeleton as HTML, so a reload paints them
+ * before the bundle runs. Null when this build has none (dev, or a build
+ * from before the shell existed), which falls back to the plain shell.
+ */
+async function serveAppShell(c: Context<AppEnv>, url: URL): Promise<Response | null> {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return null;
+  const page = appShellPage(url.pathname);
+  if (!page) return null;
+  const asset = await c.env.ASSETS.fetch(
+    new Request(new URL(`/_app-shell/${page}.txt`, url.origin), c.req.raw),
+  );
+  if (asset.status !== 200 && asset.status !== 304) return null;
+  const headers = new Headers(asset.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
+  return finalizeSpaResponse(
+    new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers }),
+    url,
+    c.env.SITE_NAME,
+    undefined,
+    true,
+  );
+}
+
 function cacheStaticAsset(response: Response): Response {
   const cached = new Response(response.body, response);
   cached.headers.set("cache-control", STATIC_CACHE);
@@ -502,8 +528,9 @@ function finalizeSpaResponse(
   url: URL,
   siteName: string | undefined,
   status?: 404,
+  appShell = false,
 ): Response {
-  const page = withPageMeta(response, url, siteName);
+  const page = withPageMeta(response, url, siteName, appShell);
   if (page.status !== 200) return page;
   if (!page.headers.get("content-type")?.includes("text/html")) {
     return import.meta.env.DEV ? page : cacheStaticAsset(page);
@@ -535,6 +562,10 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   if (!status) {
     const prerendered = await servePrerenderedPage(c, url);
     if (prerendered) return prerendered;
+  }
+  if (!status) {
+    const shell = await serveAppShell(c, url);
+    if (shell) return withoutMadeWith(shell);
   }
   const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
   // A conditional request can be a 304 with no body; only HTML fallback

@@ -215,12 +215,19 @@ function crawlerBody(meta: PageMeta, url: URL): string {
  * `siteName` (SITE_NAME, else the host it answers on) instead of our tagline,
  * the way a self-hosted Shlink or Umami carries its instance's name.
  */
-export function withPageMeta(response: Response, url: URL, siteName?: string): Response {
+export function withPageMeta(
+  response: Response,
+  url: URL,
+  siteName?: string,
+  /** The body is the prerendered app shell (scripts/prerender-app-shell.tsx),
+   *  whose root is the page as it should first paint: keep it. */
+  appShell = false,
+): Response {
   const meta = pageMeta(url);
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
   if (!RDYRCT_SITE) {
     const rewriter = new HTMLRewriter().on("title", new Text(siteName || url.hostname));
-    if (url.pathname !== "/") rewriter.on("#root", new EmptyRoot());
+    if (url.pathname !== "/" && !appShell) rewriter.on("#root", new EmptyRoot());
     return rewriter.transform(response);
   }
   // The build bakes the landing page into index.html, which is also the shell
@@ -228,7 +235,7 @@ export function withPageMeta(response: Response, url: URL, siteName?: string): R
   // marketing page until the bundle replaces it. Pages that are not prerendered
   // ship an empty root instead.
   if (!meta) {
-    if (url.pathname === "/") return response;
+    if (url.pathname === "/" || appShell) return response;
     return new HTMLRewriter().on("#root", new EmptyRoot()).transform(response);
   }
 

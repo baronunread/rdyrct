@@ -443,22 +443,43 @@ export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number])
 
 /**
  * A reload of an app page by somebody signed in (index.html's head script
- * sets data-auth from the cached /user) paints the real shell, from that
- * cache, instead of its skeleton: the shell's chunk is fetched now, in
- * parallel with this one finishing, and the first render waits for it. The
- * wait is capped, so a stalled chunk still gets the skeleton rather than a
- * blank page. Anyone else renders at once.
+ * sets data-auth from the cached /user) starts fetching the shell's chunk
+ * now, alongside this one, rather than when React first asks for it. The
+ * first render does not wait: the skeleton it paints draws the sidebar from
+ * the same cache, identical to the shell that replaces it, so the page is
+ * there at once and the swap moves nothing.
  */
-const SHELL_WAIT_MS = 1500;
 const SHELL_ROOTS = [...appNavItems.map((item) => item.to), "/import", "/admin"];
 
-function renderAfterShell(render: () => void) {
+function prefetchShell() {
   const { pathname } = globalThis.location;
   const inApp = SHELL_ROOTS.some((r) => pathname === r || pathname.startsWith(`${r}/`));
-  if (globalThis.document.documentElement.dataset.auth !== "in" || !inApp) return render();
-  Promise.race([loadShell(), new Promise((resolve) => setTimeout(resolve, SHELL_WAIT_MS))])
-    .catch(() => {})
-    .then(render);
+  if (globalThis.document.documentElement.dataset.auth === "in" && inApp)
+    loadShell().catch(() => {});
+}
+
+/**
+ * The prerendered shell stays on screen until React has drawn its own. React
+ * empties its container on the first commit, before the router has drawn
+ * anything, which showed as a one-frame blank between the two. So the static
+ * copy steps out of #root first, and goes the moment React puts anything in
+ * it: a MutationObserver runs before the browser paints, so the two never
+ * show together and nothing is ever missing.
+ */
+function handOverStaticShell(root: HTMLElement) {
+  const shell = root.querySelector("[data-shell-static]");
+  if (!shell) return;
+  root.before(shell);
+  const done = () => {
+    watch.disconnect();
+    shell.remove();
+  };
+  const watch = new MutationObserver(() => {
+    if (root.childElementCount > 0) done();
+  });
+  watch.observe(root, { childList: true });
+  // Whatever happens, it does not outstay a page that never drew.
+  setTimeout(done, 10_000);
 }
 
 const HYDRATE_WAIT_MS = 3000;
@@ -482,6 +503,8 @@ if (root) {
       .catch(() => {})
       .then(() => hydrateRoot(root, <App />));
   } else {
-    renderAfterShell(() => createRoot(root).render(<App />));
+    prefetchShell();
+    handOverStaticShell(root);
+    createRoot(root).render(<App />);
   }
 }
