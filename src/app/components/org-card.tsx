@@ -31,6 +31,7 @@ export function OrgCard({
   link,
   domain,
   domainSet,
+  domainLive = false,
   invited,
   firstClick = null,
   className,
@@ -41,6 +42,8 @@ export function OrgCard({
   domain: string;
   /** The domain was added, rather than shown as what it could be. */
   domainSet: boolean;
+  /** The added domain is serving. */
+  domainLive?: boolean;
   invited: string[];
   /** The first click on the org, once somebody opens the link. */
   firstClick?: RecentClick | null;
@@ -75,7 +78,7 @@ export function OrgCard({
         <FirstLink link={link} click={firstClick} />
       </CardRow>
       <CardRow label="Domain">
-        <Domain domain={domain} set={domainSet} paid={plan !== "free"} />
+        <Domain domain={domain} set={domainSet} live={domainLive} paid={plan !== "free"} />
       </CardRow>
       <CardRow label="Team">
         <Team invited={invited} />
@@ -145,7 +148,17 @@ function FirstLink({ link, click }: { link: LinkDTO | null; click: RecentClick |
   );
 }
 
-function Domain({ domain, set, paid }: { domain: string; set: boolean; paid: boolean }) {
+function Domain({
+  domain,
+  set,
+  live,
+  paid,
+}: {
+  domain: string;
+  set: boolean;
+  live: boolean;
+  paid: boolean;
+}) {
   return (
     <span className="flex items-center gap-2">
       <span className={cn("truncate font-mono text-[12.5px]", !set && "text-placeholder")}>
@@ -154,7 +167,7 @@ function Domain({ domain, set, paid }: { domain: string; set: boolean; paid: boo
       {!set && !paid && (
         <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">Paid</span>
       )}
-      {set && <LiveStatus done={false} label="Checking DNS" />}
+      {set && <LiveStatus done={live} label={live ? "Live" : "Checking DNS"} />}
     </span>
   );
 }

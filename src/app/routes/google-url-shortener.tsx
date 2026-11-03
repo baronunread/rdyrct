@@ -95,9 +95,9 @@ export function GoogleUrlShortenerPage() {
         <FrameSection title="The short answer">
           <p className="max-w-3xl text-pretty text-muted">
             You cannot make goo.gl links any more, and you have not been able to since 2018. Links
-            that were still getting clicks in late 2024 keep working. Links that were not stopped on
-            August 25, 2025, and will not come back. If you need a link shortener now, make new
-            links on a service you can leave, ideally on a domain you own.
+            that were still getting clicks in late 2024 keep working. The rest stopped on August 25,
+            2025, and will not come back. If you need a link shortener now, make new links on a
+            service you can leave, ideally on a domain you own.
           </p>
         </FrameSection>
 

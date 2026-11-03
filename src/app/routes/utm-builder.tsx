@@ -245,23 +245,24 @@ function UtmFieldsGrid({
 /** The tagged link, each value in its field's colour, or what to do first. */
 function TaggedText({ tagged }: { tagged: string | null }) {
   if (!tagged) return <span className="font-sans text-muted">Paste a link to start.</span>;
-  const { search } = new URL(tagged);
+  const { search, hash } = new URL(tagged);
   const tone = (param: string) => {
     const key = UTM_KEYS.find(([p]) => p === param)?.[1];
     return key ? PARAM_TONE[key] : "text-text";
   };
   // Split on the text itself rather than re-encoding the parameters, so
-  // what shows is exactly `tagged`, character for character.
-  const base = tagged.slice(0, tagged.length - search.length);
+  // what shows is exactly `tagged`, character for character: the address,
+  // the query (none for a link with no tags yet), then any #fragment, which
+  // URLs put after the query.
+  const base = tagged.slice(0, tagged.length - search.length - hash.length);
+  const pairs = search ? search.slice(1).split("&") : [];
   return (
     <>
       <span className="text-muted">{base}</span>
-      {search
-        .slice(1)
-        .split("&")
-        .map((pair, i) => (
-          <QueryPair key={pair.split("=")[0]} pair={pair} lead={i === 0 ? "?" : "&"} tone={tone} />
-        ))}
+      {pairs.map((pair, i) => (
+        <QueryPair key={pair.split("=")[0]} pair={pair} lead={i === 0 ? "?" : "&"} tone={tone} />
+      ))}
+      {hash && <span className="text-muted">{hash}</span>}
     </>
   );
 }
@@ -297,7 +298,8 @@ function QueryPair({
  *  spelling, otherwise what the page does with what you type. A value with
  *  a capital or a space still works, it just reports apart from its twin. */
 function CaseNote({ fields, onTidy }: { fields: UtmFields; onTidy: () => void }) {
-  const untidy = FIELDS.find(({ key }) => fields[key] !== tidy(fields[key]));
+  // Edge spaces alone are no second spelling: the link leaves them out.
+  const untidy = FIELDS.find(({ key }) => fields[key].trim() !== tidy(fields[key]));
   return (
     <div className="flex min-h-8 flex-col items-start justify-between gap-1 px-3 pb-1.5 text-xs sm:flex-row sm:items-center sm:gap-3 sm:px-3.5">
       {untidy ? (
@@ -519,6 +521,11 @@ function useAddressRefusal(address: string) {
   const [reason, setReason] = useState<string | null>(null);
   const [shakes, setShakes] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  // After the shake remounts the field, so focus lands in the new input,
+  // not the one that just left the page.
+  useEffect(() => {
+    if (shakes) input.current?.focus();
+  }, [shakes]);
   return {
     reason,
     shakes,
@@ -527,7 +534,6 @@ function useAddressRefusal(address: string) {
     refuse: () => {
       setReason(addressReason(address));
       setShakes((n) => n + 1);
-      input.current?.focus();
     },
   };
 }

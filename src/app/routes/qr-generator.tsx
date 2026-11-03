@@ -67,7 +67,7 @@ const generateQrInput = v.object({
   dotColor: v.optional(hexColor),
   eyeColor: v.optional(hexColor),
   background: v.optional(backgroundColor),
-  logoSize: v.optional(v.picklist([0.25, 0.5, 0.65])),
+  logoSize: v.optional(v.picklist([0.25, 0.35, 0.5, 0.65])),
 });
 const downloadQrInput = v.object({
   format: v.optional(v.picklist(["png", "svg"])),
@@ -140,7 +140,17 @@ export type QrTypePath = (typeof QR_TYPES)[number]["to"];
 
 /** The code on its stage, or the square it will fill, so typing the first
  * character changes nothing around it. */
-function CodeStage({ encoded, values, name }: { encoded: string; values: QrValues; name: string }) {
+function CodeStage({
+  encoded,
+  values,
+  name,
+  label,
+}: {
+  encoded: string;
+  values: QrValues;
+  name: string;
+  label?: string;
+}) {
   const props = qrPreviewProps(values);
   return (
     // 14px inside the sheet's 20px, with its 6px of padding.
@@ -148,6 +158,7 @@ function CodeStage({ encoded, values, name }: { encoded: string; values: QrValue
       {encoded ? (
         <QRPreview
           url={encoded}
+          label={label}
           {...props}
           sizeClass="size-56 rounded-2xl border-0 shadow-[0_0_0_1px_rgb(0_0_0/0.06),0_18px_40px_-14px_rgb(0_0_0/0.28)] sm:size-64"
         />
@@ -183,6 +194,7 @@ export function QrCard({
   setValues,
   name = "qr",
   current,
+  label,
   children,
 }: {
   /** What the code holds; empty until the fields say enough. */
@@ -193,6 +205,9 @@ export function QrCard({
   name?: string;
   /** Which of the QR pages this is, left out of the links under the card. */
   current: QrTypePath;
+  /** What a screen reader hears for the code, when its text is not for
+   *  reading aloud (a Wi-Fi password). The text it holds, otherwise. */
+  label?: string;
   children: ReactNode;
 }) {
   const [logoName, setLogoName] = useState<string>();
@@ -202,7 +217,7 @@ export function QrCard({
     <div className="flex w-full flex-col gap-4 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]">
       <div className="grid w-full gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-[auto_1fr]">
         <div className="flex min-w-0 flex-col gap-3 px-3 pt-3 sm:px-4 sm:pt-4">{children}</div>
-        <CodeStage encoded={encoded} values={values} name={name} />
+        <CodeStage encoded={encoded} values={values} name={name} label={label} />
         <div className="min-w-0 px-3 pb-1 sm:px-4">
           <QrEditorRows
             look={qrLookOf(values)}
@@ -423,7 +438,7 @@ export function QrGeneratorPage() {
                 { type: "string", pattern: "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$" },
               ],
             },
-            logoSize: { type: "number", enum: [0.25, 0.5, 0.65] },
+            logoSize: { type: "number", enum: [0.25, 0.35, 0.5, 0.65] },
           },
           required: ["value"],
         },

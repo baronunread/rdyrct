@@ -1,4 +1,12 @@
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import * as v from "valibot";
 import { Check, Ellipsis, Pencil, Plus } from "@/app/ui/icons";
@@ -13,6 +21,7 @@ import {
 } from "../lib/hooks";
 import { settle, type PageContext } from "../lib/route-preload";
 import { useCurrentOrg } from "../lib/current-org";
+import { resolveDefaultDomainId } from "../lib/default-domain";
 import { ApiError } from "../lib/api";
 import {
   type PlanLimits,
@@ -313,6 +322,12 @@ function AddDomainField({ model }: { model: DomainsModel }) {
   const [reason, setReason] = useState<string | null>(null);
   const [shakes, setShakes] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // After a shake remounts the form, so focus lands in the new input rather
+  // than falling to the page with the one that left.
+  useEffect(() => {
+    if (shakes) input.current?.focus();
+  }, [shakes]);
   if (domainsBlockedBy(model.limits.domains, !model.canWrite) !== null) return null;
 
   const close = () => {
@@ -323,7 +338,6 @@ function AddDomainField({ model }: { model: DomainsModel }) {
   const refuse = (why: string) => {
     setReason(why);
     setShakes((n) => n + 1);
-    input.current?.focus();
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -346,6 +360,7 @@ function AddDomainField({ model }: { model: DomainsModel }) {
       )}
     >
       <button
+        ref={trigger}
         type="button"
         onClick={() => {
           setOpen(true);
@@ -366,7 +381,13 @@ function AddDomainField({ model }: { model: DomainsModel }) {
       <form
         onSubmit={submit}
         noValidate
-        onKeyDown={(e) => e.key === "Escape" && close()}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          // Back to the button the field grew from, before the field goes
+          // inert, so keyboard focus stays where it was.
+          trigger.current?.focus();
+          close();
+        }}
         onBlur={(e) => {
           if (!value.trim() && !e.currentTarget.contains(e.relatedTarget)) close();
         }}
@@ -464,8 +485,17 @@ function defaultHostOf(
   domains: DomainDTO[] | undefined,
   linkHost: string,
 ): string {
-  const chosen = domains?.find((d) => d.id === org?.defaultDomainId);
-  return chosen ? chosen.hostname : linkHost;
+  const id = servingDefaultId(org, domains);
+  return domains?.find((d) => d.id === id)?.hostname ?? linkHost;
+}
+
+/** The default new links really start on: the stored one while it serves
+ *  (active and unlocked), otherwise none, which is the shared domain. The
+ *  link editor's rule (resolveDefaultDomainId), so the page never marks a
+ *  domain new links will not use. */
+function servingDefaultId(org: UserOrg | null, domains: DomainDTO[] | undefined): string | null {
+  const serving = (domains ?? []).filter((d) => d.status === "active" && d.lockedAt === null);
+  return resolveDefaultDomainId(org?.defaultDomainId, serving);
 }
 
 /** The list, the shared domain last, or the lock before the first domain. */
@@ -735,7 +765,7 @@ function SetupFold({ open, children }: { open: boolean; children: ReactNode }) {
 function DomainRow({ domain: d, model }: { domain: DomainDTO; model: DomainsModel }) {
   const { org, canWrite, pending, actions } = model;
   const graceEndsAt = org?.graceEndsAt ?? null;
-  const isDefault = org?.defaultDomainId === d.id;
+  const isDefault = servingDefaultId(org, model.domains.data) === d.id;
   const locked = d.lockedAt !== null;
   const canPick = canWrite && !locked && d.status === "active" && !pending.savingDefault;
 
@@ -773,7 +803,7 @@ function DomainRow({ domain: d, model }: { domain: DomainDTO; model: DomainsMode
 /** The shared domain, last: always live, the default when nothing else is. */
 function SharedDomainRow({ model }: { model: DomainsModel }) {
   const { org, canWrite, pending, actions, linkHost } = model;
-  const isDefault = !org?.defaultDomainId;
+  const isDefault = servingDefaultId(org, model.domains.data) === null;
   return (
     <div className={cn("group/row rounded-b-xl", isDefault && DEFAULT_TINT)}>
       <div className="flex min-h-[60px] items-center gap-3 py-3 pr-4 pl-2.5">
@@ -848,12 +878,21 @@ function RootRedirectLine({ domain: d, model }: { domain: DomainDTO; model: Doma
   const [value, setValue] = useState(d.rootRedirect);
   const [reason, setReason] = useState<string | null>(null);
   const canEdit = model.canWrite;
+  const view = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  // When the field closes (saved, or Esc), focus goes back to the line it
+  // replaced rather than falling to the page with the input that left.
+  useEffect(() => {
+    if (wasEditing.current && !editing) view.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
 
   if (!editing)
     return (
       <RootRedirectView
         domain={d}
         canEdit={canEdit}
+        buttonRef={view}
         onEdit={() => {
           setValue(d.rootRedirect);
           setReason(null);
@@ -881,15 +920,20 @@ function RootRedirectLine({ domain: d, model }: { domain: DomainDTO; model: Doma
 function RootRedirectView({
   domain: d,
   canEdit,
+  buttonRef,
   onEdit,
 }: {
   domain: DomainDTO;
   canEdit: boolean;
+  buttonRef: RefObject<HTMLButtonElement | null>;
   onEdit: () => void;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
+      // The address as stored: the line drops the scheme and a trailing slash.
+      title={d.rootRedirect || undefined}
       disabled={!canEdit}
       onClick={onEdit}
       className="group/root mt-0.5 inline-flex max-w-full cursor-pointer items-center gap-1.5 text-left text-xs text-muted transition-colors disabled:cursor-default [@media(hover:hover)]:hover:text-text"
@@ -942,11 +986,16 @@ function RootRedirectForm({
   onReason: (reason: string) => void;
   onDone: () => void;
 }) {
+  const reasonId = useId();
   return (
     <form
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
+        // One save at a time: a second PATCH could land after a newer one
+        // and put back the older address. Save stays pressable (it never
+        // greys out); it shows the spinner instead.
+        if (model.pending.savingRedirect) return;
         model.actions.saveRedirect(d, value.trim(), onDone, onReason);
       }}
       onKeyDown={(e) => e.key === "Escape" && onDone()}
@@ -962,6 +1011,7 @@ function RootRedirectForm({
         onChange={(e) => onChange(e.target.value)}
         aria-label={`Where ${d.hostname} with no slug goes`}
         aria-invalid={reason ? true : undefined}
+        aria-describedby={reason ? reasonId : undefined}
         placeholder={`https://${parentDomain(d.hostname)}`}
         inputMode="url"
         autoComplete="off"
@@ -971,7 +1021,11 @@ function RootRedirectForm({
         autoFocus
         className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none! placeholder:text-placeholder"
       />
-      {reason && <span className="text-[11px] whitespace-nowrap text-danger">{reason}</span>}
+      {reason && (
+        <span id={reasonId} role="alert" className="text-[11px] whitespace-nowrap text-danger">
+          {reason}
+        </span>
+      )}
       <button
         type="submit"
         className={buttonClass({ variant: "primary", size: "sm", className: "h-6 px-2" })}

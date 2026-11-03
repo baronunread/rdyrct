@@ -43,6 +43,12 @@ test("a dead link does not advertise rdyrct", async ({ page }) => {
   await expect(page.getByText("Made with rdyrct")).toHaveCount(0);
 });
 
+test("a link page opened directly does not advertise rdyrct either", async ({ request }) => {
+  // The prerendered page served as it is, not through a link's redirect.
+  const html = await (await request.get("/link-disabled")).text();
+  expect(html).not.toContain("Made with rdyrct");
+});
+
 test("nothing in the page reports to rdyrct.com or claims its address", async ({ request }) => {
   const html = await (await request.get("/login")).text();
   expect(html).not.toContain("stats.brnr.dev");

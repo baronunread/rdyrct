@@ -43,6 +43,7 @@ function QrTypePage({
   title,
   intro,
   encoded,
+  label,
   name,
   values,
   setValues,
@@ -54,6 +55,8 @@ function QrTypePage({
   title: string;
   intro: string;
   encoded: string;
+  /** The code's accessible name, when its text is not for reading aloud. */
+  label?: string;
   name: string;
   values: QrValues;
   setValues: Dispatch<SetStateAction<QrValues>>;
@@ -67,7 +70,14 @@ function QrTypePage({
       title={title}
       intro={intro}
       hero={
-        <QrCard encoded={encoded} values={values} setValues={setValues} name={name} current={path}>
+        <QrCard
+          encoded={encoded}
+          label={label}
+          values={values}
+          setValues={setValues}
+          name={name}
+          current={path}
+        >
           {fields}
         </QrCard>
       }
@@ -97,7 +107,11 @@ export function WifiQrPage() {
       path="/wifi-qr-code"
       title="WiFi QR code generator"
       intro="Make a QR code that joins your WiFi network when a guest points a phone camera at it. No typing the password, no account, and the password never leaves your browser."
-      encoded={wifiPayload({ ssid: ssid.trim(), password, security, hidden })}
+      // The name as typed, edge spaces included: a network called " Home"
+      // is not "Home". The image is named for the network, since the code
+      // holds the password and a screen reader would read it out.
+      encoded={wifiPayload({ ssid, password, security, hidden })}
+      label={`QR code to join ${ssid.trim()}`}
       name="wifi-qr"
       values={values}
       setValues={setValues}

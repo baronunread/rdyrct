@@ -312,6 +312,7 @@ function WaitRow({
       <div className="min-w-0 flex-1">
         <LiveStatus
           done={false}
+          announce={false}
           label="Waiting for the connection"
           className="text-sm font-semibold"
         />

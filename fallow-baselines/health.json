@@ -164,8 +164,11 @@
       }
     },
     "src/app/components/qr.tsx": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "src/app/components/same-destination-dialog.tsx": {

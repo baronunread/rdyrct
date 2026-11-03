@@ -97,6 +97,7 @@ export function SetupFlow({
   const kept = useOrgSetup(org.id)?.host;
   const keptAdded = useKeptDomain(org, kept);
   const added = domain ?? keptAdded;
+  const domainLive = useDomainLive(org, added);
   const firstClick = useFirstClick(org.id, !!link);
   const screens = {
     name: () => <NameStep org={org} name={name} onName={setName} onNext={next} />,
@@ -148,6 +149,7 @@ export function SetupFlow({
           link={link}
           domain={added ?? (typed || kept || host)}
           domainSet={!!added}
+          domainLive={domainLive}
           invited={invited}
           firstClick={firstClick}
           className="max-md:order-first"
@@ -184,6 +186,14 @@ function useStepper(orgId: string, start: FlowStep, onDone: () => void) {
 function useKeptDomain(org: UserOrg, kept: string | undefined): string | null {
   const domains = useDomains(org.id, org.plan !== "free" && !!kept);
   return kept && domains.data?.some((d) => d.hostname === kept) ? kept : null;
+}
+
+/** Whether the added domain is serving yet, so the card can say so. */
+function useDomainLive(org: UserOrg, host: string | null): boolean {
+  const domains = useDomains(org.id, org.plan !== "free" && !!host);
+  return !!domains.data?.some(
+    (d) => d.hostname === host && d.status === "active" && d.lockedAt === null,
+  );
 }
 
 /** The org's first click, asked for every few seconds once there is a

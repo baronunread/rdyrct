@@ -50,7 +50,7 @@ import {
 } from "./kv";
 import { disabledPage, heldPage, warnPage } from "./link-state-page";
 import { purgeBannedOrgs, settleBannedOrgs } from "./abuse-hold";
-import { notFoundPage } from "./not-found-page";
+import { madeWith, notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
@@ -539,7 +539,15 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
   // A conditional request can be a 304 with no body; only HTML fallback
   // responses need the soft-404 status conversion.
-  return finalizeSpaResponse(assetResponse, url, c.env.SITE_NAME, status);
+  return withoutMadeWith(finalizeSpaResponse(assetResponse, url, c.env.SITE_NAME, status));
+}
+
+/** A self-hosted copy serves the link pages' prerendered HTML here too
+ *  (/link-disabled and its siblings, opened directly), and a fork must not
+ *  advertise us: the same rule madeWith applies on the redirect path. */
+function withoutMadeWith(response: Response): Response {
+  if (RDYRCT_SITE || !response.headers.get("content-type")?.includes("text/html")) return response;
+  return madeWith(new HTMLRewriter(), null, "page").transform(response);
 }
 
 /* ---------------- shared-domain slug redirect ---------------- */

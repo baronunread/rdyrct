@@ -863,7 +863,7 @@ function DomainRow({
           </span>
         </div>
         {domain ? (
-          <LiveStatus done={domain.status === "active"} label={domainState(domain)} />
+          <ImportDomainStatus domain={domain} label={domainState(domain)} />
         ) : (
           <HostActions
             orgId={orgId}
@@ -892,6 +892,24 @@ function DomainRow({
       )}
     </div>
   );
+}
+
+/** A domain's state while it moves over: the live dot while it checks
+ *  and once it is ready, but a failed check is still and says why, rather
+ *  than pinging "Checking" for ever. */
+function ImportDomainStatus({ domain, label }: { domain: DomainDTO; label: string }) {
+  if (domain.status === "error")
+    return (
+      <span
+        title={domain.statusReason || undefined}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-danger"
+      >
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-danger" />
+        Failed
+        {domain.statusReason && <span className="sr-only">: {domain.statusReason}</span>}
+      </span>
+    );
+  return <LiveStatus done={domain.status === "active"} label={label} />;
 }
 
 function domainState(domain: DomainDTO) {
@@ -1244,8 +1262,8 @@ function SwitchStep({
             <li key={host} className="flex flex-col gap-3 px-4 py-3">
               <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
                 <span className="font-mono text-sm break-all">{host}</span>
-                <LiveStatus
-                  done={ready}
+                <ImportDomainStatus
+                  domain={domain}
                   label={ready ? "Ready to switch" : "Checking TXT records"}
                 />
               </div>

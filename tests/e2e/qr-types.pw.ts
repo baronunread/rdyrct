@@ -7,7 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function expectCode(page: Page, holds: RegExp) {
-  const code = page.getByRole("img", { name: /^QR code for/ });
+  const code = page.getByRole("img", { name: /^QR code (for|to join)/ });
   await expect(code.locator("svg")).toBeVisible({ timeout: 10_000 });
   await expect(code).toHaveAttribute("aria-label", holds);
   await expect(page.getByRole("button", { name: /PNG/ })).toBeEnabled();
@@ -22,11 +22,13 @@ test("the WiFi page draws a code that joins the network", async ({ page }) => {
 
   await page.getByLabel("Network name").fill("Cafe;guests");
   await page.getByLabel("Password").fill("hunter22");
-  await expectCode(page, /^QR code for WIFI:T:WPA;S:Cafe\\;guests;P:hunter22;;$/);
+  // Named for the network, never for the payload: that holds the password.
+  await expectCode(page, /^QR code to join Cafe;guests$/);
+  await expect(page.getByRole("img", { name: /hunter22/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Security" }).click();
   await page.getByRole("menuitem", { name: "None (open network)" }).click();
-  await expectCode(page, /^QR code for WIFI:T:nopass;S:Cafe\\;guests;;$/);
+  await expectCode(page, /^QR code to join Cafe;guests$/);
 });
 
 test("the vCard page draws a contact card", async ({ page }) => {

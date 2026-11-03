@@ -16,6 +16,7 @@ export function LiveStatus({
   done,
   label,
   className,
+  announce = true,
 }: {
   /** Whether the check has settled. */
   done: boolean;
@@ -23,6 +24,9 @@ export function LiveStatus({
    * result once done ("Live"). */
   label: string;
   className?: string;
+  /** Say the change aloud when it settles. Off inside a region that
+   *  already announces (a role="status" around it), or it is said twice. */
+  announce?: boolean;
 }) {
   // What it said on arrival, read once and never set: a status already
   // settled then has no news, and the first label renders still.
@@ -31,6 +35,7 @@ export function LiveStatus({
   const firstLabel = arrival.label;
   return (
     <span
+      aria-live={announce ? "polite" : undefined}
       className={cn(
         "live-status",
         done && "live-status-done",
