@@ -29,9 +29,12 @@ function flagPath(code: string): string | undefined {
 }
 
 /** The flag's URL: at once when this page has loaded it before, else after
- *  its module arrives; undefined meanwhile. */
-function useFlagUrl(path: string | undefined): string | undefined {
-  const [url, setUrl] = useState(() => (path ? known.get(path) : undefined));
+ *  its module arrives; undefined meanwhile, and null when it failed to load
+ *  (a placeholder left for ever reads as still loading). */
+function useFlagUrl(path: string | undefined): string | null | undefined {
+  const [url, setUrl] = useState<string | null | undefined>(() =>
+    path ? known.get(path) : undefined,
+  );
   useEffect(() => {
     if (!path || known.has(path)) return setUrl(path ? known.get(path) : undefined);
     let live = true;
@@ -40,7 +43,9 @@ function useFlagUrl(path: string | undefined): string | undefined {
         known.set(path, loaded);
         if (live) setUrl(loaded);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (live) setUrl(null);
+      });
     return () => {
       live = false;
     };
@@ -71,7 +76,7 @@ export function SourceTile({ source }: { source: string }) {
 export function Flag({ code }: { code: string }) {
   const path = flagPath(code);
   const src = useFlagUrl(path);
-  if (!path)
+  if (!path || src === null)
     return <IconWorld aria-hidden size={16} stroke={1.75} className="shrink-0 text-muted" />;
   // The flag's own circle while it loads, so the row does not move.
   if (!src) return <span aria-hidden className="size-4 shrink-0 rounded-full bg-surface-2" />;

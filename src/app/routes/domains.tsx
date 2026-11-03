@@ -743,15 +743,19 @@ function domainRowActions(d: DomainDTO, model: DomainsModel, isDefault: boolean)
 function SetupFold({ open, children }: { open: boolean; children: ReactNode }) {
   // Rows from 0fr to 1fr (as the phone menu grows), not a height tween: it
   // reaches the content's own height without animating a layout property.
-  // The setup stays mounted until the fold has shut, then goes.
+  // The setup stays mounted until the fold has shut (its 900ms wait and
+  // 300ms close), then goes, so its records query stops with it. A timer
+  // rather than transitionend, which never fires under reduced motion.
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) setMounted(true);
+  useEffect(() => {
+    if (open || !mounted) return;
+    const t = setTimeout(() => setMounted(false), 1250);
+    return () => clearTimeout(t);
+  }, [open, mounted]);
   return (
     <div
       inert={!open}
-      onTransitionEnd={(e) => {
-        if (!open && e.target === e.currentTarget) setMounted(false);
-      }}
       className={cn(
         "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
         open ? "grid-rows-[1fr] opacity-100 delay-100" : "grid-rows-[0fr] opacity-0 delay-[900ms]",
