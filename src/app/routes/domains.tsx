@@ -50,12 +50,11 @@ import { displayUrl, parentDomain } from "../lib/domain-display";
 import { displayHost } from "../lib/display-url";
 import { graceLabel, graceRunning } from "../lib/grace";
 import { relativeDate, shortDate } from "../lib/dates";
-import { CopyButton } from "../ui/copy-button";
 import { LiveStatus } from "../ui/live-status";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
-import { DnsRecords } from "../components/dns-records";
+import { DnsRecords, RecordLine } from "../components/dns-records";
 import { recheckMessage } from "../lib/domain-messages";
 import posthog from "../lib/posthog";
 import { Tooltip } from "@/app/ui/tooltip";
@@ -171,7 +170,7 @@ function fieldReason(e: Error): string | null {
  * this is about what its buttons do.
  */
 function useDomainActions({
-  mutations: { add, refresh, setRootRedirect, remove, setDefault },
+  mutations: { add, refresh, retry: retryMutation, setRootRedirect, remove, setDefault },
   toast,
   deleting,
   setDeleting,
@@ -207,6 +206,12 @@ function useDomainActions({
       onError: withErrorToast(toast),
     });
   };
+
+  const retry = (d: DomainDTO) =>
+    retryMutation.mutate(d.id, {
+      onSuccess: () => toast(`Checking ${d.hostname} again`),
+      onError: withErrorToast(toast),
+    });
 
   /** Saves a root redirect. A refusal about the address comes back for the
    * field in the row. */
@@ -257,7 +262,7 @@ function useDomainActions({
     });
   };
 
-  return { copy, addDomain, recheck, saveRedirect, makeDefault, confirmDelete };
+  return { copy, addDomain, recheck, retry, saveRedirect, makeDefault, confirmDelete };
 }
 
 function useDomainsModel(orgId: string, limits: PlanLimits) {
@@ -290,6 +295,7 @@ function useDomainsModel(orgId: string, limits: PlanLimits) {
     pending: {
       adding: mutations.add.isPending,
       refreshing: mutations.refresh.isPending,
+      retrying: mutations.retry.isPending,
       savingRedirect: mutations.setRootRedirect.isPending,
       savingDefault: mutations.setDefault.isPending,
       removing: mutations.remove.isPending,
@@ -716,17 +722,23 @@ const DEFAULT_TINT =
  * locked org; only writes go. The default is only offered on a domain that
  * is actually serving (#69): preselecting one still waiting on DNS would
  * hand every new link an address that resolves nowhere. */
+/** Re-check a domain still checking; try again on one whose check gave up
+ * (its links may use it, so deleting it is no way out). */
+function checkActions(d: DomainDTO, { canWrite, pending, actions }: DomainsModel): RowAction[] {
+  if (transitional(d.status))
+    return [
+      { label: "Re-check now", onClick: () => actions.recheck(d), disabled: pending.refreshing },
+    ];
+  if (canWrite && d.status === "error")
+    return [{ label: "Try again", onClick: () => actions.retry(d), disabled: pending.retrying }];
+  return [];
+}
+
 function domainRowActions(d: DomainDTO, model: DomainsModel, isDefault: boolean): RowAction[] {
   const { canWrite, pending, actions } = model;
   const locked = d.lockedAt !== null;
   const serving = !locked && d.status === "active";
-  const items: RowAction[] = [];
-  if (!locked && transitional(d.status))
-    items.push({
-      label: "Re-check now",
-      onClick: () => actions.recheck(d),
-      disabled: pending.refreshing,
-    });
+  const items: RowAction[] = locked ? [] : checkActions(d, model);
   if (canWrite && serving)
     items.push({
       label: isDefault ? `Stop defaulting to ${d.hostname}` : `Default new links to ${d.hostname}`,
@@ -1059,24 +1071,18 @@ function DomainSetup({ domain: d, model }: { domain: DomainDTO; model: DomainsMo
         <DnsRecords orgId={model.org?.id ?? ""} domain={d} showCname={false} />
       </div>
     );
-  const record = `Type: CNAME\nName: ${d.hostname}\nValue: ${model.appHost}`;
   return (
     <div className="pr-4 pb-4 pl-[3.25rem]">
       <p className="mb-2 text-xs text-pretty text-muted">
         Add this record where <b className="font-semibold text-text">{parent}</b>'s DNS is managed,
         or send it to whoever looks after it. It usually works within minutes.
       </p>
-      <div className="flex h-11 items-center gap-3 rounded-[10px] bg-bg py-1 pr-1 pl-3 shadow-[inset_0_0_0_1px_var(--border)]">
-        <span className="shrink-0 rounded-[5px] px-1.5 text-[11px] text-muted shadow-[inset_0_0_0_1px_var(--border)]">
-          CNAME
-        </span>
-        <code className="min-w-0 truncate font-mono text-[13px]">{d.hostname}</code>
-        <span aria-hidden className="shrink-0 text-placeholder">
-          →
-        </span>
-        <code className="min-w-0 flex-1 truncate font-mono text-[13px]">{model.appHost}</code>
-        <CopyButton text={record} label="Copy the record" onCopy={model.actions.copy} />
-      </div>
+      <RecordLine
+        type="CNAME"
+        name={d.hostname}
+        value={model.appHost}
+        onCopy={model.actions.copy}
+      />
     </div>
   );
 }

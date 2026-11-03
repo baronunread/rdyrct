@@ -410,13 +410,13 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 4
+        "count": 2
       },
       "crap_high": {
-        "count": 3
+        "count": 9
       },
       "crap_moderate": {
-        "count": 3
+        "count": 7
       }
     },
     "src/app/routes/links.tsx": {
@@ -587,7 +587,6 @@
     "src/app/routes/admin/links.tsx:hidden coupling",
     "src/worker/routes/admin-links.ts:hidden coupling",
     "tests/consent.test.ts:hidden coupling",
-    "src/app/components/org-card.tsx:hidden coupling",
     "tests/e2e/pages.ts:hidden coupling",
     "playwright.config.ts:hidden coupling",
     "src/worker/security-headers.ts:hidden coupling",

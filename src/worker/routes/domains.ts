@@ -167,6 +167,17 @@ export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<
 const ACTIVATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const TXT_ACTIVATION_TIMEOUT_MS = 7 * ACTIVATION_TIMEOUT_MS;
 
+/** When the current check of a domain gives up: a day after it started, or a
+ * week for TXT validation. "Try again" restarts it (checkingSince). */
+function checkDeadline(row: {
+  validation: DomainDTO["validation"];
+  checkingSince: number | null;
+  createdAt: number;
+}): number {
+  const timeout = row.validation === "txt" ? TXT_ACTIVATION_TIMEOUT_MS : ACTIVATION_TIMEOUT_MS;
+  return (row.checkingSince ?? row.createdAt) + timeout;
+}
+
 /** One probe's outcome. `pending` carries the current status for logging/tests. */
 export type DomainProbe =
   | { state: "pending"; status: "checking_dns" | "issuing_tls" }
@@ -233,14 +244,13 @@ export async function probeDomain(env: Env, domainId: string): Promise<DomainPro
   if (row.status === "active") return { state: "active" };
   if (row.status === "error") return { state: "error", reason: row.statusReason };
 
-  const deadline = row.validation === "txt" ? TXT_ACTIVATION_TIMEOUT_MS : ACTIVATION_TIMEOUT_MS;
-  if (Date.now() - row.createdAt > deadline) {
+  if (Date.now() > checkDeadline(row)) {
     const reason =
       row.validation === "txt"
-        ? "We never saw the TXT records. Check them at your DNS provider, then delete and re-add the domain."
+        ? "We never saw the TXT records. Check them at your DNS provider, then try again."
         : row.status === "checking_dns"
-          ? "We never saw the CNAME record resolve. Check it at your DNS provider, then delete and re-add the domain."
-          : "The TLS certificate was never issued. Delete and re-add the domain to try again.";
+          ? "We never saw the CNAME record resolve. Check it at your DNS provider, then try again."
+          : "The TLS certificate was never issued. Try again.";
     await db
       .update(schema.domains)
       .set({ status: "error", statusReason: reason })
@@ -268,12 +278,17 @@ export async function probeDomain(env: Env, domainId: string): Promise<DomainPro
 
 /**
  * Seconds to wait before the next probe. Fast at first (a pre-created CNAME
- * resolves in seconds), then a steady interval. Sleeps do not count toward the
- * Workflow step limit, and the 24h deadline in probeDomain bounds the loop.
+ * resolves in seconds), then every 5 minutes for about a day, then every 15:
+ * records somebody adds by hand days later do not need minute-by-minute
+ * checks, and each probe is a billed Workflow step and a Cloudflare API call.
+ * Sleeps do not count toward the step limit; the deadline in probeDomain
+ * bounds the loop (a week of TXT checks is about 870 probes).
  */
+const PROBE_RAMP = [5, 5, 10, 20, 30, 60, 120];
+const PROBES_AT_FIVE_MINUTES = 288;
 export function probeDelaySeconds(attempt: number): number {
-  const ramp = [5, 5, 10, 20, 30, 60, 120];
-  return attempt < ramp.length ? ramp[attempt] : 300;
+  if (attempt < PROBE_RAMP.length) return PROBE_RAMP[attempt];
+  return attempt < PROBE_RAMP.length + PROBES_AT_FIVE_MINUTES ? 300 : 900;
 }
 
 /* ---------------- routes ---------------- */
@@ -293,6 +308,7 @@ function toDTO(row: typeof schema.domains.$inferSelect): DomainDTO {
     rootRedirect: row.rootRedirect,
     validation: row.validation,
     createdAt: row.createdAt,
+    checkUntil: row.status === "active" || row.status === "error" ? null : checkDeadline(row),
     lockedAt: row.lockedAt,
   };
 }
@@ -381,6 +397,7 @@ domainRoutes.post("/", async (c) => {
     cfHostnameId: null,
     validation,
     lockedAt: null,
+    checkingSince: null,
     createdAt: Date.now(),
   };
   // Atomic: the org's domains cap is re-checked at write time inside one D1
@@ -420,6 +437,47 @@ domainRoutes.get("/:id", async (c) => {
   log.set({ orgId: c.req.param("orgId"), domainId: c.req.param("id") });
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
   return c.json(toDTO(row));
+});
+
+// Try again, on a domain whose check gave up. Its links may already use it
+// (an import onto a domain still checking), so delete-and-re-add is no way
+// out: this restarts the check, with a fresh deadline, in a new activation.
+// The Cloudflare hostname id is cleared so the activation looks it up again,
+// or creates it if Cloudflare dropped it meanwhile.
+domainRoutes.post("/:id/retry", async (c) => {
+  const log = c.get("log");
+  const orgId = c.req.param("orgId")!;
+  log.set({ orgId, domainId: c.req.param("id") });
+  const row = await getDomain(c, orgId, c.req.param("id"));
+  if (row.status !== "error")
+    throw new HTTPException(409, { message: "This domain is not waiting on a retry" });
+  if (row.lockedAt)
+    throw new HTTPException(409, {
+      message: "This domain is beyond your plan, so it stays as it is",
+    });
+  const now = Date.now();
+  const [retried] = await c.var.db
+    .update(schema.domains)
+    .set({ status: "checking_dns", statusReason: "", checkingSince: now, cfHostnameId: null })
+    .where(and(eq(schema.domains.id, row.id), eq(schema.domains.status, "error")))
+    .returning();
+  if (!retried) throw new HTTPException(409, { message: "This domain is not waiting on a retry" });
+  try {
+    // A new instance id: the first activation, keyed by the row id, still exists.
+    await c.env.DOMAIN_ACTIVATE.create({
+      id: `${row.id}-${now}`,
+      params: { domainId: row.id, hostname: row.hostname },
+    });
+  } catch (err) {
+    log.error(err instanceof Error ? err : new Error(String(err)));
+    Sentry.captureException(err);
+    await c.var.db
+      .update(schema.domains)
+      .set({ status: "error", statusReason: row.statusReason, cfHostnameId: row.cfHostnameId })
+      .where(eq(schema.domains.id, row.id));
+    throw new HTTPException(502, { message: "Could not start the check, please try again" });
+  }
+  return c.json(toDTO(retried));
 });
 
 /**

@@ -342,6 +342,9 @@ export const domains = sqliteTable(
     // entry and the Cloudflare hostname all stay, so an upgrade restores it
     // with no re-verification. Null means fine.
     lockedAt: integer("locked_at"),
+    // When the current check started, if not at creation: "Try again" on a
+    // failed domain restarts its deadline from here (migration 0052).
+    checkingSince: integer("checking_since"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [index("idx_domains_org").on(t.orgId)],

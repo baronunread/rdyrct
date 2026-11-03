@@ -308,6 +308,10 @@ linkImportRoutes.post("/", requireOrgRole("member"), async (c) => {
   return c.json({ id }, 201);
 });
 
+/** Rows one insert into link_import_rows takes: eight columns each (the
+ * status and reason defaults included) under D1's 100 bound variables. */
+const ROWS_PER_INSERT = 12;
+
 /** A chunk of the file's rows. Sent again after an interruption, a row
  * already here is left alone (same line). */
 linkImportRoutes.post("/:id/rows", requireOrgRole("member"), async (c) => {
@@ -316,19 +320,26 @@ linkImportRoutes.post("/:id/rows", requireOrgRole("member"), async (c) => {
   if (job.status !== "uploading")
     throw new HTTPException(409, { message: "This import is no longer taking rows." });
   const { rows } = parseBody(rowsBody(CHECK_CHUNK_ROWS), await c.req.json<JsonValue>());
-  await db
-    .insert(schema.linkImportRows)
-    .values(
-      rows.map((row) => ({
-        importId: job.id,
-        line: row.line,
-        host: row.host.toLowerCase(),
-        slug: row.slug,
-        destination: row.destination,
-        title: row.title,
-      })),
-    )
-    .onConflictDoNothing();
+  const values = rows.map((row) => ({
+    importId: job.id,
+    line: row.line,
+    host: row.host.toLowerCase(),
+    slug: row.slug,
+    destination: row.destination,
+    title: row.title,
+  }));
+  // D1 binds at most 100 variables a statement, so a whole chunk is several
+  // inserts, sent as one batch.
+  const inserts = [];
+  for (let i = 0; i < values.length; i += ROWS_PER_INSERT)
+    inserts.push(
+      db
+        .insert(schema.linkImportRows)
+        .values(values.slice(i, i + ROWS_PER_INSERT))
+        .onConflictDoNothing(),
+    );
+  const [first, ...rest] = inserts;
+  if (first) await db.batch([first, ...rest]);
   return c.json({ ok: true });
 });
 

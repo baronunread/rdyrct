@@ -339,6 +339,9 @@ export interface DomainDTO {
    * through TXT records, so it can be ready before its CNAME switches. */
   validation: "http" | "txt";
   createdAt: number;
+  /** Epoch ms the current check gives up, while the domain is still being
+   * checked; null once it is active or has failed. */
+  checkUntil: number | null;
   /**
    * Epoch ms this domain went beyond the org's plan (#159), or null while it
    * is fine. A locked domain keeps serving until the org's `graceEndsAt`,

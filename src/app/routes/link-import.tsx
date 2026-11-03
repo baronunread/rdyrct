@@ -33,7 +33,13 @@ import {
 } from "@/shared/link-import";
 import type { DomainDTO, OrgRole } from "@/shared/types";
 import { api, ApiError } from "../lib/api";
-import { useConfig, useDomains, useLinkImport, useLinkQuotaUsage } from "../lib/hooks";
+import {
+  useConfig,
+  useDomainMutations,
+  useDomains,
+  useLinkImport,
+  useLinkQuotaUsage,
+} from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { useImportHistory, tableDate } from "../lib/links-data";
 import { useQueryClient } from "@tanstack/react-query";
@@ -45,12 +51,11 @@ import { PageHeader, Table, Td, Th } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { Segmented } from "../ui/segmented";
 import { useToast } from "../ui/toast";
-import { Check } from "../ui/icons";
+import { Check, ChevronDown } from "../ui/icons";
 import { cn } from "../ui/cn";
 import { LockedPanel } from "../components/over-limit";
 import { NoOrgState } from "../components/no-org";
-import { DnsRecords } from "../components/dns-records";
-import { CopyButton } from "../ui/copy-button";
+import { DnsRecords, RecordLine } from "../components/dns-records";
 import { LiveStatus } from "../ui/live-status";
 import { copyToClipboard } from "../lib/clipboard";
 
@@ -227,58 +232,52 @@ type CheckState =
   | { kind: "failed"; message: string };
 
 /** What the form says is wrong after Import, in the place it is wrong. */
-type FormError = { at: "file" | "domains" | "rows"; message: string } | null;
+type FormError = { at: "file" | "rows"; message: string } | null;
 
-// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one form across the file, domain and row steps; split tracked in #422.
-function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
-  const { limits, activeDomains, defaultDomainId } = useOrgLimits();
-  const quota = useLinkQuotaUsage(orgId);
-  const toast = useToast();
-  const qc = useQueryClient();
-  const [service, setService] = useState<ImportServiceId>("bitly");
-  const [file, setFile] = useState<FileState | null>(null);
-  const [into, setInto] = useState<string | null>(null);
-  const [skipped, setSkipped] = useState<string[]>([]);
+/**
+ * What happens to one host's links when they keep their domain, decided here
+ * before anything is sent. Rows on a domain the org has go to the check
+ * whatever state the domain is in: they are saved now and answer once it is
+ * live. Rows on the old service's own short domain (bit.ly) move to the
+ * org's default domain, the one place they can go. Rows on a host it lacks,
+ * or one left out, stay out with the reason on their row, so no host holds
+ * the rest back. Members cannot list the org's
+ * domains, so theirs all go and the check says which hosts the org lacks.
+ */
+type HostPlan =
+  | { kind: "domain"; domain: DomainDTO }
+  | { kind: "unknown" }
+  | { kind: "missing" }
+  | { kind: "service"; onto: string | null }
+  | { kind: "skipped" };
+
+function planHost(
+  host: string,
+  skipped: Set<string>,
+  byHost: Map<string, DomainDTO> | null,
+  fallback: string | null,
+): HostPlan {
+  if (skipped.has(host)) return { kind: "skipped" };
+  if (SERVICE_HOSTS.has(host)) return { kind: "service", onto: fallback };
+  if (!byHost) return { kind: "unknown" };
+  const domain = byHost.get(host);
+  return domain ? { kind: "domain", domain } : { kind: "missing" };
+}
+
+const sends = (plan: HostPlan | undefined) =>
+  plan?.kind === "domain" || plan?.kind === "unknown" || (plan?.kind === "service" && !!plan.onto);
+
+/** A domain still waiting on its TXT records, which the page can show: one
+ * whose check gave up too, so they can be added before trying again. */
+const needsRecords = (plan: HostPlan | undefined) =>
+  plan?.kind === "domain" && plan.domain.validation === "txt" && plan.domain.status !== "active";
+
+/** Checks `rows` as soon as there are any: nothing is written, and the answer
+ * is what the counts and the Import button say. */
+function useCheck(orgId: string, rows: ImportRow[]): CheckState {
   const [check, setCheck] = useState<CheckState>({ kind: "idle" });
-  const [error, setError] = useState<FormError>(null);
-  const [sending, setSending] = useState<{ done: number; total: number } | null>(null);
-  const dropRef = useRef<HTMLLabelElement>(null);
-
-  const read = useMemo(() => readFile(file), [file]);
-  const fileHosts = useMemo(() => hostsOf(read.rows), [read.rows]);
-
-  // The select's starting point: a file on the service's own short domain
-  // has to land somewhere of ours; one on the person's own domains keeps
-  // them. Their own pick wins once they make one.
-  const defaultHost =
-    activeDomains.find((d) => d.id === defaultDomainId)?.hostname ?? activeDomains[0]?.hostname;
-  const target =
-    into ?? (fileHosts.some((h) => SERVICE_HOSTS.has(h)) && defaultHost ? defaultHost : KEEP);
-  const keep = target === KEEP;
-
-  // The rows as they will be sent: moved onto the chosen domain, or on
-  // their own less any domain the person left out.
-  const skippedSet = useMemo(() => new Set(skipped), [skipped]);
-  const rows = useMemo(() => {
-    if (!keep) return read.rows.map((row) => ({ ...row, host: target }));
-    return read.rows.filter((row) => !skippedSet.has(row.host));
-  }, [read.rows, keep, target, skippedSet]);
-
-  const canManage = role === "owner" || role === "admin";
-  const domains = useDomains(orgId, canManage);
-  const byHost = new Map((domains.data ?? []).map((d) => [d.hostname, d]));
-  // Hosts the file keeps that the org does not have ready. Members cannot
-  // list the org's domains, so for them the check says which hosts it lacks.
-  const waiting =
-    keep && canManage
-      ? fileHosts.filter((h) => !skippedSet.has(h) && byHost.get(h)?.status !== "active")
-      : [];
-  const domainsKey = (domains.data ?? []).map((d) => `${d.hostname}:${d.status}`).join();
-
-  // Check as soon as there is something checkable: nothing is written, and
-  // the answer is what the Import button and the hint need to say.
   useEffect(() => {
-    if (!rows.length || waiting.length) {
+    if (!rows.length) {
       setCheck({ kind: "idle" });
       return;
     }
@@ -300,63 +299,61 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
     return () => {
       current = false;
     };
-    // `waiting` is derived from domainsKey; listing the key keeps a new
-    // array each render from re-running the check.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, rows, waiting.length, domainsKey]);
+  }, [orgId, rows]);
+  return check;
+}
 
-  const verdicts = check.kind === "checked" ? check.verdicts : [];
-  const readyLines = new Set(verdicts.filter((v) => v.status === "ready").map((v) => v.line));
-  const ready = rows.filter((row) => readyLines.has(row.line));
-  const exists = verdicts.filter((v) => v.status === "exists").length;
-  const room =
-    check.kind === "checked" && check.room !== null
-      ? check.room
-      : Math.max(0, limits.links - (quota.data?.count ?? 0));
-  const fits = Math.min(room, ready.length);
-  const problems = problemsOf(rows, verdicts, read.unreadable);
+/** What one Import will do, counted from the check. */
+interface Tally {
+  /** Saved and answering at once. */
+  now: number;
+  /** Saved now, answering once their domain is live. */
+  following: number;
+  exists: number;
+  /** On a host left out or not on rdyrct, never sent. */
+  leftOut: number;
+  /** Unreadable, or refused by the check. */
+  refused: number;
+  /** Ready, past the plan's room. */
+  over: number;
+}
+
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one form across the file, its domains and the counts; split tracked in #422.
+function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
+  const { limits, activeDomains } = useOrgLimits();
+  const quota = useLinkQuotaUsage(orgId);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [service, setService] = useState<ImportServiceId>("bitly");
+  const [file, setFile] = useState<FileState | null>(null);
+  const [into, setInto] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [error, setError] = useState<FormError>(null);
+  const [sending, setSending] = useState<{ done: number; total: number } | null>(null);
+  const dropRef = useRef<HTMLLabelElement>(null);
+
+  const read = useMemo(() => readFile(file), [file]);
+  const { target, keep, plans, rows } = useHostPlans(orgId, role, read, into, skipped);
+  const check = useCheck(orgId, rows);
+  const roomLeft = Math.max(0, limits.links - (quota.data?.count ?? 0));
+  const { tally, ready, fits, room, problems } = tallyOf(read, rows, check, roomLeft, (host) => {
+    const plan = plans.get(host);
+    return keep && plan?.kind === "domain" && plan.domain.status !== "active";
+  });
 
   const choose = async (picked: File | undefined) => {
     if (!picked) return;
-    const table = parseCsv(await picked.text());
-    setError(null);
+    const opened = openTable(picked.name, parseCsv(await picked.text()));
     setSkipped([]);
-    if (!table.length) {
-      setFile(null);
-      setError({ at: "file", message: "That file has no rows" });
-      return;
-    }
-    if (table.length - 1 > MAX_ROWS) {
-      setFile(null);
-      setError({ at: "file", message: `Over ${MAX_ROWS.toLocaleString("en-US")} links` });
-      return;
-    }
-    setFile({ name: picked.name, table, map: detectColumns(table[0]), hasHeader: true });
+    setError("error" in opened ? { at: "file", message: opened.error } : null);
+    setFile("error" in opened ? null : opened);
   };
 
   const submit = async () => {
-    if (!file || !read.rows.length) {
-      setError({ at: "file", message: file ? "No links in this file" : "Choose a file first" });
-      dropRef.current?.focus();
-      return;
-    }
-    if (waiting.length) {
-      setError({ at: "domains", message: "Add these domains first, or leave them out" });
-      return;
-    }
-    if (check.kind !== "checked" || !fits) {
-      setError({
-        at: "rows",
-        message:
-          check.kind === "checking"
-            ? "Still checking the file"
-            : check.kind === "failed"
-              ? check.message
-              : "None of these links can import",
-      });
-      return;
-    }
-    setError(null);
+    const blocked = blockedBy(file, read, check, fits);
+    setError(blocked);
+    if (blocked?.at === "file") dropRef.current?.focus();
+    if (blocked) return;
     const send = ready.slice(0, fits);
     setSending({ done: 0, total: send.length });
     try {
@@ -402,16 +399,13 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
         onFile={(f) => void choose(f)}
       />
       {info && (
-        <details className="group -mt-1 text-sm">
-          <summary className="w-fit cursor-pointer text-xs text-muted [@media(hover:hover)]:hover:text-text">
-            How to export from {info.name}
-          </summary>
-          <ol className="mt-2 flex max-w-prose list-decimal flex-col gap-1 pl-5 text-pretty text-muted">
+        <Disclosure className="-mt-1" summary={`How to export from ${info.name}`}>
+          <ol className="flex max-w-prose list-decimal flex-col gap-1 pl-5 text-pretty text-muted">
             {info.steps.map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ol>
-        </details>
+        </Disclosure>
       )}
       {file && !file.map && <ColumnPicker file={file} onChange={setFile} />}
 
@@ -434,134 +428,241 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
         </div>
       )}
 
-      {keep && fileHosts.length > 0 && (waiting.length > 0 || skipped.length > 0) && (
-        <div className="flex flex-col gap-2">
-          <p className="flex items-baseline justify-between gap-3 text-xs text-muted">
-            The domains in this file
-            {error?.at === "domains" && <span className="text-danger">{error.message}</span>}
-          </p>
-          <ul className={LIST_CARD}>
-            {fileHosts.map((host) => (
-              <li key={host}>
-                {SERVICE_HOSTS.has(host) && !skippedSet.has(host) ? (
-                  <ServiceHostRow
-                    host={host}
-                    links={read.rows.filter((r) => r.host === host).length}
-                    hasDomains={activeDomains.length > 0}
-                    onSkip={() => setSkipped([...skipped, host])}
-                  />
-                ) : (
-                  <DomainRow
-                    orgId={orgId}
-                    host={host}
-                    links={read.rows.filter((r) => r.host === host).length}
-                    domain={byHost.get(host)}
-                    canManage={canManage}
-                    skipped={skippedSet.has(host)}
-                    onSkip={(skip) =>
-                      setSkipped(skip ? [...skipped, host] : skipped.filter((h) => h !== host))
-                    }
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
+      {keep && plans.size > 0 && (
+        <FileDomains
+          key={file?.name}
+          orgId={orgId}
+          rows={read.rows}
+          plans={plans}
+          onSkip={(host, skip) =>
+            setSkipped(skip ? [...skipped, host] : skipped.filter((h) => h !== host))
+          }
+        />
+      )}
+
+      <div className="-mx-4 -mb-4 flex flex-col gap-3 px-4 py-4 shadow-[inset_0_1px_0_var(--border)] sm:-mx-5 sm:-mb-5 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <Counts
+            check={check}
+            tally={tally}
+            room={room}
+            error={error?.at === "rows" ? error.message : undefined}
+            unlimited={limits.links >= 1_000_000}
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            className="max-sm:h-11 max-sm:w-full"
+            onClick={() => void submit()}
+          >
+            {check.kind === "checked" && fits > 0
+              ? `Import ${n(fits)} ${fits === 1 ? "link" : "links"}`
+              : "Import"}
+          </Button>
         </div>
-      )}
-
-      {check.kind === "checked" && (problems.length > 0 || exists > 0) && (
-        <CheckSummary
-          fits={fits}
-          exists={exists}
-          left={problems.length + (ready.length - fits)}
-          problems={problems}
-        />
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <ImportHint
-          check={check}
-          room={room}
-          ready={ready.length}
-          fits={fits}
-          error={error?.at === "rows" ? error.message : undefined}
-          unlimited={limits.links >= 1_000_000}
-        />
-        <Button
-          variant="primary"
-          size="sm"
-          className="max-sm:h-11 max-sm:w-full"
-          onClick={() => void submit()}
-        >
-          {check.kind === "checked" && fits > 0
-            ? `Import ${n(fits)} ${fits === 1 ? "link" : "links"}`
-            : "Import"}
-        </Button>
+        {check.kind === "checked" && problems.length > 0 && (
+          <Disclosure
+            summary={`Why ${problems.length === 1 ? "one link" : `${n(problems.length)} links`} can't import`}
+          >
+            <Problems rows={problems} />
+          </Disclosure>
+        )}
       </div>
     </Section>
   );
 }
 
-/**
- * A host that belongs to the old service (bit.ly, dub.sh): nobody else can
- * point it here, so its links need one of the org's own domains, picked in
- * Into domain, or a domain added first.
- */
-function ServiceHostRow({
-  host,
-  links,
-  hasDomains,
+const defaultHostOf = (domains: DomainDTO[], defaultId: string | null | undefined) =>
+  domains.find((d) => d.id === defaultId)?.hostname ?? domains[0]?.hostname ?? null;
+
+/** The Into select's starting point: a file only on the service's own short
+ * domains has to land somewhere of ours; one with the person's own domains
+ * keeps them, and its bit.ly rows move to the default. Their own pick wins
+ * once they make one. */
+function startingTarget(fileHosts: string[], defaultHost: string | null): string {
+  const onlyService = fileHosts.length > 0 && fileHosts.every((h) => SERVICE_HOSTS.has(h));
+  return onlyService && defaultHost ? defaultHost : KEEP;
+}
+
+/** The rows as they go to the check: all moved onto `target`, or, keeping
+ * their domains, those on the hosts in `sendKey`, with bit.ly ones moved to
+ * the default domain. */
+function rowsToSend(
+  rows: ImportRow[],
+  target: string,
+  sendKey: string,
+  defaultHost: string | null,
+): ImportRow[] {
+  if (target !== KEEP) return rows.map((row) => ({ ...row, host: target }));
+  const send = new Set(sendKey.split(" "));
+  const moved = (row: ImportRow) =>
+    SERVICE_HOSTS.has(row.host) && defaultHost ? { ...row, host: defaultHost } : row;
+  return rows.filter((row) => send.has(row.host)).map(moved);
+}
+
+/** The host plans and the rows they send, for the form. */
+function useHostPlans(
+  orgId: string,
+  role: OrgRole,
+  read: ReadResult,
+  into: string | null,
+  skipped: string[],
+) {
+  const { activeDomains, defaultDomainId } = useOrgLimits();
+  const fileHosts = useMemo(() => hostsOf(read.rows), [read.rows]);
+  const defaultHost = defaultHostOf(activeDomains, defaultDomainId);
+  const target = into ?? startingTarget(fileHosts, defaultHost);
+  const keep = target === KEEP;
+
+  const canManage = role === "owner" || role === "admin";
+  // Every 3 seconds while a domain checks: somebody here is waiting on it.
+  const domains = useDomains(orgId, canManage, 3_000);
+  const byHost = canManage ? new Map((domains.data ?? []).map((d) => [d.hostname, d])) : null;
+  const skippedSet = new Set(skipped);
+  const plans = new Map(
+    fileHosts.map((host) => [host, planHost(host, skippedSet, byHost, defaultHost)]),
+  );
+
+  // Keyed on which hosts send, not on the domains themselves: one going live
+  // changes what the counts say, not what the check answers.
+  const sendKey = keep ? fileHosts.filter((host) => sends(plans.get(host))).join(" ") : "";
+  const rows = useMemo(
+    () => rowsToSend(read.rows, target, sendKey, defaultHost),
+    [read.rows, target, sendKey, defaultHost],
+  );
+  return { target, keep, fileHosts, plans, rows };
+}
+
+/** What one Import press does, from the check: the rows it sends (ready, up
+ * to the plan's room) and the counts beside the button. `waits` says
+ * whether a host's links answer only once its domain is live. */
+function tallyOf(
+  read: ReadResult,
+  rows: ImportRow[],
+  check: CheckState,
+  roomLeft: number,
+  waits: (host: string) => boolean,
+) {
+  const verdicts = check.kind === "checked" ? check.verdicts : [];
+  const readyLines = new Set(verdicts.filter((v) => v.status === "ready").map((v) => v.line));
+  const ready = rows.filter((row) => readyLines.has(row.line));
+  const room = check.kind === "checked" && check.room !== null ? check.room : roomLeft;
+  const fits = Math.min(room, ready.length);
+  const following = ready.slice(0, fits).filter((row) => waits(row.host)).length;
+  const problems = problemsOf(rows, verdicts, read.unreadable);
+  const tally: Tally = {
+    now: fits - following,
+    following,
+    exists: verdicts.filter((v) => v.status === "exists").length,
+    leftOut: read.rows.length - rows.length,
+    refused: problems.length,
+    over: ready.length - fits,
+  };
+  return { tally, ready, fits, room, problems };
+}
+
+/** A chosen file's table, or why it cannot be used. */
+function openTable(name: string, table: string[][]): FileState | { error: string } {
+  if (!table.length) return { error: "That file has no rows" };
+  if (table.length - 1 > MAX_ROWS)
+    return { error: `Over ${MAX_ROWS.toLocaleString("en-US")} links` };
+  return { name, table, map: detectColumns(table[0]), hasHeader: true };
+}
+
+/** What stops an Import press, said where it is wrong; null when nothing. */
+function blockedBy(
+  file: FileState | null,
+  read: ReadResult,
+  check: CheckState,
+  fits: number,
+): FormError {
+  if (!file) return { at: "file", message: "Choose a file first" };
+  if (!read.rows.length) return { at: "file", message: "No links in this file" };
+  if (check.kind === "checking") return { at: "rows", message: "Still checking the file" };
+  if (check.kind === "failed") return { at: "rows", message: check.message };
+  if (check.kind !== "checked" || !fits)
+    return { at: "rows", message: "None of these links can import" };
+  return null;
+}
+
+/** The file's hosts, one row each. Only one set of records is open at a
+ * time: the first host that needs them, until the person opens another or
+ * closes it. */
+function FileDomains({
+  orgId,
+  rows,
+  plans,
   onSkip,
 }: {
-  host: string;
-  links: number;
-  hasDomains: boolean;
-  onSkip: () => void;
+  orgId: string;
+  rows: ImportRow[];
+  plans: Map<string, HostPlan>;
+  onSkip: (host: string, skip: boolean) => void;
 }) {
+  // null: the first that needs records. "": none.
+  const [open, setOpen] = useState<string | null>(null);
+  const hosts = [...plans.keys()];
+  const shown = open ?? hosts.find((host) => needsRecords(plans.get(host)));
   return (
-    <div className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="font-mono text-sm break-all">{host}</span>
-          <span className="tnum text-xs text-muted">
-            {links.toLocaleString("en-US")} {links === 1 ? "link" : "links"}
-          </span>
-        </div>
-        <Button variant="ghost" size="sm" onClick={onSkip}>
-          Leave these out
-        </Button>
-      </div>
-      <p className="max-w-prose text-sm text-pretty text-muted">
-        {hasDomains ? (
-          <>Links on {host} can't keep its domain. Pick one of yours under Into domain.</>
-        ) : (
-          <>
-            Links on {host} can't keep its domain, and they need one of yours.{" "}
-            <Link to="/domains" className="text-accent [@media(hover:hover)]:hover:underline">
-              Add a domain
-            </Link>{" "}
-            first.
-          </>
-        )}
-      </p>
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-muted">The domains in this file</p>
+      <ul className={LIST_CARD}>
+        {hosts.map((host) => (
+          <li key={host}>
+            <HostRow
+              orgId={orgId}
+              host={host}
+              links={rows.filter((r) => r.host === host).length}
+              plan={plans.get(host) ?? { kind: "unknown" }}
+              open={shown === host}
+              onOpen={(show) => setOpen(show ? host : "")}
+              onSkip={(skip) => onSkip(host, skip)}
+            />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
+/** A disclosure in the page's own style: a muted line with a chevron, opening
+ * smoothly (styles.css, `details`). */
+function Disclosure({
+  summary,
+  children,
+  className,
+}: {
+  summary: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <details className={cn("group text-sm", className)}>
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs text-muted [&::-webkit-details-marker]:hidden [@media(hover:hover)]:hover:text-text">
+        {summary}
+        <ChevronDown
+          size={14}
+          aria-hidden
+          className="shrink-0 transition-transform duration-150 group-open:rotate-180"
+        />
+      </summary>
+      <div className="pt-2">{children}</div>
+    </details>
+  );
+}
+
 /** The line beside Import: the plan's room before a file, the check's
- * progress while it runs, and what will happen once it is done. */
-function ImportHint({
+ * progress while it runs, then what one press does, as counts. */
+function Counts({
   check,
+  tally,
   room,
-  ready,
-  fits,
   error,
   unlimited,
 }: {
   check: CheckState;
+  tally: Tally;
   room: number;
-  ready: number;
-  fits: number;
   error?: string;
   unlimited: boolean;
 }) {
@@ -574,66 +675,45 @@ function ImportHint({
       </span>
     );
   if (check.kind === "failed") return <span className="text-sm text-danger">{check.message}</span>;
-  if (check.kind === "checked" && fits < ready)
+  if (check.kind === "idle" && !tally.leftOut) {
+    if (unlimited) return <span />;
     return (
-      <span className="text-sm text-pretty">
-        Your plan has room for {n(fits)} more links, so the last {n(ready - fits)} will be left out.{" "}
-        <Link to="/billing" className="text-accent [@media(hover:hover)]:hover:underline">
-          See plans
-        </Link>
+      <span className="tnum text-sm text-muted">
+        Your plan has room for {n(room)} more {room === 1 ? "link" : "links"}.
       </span>
     );
-  if (check.kind === "checked")
-    return (
-      <span className="text-sm text-muted">
-        Clicks start from zero here. Your old service keeps the history.
-      </span>
-    );
-  if (unlimited) return <span />;
+  }
+  const chips: { key: string; label: ReactNode; value: number; tone?: string }[] = [
+    { key: "now", label: "ready", value: tally.now },
+    { key: "following", label: "follow when live", value: tally.following },
+    { key: "exists", label: "already on rdyrct", value: tally.exists },
+    { key: "left", label: "left out", value: tally.leftOut },
+    { key: "refused", label: "can't import", value: tally.refused, tone: "text-danger" },
+    {
+      key: "over",
+      label: (
+        <>
+          over your plan,{" "}
+          <Link to="/billing" className="text-accent [@media(hover:hover)]:hover:underline">
+            see plans
+          </Link>
+        </>
+      ),
+      value: tally.over,
+      tone: "text-butter",
+    },
+  ];
   return (
-    <span className="tnum text-sm text-muted">
-      Your plan has room for {n(room)} more {room === 1 ? "link" : "links"}.
-    </span>
-  );
-}
-
-/** Rows that will not import, behind a count: the person mostly wants the
- * number, and the reasons when it is not zero. */
-function CheckSummary({
-  fits,
-  exists,
-  left,
-  problems,
-}: {
-  fits: number;
-  exists: number;
-  left: number;
-  problems: { line: number; address: string; reason: string }[];
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <Totals
-        items={[
-          { label: "Will import", value: fits },
-          { label: "Already on rdyrct", value: exists },
-          { label: "Won't import", value: left },
-        ]}
-      />
-      {problems.length > 0 && (
-        <details className="text-sm">
-          <summary className="w-fit cursor-pointer text-xs text-muted [@media(hover:hover)]:hover:text-text">
-            Why{" "}
-            {problems.length === 1
-              ? "one link"
-              : `${problems.length.toLocaleString("en-US")} links`}{" "}
-            won't import
-          </summary>
-          <div className="mt-3">
-            <Problems rows={problems} />
-          </div>
-        </details>
-      )}
-    </div>
+    <ul aria-label="What this import does" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      {chips
+        .filter((chip) => chip.value > 0)
+        .map((chip) => (
+          <li key={chip.key} className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+            <span className={cn("tnum font-semibold", chip.tone)}>{n(chip.value)}</span>
+            <span className="text-muted">{chip.label}</span>
+          </li>
+        ))}
+    </ul>
   );
 }
 
@@ -835,102 +915,197 @@ function ColumnPicker({
   );
 }
 
-function DomainRow({
+/**
+ * One host in the file, laid out like a row on Domains: the hostname, how
+ * many links it carries and what happens to them, and the one thing to do
+ * about it. A domain still waiting on its TXT records shows them under the
+ * row, one at a time across the list, so a file on nine domains is not nine
+ * open sets of records.
+ */
+function HostRow({
   orgId,
   host,
   links,
-  domain,
-  canManage,
-  skipped,
+  plan,
+  open,
+  onOpen,
   onSkip,
 }: {
   orgId: string;
   host: string;
   links: number;
-  domain: DomainDTO | undefined;
-  canManage: boolean;
-  skipped: boolean;
+  plan: HostPlan;
+  open: boolean;
+  onOpen: (open: boolean) => void;
   onSkip: (skip: boolean) => void;
 }) {
-  const pending = domain?.validation === "txt" && domain.status !== "active";
+  const records = needsRecords(plan);
   return (
     <div className="flex flex-col gap-3 px-4 py-3">
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="font-mono text-sm break-all">{host}</span>
-          <span className="tnum text-xs text-muted">
-            {links.toLocaleString()} {links === 1 ? "link" : "links"}
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-[1_1_14rem] flex-col gap-0.5">
+          <span title={host} className="truncate font-mono text-sm">
+            {host}
+          </span>
+          <span className="tnum text-xs text-pretty text-muted">
+            {links.toLocaleString("en-US")} {links === 1 ? "link" : "links"}
+            {" · "}
+            {hostNote(plan)}
+            {records && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  className="cursor-pointer text-accent [@media(hover:hover)]:hover:underline"
+                  onClick={() => onOpen(!open)}
+                >
+                  {open ? "Hide records" : "Show records"}
+                </button>
+              </>
+            )}
           </span>
         </div>
-        {domain ? (
-          <ImportDomainStatus domain={domain} label={domainState(domain)} />
-        ) : (
-          <HostActions
-            orgId={orgId}
-            host={host}
-            canManage={canManage}
-            skipped={skipped}
-            onSkip={onSkip}
-          />
-        )}
+        <div className="ml-auto">
+          <HostAction orgId={orgId} host={host} plan={plan} onSkip={onSkip} />
+        </div>
       </div>
-      {!domain && !skipped && !canManage && (
-        <p className="text-sm text-muted">
-          Only an owner or admin can add a domain. If {host} is not on rdyrct yet, ask one to add
-          it. The next step shows which links can import.
+      {plan.kind === "service" && !plan.onto && (
+        <p className="max-w-prose text-sm text-pretty text-muted">
+          Nobody but the old service can point {host} here, so these need a domain of yours.{" "}
+          <Link to="/domains" className="text-accent [@media(hover:hover)]:hover:underline">
+            Add a domain
+          </Link>{" "}
+          first.
         </p>
       )}
-      {domain && pending && (
-        <div className="flex flex-col gap-2">
-          <p className="max-w-prose text-sm text-pretty">
-            Add these two TXT records at your DNS provider now. They prove the domain is yours and
-            let us issue its certificate, while your links still point at the old service. Leave the
-            CNAME alone until the last step.
-          </p>
-          <DnsRecords orgId={orgId} domain={domain} showCname={false} />
+      {records && plan.kind === "domain" && (
+        <div
+          className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out data-[open=true]:grid-rows-[1fr]"
+          data-open={open}
+        >
+          <div className="flex min-h-0 flex-col gap-2 overflow-hidden" inert={!open}>
+            <p className="max-w-prose text-sm text-pretty">
+              Add these at your DNS provider. They prove the domain is yours while your links still
+              point at the old service. Leave its CNAME alone until the import is done.
+            </p>
+            <DnsRecords orgId={orgId} domain={plan.domain} showCname={false} />
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-/** A domain's state while it moves over: the live dot while it checks
- *  and once it is ready, but a failed check is still and says why, rather
- *  than pinging "Checking" for ever. */
-function ImportDomainStatus({ domain, label }: { domain: DomainDTO; label: string }) {
-  if (domain.status === "error")
-    return (
-      <span
-        title={domain.statusReason || undefined}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-danger"
-      >
-        <span aria-hidden className="size-2 shrink-0 rounded-full bg-danger" />
-        Failed
-        {domain.statusReason && <span className="sr-only">: {domain.statusReason}</span>}
-      </span>
-    );
-  return <LiveStatus done={domain.status === "active"} label={label} />;
+/** What happens to a host's links, after their count. */
+const HOST_NOTES = {
+  missing: "left out until you add the domain",
+  skipped: "left out",
+  unknown: "checked against your domains",
+} as const;
+
+function hostNote(plan: HostPlan): string {
+  if (plan.kind === "service") return plan.onto ? `move to ${plan.onto}` : "left out";
+  if (plan.kind !== "domain") return HOST_NOTES[plan.kind];
+  if (plan.domain.status === "active") return "answer at once";
+  if (plan.domain.status === "error")
+    return plan.domain.validation === "txt"
+      ? "its TXT records never showed up"
+      : "its check failed";
+  const by = plan.domain.checkUntil ? ` by ${shortDate(plan.domain.checkUntil)}` : "";
+  return plan.domain.validation === "txt" ? `needs 2 TXT records${by}` : "follow when live";
 }
 
-function domainState(domain: DomainDTO) {
-  if (domain.status === "active") return "Ready";
-  return domain.validation === "txt" ? "Checking TXT records" : "Checking DNS";
-}
+const shortDate = (ms: number) =>
+  new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-/** What can be done about a domain the org does not have yet. */
-function HostActions({
+/** The right side of a host's row: its domain's state, or what to do. */
+function HostAction({
   orgId,
   host,
-  canManage,
-  skipped,
+  plan,
   onSkip,
 }: {
   orgId: string;
   host: string;
-  canManage: boolean;
-  skipped: boolean;
+  plan: HostPlan;
   onSkip: (skip: boolean) => void;
 }) {
+  const leaveOut = (
+    <Button variant="ghost" size="sm" onClick={() => onSkip(true)}>
+      Leave out
+    </Button>
+  );
+  switch (plan.kind) {
+    case "skipped":
+      return (
+        <Button variant="ghost" size="sm" onClick={() => onSkip(false)}>
+          Bring back
+        </Button>
+      );
+    case "missing":
+      return <AddHost orgId={orgId} host={host} />;
+    case "service":
+      return plan.onto ? leaveOut : null;
+    case "unknown":
+      return leaveOut;
+    case "domain":
+      return (
+        <div className="flex items-center gap-2">
+          {leaveOut}
+          <HostStatus orgId={orgId} domain={plan.domain} />
+        </div>
+      );
+  }
+}
+
+/** A domain's state while it moves over: the live dot while it checks and
+ * once it is live, but a failed check is still, says why on hover, and can
+ * be asked again, rather than pinging "Checking" for ever. */
+function HostStatus({ orgId, domain }: { orgId: string; domain: DomainDTO }) {
+  const toast = useToast();
+  const { retry } = useDomainMutations(orgId);
+  if (domain.status === "error")
+    return (
+      <div className="flex items-center gap-2">
+        <span
+          title={domain.statusReason || undefined}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-danger"
+        >
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-danger" />
+          Failed
+          {domain.statusReason && <span className="sr-only">: {domain.statusReason}</span>}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            retry.mutate(domain.id, {
+              onError: (e) =>
+                toast(e instanceof ApiError ? e.message : "Something went wrong", "error"),
+            })
+          }
+        >
+          <BusyContent busy={retry.isPending}>Try again</BusyContent>
+        </Button>
+      </div>
+    );
+  return <ImportDomainStatus domain={domain} label={domainState(domain)} />;
+}
+
+/** A domain's live dot, shared with the DNS step. */
+function ImportDomainStatus({ domain, label }: { domain: DomainDTO; label: string }) {
+  return <LiveStatus done={domain.status === "active"} label={label} className="shrink-0" />;
+}
+
+function domainState(domain: DomainDTO) {
+  if (domain.status === "active") return "Live";
+  return domain.validation === "txt" ? "Checking TXT records" : "Checking DNS";
+}
+
+/** Adds a host the org lacks, with TXT validation, so it is ready before
+ * its CNAME moves. */
+function AddHost({ orgId, host }: { orgId: string; host: string }) {
   const toast = useToast();
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
@@ -950,25 +1125,10 @@ function HostActions({
     }
   };
 
-  if (skipped)
-    return (
-      <Button variant="ghost" size="sm" onClick={() => onSkip(false)}>
-        Import these links after all
-      </Button>
-    );
-  const leaveOut = (
-    <Button variant="ghost" size="sm" onClick={() => onSkip(true)}>
-      Leave these out
-    </Button>
-  );
-  if (!canManage) return leaveOut;
   return (
-    <div className="flex items-center gap-2">
-      {leaveOut}
-      <Button variant="outline" size="sm" disabled={adding} onClick={add}>
-        <BusyContent busy={adding}>Add {host}</BusyContent>
-      </Button>
-    </div>
+    <Button variant="outline" size="sm" aria-label={`Add ${host}`} onClick={() => void add()}>
+      <BusyContent busy={adding}>Add domain</BusyContent>
+    </Button>
   );
 }
 
@@ -1256,40 +1416,51 @@ function SwitchStep({
       <ul className={LIST_CARD}>
         {hosts.map((host) => {
           const domain = byHost.get(host);
-          if (!domain) return null;
+          // Verified over HTTP: its CNAME already reaches us, nothing to switch.
+          if (!domain || (domain.status === "active" && domain.validation !== "txt")) return null;
           const ready = domain.status === "active";
           return (
             <li key={host} className="flex flex-col gap-3 px-4 py-3">
               <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
                 <span className="font-mono text-sm break-all">{host}</span>
-                <ImportDomainStatus
-                  domain={domain}
-                  label={ready ? "Ready to switch" : "Checking TXT records"}
-                />
+                {domain.status === "error" ? (
+                  <HostStatus orgId={orgId} domain={domain} />
+                ) : (
+                  <ImportDomainStatus
+                    domain={domain}
+                    label={ready ? "Ready to switch" : "Checking TXT records"}
+                  />
+                )}
               </div>
               {ready ? (
                 <>
                   <p className="max-w-prose text-sm text-pretty">
-                    The certificate is issued. At your DNS provider, change the CNAME for {host} to
-                    the value below. Your links answer from rdyrct as soon as it takes effect, with
-                    no gap.
+                    The certificate is issued. Change this CNAME at your DNS provider, and your
+                    links answer from rdyrct as soon as it takes effect, with no gap.
                   </p>
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 py-1.5 pr-1.5 pl-3 text-sm">
-                    <code className="font-mono text-xs break-all">
-                      {host} CNAME {appHost}
-                    </code>
-                    <CopyButton
-                      text={appHost}
-                      label="Copy CNAME target"
-                      onCopy={(text) => copyToClipboard(text, toast)}
-                    />
-                  </div>
+                  <RecordLine
+                    type="CNAME"
+                    name={host}
+                    value={appHost}
+                    onCopy={(text) => copyToClipboard(text, toast)}
+                  />
                 </>
               ) : (
                 <>
                   <p className="max-w-prose text-sm text-pretty">
-                    We have not seen the TXT records yet. Once they are in, the certificate is
-                    issued and this turns ready, usually within minutes.
+                    {domain.status === "error" ? (
+                      <>
+                        We never saw these TXT records, so we stopped checking. Your links are
+                        imported and wait on this domain. Add the records, then try again.
+                      </>
+                    ) : (
+                      <>
+                        We have not seen the TXT records yet. Once they are in, the certificate is
+                        issued and this turns ready, usually within minutes.
+                        {domain.checkUntil &&
+                          ` We keep checking until ${shortDate(domain.checkUntil)}.`}
+                      </>
+                    )}
                   </p>
                   <DnsRecords orgId={orgId} domain={domain} showCname={false} />
                 </>

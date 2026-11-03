@@ -365,9 +365,12 @@ export const invitesQuery = (orgId: string, enabled = true) =>
     enabled: enabled && !!orgId,
   });
 
-export const useDomains = (orgId: string, enabled = true) => useQuery(domainsQuery(orgId, enabled));
+export const useDomains = (orgId: string, enabled = true, every = 10_000) =>
+  useQuery(domainsQuery(orgId, enabled, every));
 
-export const domainsQuery = (orgId: string, enabled = true) =>
+/** `every`: how often to ask while a domain is still checking. A page that
+ * waits on one (Import) asks more often than the default. */
+export const domainsQuery = (orgId: string, enabled = true, every = 10_000) =>
   queryOptions<DomainDTO[]>({
     queryKey: ["domains", orgId],
     queryFn: () => api(`/orgs/${orgId}/domains`),
@@ -375,7 +378,7 @@ export const domainsQuery = (orgId: string, enabled = true) =>
     // A background Workflow drives DNS/TLS activation independently; this
     // just polls to reflect that progress while any domain is transitional.
     refetchInterval: (query) =>
-      query.state.data?.some((d) => d.status !== "active" && d.status !== "error") ? 10_000 : false,
+      query.state.data?.some((d) => d.status !== "active" && d.status !== "error") ? every : false,
   });
 
 export function useDomainMutations(orgId: string) {
@@ -394,6 +397,13 @@ export function useDomainMutations(orgId: string) {
   // query because nothing polls it, somebody asks for it.
   const refresh = useMutation({
     mutationFn: (id: string) => api<DomainDTO>(`/orgs/${orgId}/domains/${id}`),
+    onSuccess: invalidate,
+  });
+  // Try again, on a domain whose check gave up: restarts it with a fresh
+  // deadline, keeping the domain and the links on it.
+  const retry = useMutation({
+    mutationFn: (id: string) =>
+      api<DomainDTO>(`/orgs/${orgId}/domains/${id}/retry`, { method: "POST" }),
     onSuccess: invalidate,
   });
   const setRootRedirect = useMutation({
@@ -415,7 +425,7 @@ export function useDomainMutations(orgId: string) {
       api(`/orgs/${orgId}`, { method: "PATCH", body: { defaultDomainId: id } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user"] }),
   });
-  return { add, refresh, setRootRedirect, remove, setDefault };
+  return { add, refresh, retry, setRootRedirect, remove, setDefault };
 }
 
 // API keys (#131): minted per-user but scoped through an owned org (the
