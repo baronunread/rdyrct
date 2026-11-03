@@ -3,6 +3,7 @@ import { reset } from "cloudflare:test";
 import { RDYRCT_SITE } from "../../src/shared/site";
 import { applySecurityHeaders } from "../../src/worker/security-headers";
 import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
+import { notFoundPage } from "../../src/worker/not-found-page";
 import { applyTestMigrations, fetchWorker } from "./support";
 
 /**
@@ -18,6 +19,19 @@ beforeEach(applyTestMigrations);
 afterEach(reset);
 
 describe.runIf(!RDYRCT_SITE)("a self-hosted build", () => {
+  it("does not advertise rdyrct on a dead link's page", async () => {
+    const html = `<html><body data-page="404-short"><div id="root"><a href="/">Go home</a><a data-slot="made-with" href="/">Made with rdyrct</a></div></body></html>`;
+    const assets: Fetcher = {
+      fetch: async () => new Response(html),
+      connect: () => {
+        throw new Error("ASSETS.connect is not used");
+      },
+    };
+    const res = await notFoundPage(assets, "http://localhost/gone", "http://localhost");
+
+    expect(await res.text()).not.toContain("Made with rdyrct");
+  });
+
   it("opens on the app, not a landing page", async () => {
     const res = await fetchWorker(new Request("http://localhost/"));
 

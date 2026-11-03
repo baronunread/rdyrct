@@ -34,6 +34,7 @@ const pages: { name: string; title: string; view: ReactElement }[] = [
     // The Worker points this at APP_URL, or removes it on a custom domain.
     view: (
       <NotFoundView
+        madeWith
         back={
           <a href="/" className={HOME_LINK}>
             Go home

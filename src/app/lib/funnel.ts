@@ -148,6 +148,8 @@ export type CtaPlacement =
   | "utm_page_signup"
   // The /branded-link-shortener page's one sign-up.
   | "branded_page_signup"
+  // The /google-url-shortener page's one sign-up, for people leaving goo.gl.
+  | "googl_page_signup"
   | "pricing_free"
   | "pricing_hobby"
   | "pricing_pro"
