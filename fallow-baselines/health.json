@@ -413,10 +413,10 @@
         "count": 2
       },
       "crap_high": {
-        "count": 9
+        "count": 10
       },
       "crap_moderate": {
-        "count": 7
+        "count": 6
       }
     },
     "src/app/routes/links.tsx": {
@@ -577,8 +577,8 @@
     "src/app/ui/menu.tsx:hidden coupling",
     "src/app/components/link-editor.tsx:complexity",
     "src/app/lib/mcp-url.ts:high impact",
-    "src/app/routes/admin/orgs.tsx:hidden coupling",
     "src/app/routes/link-import.tsx:complexity",
+    "src/app/routes/admin/orgs.tsx:hidden coupling",
     "src/app/routes/admin/users.tsx:hidden coupling",
     "src/app/components/setup-flow.tsx:hidden coupling",
     "src/app/lib/account-security.ts:complexity",

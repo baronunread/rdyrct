@@ -248,6 +248,7 @@ type HostPlan =
   | { kind: "domain"; domain: DomainDTO }
   | { kind: "unknown" }
   | { kind: "missing" }
+  | { kind: "locked" }
   | { kind: "service"; onto: string | null }
   | { kind: "skipped" };
 
@@ -258,10 +259,15 @@ function planHost(
   fallback: string | null,
 ): HostPlan {
   if (skipped.has(host)) return { kind: "skipped" };
-  if (SERVICE_HOSTS.has(host)) return { kind: "service", onto: fallback };
+  // Left out, the default domain takes nothing, bit.ly rows included.
+  if (SERVICE_HOSTS.has(host))
+    return { kind: "service", onto: fallback && !skipped.has(fallback) ? fallback : null };
   if (!byHost) return { kind: "unknown" };
   const domain = byHost.get(host);
-  return domain ? { kind: "domain", domain } : { kind: "missing" };
+  if (!domain) return { kind: "missing" };
+  // Beyond the plan after a downgrade: it takes no new links (the check
+  // would refuse every row), so they stay out with the reason on the row.
+  return domain.lockedAt ? { kind: "locked" } : { kind: "domain", domain };
 }
 
 const sends = (plan: HostPlan | undefined) =>
@@ -1000,6 +1006,7 @@ function HostRow({
 /** What happens to a host's links, after their count. */
 const HOST_NOTES = {
   missing: "left out until you add the domain",
+  locked: "left out, this domain is beyond your plan",
   skipped: "left out",
   unknown: "checked against your domains",
 } as const;
@@ -1045,6 +1052,8 @@ function HostAction({
       );
     case "missing":
       return <AddHost orgId={orgId} host={host} />;
+    case "locked":
+      return null;
     case "service":
       return plan.onto ? leaveOut : null;
     case "unknown":

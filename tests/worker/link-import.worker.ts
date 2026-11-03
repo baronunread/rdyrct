@@ -146,6 +146,38 @@ it("stores a full chunk of rows in one request", async () => {
   expect(stored?.n).toBe(CHECK_CHUNK_ROWS);
 });
 
+const storedRows = async (id: string) =>
+  (
+    await env.DB.prepare("select count(*) as n from link_import_rows where import_id = ?")
+      .bind(id)
+      .first<{ n: number }>()
+  )?.n;
+
+it("stores a full chunk sent twice once", async () => {
+  const rows = Array.from({ length: CHECK_CHUNK_ROWS }, (_, i) =>
+    row(i + 2, `again-${i}`, `https://example.com/${i}`),
+  );
+  const created = await call("POST", "", { service: "shortio", total: rows.length });
+  const { id } = await jsonBody<{ id: string }>(created);
+  expect((await call("POST", `/${id}/rows`, { rows })).status).toBe(200);
+  expect((await call("POST", `/${id}/rows`, { rows })).status).toBe(200);
+  expect(await storedRows(id)).toBe(CHECK_CHUNK_ROWS);
+});
+
+it("stores none of a chunk when one of its inserts fails", async () => {
+  const rows = Array.from({ length: CHECK_CHUNK_ROWS }, (_, i) =>
+    row(i + 2, `whole-${i}`, `https://example.com/${i}`),
+  );
+  const created = await call("POST", "", { service: "shortio", total: rows.length });
+  const { id } = await jsonBody<{ id: string }>(created);
+  // Past the first insert's 12 rows, so an earlier insert has already run.
+  await env.DB.prepare(
+    "create trigger fail_late_rows before insert on link_import_rows when new.line > 20 begin select raise(abort, 'insert failed'); end",
+  ).run();
+  expect((await call("POST", `/${id}/rows`, { rows })).status).not.toBe(200);
+  expect(await storedRows(id)).toBe(0);
+});
+
 describe("who can import", () => {
   it("refuses a free plan with a code the page can show an upgrade for", async () => {
     await setPlan("free");

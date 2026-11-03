@@ -335,6 +335,25 @@ describe("trying a failed domain again", () => {
     expect(row?.cf_hostname_id).toBeNull();
   });
 
+  it("refuses a domain beyond the plan, which stays as it is", async () => {
+    const cookie = await adminCookie();
+    await seedDomain({ status: "error", cfHostnameId: "cf-1", createdAt: Date.now() });
+    await env.DB.prepare("update domains set locked_at = 1 where id = 'domain-1'").run();
+    expect((await retry(cookie)).status).toBe(409);
+    expect((await statusOf("domain-1"))?.status).toBe("error");
+  });
+
+  it("does not reach another organization's domain", async () => {
+    const cookie = await adminCookie();
+    await env.DB.prepare(
+      "insert into orgs (id, name, created_at) values ('org-2', 'Other', 0)",
+    ).run();
+    await seedDomain({ status: "error", cfHostnameId: "cf-1", createdAt: Date.now() });
+    await env.DB.prepare("update domains set org_id = 'org-2' where id = 'domain-1'").run();
+    expect((await retry(cookie)).status).toBe(404);
+    expect((await statusOf("domain-1"))?.status).toBe("error");
+  });
+
   it("refuses a domain that has not failed", async () => {
     const cookie = await adminCookie();
     await seedDomain({ cfHostnameId: "cf-1", createdAt: Date.now() });

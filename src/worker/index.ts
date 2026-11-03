@@ -506,6 +506,10 @@ async function serveAppShell(c: Context<AppEnv>, url: URL): Promise<Response | n
     new Request(new URL(`/_app-shell/${page}.txt`, url.origin), c.req.raw),
   );
   if (asset.status !== 200 && asset.status !== 304) return null;
+  // A missing file still answers 200, with index.html (not_found_handling:
+  // single-page-application), and in production that one has the landing
+  // page baked into #root. The shell files are .txt, so HTML means none.
+  if (asset.headers.get("content-type")?.includes("text/html")) return null;
   const headers = new Headers(asset.headers);
   headers.set("content-type", "text/html; charset=utf-8");
   return finalizeSpaResponse(
