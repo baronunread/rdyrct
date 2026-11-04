@@ -351,6 +351,10 @@ export type ConsentAnswer = "on" | "off" | "unasked";
 /** How many people a send to one list, narrowed by a filter, reaches now. */
 export interface NewsletterAudienceCount {
   count: number;
+  /** What was counted, echoed back: the page words the number from these,
+   * so a count still loading never shows under the next filter's wording. */
+  list: MarketingList;
+  filter: AudienceFilter;
 }
 
 export interface NewsletterSendResult {

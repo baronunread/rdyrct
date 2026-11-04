@@ -131,7 +131,7 @@ adminNewsletterRoutes.get("/audience", async (c) => {
   const { list, ...filter } = parseBody(countSchema, c.req.query());
   const count = await countOptedIn(drizzle(c.env.DB, { schema }), list, filter);
   log.set({ newsletter: { list, audience: filter, count } });
-  return c.json({ count } satisfies NewsletterAudienceCount);
+  return c.json({ count, list, filter } satisfies NewsletterAudienceCount);
 });
 
 // A test goes to the admin alone, through the same path as a real send, so the

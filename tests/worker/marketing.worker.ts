@@ -333,6 +333,34 @@ function captureBatches(status: (call: number) => number = () => 200) {
   return { batches, restore: () => (globalThis.fetch = original) };
 }
 
+type Captured = ReturnType<typeof captureBatches>;
+
+/** Every address a send reached, in order, repeats kept. */
+const addressesOf = (mail: Captured) => mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));
+
+/** Checks `n` people got the issue, each exactly once, and returns who. */
+function expectEachOnce(mail: Captured, n: number): string[] {
+  const everyone = addressesOf(mail);
+  expect(everyone).toHaveLength(n);
+  expect(new Set(everyone).size).toBe(n);
+  return everyone;
+}
+
+/** Runs `change` while the first batch is on its way to the provider, as if
+ * the database moved under a running send. Returns the restore. */
+function duringFirstBatch(change: () => Promise<void>): () => void {
+  const original = globalThis.fetch;
+  let first = true;
+  globalThis.fetch = async (input, init) => {
+    if (first && String(input instanceof Request ? input.url : input).endsWith("/emails/batch")) {
+      first = false;
+      await change();
+    }
+    return original(input, init);
+  };
+  return () => (globalThis.fetch = original);
+}
+
 /** A paragraph node as the editor sends it. */
 const para = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
 const doc = (...content: JsonValue[]) => ({ type: "doc", content });
@@ -639,9 +667,7 @@ describe("sending a newsletter", () => {
     const res = await send();
     expect(res.status).toBe(200);
     expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 150, done: true });
-    const everyone = mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));
-    expect(everyone).toHaveLength(150);
-    expect(new Set(everyone).size).toBe(150);
+    expectEachOnce(mail, 150);
 
     // Done: sending the same issue again sends nothing more.
     expect(await jsonBody<{ sent: number }>(await send())).toEqual({ sent: 150, done: true });
@@ -656,20 +682,14 @@ describe("sending a newsletter", () => {
       Array.from({ length: 101 }, (_, i) => seedUser(`q${String(i).padStart(3, "0")}`, 5)),
     );
     // The last person unsubscribes as the first batch goes out.
-    const original = globalThis.fetch;
-    let first = true;
-    globalThis.fetch = async (input, init) => {
-      if (first && String(input instanceof Request ? input.url : input).endsWith("/emails/batch")) {
-        first = false;
-        await env.DB.prepare("update user set news_opt_in_at = null where id = 'q100'").run();
-      }
-      return original(input, init);
-    };
+    const restoreFetch = duringFirstBatch(async () => {
+      await env.DB.prepare("update user set news_opt_in_at = null where id = 'q100'").run();
+    });
     const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
       ...issue,
       sendId: "send-unsub",
     });
-    globalThis.fetch = original;
+    restoreFetch();
     expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 100, done: true });
     expect(mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]))).not.toContain(
       "q100@example.com",
@@ -895,9 +915,7 @@ describe("narrowing a send", () => {
 
     const res = await send({ stage: "new" });
     expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 150, done: true });
-    const everyone = mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));
-    expect(everyone).toHaveLength(150);
-    expect(new Set(everyone).size).toBe(150);
+    const everyone = expectEachOnce(mail, 150);
     expect(everyone.every((address) => address.includes("-a-new@"))).toBe(true);
     mail.restore();
   });
@@ -910,21 +928,15 @@ describe("narrowing a send", () => {
       ...Array.from({ length: 101 }, (_, i) => seedUser(`r${String(i).padStart(3, "0")}`, 5)),
     ]);
     // The last person makes a link as the first batch goes out: no longer new.
-    const original = globalThis.fetch;
-    let first = true;
-    globalThis.fetch = async (input, init) => {
-      if (first && String(input instanceof Request ? input.url : input).endsWith("/emails/batch")) {
-        first = false;
-        await linkBy("r100").run();
-      }
-      return original(input, init);
-    };
+    const restoreFetch = duringFirstBatch(async () => {
+      await linkBy("r100").run();
+    });
     const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
       ...issue,
       sendId: "send-leaves",
       audience: { stage: "new" },
     });
-    globalThis.fetch = original;
+    restoreFetch();
     expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 100, done: true });
     mail.restore();
   });

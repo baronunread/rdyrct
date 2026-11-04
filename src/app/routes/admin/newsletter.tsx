@@ -282,14 +282,18 @@ function Audience({
   status,
   list,
   filter,
-  count,
+  counted,
+  stale,
   onList,
   onFilter,
 }: {
   status: NewsletterStatus | undefined;
   list: MarketingList;
   filter: AudienceFilter;
-  count: number | undefined;
+  /** The last count and what it counted; worded from its own list and filter. */
+  counted: NewsletterAudienceCount | undefined;
+  /** A newer count is on its way: the one shown is for the previous choice. */
+  stale: boolean;
   onList: (list: MarketingList) => void;
   onFilter: (filter: AudienceFilter) => void;
 }) {
@@ -319,12 +323,16 @@ function Audience({
       </div>
       {/* Two lines kept whatever the filters say, so the box does not jump. */}
       <div aria-live="polite" className="flex min-h-11 flex-col gap-0.5">
-        {count === undefined ? (
+        {counted === undefined ? (
           <Skeleton className="h-5 w-64 max-w-full" />
         ) : (
-          <p data-testid="newsletter-audience">
-            <span className="font-semibold tabular-nums">{fullNumber(count)}</span>{" "}
-            {audienceTail(count, list, filter)}.
+          <p
+            data-testid="newsletter-audience"
+            aria-busy={stale}
+            className={stale ? "opacity-50 transition-opacity" : "transition-opacity"}
+          >
+            <span className="font-semibold tabular-nums">{fullNumber(counted.count)}</span>{" "}
+            {audienceTail(counted.count, counted.list, counted.filter)}.
           </p>
         )}
         <p className="text-xs text-muted">
@@ -417,7 +425,8 @@ export function AdminNewsletterPage() {
   const status = useQuery(newsletterQuery).data;
   const [list, setList] = useState<MarketingList>("news");
   const [filter, setFilter] = useState<AudienceFilter>(EVERYONE);
-  const count = useQuery(audienceQuery(list, filter)).data?.count;
+  const audience = useQuery(audienceQuery(list, filter));
+  const count = audience.data?.count;
   const composer = useComposer(list, filter);
   const { busy, check, sendTest, sendAll, audienceChanged } = composer;
   const [confirming, setConfirming] = useState(false);
@@ -441,7 +450,8 @@ export function AdminNewsletterPage() {
         status={status}
         list={list}
         filter={filter}
-        count={count}
+        counted={audience.data}
+        stale={audience.isPlaceholderData}
         onList={pickList}
         onFilter={pickFilter}
       />

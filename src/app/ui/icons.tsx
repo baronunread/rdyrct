@@ -31,7 +31,6 @@ export {
   IconLayoutSidebarLeftExpand as PanelLeftOpen,
   IconLock as Lock,
   IconLogout as LogOut,
-  IconMail as Mail,
   IconMenu2 as MenuIcon,
   IconMoon as Moon,
   IconPencil as Pencil,
