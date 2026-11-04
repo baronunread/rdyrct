@@ -201,8 +201,9 @@ function AdminToggleMenuItem({
   );
 }
 
-/** Ban/unban and delete, hidden for your own row; ban is also hidden for
- * other platform admins. */
+/** Ban/unban and delete, hidden for your own row and for other platform
+ * admins: the server refuses both on an admin, and "Remove platform admin"
+ * is how an admin loses the role. */
 function DangerMenuItems({
   user,
   isSelf,
@@ -212,16 +213,14 @@ function DangerMenuItems({
   isSelf: boolean;
   onConfirm: (kind: UserAction) => void;
 }) {
-  if (isSelf) return null;
+  if (isSelf || user.isAdmin) return null;
   return (
     <>
       <MenuSeparator />
-      {!user.isAdmin && (
-        <MenuItem className="text-danger" onClick={() => onConfirm(user.banned ? "unban" : "ban")}>
-          <Ban size={14} />
-          {user.banned ? "Unban user" : "Ban user"}
-        </MenuItem>
-      )}
+      <MenuItem className="text-danger" onClick={() => onConfirm(user.banned ? "unban" : "ban")}>
+        <Ban size={14} />
+        {user.banned ? "Unban user" : "Ban user"}
+      </MenuItem>
       <MenuItem className="text-danger" onClick={() => onConfirm("delete")}>
         <Trash2 size={14} /> Delete user
       </MenuItem>
