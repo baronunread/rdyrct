@@ -502,6 +502,16 @@ orgRoutes.delete(
     if (memberships.length === 1 && memberships[0]?.orgId === orgId)
       throw new HTTPException(409, { message: ONLY_ORG_MESSAGE, cause: { code: "only_org" } });
     await deleteOrg(c.var.db, c.env, orgId);
+    // The org row, its links and its members are gone after this returns, so
+    // the audit entry is the only record that the owner asked for it.
+    const log = c.get("log");
+    log.set({ org: { id: orgId } });
+    log.audit({
+      action: "org.delete",
+      actor: { type: "user", id: c.var.user!.id },
+      target: { type: "org", id: orgId },
+      outcome: "success",
+    });
     return c.json({ ok: true });
   },
 );
@@ -585,6 +595,16 @@ orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) =>
       message: `This plan allows ${limits.members} members who can make changes: set someone else to viewer first`,
       cause: { code: "member_limit" },
     });
+  // A role decides what the member can read and change, so the change goes on
+  // the audit trail with both sides: who granted it and to whom.
+  const log = c.get("log");
+  log.set({ org: { id: orgId }, member: { id: targetId, role } });
+  log.audit({
+    action: "member.role",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "user", id: targetId },
+    outcome: "success",
+  });
   return c.json({ ok: true });
 });
 
@@ -595,6 +615,14 @@ orgRoutes.delete("/:orgId/members/:userId", requireOrgRole("admin"), async (c) =
     c.req.param("userId"),
   );
   await c.var.db.delete(schema.orgMembers).where(memberWhere(orgId, targetId));
+  const log = c.get("log");
+  log.set({ org: { id: orgId }, member: { id: targetId } });
+  log.audit({
+    action: "member.remove",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "user", id: targetId },
+    outcome: "success",
+  });
   return c.json({ ok: true });
 });
 
@@ -727,6 +755,7 @@ async function mailInvites(
 }
 
 orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
+  const log = c.get("log");
   let rawBody: JsonValue;
   try {
     rawBody = await c.req.json();
@@ -756,6 +785,12 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   if (emails.length === 0) {
     const invite = { ...base, token: uid(24), email: null };
     await db.insert(schema.invites).values(invite);
+    log.audit({
+      action: "invite.create",
+      actor: { type: "user", id: c.var.user!.id },
+      target: { type: "org", id: orgId },
+      outcome: "success",
+    });
     return c.json({ invites: [inviteDTO(invite)], failed: [] } satisfies InvitesCreated, 201);
   }
 
@@ -785,23 +820,33 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   // addresses again and the retry lands on the same invites.
   const { failed, error } = await mailInvites(c.env, org?.name ?? "rdyrct", created);
   if (error) {
-    const log = c.get("log");
     // Counts only: the addresses are personal data.
-    log?.set({ invites: { failed: failed.length, sent: created.length - failed.length } });
-    log?.error(error);
+    log.set({ invites: { failed: failed.length, sent: created.length - failed.length } });
+    log.error(error);
   }
+  log.audit({
+    action: "invite.create",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "org", id: orgId },
+    outcome: "success",
+  });
   return c.json({ invites: created.map(inviteDTO), failed } satisfies InvitesCreated, 201);
 });
 
 orgRoutes.delete("/:orgId/invites/:token", requireOrgRole("admin"), async (c) => {
+  const token = c.req.param("token");
+  const orgId = c.req.param("orgId");
   await c.var.db
     .delete(schema.invites)
-    .where(
-      and(
-        eq(schema.invites.token, c.req.param("token")),
-        eq(schema.invites.orgId, c.req.param("orgId")),
-      ),
-    );
+    .where(and(eq(schema.invites.token, token), eq(schema.invites.orgId, orgId)));
+  const log = c.get("log");
+  log.set({ org: { id: orgId }, invite: { token } });
+  log.audit({
+    action: "invite.revoke",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "invite", id: token },
+    outcome: "success",
+  });
   return c.json({ ok: true });
 });
 
