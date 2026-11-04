@@ -186,7 +186,19 @@ function captureBatches(status = 200) {
   return { batches, restore: () => (globalThis.fetch = original) };
 }
 
-const issue = { subject: "What is new", body: "First paragraph.\n\nSecond paragraph." };
+/** A paragraph node as the editor sends it. */
+const para = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+const doc = (...content: JsonValue[]) => ({ type: "doc", content });
+const issue = {
+  subject: "What is new",
+  doc: doc(para("First paragraph."), para("Second paragraph.")),
+};
+/** A button node as the editor sends it, extra attributes and all. */
+const button = (href: string, label = "Read more") => ({
+  type: "button",
+  attrs: { class: "button", href, alignment: "left" },
+  content: [{ type: "text", text: label }],
+});
 
 describe("sending a newsletter", () => {
   it("404s for anyone who is not a platform admin", async () => {
@@ -223,9 +235,31 @@ describe("sending a newsletter", () => {
     expect(status).toMatchObject({ optedIn: 2, configured: true });
 
     const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      ctaLabel: "Read more",
-      ctaUrl: "https://rdyrct.com/changelog",
+      subject: issue.subject,
+      doc: doc(
+        { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Big <news>" }] },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Read " },
+            { type: "text", text: "this", marks: [{ type: "bold" }] },
+            { type: "text", text: " and " },
+            {
+              type: "text",
+              text: "the changelog",
+              marks: [
+                { type: "link", attrs: { href: "https://rdyrct.com/changelog", target: "_blank" } },
+              ],
+            },
+          ],
+        },
+        {
+          type: "bulletList",
+          content: [{ type: "listItem", content: [para("One")] }],
+        },
+        { type: "horizontalRule", attrs: { class: "divider" } },
+        button("https://rdyrct.com/changelog"),
+      ),
       sendId: "send-0001",
     });
     expect(res.status).toBe(200);
@@ -242,6 +276,14 @@ describe("sending a newsletter", () => {
       expect(email.html).toContain("Unsubscribe");
       expect(email.text).toContain(`Unsubscribe: ${link}`);
       expect(email.html).toContain("Read more");
+      expect(email.html).toContain("<h2");
+      expect(email.html).toContain("Big &lt;news&gt;");
+      expect(email.html).toContain("<strong>this</strong>");
+      expect(email.html).toContain('href="https://rdyrct.com/changelog"');
+      expect(email.text).toContain("Big <news>");
+      expect(email.text).toContain("Read this and the changelog (https://rdyrct.com/changelog)");
+      expect(email.text).toContain("- One");
+      expect(email.text).toContain("Read more: https://rdyrct.com/changelog");
     }
     // Each person's link names that person, and only works for them.
     const [first, second] = sent;
@@ -338,15 +380,61 @@ describe("sending a newsletter", () => {
     mail.restore();
   });
 
-  it("rejects a send with no subject, and a button with no link", async () => {
+  it("rejects a send with no subject, no text, or a button with no link", async () => {
+    const mail = captureBatches();
     const cookie = await adminCookie();
-    const send = (body: { [field: string]: string }) =>
-      json(cookie, "POST", "/api/admin/newsletter/send", { sendId: "send-0003", ...body });
-    expect((await send({ subject: " ", body: "Hi" })).status).toBe(400);
-    expect((await send({ ...issue, ctaLabel: "Go" })).status).toBe(400);
-    expect((await send({ ...issue, ctaLabel: "Go", ctaUrl: "javascript:alert(1)" })).status).toBe(
-      400,
-    );
+    const send = async (body: { [field: string]: JsonValue }) => {
+      const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+        sendId: "send-0003",
+        ...body,
+      });
+      return { status: res.status, message: (await jsonBody<{ message: string }>(res)).message };
+    };
+    expect((await send({ ...issue, subject: " " })).status).toBe(400);
+    expect(await send({ ...issue, doc: doc({ type: "paragraph" }) })).toEqual({
+      status: 400,
+      message: "Write the email",
+    });
+    expect((await send({ ...issue, body: "Plain text", doc: null })).status).toBe(400);
+    for (const href of ["#", "javascript:alert(1)"]) {
+      expect(await send({ ...issue, doc: doc(para("Hi"), button(href)) })).toEqual({
+        status: 400,
+        message: "A button needs a label and an http(s) link",
+      });
+    }
+    expect(mail.batches).toHaveLength(0);
+    mail.restore();
+  });
+
+  it("accepts a document on the test route and refuses a node the editor does not have", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    const test = (body: JsonValue) => json(cookie, "POST", "/api/admin/newsletter/test", body);
+    expect((await test(issue)).status).toBe(200);
+
+    const table = { type: "table", content: [{ type: "tableRow", content: [] }] };
+    const image = { type: "image", attrs: { src: "https://evil.test/x.png" } };
+    for (const node of [table, image]) {
+      const res = await test({ ...issue, doc: doc(para("Hi"), node) });
+      expect(res.status).toBe(400);
+      expect((await jsonBody<{ message: string }>(res)).message).toContain(`"${node.type}"`);
+    }
+    // A mark outside the list, and a list nested past the cap, inside a list item.
+    const strike = { type: "text", text: "x", marks: [{ type: "strike" }] };
+    expect(
+      (await test({ ...issue, doc: doc({ type: "paragraph", content: [strike] }) })).status,
+    ).toBe(400);
+    let nested: JsonValue = para("deep");
+    for (let i = 0; i < 6; i++) {
+      nested = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [para("x"), nested] }],
+      };
+    }
+    expect((await test({ ...issue, doc: doc(nested) })).status).toBe(400);
+    // Only the first, valid test went out.
+    expect(mail.batches).toHaveLength(1);
+    mail.restore();
   });
 
   it("answers a provider failure with an error, not a success", async () => {

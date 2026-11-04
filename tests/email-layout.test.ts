@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { NOTICE_FOOTER, renderEmail } from "../src/worker/email-layout";
+import {
+  type EmailBlock,
+  NOTICE_FOOTER,
+  blocksPreview,
+  renderEmail,
+} from "../src/worker/email-layout";
 
 const APP_URL = "https://rdyrct.example";
 const TO = "person@example.com";
@@ -207,5 +212,101 @@ describe("renderEmail unsubscribe slot", () => {
   test("refuses a link that is not http(s)", () => {
     const { html } = renderEmail({ ...base, unsubscribeUrl: "javascript:alert(1)" }, APP_URL, TO);
     expect(html.html).not.toContain("javascript:");
+  });
+});
+
+describe("renderEmail blocks slot", () => {
+  const blocks: EmailBlock[] = [
+    { kind: "heading", level: 2, content: [{ text: "Big <script>alert(1)</script>" }] },
+    { kind: "heading", level: 3, content: [{ text: "Small one" }] },
+    {
+      kind: "paragraph",
+      content: [
+        { text: "Hi " },
+        { text: "bold", bold: true },
+        { text: " " },
+        { text: "it", italic: true },
+        { text: " " },
+        { text: "un", underline: true },
+        { lineBreak: true },
+        { text: "docs", href: "https://rdyrct.com/docs" },
+        { text: " and " },
+        { text: "bad", href: "javascript:alert(1)" },
+      ],
+    },
+    {
+      kind: "list",
+      ordered: false,
+      items: [
+        [{ kind: "paragraph", content: [{ text: "one" }] }],
+        [{ kind: "paragraph", content: [{ text: "two" }] }],
+      ],
+    },
+    {
+      kind: "list",
+      ordered: true,
+      start: 3,
+      items: [[{ kind: "paragraph", content: [{ text: "third" }] }]],
+    },
+    { kind: "divider" },
+    { kind: "button", label: "Open it", url: "https://rdyrct.com/x" },
+    { kind: "button", label: "Evil", url: "javascript:alert(1)" },
+  ];
+  const { html, text } = renderEmail({ ...base, paragraphs: [], blocks }, APP_URL, TO);
+
+  test("renders each block with escaping", () => {
+    expect(html.html).toContain("<h2");
+    expect(html.html).toContain("Big &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html.html).not.toContain("<script>");
+    expect(html.html).toContain("<h3");
+    expect(html.html).toContain("<strong>bold</strong>");
+    expect(html.html).toContain("<em>it</em>");
+    expect(html.html).toContain("<u>un</u>");
+    expect(html.html).toContain("<br>");
+    expect(html.html).toMatch(/<a class="link" href="https:\/\/rdyrct.com\/docs"[^>]*>docs<\/a>/);
+    expect(html.html).toMatch(/<ul class="text"[^>]*><li[^>]*><span>one<\/span><\/li>/);
+    expect(html.html).toContain('<ol class="text" start="3"');
+    expect(html.html).toContain('<hr class="rule"');
+    expect(html.html).toMatch(/class="cta-link" href="https:\/\/rdyrct.com\/x"[^>]*>Open it</);
+  });
+
+  test("drops a javascript: link and button, keeping the link's text", () => {
+    expect(html.html).not.toContain("javascript:");
+    expect(html.html).toContain(" and bad");
+    expect(html.html).not.toContain("Evil");
+    expect(text).not.toContain("javascript:");
+    expect(text).not.toContain("Evil");
+  });
+
+  test("writes the same document into the text part", () => {
+    const body = text.slice(text.indexOf("Big"), text.indexOf("\n--"));
+    expect(body).toBe(
+      [
+        "Big <script>alert(1)</script>",
+        "",
+        "Small one",
+        "",
+        "Hi bold it un",
+        "docs (https://rdyrct.com/docs) and bad",
+        "",
+        "- one",
+        "- two",
+        "",
+        "3. third",
+        "",
+        "* * *",
+        "",
+        "Open it: https://rdyrct.com/x",
+        "",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("previews the first text for the preheader, without buttons", () => {
+    expect(blocksPreview(blocks)).toBe(
+      "Big <script>alert(1)</script> Small one Hi bold it un docs (https://rdyrct.com/docs) and bad - one - two 3. third",
+    );
+    expect(blocksPreview(blocks, 20)).toBe("Big <script>alert(1…");
   });
 });

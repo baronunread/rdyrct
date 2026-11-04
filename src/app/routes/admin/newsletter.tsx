@@ -1,19 +1,21 @@
 /**
- * Newsletter composer (platform admin). One issue at a time: a subject, plain
- * paragraphs and an optional button. A test goes to the admin alone; a send
+ * Newsletter composer (platform admin). One issue at a time: a subject and a
+ * body written in the email editor (headings, lists, links, a button). A test goes to the admin alone; a send
  * goes to everyone who opted in (worker/marketing.ts decides who that is).
  */
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import type { Editor } from "@tiptap/react";
 import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { settle } from "../../lib/route-preload";
 import { errorMessage } from "../../lib/error-message";
 import { Button } from "../../ui/button";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
-import { Field, Input, Textarea } from "../../ui/field";
+import { Field, FieldReason, Input } from "../../ui/field";
 import { BusyContent } from "../../ui/spinner";
 import { useToast } from "../../ui/toast";
 import { SectionHeading, fullNumber } from "./admin-kit";
+import { NewsletterEditor } from "./newsletter-editor";
 import { shortDate } from "../../lib/dates";
 import type {
   NewsletterAnswers,
@@ -29,58 +31,53 @@ const newsletterQuery = queryOptions<NewsletterStatus>({
 
 export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(newsletterQuery)]);
 
-type Draft = { subject: string; body: string; ctaLabel: string; ctaUrl: string };
-type Problems = { subject?: string; body?: string; ctaLabel?: string; ctaUrl?: string };
-const EMPTY: Draft = { subject: "", body: "", ctaLabel: "", ctaUrl: "" };
+type Problems = { subject?: string; body?: string };
 
-/** The button's two fields: both or neither, and an http(s) link. */
-function buttonProblems(label: string, url: string): Problems {
-  if (url && !label) return { ctaLabel: "Name the button" };
-  if (label && !/^https?:\/\//i.test(url)) return { ctaUrl: "Needs https://" };
-  return {};
-}
-
-/** What is wrong with the draft, field by field. The server checks again. */
-function problemsIn(draft: Draft): Problems {
-  const problems = buttonProblems(draft.ctaLabel.trim(), draft.ctaUrl.trim());
-  if (!draft.subject.trim()) problems.subject = "Add a subject";
-  if (!draft.body.trim()) problems.body = "Write the email";
-  return problems;
-}
-
-function focusFirst(problems: Problems, form: HTMLFormElement | null) {
-  const first = (["subject", "body", "ctaLabel", "ctaUrl"] as const).find((k) => problems[k]);
-  if (first) form?.querySelector<HTMLElement>(`[name="${first}"]`)?.focus();
+/** Whether a button in the body still has no http(s) link (the editor's
+ * new button starts with none). */
+function buttonWithoutLink(editor: Editor | null): boolean {
+  let missing = false;
+  editor?.state.doc.descendants((node) => {
+    if (node.type.name === "button" && !/^https?:\/\/\S/i.test(String(node.attrs.href ?? ""))) {
+      missing = true;
+    }
+    return !missing;
+  });
+  return missing;
 }
 
 const people = (n: number) => `${fullNumber(n)} ${n === 1 ? "person" : "people"}`;
 
-/** The draft, its field errors, and the two sends. */
+/** The draft, its field errors, and the two sends. The body lives in the
+ * editor; it is read from there when a send needs it. */
 function useComposer() {
   const qc = useQueryClient();
   const toast = useToast();
-  const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [subject, setSubjectValue] = useState("");
   const [problems, setProblems] = useState<Problems>({});
   const [busy, setBusy] = useState<"test" | "send" | null>(null);
+  const editorRef = useRef<Editor | null>(null);
   // One per composed issue: the provider skips batches it already sent under
   // it, so a retry after a failure cannot send twice. A ref: nothing shows it.
   // Made on the first send and cleared after a success, for the next issue.
   const sendId = useRef<string | null>(null);
 
-  const set = (key: keyof Draft) => (value: string) => {
-    setDraft((d) => ({ ...d, [key]: value }));
-    setProblems((p) => ({ ...p, [key]: undefined }));
+  const setSubject = (value: string) => {
+    setSubjectValue(value);
+    setProblems((p) => ({ ...p, subject: undefined }));
   };
-  const payload = {
-    subject: draft.subject,
-    body: draft.body,
-    ctaLabel: draft.ctaLabel || undefined,
-    ctaUrl: draft.ctaUrl || undefined,
-  };
+  const bodyChanged = () => setProblems((p) => (p.body ? { ...p, body: undefined } : p));
+  const payload = () => ({ subject, doc: editorRef.current?.getJSON() });
+  /** Marks what is wrong, field by field, and focuses the first. The server
+   * checks again. */
   const check = (form: HTMLFormElement | null) => {
-    const found = problemsIn(draft);
+    const found: Problems = {};
+    if (!subject.trim()) found.subject = "Add a subject";
+    if (!editorRef.current?.getText().trim()) found.body = "Write the email";
+    else if (buttonWithoutLink(editorRef.current)) found.body = "A button needs a link";
     setProblems(found);
-    focusFirst(found, form);
+    if (found.subject) form?.querySelector<HTMLElement>('[name="subject"]')?.focus();
+    else if (found.body) editorRef.current?.commands.focus();
     return Object.keys(found).length === 0;
   };
   /** Runs one send; true when it went. A failure is a toast. */
@@ -100,7 +97,10 @@ function useComposer() {
   const sendTest = async (form: HTMLFormElement | null) => {
     if (!check(form)) return;
     await run("test", async () => {
-      await api<NewsletterSendResult>("/admin/newsletter/test", { method: "POST", body: payload });
+      await api<NewsletterSendResult>("/admin/newsletter/test", {
+        method: "POST",
+        body: payload(),
+      });
       return "Test sent to you";
     });
   };
@@ -108,15 +108,16 @@ function useComposer() {
     run("send", async () => {
       const result = await api<NewsletterSendResult>("/admin/newsletter/send", {
         method: "POST",
-        body: { ...payload, sendId: (sendId.current ??= crypto.randomUUID()) },
+        body: { ...payload(), sendId: (sendId.current ??= crypto.randomUUID()) },
       });
-      setDraft(EMPTY);
+      setSubjectValue("");
+      editorRef.current?.commands.clearContent();
       sendId.current = null;
       await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
       return `Sent to ${people(result.sent)}`;
     });
 
-  return { draft, problems, busy, set, check, sendTest, sendAll };
+  return { subject, problems, busy, editorRef, setSubject, bodyChanged, check, sendTest, sendAll };
 }
 
 /** One count with its label, for the answers row. */
@@ -196,46 +197,38 @@ function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
 }
 
 function IssueFields({ composer }: { composer: ReturnType<typeof useComposer> }) {
-  const { draft, problems, set } = composer;
+  const { subject, problems, editorRef, setSubject, bodyChanged } = composer;
+  const labelId = useId();
+  const reasonId = useId();
   return (
     <>
       <Field label="Subject" error={problems.subject}>
         <Input
           name="subject"
-          value={draft.subject}
-          onChange={(e) => set("subject")(e.target.value)}
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
           maxLength={150}
         />
       </Field>
-      <Field
-        label="Message"
-        error={problems.body}
-        hint="Plain text. Leave a blank line between paragraphs."
-      >
-        <Textarea
-          name="body"
-          rows={10}
-          value={draft.body}
-          onChange={(e) => set("body")(e.target.value)}
+      {/* Not a Field: that is a <label>, and a label around an editor with
+          menus inside it forwards their clicks. The same label row. */}
+      <div className="min-w-0">
+        <span className="mb-1.5 flex min-h-4 items-center gap-1.5 text-xs text-muted">
+          <span id={labelId} className="shrink-0">
+            Message
+          </span>
+          {problems.body && <FieldReason id={reasonId} reason={problems.body} />}
+        </span>
+        <NewsletterEditor
+          editorRef={editorRef}
+          labelId={labelId}
+          reasonId={reasonId}
+          invalid={Boolean(problems.body)}
+          onChange={bodyChanged}
         />
-      </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Button label" optional error={problems.ctaLabel}>
-          <Input
-            name="ctaLabel"
-            value={draft.ctaLabel}
-            onChange={(e) => set("ctaLabel")(e.target.value)}
-            maxLength={60}
-          />
-        </Field>
-        <Field label="Button link" optional error={problems.ctaUrl}>
-          <Input
-            name="ctaUrl"
-            inputMode="url"
-            value={draft.ctaUrl}
-            onChange={(e) => set("ctaUrl")(e.target.value)}
-          />
-        </Field>
+        <span className="mt-1 block text-xs text-muted">
+          Select text to format it or add a link. Type / for a heading, list, divider or button.
+        </span>
       </div>
     </>
   );
@@ -259,6 +252,9 @@ export function AdminNewsletterPage() {
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          // The editor's link and button forms sit inside this one, and
+          // React bubbles their submit here. Only this form's own counts.
+          if (event.target !== event.currentTarget) return;
           if (check(event.currentTarget)) setConfirming(true);
         }}
       >

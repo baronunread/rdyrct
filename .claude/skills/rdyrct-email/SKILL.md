@@ -19,7 +19,8 @@ renders nowhere near a browser: mail.
 ## Writing a new email
 
 1. Define the content, not markup. A new email is an `EmailContent` value:
-   `preheader`, `heading`, `paragraphs`, optional `code`, `cta`, `note`.
+   `preheader`, `heading`, `paragraphs`, optional `blocks` (headings,
+   lists, links, dividers, buttons), `code`, `cta`, `note`.
    If it does not fit those slots, extend `EmailContent` and the layout in one
    commit rather than hand-rolling HTML at the call site.
 2. Copy follows the house rules: Orwell's six, no em dashes, sentence case,
@@ -86,10 +87,17 @@ How it is sent:
   `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
   headers (RFC 8058, which Gmail and Yahoo require of bulk mail) carry the
   same signed link. Never send a newsletter without them.
-- The composer is Platform > Newsletter (admin only). It takes a subject, plain
-  paragraphs and an optional button, sends a test to the admin alone, and sends
-  to all. The email is built from `EmailContent` slots like any other, so the
-  palette and type scale stay the layout's; do not invent new ones.
+- The composer is Platform > Newsletter (admin only). It takes a subject and a
+  body written in Resend's editor (`@react-email/editor`, cut down in
+  `routes/admin/newsletter-editor.tsx` to paragraphs, two heading sizes,
+  lists, bold, italic, underline, links, line breaks, a divider and buttons),
+  sends a test to the admin alone, and sends to all. The browser sends the
+  editor's JSON, never HTML: `worker/newsletter-doc.ts` parses it against the
+  same allow-list (anything else is a 400 naming it) into the layout's
+  `blocks` slot, which escapes every string and drops any link or button that
+  is not http(s). The palette and type scale stay the layout's; do not invent
+  new ones. To allow another node, add it to the editor, the schema and
+  `blockHtml`/`blockText` in one commit.
 - One wide event per send, with counts and never addresses. A send over 5,000
   recipients is refused, not cut short; past that, move it to a Workflow.
 

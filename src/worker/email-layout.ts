@@ -41,12 +41,30 @@ const FONT = `"Figtree Variable", Figtree, ui-sans-serif, system-ui, -apple-syst
 // spacing. Mirrors the app's --font-mono.
 const CODE_FONT = `ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace`;
 
+/** A run of text inside a block, or a line break. A link is http(s) only:
+ * anything else renders as its text alone. */
+export type EmailInline =
+  | { text: string; bold?: boolean; italic?: boolean; underline?: boolean; href?: string }
+  | { lineBreak: true };
+
+/** One block of a written email (the newsletter editor's output, parsed in
+ * worker/newsletter-doc.ts). Rendered with the same styles as paragraphs. */
+export type EmailBlock =
+  | { kind: "paragraph"; content: EmailInline[] }
+  | { kind: "heading"; level: 2 | 3; content: EmailInline[] }
+  | { kind: "list"; ordered: boolean; start?: number; items: EmailBlock[][] }
+  | { kind: "divider" }
+  | { kind: "button"; label: string; url: string };
+
 export interface EmailContent {
   /** The grey line inboxes show next to the subject. */
   preheader: string;
   heading: string;
   /** Plain text; escaped into the HTML part and used as-is in the text part. */
   paragraphs: string[];
+  /** Written blocks after the paragraphs: headings, lists, links, a divider,
+   * buttons. Every string in them is escaped like a paragraph. */
+  blocks?: EmailBlock[];
   /** A code to read and retype, shown large and spaced. */
   code?: string;
   cta?: { label: string; url: string };
@@ -104,6 +122,68 @@ function ctaBlock(cta: { label: string; url: string }): SafeHtml {
       </table>`;
 }
 
+const PARAGRAPH_STYLE = `margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:1.6;color:${LIGHT.text}`;
+
+/** One run of text. A link that is not http(s) keeps its text and loses the
+ * link: safeUrl's "#" would leave a dead link in the email. */
+function inlineHtml(run: EmailInline): SafeHtml {
+  if ("lineBreak" in run) return emailHtml`<br>`;
+  let out = emailHtml`${run.text}`;
+  if (run.bold) out = emailHtml`<strong>${out}</strong>`;
+  if (run.italic) out = emailHtml`<em>${out}</em>`;
+  if (run.underline) out = emailHtml`<u>${out}</u>`;
+  const href = run.href ? safeUrl(run.href) : "#";
+  if (href !== "#") {
+    out = emailHtml`<a class="link" href="${href}" style="color:${LIGHT.accent};text-decoration:underline">${out}</a>`;
+  }
+  return out;
+}
+
+type HeadingBlock = Extract<EmailBlock, { kind: "heading" }>;
+type ListBlock = Extract<EmailBlock, { kind: "list" }>;
+
+/** A heading inside the body: smaller than the email's own h1. */
+function headingHtml(block: HeadingBlock): SafeHtml {
+  const runs = block.content.map(inlineHtml);
+  return block.level === 2
+    ? emailHtml`<h2 class="text" style="margin:22px 0 10px;font-family:${FONT};font-size:18px;line-height:1.35;font-weight:700;color:${LIGHT.text}">${runs}</h2>`
+    : emailHtml`<h3 class="text" style="margin:18px 0 8px;font-family:${FONT};font-size:16px;line-height:1.4;font-weight:700;color:${LIGHT.text}">${runs}</h3>`;
+}
+
+function listHtml(block: ListBlock): SafeHtml {
+  const items = block.items.map(
+    (item) =>
+      emailHtml`<li class="text" style="margin:0 0 6px;font-family:${FONT};font-size:15px;line-height:1.6;color:${LIGHT.text}">${item.map(listItemBlock)}</li>`,
+  );
+  const style = `margin:0 0 14px;padding:0 0 0 22px;font-family:${FONT};font-size:15px;line-height:1.6;color:${LIGHT.text}`;
+  return block.ordered
+    ? emailHtml`<ol class="text" start="${block.start ?? 1}" style="${style}">${items}</ol>`
+    : emailHtml`<ul class="text" style="${style}">${items}</ul>`;
+}
+
+/** One written block, styled like the layout's own paragraphs and button. */
+function blockHtml(block: EmailBlock): SafeHtml | null {
+  switch (block.kind) {
+    case "paragraph":
+      return emailHtml`<p class="text" style="${PARAGRAPH_STYLE}">${block.content.map(inlineHtml)}</p>`;
+    case "heading":
+      return headingHtml(block);
+    case "list":
+      return listHtml(block);
+    case "divider":
+      return emailHtml`<hr class="rule" style="border:none;border-top:1px solid ${LIGHT.border};margin:22px 0">`;
+    case "button":
+      return safeUrl(block.url) === "#" ? null : ctaBlock(block);
+  }
+}
+
+/** Inside a list item a paragraph drops its bottom margin, so the bullets
+ * keep the list's own spacing. */
+function listItemBlock(block: EmailBlock): SafeHtml | null {
+  if (block.kind !== "paragraph") return blockHtml(block);
+  return emailHtml`<span>${block.content.map(inlineHtml)}</span>`;
+}
+
 function codeBlock(code: string): SafeHtml {
   return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
 }
@@ -131,6 +211,7 @@ function plainRows(content: EmailContent, paragraphs: SafeHtml[], appUrl: string
         <tr>
           <td class="text" style="padding:0 26px ${content.footer === false ? "12px" : "0"}">
             ${paragraphs}
+            ${content.blocks ? content.blocks.map(blockHtml) : null}
             ${content.code ? codeBlock(content.code) : null}
             ${content.cta ? ctaBlock(content.cta) : null}
             ${
@@ -220,6 +301,8 @@ export function renderEmail(content: EmailContent, appUrl: string, to: string): 
     .cta-link { color: ${DARK.bg} !important; }
     .eyebrow { color: ${DARK.accent} !important; }
     .soft { background: ${DARK.surface2} !important; }
+    .link { color: ${DARK.accent} !important; }
+    .rule { border-top-color: ${DARK.border} !important; }
   }
 </style>
 </head>
@@ -263,7 +346,12 @@ export const NOTICE_FOOTER = `Questions? Write to ${SUPPORT_EMAIL}.`;
  * deliverability penalty, and text-only clients otherwise get nothing.
  */
 function renderText(content: EmailContent, appUrl: string, to: string): string {
-  const lines = [content.heading, "", ...content.paragraphs.flatMap((p) => [p, ""])];
+  const lines = [
+    content.heading,
+    "",
+    ...content.paragraphs.flatMap((p) => [p, ""]),
+    ...blocksText(content.blocks),
+  ];
   if (content.hero) {
     if (content.hero.eyebrow) lines.unshift(content.hero.eyebrow.toUpperCase(), "");
     lines.push(`${content.hero.sample.long} -> ${content.hero.sample.short}`, "");
@@ -282,4 +370,57 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
     );
   }
   return lines.join("\n").trimEnd();
+}
+
+/** A run of text in the plain part: a link as "text (url)", or the url alone
+ * when the text is the url. */
+function inlineText(content: EmailInline[]): string {
+  return content
+    .map((run) => {
+      if ("lineBreak" in run) return "\n";
+      const href = run.href ? safeUrl(run.href) : "#";
+      if (href === "#" || run.text === run.href || run.text === href) return run.text;
+      return `${run.text} (${href})`;
+    })
+    .join("");
+}
+
+/** One block as plain-text lines; `indent` nests a list inside a list. */
+function blockText(block: EmailBlock, indent: string): string[] {
+  switch (block.kind) {
+    case "paragraph":
+    case "heading":
+      return inlineText(block.content)
+        .split("\n")
+        .map((line) => indent + line);
+    case "list":
+      return block.items.flatMap((item, i) => {
+        const marker = block.ordered ? `${(block.start ?? 1) + i}. ` : "- ";
+        const [first, ...rest] = item.flatMap((child) => blockText(child, ""));
+        const pad = indent + " ".repeat(marker.length);
+        return [indent + marker + (first ?? "").trimStart(), ...rest.map((line) => pad + line)];
+      });
+    case "divider":
+      // Not "---": a line starting "--" is where the signature begins.
+      return [indent + "* * *"];
+    case "button":
+      return safeUrl(block.url) === "#" ? [] : [`${indent}${block.label}: ${safeUrl(block.url)}`];
+  }
+}
+
+/** The written blocks as plain-text lines, a blank line after each. */
+function blocksText(blocks: EmailBlock[] = []): string[] {
+  return blocks.flatMap((block) => [...blockText(block, ""), ""]);
+}
+
+/** The blocks' text in reading order, for a preheader. */
+export function blocksPreview(blocks: EmailBlock[], length = 120): string {
+  const text = blocks
+    .flatMap((block) =>
+      block.kind === "divider" || block.kind === "button" ? [] : blockText(block, ""),
+    )
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text;
 }

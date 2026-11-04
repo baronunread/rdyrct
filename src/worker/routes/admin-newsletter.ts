@@ -8,7 +8,6 @@
  * counts, never addresses.
  */
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
@@ -20,10 +19,10 @@ import type {
   NewsletterSendRow,
   NewsletterStatus,
 } from "../../shared/types";
-import { safeUrl } from "../email-html";
 import { countOptedIn, newsletterAnswers, optedInRecipients } from "../marketing";
 import { MAX_RECIPIENTS, deliverNewsletter, newsletterConfigured, type Issue } from "../newsletter";
 import { parseBody } from "../schemas";
+import { docToBlocks, newsletterDocSchema } from "../newsletter-doc";
 
 const issueFields = {
   subject: v.pipe(
@@ -32,16 +31,9 @@ const issueFields = {
     v.minLength(1, "Add a subject"),
     v.maxLength(150, "The subject is too long"),
   ),
-  body: v.pipe(
-    v.string("body is required"),
-    v.trim(),
-    v.minLength(1, "Write the email"),
-    v.maxLength(20_000, "The email is too long"),
-  ),
-  ctaLabel: v.optional(
-    v.pipe(v.string(), v.trim(), v.maxLength(60, "The button label is too long")),
-  ),
-  ctaUrl: v.optional(v.pipe(v.string(), v.trim())),
+  // The editor's JSON document, never HTML: newsletter-doc.ts allows only
+  // the nodes and marks the email layout renders.
+  doc: newsletterDocSchema,
 };
 
 const testSchema = v.object(issueFields);
@@ -55,17 +47,7 @@ const sendSchema = v.object({
 type IssueFields = v.InferOutput<typeof testSchema>;
 
 function toIssue(fields: IssueFields): Issue {
-  const paragraphs = fields.body
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const label = fields.ctaLabel?.trim();
-  const url = fields.ctaUrl?.trim();
-  if (!label && !url) return { subject: fields.subject, paragraphs };
-  if (!label || !url || safeUrl(url) === "#") {
-    throw new HTTPException(400, { message: "A button needs a label and an http(s) link" });
-  }
-  return { subject: fields.subject, paragraphs, cta: { label, url } };
+  return { subject: fields.subject, blocks: docToBlocks(fields.doc) };
 }
 
 export const adminNewsletterRoutes = new Hono<AppEnv>();

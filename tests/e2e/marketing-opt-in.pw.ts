@@ -170,20 +170,45 @@ test.describe("product news opt-in", () => {
     // A form error marks its fields; nothing is sent.
     await expect(page.getByText("Add a subject")).toBeVisible();
     await expect(page.getByText("Write the email")).toBeVisible();
+    const editor = page.getByRole("textbox", { name: "Message" });
+    await expect(editor).toHaveAttribute("aria-invalid", "true");
 
     await page.getByLabel("Subject").fill("Hello from the test");
-    await page.getByLabel("Message").fill("First paragraph.\n\nSecond paragraph.");
+    // The editor: a heading from the slash menu, a bold word, a link.
+    await editor.click();
+    await page.keyboard.type("/subtitle");
+    await expect(page.getByRole("button", { name: "Subtitle", exact: true })).toBeVisible();
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Launch day");
+    await expect(editor).not.toHaveAttribute("aria-invalid");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("This is ");
+    await page.keyboard.press("ControlOrMeta+b");
+    await page.keyboard.type("big");
+    await page.keyboard.press("ControlOrMeta+b");
+    await page.keyboard.type(" news. Read the docs");
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Shift+ArrowLeft");
+    await page.getByRole("button", { name: "Add link" }).click();
+    await page.getByPlaceholder("Paste a link").fill("https://rdyrct.com/docs");
+    await page.keyboard.press("Enter");
+    await expect(editor.locator("h2")).toHaveText("Launch day");
+    await expect(editor.locator("strong")).toHaveText("big");
+    await expect(editor.locator('a[href="https://rdyrct.com/docs"]')).toHaveText("docs");
+
     await page.getByRole("button", { name: "Send test to me" }).click();
     await expect(page.getByText("Test sent to you")).toBeVisible();
 
     let link = "";
+    let mail = "";
     await expect
       .poll(async () => {
-        const text = await latestMailTextTo(page, email);
-        link = text?.match(/Unsubscribe: (\S+)/)?.[1] ?? "";
+        mail = (await latestMailTextTo(page, email)) ?? "";
+        link = mail.match(/Unsubscribe: (\S+)/)?.[1] ?? "";
         return link;
       })
       .toContain("/unsubscribe?t=");
+    expect(mail).toContain("Launch day");
+    expect(mail).toContain("This is big news. Read the docs (https://rdyrct.com/docs)");
 
     // The link works with no session at all.
     await page.context().clearCookies();

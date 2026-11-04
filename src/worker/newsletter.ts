@@ -14,7 +14,7 @@
  */
 import { createError } from "evlog";
 import { emailConfigured } from "./email";
-import { renderEmail } from "./email-layout";
+import { type EmailBlock, blocksPreview, renderEmail } from "./email-layout";
 import type { Env } from "./env";
 import { unsubscribeUrl } from "./marketing";
 
@@ -28,9 +28,8 @@ export const MAX_RECIPIENTS = BATCH_SIZE * 50;
 
 export interface Issue {
   subject: string;
-  /** Plain paragraphs. The admin screen splits the body on blank lines. */
-  paragraphs: string[];
-  cta?: { label: string; url: string };
+  /** The body, written in the admin editor (newsletter-doc.ts parses it). */
+  blocks: EmailBlock[];
 }
 
 export interface Recipient {
@@ -62,10 +61,10 @@ async function outgoing(
   const link = await unsubscribeUrl(env, to.id);
   const body = renderEmail(
     {
-      preheader: issue.paragraphs[0]?.slice(0, 120) ?? issue.subject,
+      preheader: blocksPreview(issue.blocks) || issue.subject,
       heading: issue.subject,
-      paragraphs: issue.paragraphs,
-      cta: issue.cta,
+      paragraphs: [],
+      blocks: issue.blocks,
       footerLine: "You get this because you opted in to product news.",
       unsubscribeUrl: link,
     },
