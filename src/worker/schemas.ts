@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { INVITABLE_ROLES, type JsonValue } from "../shared/types";
+import { INVITABLE_ROLES, MARKETING_SOURCES, type JsonValue } from "../shared/types";
 import { limitOverridesSchema } from "../shared/limits";
 import { HTTPException } from "hono/http-exception";
 
@@ -52,6 +52,12 @@ export function parseOptionalBody<const TSchema extends v.GenericSchema>(
  * between a route reading a `string` and a route reading whatever arrived.
  */
 export const optionalText = v.optional(v.fallback(v.string(), ""), "");
+
+/** The answer to "email me product news": who gave it and where. */
+export const marketingBodySchema = v.object({
+  optIn: v.boolean("optIn must be true or false"),
+  source: v.picklist(MARKETING_SOURCES, "source must be signup, prompt or settings"),
+});
 
 /** The same for a flag, where anything that is not a boolean is not an answer. */
 export const optionalFlag = v.optional(v.fallback(v.nullable(v.boolean()), null));

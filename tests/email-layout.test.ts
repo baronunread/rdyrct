@@ -187,3 +187,25 @@ describe("renderEmail (#73)", () => {
     expect(html.html).not.toContain("null");
   });
 });
+
+describe("renderEmail unsubscribe slot", () => {
+  const link = "https://rdyrct.example/unsubscribe?t=abc.def";
+
+  test("puts the reader's unsubscribe link in the footer of both parts", () => {
+    const { html, text } = renderEmail({ ...base, unsubscribeUrl: link }, APP_URL, TO);
+    expect(html.html).toContain(`href="${link}"`);
+    expect(html.html).toContain("Unsubscribe</a>");
+    expect(text).toContain(`Unsubscribe: ${link}`);
+  });
+
+  test("adds nothing to mail that has no such link", () => {
+    const { html, text } = renderEmail(base, APP_URL, TO);
+    expect(html.html).not.toContain("Unsubscribe");
+    expect(text).not.toContain("Unsubscribe");
+  });
+
+  test("refuses a link that is not http(s)", () => {
+    const { html } = renderEmail({ ...base, unsubscribeUrl: "javascript:alert(1)" }, APP_URL, TO);
+    expect(html.html).not.toContain("javascript:");
+  });
+});

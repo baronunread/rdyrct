@@ -39,6 +39,7 @@ import { deleteAccountAndOwnedOrgs } from "../better-auth";
 import { banUser, ownedDestinationHosts, unbanUser } from "../abuse-hold";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
+import { adminNewsletterRoutes } from "./admin-newsletter";
 import { recordAdminAction } from "../audit";
 import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
 import {
@@ -83,6 +84,7 @@ adminRoutes.use("*", requireAdmin);
 // above this line is reachable by any signed-in user. It was, briefly, and a
 // test caught it (#67).
 adminRoutes.route("/links", adminLinkRoutes);
+adminRoutes.route("/newsletter", adminNewsletterRoutes);
 
 const AUDIT_MAX_ROWS = 200;
 

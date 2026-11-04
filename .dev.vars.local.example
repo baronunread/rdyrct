@@ -13,6 +13,8 @@ RESEND_API_KEY=re_local_emulated
 MAIL_FROM=rdyrct <no-reply@localhost>
 # The founder's welcome email. Leave unset to send none.
 WELCOME_FROM=Andrea at rdyrct <andrea@localhost>
+# Newsletters (Platform > Newsletter). Leave unset and a send is refused.
+NEWSLETTER_FROM=Andrea at rdyrct <news@localhost>
 
 # Polar (sandbox): https://sandbox.polar.sh
 # Any value here switches billing on, placeholder included: plan limits and

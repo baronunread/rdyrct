@@ -56,24 +56,46 @@ What a preview must pass before it ships: light and dark both readable, no
 horizontal scroll at 380px, the preheader invisible in the body, links
 http(s) only, and the footer intact (sender, recipient, "Not you?").
 
-## Broadcasts (marketing) go through Resend, not this repo
+## Newsletters (marketing) are sent by this app, to people who opted in
 
 Transactional mail (verification codes, invites, grace warnings) is
-`renderEmail()` + `sendEmail()`. A newsletter or announcement is a Resend
-Broadcast, composed in Resend's editor. There is no composer in this repo on
-purpose: Resend's already handles preview, test sends, scheduling and the
-unsubscribe page.
+`renderEmail()` + `sendEmail()`. A newsletter or announcement is a different
+thing with a different rule, and it goes through `src/worker/newsletter.ts`.
 
-Who a Broadcast goes to is a consent question, not a data question. **A
-verified address is not consent to marketing.** Never import the user table
-(or any export of it) into a Resend audience to send to. The only list a
-Broadcast may go to is the people who opted in: the Newsletter topic on the
-Resend contact each account gets at sign-up. Until that exists there is no
-consented list, so there is nothing to send a Broadcast to.
+**A verified address is not consent to marketing.** The only people a
+newsletter may reach have opted in, and that fact lives in our own D1
+(`user.marketing_opt_in_at`, with when and how: `marketing_opt_in_source`),
+never only at a provider. The default is not opted in, for existing accounts
+and for new ones. `optedInRecipients()` in `marketing.ts` is the one query that
+says who gets mail (opted in, verified, not banned); do not write a second, and
+never email an export of the user table. Mail to a person who has not opted in
+is transactional or it does not go.
 
-If you build custom HTML for a Broadcast, reuse this layout's palette and type
-scale. The layout's tokens (LIGHT/DARK in email-layout.ts) are the source of
-truth for those colours; do not invent new ones.
+How it is sent:
+
+- No subscriber list is kept at Resend. The app sends one email per opted-in
+  user through Resend's batch endpoint (up to 100 per call), over plain
+  `fetch` with `RESEND_BASE_URL`, so the dev emulator receives it.
+  `newsletter.ts` is the only file that knows the provider. Switching provider
+  means rewriting its `postBatch` and `emailConfigured()` in `email.ts`.
+- The sender is `NEWSLETTER_FROM`, on a subdomain of its own, so a marketing
+  complaint cannot reach the reputation of sign-in mail. Unset, a send is
+  refused with an error.
+- Every email is rendered per person with `renderEmail()` and
+  `unsubscribeUrl`: the link shows in the footer of both parts, and the
+  `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+  headers (RFC 8058, which Gmail and Yahoo require of bulk mail) carry the
+  same signed link. Never send a newsletter without them.
+- The composer is Platform > Newsletter (admin only). It takes a subject, plain
+  paragraphs and an optional button, sends a test to the admin alone, and sends
+  to all. The email is built from `EmailContent` slots like any other, so the
+  palette and type scale stay the layout's; do not invent new ones.
+- One wide event per send, with counts and never addresses. A send over 5,000
+  recipients is refused, not cut short; past that, move it to a Workflow.
+
+Tests for the rule are `tests/worker/marketing.worker.ts` (only opted-in,
+verified, unbanned accounts get mail; headers present; non-admins get a 404;
+tampered tokens fail) and `tests/e2e/marketing-opt-in.pw.ts`.
 
 ## Tests
 

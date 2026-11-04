@@ -13,6 +13,8 @@ import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
 import { Segmented } from "../ui/segmented";
+import { Switch } from "../ui/switch";
+import { useSetMarketing } from "../lib/marketing";
 import { SigningInGroup } from "../components/signing-in-group";
 import { PageHeader } from "../ui/misc";
 import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
@@ -199,6 +201,30 @@ function AccountGroup({ user }: { user: User | undefined }) {
   );
 }
 
+/** Product news by email: the same consent the sign-up box and the one-time
+ * dialog record, changeable any time. Waits for the server's answer before it
+ * shows a state, since the cached user is a page load old. */
+function EmailGroup({ user }: { user: User | undefined }) {
+  const toast = useToast();
+  const set = useSetMarketing();
+  const optedIn = set.isPending ? Boolean(set.variables?.optIn) : Boolean(user?.marketing.optedIn);
+  const change = (optIn: boolean) =>
+    set.mutate(
+      { optIn, source: "settings" },
+      {
+        onSuccess: () => toast(optIn ? "Product news is on" : "Product news is off"),
+        onError: (error) => toast(errorMessage(error), "error"),
+      },
+    );
+  return (
+    <SettingsGroup title="Updates">
+      <SettingsRow label="Product news" hint="New features and tips, now and then.">
+        <Switch label="Product news" checked={optedIn} onCheckedChange={change} />
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
+
 /** The delete-account confirm dialog and its request. */
 function useDeleteAccountFlow() {
   const toast = useToast();
@@ -315,6 +341,7 @@ export function SettingsPage() {
       <div className="flex max-w-[760px] flex-col gap-8">
         <AccountGroup user={currentUser.data?.user} />
         <SigningInGroup />
+        <EmailGroup user={currentUser.data?.user} />
         <DeleteAccountGroup
           disabled={accountDeleteDisabled}
           owned={ownedOrgs}

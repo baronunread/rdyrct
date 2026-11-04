@@ -60,6 +60,10 @@ export interface EmailContent {
    * you may not have asked for (ignore it). Mail about the reader's own
    * account, where ignoring it is bad advice, passes NOTICE_FOOTER. */
   footerLine?: string;
+  /** Marketing mail only: this reader's own unsubscribe link, shown in the
+   * footer of both parts. Needs the footer, so it is ignored with footer
+   * false. */
+  unsubscribeUrl?: string;
   /** A welcome-style layout: brand band, eyebrow, big centred heading, and a
    * sample (a long link and its short form) in a pill. For the one email that
    * should feel like a greeting; every other email keeps the plain layout. */
@@ -232,7 +236,7 @@ ${preheaderBlock(content.preheader)}
             : emailHtml`<tr>
           <td style="padding:24px 26px 26px">
             <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
-            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${content.footerLine ?? NOT_YOU}</p>
+            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${content.footerLine ?? NOT_YOU}${content.unsubscribeUrl ? emailHtml` <a class="muted" href="${safeUrl(content.unsubscribeUrl)}" style="color:${LIGHT.muted};text-decoration:underline">Unsubscribe</a>.` : null}</p>
           </td>
         </tr>`
         }
@@ -273,6 +277,7 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
       "rdyrct, link shortening and QR codes.",
       `Sent to ${to}.`,
       content.footerLine ?? NOT_YOU,
+      ...(content.unsubscribeUrl ? [`Unsubscribe: ${safeUrl(content.unsubscribeUrl)}`] : []),
       appUrl,
     );
   }

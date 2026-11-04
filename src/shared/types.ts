@@ -243,6 +243,35 @@ export interface User {
   comped: boolean;
   /** Same-origin serving URL for the user's avatar, or null (blobatar). */
   image: string | null;
+  /** Product news consent. Never read off the cached user: see marketing.ts. */
+  marketing: MarketingState;
+}
+
+/** Where a marketing answer was given. */
+export const MARKETING_SOURCES = ["signup", "prompt", "settings"] as const;
+export type MarketingSource = (typeof MARKETING_SOURCES)[number];
+
+export interface MarketingState {
+  /** Opted in to product news right now. */
+  optedIn: boolean;
+  /** Answered anywhere, even by dismissing the dialog. False means the
+   * one-time dialog still owes them the question. */
+  asked: boolean;
+}
+
+/** What the admin newsletter screen reads. */
+export interface NewsletterStatus {
+  /** Verified, not banned, opted in: who a send reaches. */
+  optedIn: number;
+  /** NEWSLETTER_FROM is set. Without it a send is refused. */
+  configured: boolean;
+  /** The most one send reaches. A bigger list is refused, not cut short. */
+  maxRecipients: number;
+}
+
+export interface NewsletterSendResult {
+  /** Emails the provider accepted. */
+  sent: number;
 }
 
 export interface QrOverrides {

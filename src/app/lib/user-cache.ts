@@ -50,6 +50,9 @@ const userSchema = v.object({
   hasBillingAccount: v.boolean(),
   comped: v.boolean(),
   image: v.nullable(v.string()),
+  // Parsed so the record stays whole. Never read from the cache: the dialog
+  // and the Settings toggle wait for the real answer (useCurrentUser).
+  marketing: v.object({ optedIn: v.boolean(), asked: v.boolean() }),
 });
 
 const orgSchema = v.object({

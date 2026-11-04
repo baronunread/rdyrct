@@ -28,6 +28,7 @@ import { mcpRoutes } from "./routes/mcp";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { avatarRoutes } from "./routes/avatars";
 import { adminRoutes } from "./routes/admin";
+import { unsubscribeRoutes } from "./unsubscribe";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { revalidateOnRedirect } from "./risk";
@@ -375,6 +376,11 @@ app.route("/api/reports", reportRoutes);
 // its route registrations count as side effects).
 if (import.meta.env.DEV)
   app.all("/__dev/*", async (c) => (await import("./dev-scenarios")).handleDev(c));
+
+// Newsletter unsubscribe (unsubscribe.ts): public, signed token, no session. In
+// every build, self-hosted included, because any copy that sends a newsletter
+// must be able to take people off it.
+app.route("/unsubscribe", unsubscribeRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => {

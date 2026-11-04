@@ -91,6 +91,7 @@ const adminLinks = () => import("./routes/admin/links");
 const adminOrgs = () => import("./routes/admin/orgs");
 const adminUsers = () => import("./routes/admin/users");
 const adminAudit = () => import("./routes/admin/audit");
+const adminNewsletter = () => import("./routes/admin/newsletter");
 const adminLayout = () => import("./routes/admin/layout");
 const AdminLayout = lazy(() => adminLayout().then((m) => ({ default: m.AdminLayout })));
 
@@ -323,6 +324,12 @@ const adminAuditRoute = createRoute({
   component: lazyPage(adminAudit, "AdminAuditPage"),
   loader: adminLoader(adminAudit),
 });
+const adminNewsletterRoute = createRoute({
+  ...adminPage,
+  path: "newsletter",
+  component: lazyPage(adminNewsletter, "AdminNewsletterPage"),
+  loader: adminLoader(adminNewsletter),
+});
 
 const routeTree = rootRoute.addChildren([
   RDYRCT_SITE ? marketingRoutes() : appHomeRoute,
@@ -351,6 +358,7 @@ const routeTree = rootRoute.addChildren([
       adminOrgsRoute,
       adminUsersRoute,
       adminAuditRoute,
+      adminNewsletterRoute,
     ]),
   ]),
 ]);

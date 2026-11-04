@@ -165,3 +165,15 @@ export async function signUpThroughForm(page: Page, email: string, password: str
       .first(),
   ).toBeVisible({ timeout: 30_000 });
 }
+
+/** The text of the newest email the emulator holds for `email`, or null.
+ * For a spec that reads a link out of a message (an unsubscribe link). */
+export async function latestMailTextTo(page: Page, email: string): Promise<string | null> {
+  const response = await page.request.get("http://localhost:4000/emails", {
+    headers: { authorization: "Bearer test_token_admin" },
+  });
+  if (!response.ok()) return null;
+  const mine = inboxList(await response.json()).filter((item) => addressedTo(item, email));
+  const newest = mine.at(-1);
+  return newest && isRecord(newest) ? String(newest.text ?? "") : null;
+}

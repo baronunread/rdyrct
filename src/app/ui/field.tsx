@@ -4,6 +4,7 @@ import {
   useContext,
   useId,
   type InputHTMLAttributes,
+  type TextareaHTMLAttributes,
   type SelectHTMLAttributes,
   type ReactNode,
 } from "react";
@@ -98,6 +99,21 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   },
 );
 Input.displayName = "Input";
+
+/** A multi-line input: the same ring, a few rows tall, resizable downward. */
+export const Textarea = forwardRef<
+  HTMLTextAreaElement,
+  TextareaHTMLAttributes<HTMLTextAreaElement>
+>(({ className, ...props }, ref) => (
+  <textarea
+    ref={ref}
+    className={cn(inputClass, "min-h-32 resize-y py-2 leading-relaxed", className)}
+    {...NO_AUTOFILL}
+    {...useFieldAria()}
+    {...props}
+  />
+));
+Textarea.displayName = "Textarea";
 
 export const Select = forwardRef<
   HTMLSelectElement,

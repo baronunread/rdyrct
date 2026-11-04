@@ -28,6 +28,7 @@ const PENDING_HOST = "pending.workers.dev";
 const RDYRCT_ONLY_VARS = [
   "MAIL_FROM",
   "WELCOME_FROM",
+  "NEWSLETTER_FROM",
   "POLAR_SERVER",
   "POLAR_PRO_PRODUCT_ID",
   "POLAR_HOBBY_PRODUCT_ID",

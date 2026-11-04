@@ -544,7 +544,7 @@ async function seed() {
     return { sub: true, comp: null, leaving: seen % 3 === 0 };
   };
 
-  const userRows = users.map((u) => {
+  const userRows = users.map((u, index) => {
     const { sub, comp, leaving } = billingFor(u);
     // A subscriber has Polar ids; a comped user has none. Leaving them off
     // made every seeded subscriber look comped on /billing, which is the one
@@ -558,7 +558,12 @@ async function seed() {
       sub ? now + randInt(3, 28) * day : "NULL"
     }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
       comp ? u.createdAt : "NULL"
-    }, ${u.createdAt}, ${u.createdAt})`;
+    }, ${
+      // Every fourth account opted in (so the admin newsletter screen has a
+      // count), and all are already asked: nobody meets the one-time dialog
+      // by accident. The "unasked" scenario is the account that does.
+      index % 4 === 0 ? `${u.createdAt}, 'settings'` : "NULL, NULL"
+    }, ${u.createdAt}, ${u.createdAt}, ${u.createdAt})`;
   });
   const accountRows = users.map(
     (u) =>
@@ -568,7 +573,8 @@ async function seed() {
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
        subscription_status, polar_subscription_id, polar_customer_id,
        polar_subscription_cancel_at_period_end, polar_subscription_current_period_end,
-       comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
+       comp_plan, comp_reason, comp_granted_at, marketing_opt_in_at,
+       marketing_opt_in_source, marketing_asked_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);
@@ -1184,14 +1190,26 @@ async function seedScenarioAccounts(passwordHash: string, now: number, day: numb
       name: "Sam Rivera",
       email: "fresh.account@seed.test",
       admin: 0,
+      asked: 1,
       // What sign-up names a first org for someone on a personal address.
       org: defaultOrgName("sam.rivera@gmail.com", "Sam Rivera"),
+    },
+    {
+      // An existing account that has never been asked about product news: the
+      // one-time dialog opens on its first app page.
+      key: "unasked",
+      name: "Nico Pending",
+      email: "unasked.account@seed.test",
+      admin: 0,
+      asked: 0,
+      org: defaultOrgName("nico.pending@gmail.com", "Nico Pending"),
     },
     {
       key: "admin",
       name: "Ada Platform",
       email: "platform.admin@seed.test",
       admin: 1,
+      asked: 1,
       org: defaultOrgName("ada.platform@gmail.com", "Ada Platform"),
     },
   ];
@@ -1201,8 +1219,8 @@ async function seedScenarioAccounts(passwordHash: string, now: number, day: numb
     const orgId = `seed-scn-org-${a.key}`;
     const at = a.key === "fresh" ? now - 60_000 : now - 200 * day;
     statements.push(
-      `INSERT INTO user (id, name, email, email_verified, plan, is_admin, created_at, updated_at)
-       VALUES (${q(userId)}, ${q(a.name)}, ${q(a.email)}, 1, 'free', ${a.admin}, ${at}, ${at})`,
+      `INSERT INTO user (id, name, email, email_verified, plan, is_admin, marketing_asked_at, created_at, updated_at)
+       VALUES (${q(userId)}, ${q(a.name)}, ${q(a.email)}, 1, 'free', ${a.admin}, ${a.asked ? at : "NULL"}, ${at}, ${at})`,
       `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at)
        VALUES (${q(`seed-acc-scn-${a.key}`)}, ${q(userId)}, 'credential', ${q(userId)}, ${q(passwordHash)}, ${at}, ${at})`,
       `INSERT INTO orgs (id, name, created_at) VALUES (${q(orgId)}, ${q(a.org)}, ${at})`,

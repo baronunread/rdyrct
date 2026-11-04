@@ -42,6 +42,11 @@ export interface Env {
   // founder's welcome email. Unset, no welcome is sent: its text is written in
   // one person's voice, which a self-hosted instance has no right to borrow.
   WELCOME_FROM?: string;
+  // var, e.g. "Andrea at rdyrct <news@news.rdyrct.com>". The sender of every
+  // newsletter, on its own subdomain so a marketing complaint cannot reach the
+  // reputation of the sign-in mail's MAIL_FROM. Unset, a newsletter send is
+  // refused (newsletter.ts).
+  NEWSLETTER_FROM?: string;
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
 

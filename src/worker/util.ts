@@ -36,6 +36,7 @@ export const RESERVED_SLUGS = new Set([
   "reset-password",
   "invite",
   "consent",
+  "unsubscribe",
   "privacy",
   "terms",
   "report",

@@ -41,6 +41,7 @@ import { OverLimitBanner } from "../components/over-limit";
 import { SetupChecklist, SetupGuideItem } from "../components/setup-checklist";
 import { UserAvatar } from "../components/user-avatar";
 import { CommandMenu } from "../components/command-menu";
+import { MarketingPrompt } from "../components/marketing-prompt";
 import { openCommandMenu } from "../lib/shortcut";
 import { NewLinkHost } from "../components/new-link-host";
 import { OrgMenuItems } from "../components/org-menu-items";
@@ -854,6 +855,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
     <NewLinkHost>
       <div className="flex min-h-dvh">
         <CommandMenu />
+        <MarketingPrompt />
         <WebMcpLinkTools />
         <WebMcpAnalyticsTool />
         {/* desktop sidebar: fixed so it never moves, not even on overscroll */}

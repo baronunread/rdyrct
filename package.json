@@ -143,6 +143,9 @@
       "WELCOME_FROM": {
         "description": "rdyrct.com's. Your copy drops it."
       },
+      "NEWSLETTER_FROM": {
+        "description": "rdyrct.com's. Your copy drops it, and so sends no newsletter."
+      },
       "POLAR_SERVER": {
         "description": "Billing, which is off on your copy unless you set up [Polar](https://polar.sh). Your copy drops rdyrct.com's values."
       },

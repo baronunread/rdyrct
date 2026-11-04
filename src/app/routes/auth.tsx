@@ -40,6 +40,7 @@ import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 import type { CurrentUser } from "@/shared/types";
 import { isAppPage, SETUP_ARRIVE, SETUP_FLOW } from "../lib/setup-arrive";
+import { forgetSignupChoice, rememberSignupChoice } from "../lib/marketing";
 import { loadShell } from "../lib/shell-loader";
 import { loadWelcome } from "../lib/welcome-loader";
 
@@ -448,6 +449,22 @@ function GoogleG() {
   );
 }
 
+/** The sign-up form's one optional box. A native checkbox, unticked: consent
+ * has to be a choice, and the Google button above reads it too. */
+function NewsOptIn({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <label className="flex min-h-10 cursor-pointer items-start gap-2.5 text-sm text-muted">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-accent"
+      />
+      <span>Send me product news and tips. Unsubscribe any time.</span>
+    </label>
+  );
+}
+
 function AuthFormView({
   mode,
   busy,
@@ -497,7 +514,12 @@ function AuthFormView({
     defaultValues: { email: "", password: "" },
   });
 
+  // Unticked unless the person ticks it: no pre-ticked consent.
+  const [news, setNews] = useState(false);
+
   const startGoogle = () => {
+    if (mode === "signup") rememberSignupChoice(news);
+    else forgetSignupChoice();
     setLastAuth("google");
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
@@ -516,7 +538,13 @@ function AuthFormView({
 
   const password = watch("password");
   const onFormSubmit = handleSubmit(
-    (data) => onSubmit(data.email, data.password),
+    (data) => {
+      // Signed-up choice rides to the first signed-in load (lib/marketing.ts);
+      // a login drops any older one rather than apply it to this account.
+      if (mode === "signup") rememberSignupChoice(news);
+      else forgetSignupChoice();
+      onSubmit(data.email, data.password);
+    },
     (errors) => {
       if (mode === "signup")
         posthog.capture(SIGNUP_FAILED, { reason: `invalid_${Object.keys(errors).join("_")}` });
@@ -551,6 +579,7 @@ function AuthFormView({
           password={password}
           onForgot={() => onForgot(getValues("email"))}
         />
+        {mode === "signup" && <NewsOptIn checked={news} onChange={setNews} />}
         {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
           type="submit"

@@ -14,6 +14,9 @@ import { orgPlanOf } from "@/shared/types";
 import { effectiveLimits, tierOf } from "@/shared/limits";
 import { loadLimitOverrides } from "../limit-overrides";
 import { parseOver } from "../reconcile";
+import { marketingStateOf, setMarketing } from "../marketing";
+import { marketingBodySchema, parseBody } from "../schemas";
+import type { JsonValue } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
@@ -67,6 +70,8 @@ async function currentUserFor(
       .select({
         customerId: schema.user.polarCustomerId,
         compPlan: schema.user.compPlan,
+        marketingOptInAt: schema.user.marketingOptInAt,
+        marketingAskedAt: schema.user.marketingAskedAt,
       })
       .from(schema.user)
       .where(eq(schema.user.id, user.id)),
@@ -106,6 +111,9 @@ async function currentUserFor(
       limits: effectiveLimits(planNow(orgPlanOf(user.plan)), overrides.get(user.id)),
       hasBillingAccount: Boolean(billingRows[0]?.customerId),
       comped: Boolean(billingRows[0]?.compPlan),
+      marketing: marketingStateOf(
+        billingRows[0] ?? { marketingOptInAt: null, marketingAskedAt: null },
+      ),
     },
     orgs,
   };
@@ -115,6 +123,24 @@ userRoutes.get("/user", requireUser, async (c) => {
   const log = c.get("log");
   log.set({ userId: c.var.user!.id });
   return c.json(await currentUserFor(c.var.db, c.var.user!));
+});
+
+// Product news consent: the sign-up form's choice, the one-time dialog and the
+// Settings toggle all land here (marketing.ts has the rules). Consent is
+// personal data, so every change is audited, never with the address.
+userRoutes.put("/user/marketing", requireUser, async (c) => {
+  const log = c.get("log");
+  const user = c.var.user!;
+  const body = parseBody(marketingBodySchema, await c.req.json<JsonValue>().catch(() => null));
+  const { state, applied } = await setMarketing(c.var.db, user.id, body.optIn, body.source);
+  log.set({ marketing: { optIn: body.optIn, source: body.source, applied } });
+  log.audit({
+    action: "marketing.consent",
+    actor: { type: "user", id: user.id },
+    target: { type: "user", id: user.id },
+    outcome: applied ? "success" : "denied",
+  });
+  return c.json(state);
 });
 
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup

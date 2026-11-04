@@ -330,6 +330,36 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   one left ownerless would have no plan, no billing and nobody who could
   delete it. Settings names each org in the confirmation first. Orgs the
   account only belongs to are untouched.
+- **Product news (newsletter) needs consent, and consent lives in D1.** The
+  three `user.marketing_*` columns (`marketing_opt_in_at`,
+  `marketing_opt_in_source`, `marketing_asked_at`; migration 0053) are the
+  source of truth, never a provider's list, and everyone starts not opted in:
+  no pre-ticked box, and a verified address is not consent. Only
+  `src/worker/marketing.ts` reads or writes them. Three ways to answer: an
+  unticked box on the sign-up form (email and Google; the choice rides
+  `sessionStorage` to the first signed-in app load, `lib/marketing.ts`), a
+  one-time dialog for accounts not yet asked (`MarketingPrompt` in the shell,
+  never in `/welcome`; closing it is a "no"), and a Settings toggle. Any answer
+  sets `marketing_asked_at`. A sign-up or dialog answer applies only to an
+  account that has not answered, so a stale one cannot overwrite a decision;
+  Settings always applies. `PUT /api/user/marketing` is the one write, audited.
+  Dev test accounts (`/__dev/test-account`) and seeded accounts are already
+  asked, so the dialog does not open over other specs; the `unasked` scenario
+  and `asked: false` give one that has not.
+  Sending is the app's own job, one email per opted-in, verified, unbanned
+  user, in `src/worker/newsletter.ts`: the only file that knows the provider
+  (Resend's batch endpoint, plain `fetch`, `RESEND_BASE_URL`; no list is kept
+  there). It sends from `NEWSLETTER_FROM`, a subdomain sender, and refuses
+  when that is unset. Every email has its own unsubscribe link in the footer
+  and the RFC 8058 one-click headers. The link is `/unsubscribe?t=`, a Worker
+  page (`unsubscribe.ts`, in self-hosted builds too, reserved from slugs) over
+  an HMAC of the user id keyed from `BETTER_AUTH_SECRET` under its own label,
+  so rotating that secret also breaks links already mailed. GET shows a button
+  and changes nothing; POST (button or a mail client's one-click) unsubscribes.
+  Platform admins send from Platform > Newsletter (`/api/admin/newsletter`:
+  count, a test to themselves, send to all). One send is capped at 5,000
+  recipients and refused beyond that; each batch carries an idempotency key from
+  the screen's `sendId`, so a retry never sends twice.
 - **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
   client in `src/app/lib/turnstile.ts`) guards signup and password reset
   (an `x-turnstile-token` header, verified against `siteverify` in
@@ -420,7 +450,8 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
 `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` (optional; unset switches the
-check off), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
+check off), `NEWSLETTER_FROM` (a var on its own sending subdomain; unset refuses
+newsletter sends), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
 Web Risk).
 
 ## Layout

@@ -37,6 +37,7 @@ export const APP_ROUTES: readonly string[] = [
   "/admin/orgs",
   "/admin/users",
   "/admin/audit",
+  "/admin/newsletter",
 ];
 
 const SPA_ROUTES = [...APP_ROUTES, ...(RDYRCT_SITE ? SITE_ONLY_PATHS : [])].map((route) =>

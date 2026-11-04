@@ -31,7 +31,7 @@ initLogger({
 // (React never mounts). Scoping emit to /api/** keeps the SPA and the root
 // redirect untouched while still covering every handler entry point.
 // /__dev only exists in a dev build (src/worker/dev-scenarios.ts).
-const INCLUDED = ["/api/**", "/api/*", "/__dev/**"];
+const INCLUDED = ["/api/**", "/api/*", "/__dev/**", "/unsubscribe"];
 
 /** Register once, before your routes: `app.use(evlogMiddleware)`. */
 export const evlogMiddleware = evlog({

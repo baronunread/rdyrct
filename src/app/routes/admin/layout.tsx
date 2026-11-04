@@ -26,6 +26,7 @@ const TABS = [
   { to: "/admin/orgs", end: false, label: "Organizations" },
   { to: "/admin/links", end: false, label: "Links" },
   { to: "/admin/audit", end: false, label: "Audit log" },
+  { to: "/admin/newsletter", end: false, label: "Newsletter" },
 ] as const;
 
 /** The usage range lives in the header, on the right of the title, so it

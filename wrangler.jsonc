@@ -86,6 +86,10 @@
     "MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
     // The founder's welcome email is sent from this address. Forks leave it unset.
     "WELCOME_FROM": "Andrea at rdyrct <andrea@mail.rdyrct.com>",
+    // Newsletters go out from this address, on a subdomain of their own so a
+    // marketing complaint cannot hurt sign-in mail. Verify the domain in
+    // Resend first. Unset (forks), a newsletter send is refused.
+    "NEWSLETTER_FROM": "Andrea at rdyrct <andrea@news.rdyrct.com>",
     // "production" or "sandbox" — the SDK maps this to the API base URL.
     "POLAR_SERVER": "production",
     "POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",
@@ -312,6 +316,7 @@
         "SHARED_LINK_HOST": "rdyr.cc",
         "MAIL_FROM": "rdyrct <no-reply@localhost>",
         "WELCOME_FROM": "Andrea at rdyrct <andrea@localhost>",
+        "NEWSLETTER_FROM": "Andrea at rdyrct <news@localhost>",
         "POLAR_SERVER": "sandbox",
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
         "POLAR_HOBBY_PRODUCT_ID": "playwright_hobby_product",
