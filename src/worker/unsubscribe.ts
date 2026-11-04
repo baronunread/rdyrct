@@ -163,15 +163,25 @@ function wantedOf(
 }
 
 /** Records what a POST asks for; false when the account is gone. */
-async function applyWanted(db: DB, userId: string, wanted: Wanted): Promise<boolean> {
-  if (wanted.kind === "off") return unsubscribeUser(db, userId, wanted.from);
+/** Applies the answer; `found` is false for an account that is gone, and
+ * `state` is where the reader stands after it. */
+async function applyWanted(
+  db: DB,
+  userId: string,
+  wanted: Wanted,
+): Promise<{ found: boolean; state: MarketingState }> {
+  if (wanted.kind === "off") {
+    const found = await unsubscribeUser(db, userId, wanted.from);
+    return { found, state: await marketingState(db, userId) };
+  }
   // Only a list that changes is written, so a list left on keeps the time
   // and source of its opt-in.
   const before = await marketingState(db, userId);
   const changed = (list: MarketingList) =>
     before[list] === wanted[list] ? undefined : wanted[list];
   const answer = { source: "settings" as const, news: changed("news"), offers: changed("offers") };
-  return (await setMarketing(db, userId, answer)).applied;
+  const { applied, state } = await setMarketing(db, userId, answer);
+  return { found: applied, state };
 }
 
 // The form and a mail client's one-click request: 200 either way.
@@ -194,8 +204,7 @@ unsubscribeRoutes.post("/", async (c) => {
   }
   const wanted = wantedOf(parsed.output, named.list, c.req.query("scope"));
   const db = drizzle(c.env.DB, { schema });
-  const found = await applyWanted(db, named.userId, wanted);
-  const state = await marketingState(db, named.userId);
+  const { found, state } = await applyWanted(db, named.userId, wanted);
   log?.set({ unsubscribe: { valid: true, list: named.list, wanted, found } });
   log?.audit({
     action: wanted.kind === "save" ? "marketing.consent" : "marketing.unsubscribe",

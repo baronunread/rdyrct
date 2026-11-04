@@ -14,7 +14,7 @@ async function blockAuthRequests(page: Page) {
 }
 
 async function submitLogin(page: Page, email: string, password: string) {
-  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
@@ -71,7 +71,7 @@ test.describe("authentication forms", () => {
         const { default: posthog } = await import(modulePath);
         posthog.capture = (event) => window.recordSignupEvent(event);
       });
-      await page.getByLabel("Email", { exact: true }).fill("duplicate-signup@example.com");
+      await page.getByLabel("Email").fill("duplicate-signup@example.com");
       await page.getByLabel("Password").fill("test-password-123");
       const signIn = page.waitForResponse("**/api/auth/sign-in/email");
       await page.getByRole("button", { name: "Sign up", exact: true }).click();
@@ -163,7 +163,7 @@ test.describe("authentication forms", () => {
     const authRequests = await blockAuthRequests(page);
 
     await page.goto("/signup");
-    await page.getByLabel("Email", { exact: true }).fill("person@example.com");
+    await page.getByLabel("Email").fill("person@example.com");
     await page.getByLabel("Password").fill("short");
     await page.getByRole("button", { name: "Sign up" }).click();
 
@@ -233,7 +233,7 @@ test.describe("authentication forms", () => {
     });
 
     await page.goto("/signup");
-    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill("test-password-123");
     await page.getByRole("button", { name: "Sign up" }).click();
 
@@ -255,7 +255,7 @@ test.describe("authentication forms", () => {
     // Same address, a password of the prober's choosing: an outsider must
     // not be able to tell from the screen that this address is registered.
     await page.goto("/signup");
-    await page.getByLabel("Email", { exact: true }).fill(victim);
+    await page.getByLabel("Email").fill(victim);
     await page.getByLabel("Password").fill("another-password-456");
     await page.getByRole("button", { name: "Sign up" }).click();
 

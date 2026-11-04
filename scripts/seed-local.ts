@@ -565,7 +565,7 @@ async function seed() {
       // "unasked" scenario is the account that does.
       index % 4 === 0 ? `${u.createdAt}, 'settings'` : "NULL, NULL"
     }, ${
-      index % 5 === 0 ? `${u.createdAt}, 'signup'` : "NULL, NULL"
+      index % 5 === 0 ? `${u.createdAt}, 'onboarding'` : "NULL, NULL"
     }, ${u.createdAt}, ${u.createdAt}, ${u.createdAt})`;
   });
   const accountRows = users.map(

@@ -1,15 +1,18 @@
 /**
  * Newsletter composer (platform admin). One issue at a time, to one list
- * (product news or offers): a subject and a body written in the email editor
- * (headings, lists, links, a button). A test goes to the admin alone; a send
- * goes to everyone opted in to that list, narrowed by stage and plan
- * (worker/marketing.ts decides who).
+ * (product news or offers) narrowed by stage and plan (worker/marketing.ts
+ * decides who): a subject and a body written in the email editor. A test
+ * goes to the admin alone, at once; a send goes now or at a scheduled time,
+ * through a Cloudflare Workflow (worker/newsletter-send.ts). The page is the
+ * composer first; who has answered sits in two quiet lines under the
+ * history.
  */
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   keepPreviousData,
   queryOptions,
+  useMutation,
   useQuery,
   useQueryClient,
   type QueryClient,
@@ -22,32 +25,37 @@ import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { Field, FieldReason, Input } from "../../ui/field";
 import { BusyContent } from "../../ui/spinner";
 import { useToast } from "../../ui/toast";
-import { Segmented } from "../../ui/segmented";
-import { Skeleton } from "../../ui/skeleton";
-import { SectionHeading, fullNumber } from "./admin-kit";
+import { SectionHeading, StateLabel, fullNumber, type StateTone } from "./admin-kit";
 import { NewsletterEditor } from "./newsletter-editor";
+import { AudienceField, audienceTail, filterLabels } from "./newsletter-audience";
+import { SchedulePicker, whenWords } from "./newsletter-schedule";
 import { shortDate } from "../../lib/dates";
 import {
-  ACTIVE_WITHIN_DAYS,
-  AUDIENCE_PLANS,
-  AUDIENCE_STAGES,
   EVERYONE,
   MARKETING_LIST_LABELS,
   MARKETING_LISTS,
   type AudienceFilter,
-  type AudiencePlan,
-  type AudienceStage,
   type MarketingList,
   type NewsletterAudienceCount,
   type NewsletterAnswers,
-  type NewsletterSendResult,
   type NewsletterSendRow,
+  type NewsletterSendState,
+  type NewsletterSendStatus,
   type NewsletterStatus,
 } from "@/shared/types";
 
+/** Asked again every few seconds while a send is going out, or due to. */
 const newsletterQuery = queryOptions<NewsletterStatus>({
   queryKey: ["admin", "newsletter"],
   queryFn: () => api("/admin/newsletter"),
+  refetchInterval: (query) =>
+    query.state.data?.sends.some(
+      (send) =>
+        send.status === "sending" ||
+        (send.status === "scheduled" && (send.scheduledFor ?? 0) <= Date.now()),
+    )
+      ? 3000
+      : false,
 });
 
 /** How many people a send to `list` with `filter` reaches, asked again as
@@ -84,67 +92,20 @@ function buttonWithoutLink(editor: Editor | null): boolean {
 /** All the text a body may hold; the server refuses more (newsletter-doc.ts). */
 const MAX_TEXT = 20_000;
 
-const people = (n: number) => `${fullNumber(n)} ${n === 1 ? "person" : "people"}`;
-
-/** The audience picker's choices. */
-const LIST_ITEMS = MARKETING_LISTS.map((id) => ({ id, label: MARKETING_LIST_LABELS[id] }));
-
-const STAGE_LABELS = {
-  any: "Everyone",
-  new: "New",
-  active: "Active",
-  slipping: "Slipping away",
-} satisfies Record<AudienceStage, string>;
-const STAGE_ITEMS = AUDIENCE_STAGES.map((id) => ({ id, label: STAGE_LABELS[id] }));
-
-const PLAN_LABELS = { any: "Any", free: "Free", paid: "Paid" } satisfies Record<
-  AudiencePlan,
-  string
->;
-const PLAN_ITEMS = AUDIENCE_PLANS.map((id) => ({ id, label: PLAN_LABELS[id] }));
-
-/** What each filter keeps, as the end of "people on Offers who …". */
-const STAGE_WORDS = {
-  any: null,
-  new: "have not made a link yet",
-  active: `made a link and came back in the last ${ACTIVE_WITHIN_DAYS} days`,
-  slipping: `made a link but have not been back for ${ACTIVE_WITHIN_DAYS} days`,
-} satisfies Record<AudienceStage, string | null>;
-const PLAN_WORDS = {
-  any: null,
-  free: "are on Free",
-  paid: "are on a paid plan",
-} satisfies Record<AudiencePlan, string | null>;
-
-/** "people on Offers who are on Free and have not made a link yet", after
- * a count of `n`. */
-function audienceTail(n: number, list: MarketingList, filter: AudienceFilter): string {
-  const clauses = [PLAN_WORDS[filter.plan], STAGE_WORDS[filter.stage]].filter(Boolean);
-  const who = clauses.length > 0 ? ` who ${clauses.join(" and ")}` : "";
-  return `${n === 1 ? "person" : "people"} on ${MARKETING_LIST_LABELS[list]}${who}`;
-}
-
-/** The filters a past send used, for its history line; nothing for none. */
-function filterLabels(filter: AudienceFilter): string[] {
-  return [
-    filter.stage === "any" ? null : STAGE_LABELS[filter.stage],
-    filter.plan === "any" ? null : PLAN_LABELS[filter.plan],
-  ].filter((label) => label !== null);
-}
-
-/** The draft, its field errors, and the two sends. The body lives in the
- * editor; it is read from there when a send needs it. */
+/** The draft, its field errors, and the three ways to send it. The body
+ * lives in the editor; it is read from there when a send needs it. */
 function useComposer(list: MarketingList, audience: AudienceFilter) {
   const qc = useQueryClient();
   const toast = useToast();
   const [subject, setSubjectValue] = useState("");
   const [problems, setProblems] = useState<Problems>({});
-  const [busy, setBusy] = useState<"test" | "send" | null>(null);
+  const [busy, setBusy] = useState<"test" | "send" | "schedule" | null>(null);
   const editorRef = useRef<Editor | null>(null);
-  // One per composed issue: the provider skips batches it already sent under
-  // it, so a retry after a failure cannot send twice. A ref: nothing shows it.
-  // Made on the first send and cleared after a success, for the next issue.
+  // One per composed issue, and the id of the send's workflow: sending the
+  // same id twice (a double click, a retry) starts nothing new. A ref:
+  // nothing shows it. Made on the first send and cleared after a success.
   const sendId = useRef<string | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const setSubject = (value: string) => {
     setSubjectValue(value);
@@ -154,7 +115,7 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
   const payload = () => ({ list, subject, doc: editorRef.current?.getJSON() });
   /** Marks what is wrong, field by field, and focuses the first. The server
    * checks again. */
-  const check = (form: HTMLFormElement | null) => {
+  const check = () => {
     const found: Problems = {};
     if (!subject.trim()) found.subject = "Add a subject";
     const text = editorRef.current?.getText() ?? "";
@@ -162,12 +123,12 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
     else if (text.length > MAX_TEXT) found.body = "The email is too long";
     else if (buttonWithoutLink(editorRef.current)) found.body = "A button needs a link";
     setProblems(found);
-    if (found.subject) form?.querySelector<HTMLElement>('[name="subject"]')?.focus();
+    if (found.subject) formRef.current?.querySelector<HTMLElement>('[name="subject"]')?.focus();
     else if (found.body) editorRef.current?.commands.focus();
     return Object.keys(found).length === 0;
   };
   /** Runs one send; true when it went. A failure is a toast. */
-  const run = async (kind: "test" | "send", send: () => Promise<string>) => {
+  const run = async (kind: "test" | "send" | "schedule", send: () => Promise<string>) => {
     setBusy(kind);
     try {
       toast(await send());
@@ -180,31 +141,30 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
     }
   };
 
-  const sendTest = async (form: HTMLFormElement | null) => {
-    if (!check(form)) return;
+  const sendTest = async () => {
+    if (!check()) return;
     await run("test", async () => {
-      await api<NewsletterSendResult>("/admin/newsletter/test", {
-        method: "POST",
-        body: payload(),
-      });
+      await api("/admin/newsletter/test", { method: "POST", body: payload() });
       return "Test sent to you";
     });
   };
-  const sendAll = () =>
-    run("send", async () => {
-      const result = await api<NewsletterSendResult>("/admin/newsletter/send", {
+  /** Send now (no time) or Schedule. */
+  const send = (scheduledFor?: number) =>
+    run(scheduledFor ? "schedule" : "send", async () => {
+      const state = await api<NewsletterSendState>("/admin/newsletter/send", {
         method: "POST",
-        body: { ...payload(), audience, sendId: (sendId.current ??= crypto.randomUUID()) },
+        body: {
+          ...payload(),
+          audience,
+          sendId: (sendId.current ??= crypto.randomUUID()),
+          ...(scheduledFor && { scheduledFor }),
+        },
       });
       await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
-      // Stopped at the per-request limit with people left: the same send id
-      // and the same issue carry on from where it stopped.
-      if (!result.done)
-        return `Sent to ${people(result.sent)} so far. Send again to reach the rest.`;
       setSubjectValue("");
       editorRef.current?.commands.clearContent();
       sendId.current = null;
-      return `Sent to ${people(result.sent)}`;
+      return state.scheduledFor ? `Scheduled for ${whenWords(state.scheduledFor)}` : "Sending";
     });
 
   /** A send to another list, or other filters, is another send: the next
@@ -218,163 +178,128 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
     problems,
     busy,
     editorRef,
+    formRef,
     setSubject,
     bodyChanged,
     check,
     sendTest,
-    sendAll,
+    send,
     audienceChanged,
   };
 }
 
-/** One count with its label, for the answers row. */
-function Count({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="text-base font-semibold tabular-nums">{fullNumber(value)}</dd>
-    </div>
-  );
-}
-
-/** Where the yeses came from, as a line under the counts. */
-function yesSources(yes: NewsletterAnswers["yes"]): string {
+/** One list's answers as a line: yes (and where from), no, not asked. */
+function answersLine(answers: NewsletterAnswers): string {
+  const { onboarding, prompt, settings } = answers.yes;
+  const yes = onboarding + prompt + settings;
   return [
-    `${fullNumber(yes.signup)} at sign-up`,
-    `${fullNumber(yes.prompt)} from the dialog`,
-    `${fullNumber(yes.settings)} in Settings`,
-  ].join(" · ");
+    `${fullNumber(yes)} said yes (${fullNumber(onboarding)} in onboarding, ${fullNumber(prompt)} from the dialog, ${fullNumber(settings)} in Settings)`,
+    `${fullNumber(answers.no)} said no`,
+    `${fullNumber(answers.unasked)} not asked yet`,
+  ].join(", ");
 }
 
-/** One list's answers: yes, no, not asked, and where the yeses came from. */
-function ListAnswers({ list, answers }: { list: MarketingList; answers: NewsletterAnswers }) {
+/** Who has answered, per list: two quiet lines, not a dashboard. */
+function Answers({ status }: { status: NewsletterStatus }) {
   const headingId = useId();
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2">
+    <section aria-labelledby={headingId} className="flex flex-col gap-1.5">
       <h3 id={headingId} className="text-sm font-semibold">
-        {MARKETING_LIST_LABELS[list]}
+        Answers
       </h3>
-      <dl className="grid grid-cols-3 gap-3">
-        <Count
-          label="Said yes"
-          value={answers.yes.signup + answers.yes.prompt + answers.yes.settings}
-        />
-        <Count label="Said no" value={answers.no} />
-        <Count label="Not asked yet" value={answers.unasked} />
+      <dl className="flex flex-col gap-1 text-xs text-muted">
+        {MARKETING_LISTS.map((id) => (
+          <div key={id} className="flex flex-col sm:flex-row sm:gap-1.5">
+            <dt className="shrink-0 font-medium text-text">{MARKETING_LIST_LABELS[id]}</dt>
+            <dd className="tabular-nums">{answersLine(status.answers[id])}.</dd>
+          </div>
+        ))}
       </dl>
-      <p className="text-xs text-muted">{yesSources(answers.yes)}</p>
     </section>
   );
 }
 
-/** One filter: what it is called, and its choices. */
-function FilterRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-      <span className="text-xs text-muted sm:w-14 sm:shrink-0">{label}</span>
-      {children}
-    </div>
-  );
+const STATUS = {
+  scheduled: { tone: "warn", label: "Scheduled" },
+  sending: { tone: "warn", label: "Sending" },
+  sent: { tone: "ok", label: "Sent" },
+  cancelled: { tone: "quiet", label: "Cancelled" },
+  failed: { tone: "bad", label: "Failed" },
+} satisfies Record<NewsletterSendStatus, { tone: StateTone; label: string }>;
+
+/** When a send went or goes, and how far it got, in words. */
+function sendLine(send: NewsletterSendRow): string {
+  const who = [MARKETING_LIST_LABELS[send.list], ...filterLabels(send.audience)].join(" · ");
+  const when = send.scheduledFor ?? send.createdAt;
+  switch (send.status) {
+    case "scheduled":
+      return `${who} · goes ${whenWords(when)}`;
+    case "sending":
+      return `${who} · ${fullNumber(send.sent)} so far`;
+    case "cancelled":
+      return `${who} · was set for ${shortDate(when)}`;
+    case "sent":
+    case "failed":
+      return `${who} · ${shortDate(send.finishedAt ?? when)} · to ${fullNumber(send.sent)}`;
+  }
 }
 
-/** Who a send reaches: the list, the filters, and how many people that is. */
-function Audience({
-  status,
-  list,
-  filter,
-  counted,
-  stale,
-  onList,
-  onFilter,
-}: {
-  status: NewsletterStatus | undefined;
-  list: MarketingList;
-  filter: AudienceFilter;
-  /** The last count and what it counted; worded from its own list and filter. */
-  counted: NewsletterAudienceCount | undefined;
-  /** A newer count is on its way: the one shown is for the previous choice. */
-  stale: boolean;
-  onList: (list: MarketingList) => void;
-  onFilter: (filter: AudienceFilter) => void;
-}) {
-  const answers = status?.answers;
-  return (
-    <div className="flex flex-col gap-4 rounded-xl bg-surface-2 p-4 text-sm">
-      <div className="flex flex-col gap-3">
-        <FilterRow label="Send to">
-          <Segmented label="Send to" items={LIST_ITEMS} value={list} onChange={onList} />
-        </FilterRow>
-        <FilterRow label="Stage">
-          <Segmented
-            label="Stage"
-            items={STAGE_ITEMS}
-            value={filter.stage}
-            onChange={(stage) => onFilter({ ...filter, stage })}
-          />
-        </FilterRow>
-        <FilterRow label="Plan">
-          <Segmented
-            label="Plan"
-            items={PLAN_ITEMS}
-            value={filter.plan}
-            onChange={(plan) => onFilter({ ...filter, plan })}
-          />
-        </FilterRow>
-      </div>
-      {/* Two lines kept whatever the filters say, so the box does not jump. */}
-      <div aria-live="polite" className="flex min-h-11 flex-col gap-0.5">
-        {counted === undefined ? (
-          <Skeleton className="h-5 w-64 max-w-full" />
-        ) : (
-          <p
-            data-testid="newsletter-audience"
-            aria-busy={stale}
-            className={stale ? "opacity-50 transition-opacity" : "transition-opacity"}
-          >
-            <span className="font-semibold tabular-nums">{fullNumber(counted.count)}</span>{" "}
-            {audienceTail(counted.count, counted.list, counted.filter)}.
-          </p>
-        )}
-        <p className="text-xs text-muted">
-          Only people who opted in, verified their address and are not banned.
-        </p>
-      </div>
-      {answers && (
-        <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
-          {MARKETING_LISTS.map((id) => (
-            <ListAnswers key={id} list={id} answers={answers[id]} />
-          ))}
-        </div>
-      )}
-      {status?.configured === false && (
-        <p className="text-muted">
-          Sending is off. Set NEWSLETTER_FROM and the email provider key first.
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** The issues that went out, newest first. */
+/** Scheduled sends first, soonest first, then the rest, newest first. */
 function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const cancel = useMutation({
+    mutationFn: (id: string) =>
+      api<NewsletterSendState>(`/admin/newsletter/sends/${id}/cancel`, { method: "POST" }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
+      toast("Send cancelled");
+    },
+    onError: (error) => toast(errorMessage(error), "error"),
+  });
   return (
-    <section aria-labelledby="sent-heading" className="flex flex-col gap-2">
-      <h3 id="sent-heading" className="text-sm font-semibold">
-        Sent
+    <section aria-labelledby="sends-heading" className="flex flex-col gap-2">
+      <h3 id="sends-heading" className="text-sm font-semibold">
+        Sends
       </h3>
       {sends.length === 0 ? (
-        <p className="text-sm text-muted">Nothing sent yet.</p>
+        <p className="text-sm text-muted">Nothing sent or scheduled yet.</p>
       ) : (
-        <ol className="divide-y divide-border rounded-xl border border-border">
+        <ol className="rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
           {sends.map((send) => (
-            <li key={send.id} className="flex flex-col gap-0.5 px-4 py-3 text-sm">
-              <span className="min-w-0 truncate font-medium">{send.subject}</span>
-              <span className="text-xs text-muted">
-                {[MARKETING_LIST_LABELS[send.list], ...filterLabels(send.audience)].join(" · ")} ·{" "}
-                {shortDate(send.sentAt)} · to {fullNumber(send.sent)}
-                {send.done ? "" : " so far, not finished"}
-                {send.sentBy ? ` · by ${send.sentBy}` : ""}
+            <li key={send.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3">
+              {/* On a phone the state and Cancel take a line of their own. */}
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 max-sm:basis-full">
+                <span className="truncate text-sm font-medium" title={send.subject}>
+                  {send.subject}
+                </span>
+                <span className="text-xs text-muted tabular-nums">
+                  {sendLine(send)}
+                  {send.sentBy && (
+                    <>
+                      {" · "}
+                      <span className="whitespace-nowrap">
+                        by <span className="font-mono">{send.sentBy}</span>
+                      </span>
+                    </>
+                  )}
+                </span>
               </span>
+              <StateLabel tone={STATUS[send.status].tone}>{STATUS[send.status].label}</StateLabel>
+              {send.status === "scheduled" && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="max-sm:ml-auto"
+                  disabled={cancel.isPending}
+                  aria-label={`Cancel ${send.subject}`}
+                  onClick={() => cancel.mutate(send.id)}
+                >
+                  <BusyContent busy={cancel.isPending && cancel.variables === send.id}>
+                    Cancel
+                  </BusyContent>
+                </Button>
+              )}
             </li>
           ))}
         </ol>
@@ -428,7 +353,7 @@ export function AdminNewsletterPage() {
   const audience = useQuery(audienceQuery(list, filter));
   const count = audience.data?.count;
   const composer = useComposer(list, filter);
-  const { busy, check, sendTest, sendAll, audienceChanged } = composer;
+  const { busy, check, sendTest, send, audienceChanged, formRef } = composer;
   const [confirming, setConfirming] = useState(false);
   const pickList = (next: MarketingList) => {
     if (next === list || busy !== null) return;
@@ -444,19 +369,15 @@ export function AdminNewsletterPage() {
   const reach = count ?? 0;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
+    <div className="flex max-w-2xl flex-col gap-8">
       <SectionHeading>Newsletter</SectionHeading>
-      <Audience
-        status={status}
-        list={list}
-        filter={filter}
-        counted={audience.data}
-        stale={audience.isPlaceholderData}
-        onList={pickList}
-        onFilter={pickFilter}
-      />
-
+      {status?.configured === false && (
+        <p className="text-sm text-muted">
+          Sending is off. Set NEWSLETTER_FROM and the email provider key first.
+        </p>
+      )}
       <form
+        ref={formRef}
         noValidate
         className="flex flex-col gap-4"
         onSubmit={(event) => {
@@ -464,22 +385,39 @@ export function AdminNewsletterPage() {
           // The editor's link and button forms sit inside this one, and
           // React bubbles their submit here. Only this form's own counts.
           if (event.target !== event.currentTarget) return;
-          if (check(event.currentTarget)) setConfirming(true);
+          if (check()) setConfirming(true);
         }}
       >
+        <AudienceField
+          list={list}
+          filter={filter}
+          counted={audience.data}
+          stale={audience.isPlaceholderData}
+          disabled={busy !== null}
+          onList={pickList}
+          onFilter={pickFilter}
+        />
         <IssueFields composer={composer} />
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
-            type="button"
-            variant="outline"
+            variant="ghost"
+            className="max-sm:w-full sm:-ml-2.5"
             disabled={locked}
-            onClick={(event) => void sendTest(event.currentTarget.form)}
+            onClick={() => void sendTest()}
           >
             <BusyContent busy={busy === "test"}>Send test to me</BusyContent>
           </Button>
-          <Button type="submit" variant="primary" disabled={locked || reach === 0}>
-            Send to {fullNumber(reach)}
-          </Button>
+          <div className="ml-auto flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1">
+            <SchedulePicker
+              disabled={locked}
+              busy={busy === "schedule"}
+              onOpen={check}
+              onSchedule={(at) => send(at)}
+            />
+            <Button type="submit" variant="primary" disabled={locked || reach === 0}>
+              Send now
+            </Button>
+          </div>
         </div>
       </form>
 
@@ -487,17 +425,18 @@ export function AdminNewsletterPage() {
         title="Send newsletter"
         open={confirming}
         onClose={() => busy === null && setConfirming(false)}
-        onConfirm={() => void sendAll().then((sent) => sent && setConfirming(false))}
+        onConfirm={() => void send().then((sent) => sent && setConfirming(false))}
         confirmLabel={`Send to ${fullNumber(reach)}`}
         pending={busy === "send"}
       >
         <p>
-          This emails {fullNumber(reach)} {audienceTail(reach, list, filter)}. It cannot be
+          This emails {fullNumber(reach)} {audienceTail(reach, list, filter)} now. It cannot be
           recalled.
         </p>
       </ConfirmDialog>
 
       <SendHistory sends={status?.sends ?? []} />
+      {status && <Answers status={status} />}
     </div>
   );
 }

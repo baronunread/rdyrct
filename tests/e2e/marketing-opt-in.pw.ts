@@ -1,16 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { makePlatformAdmin, queryRows, rawSql } from "./db";
-import {
-  latestMailTextTo,
-  signUpAndVerify,
-  subjectsSentTo,
-  submitSignup,
-  verifySignup,
-} from "./resend";
+import { latestMailTextTo, signUpAndVerify, subjectsSentTo } from "./resend";
 
 const PASSWORD = "test-password-123";
-const NEWS_BOX = "Email me product news";
-const OFFERS_BOX = "Email me offers on paid plans";
 
 interface Consent {
   news: string | null;
@@ -62,14 +54,6 @@ async function expectAnsweredNo(page: Page, email: string, source: string) {
   expect(row).toMatchObject({ news: null, offers: null, newsSource: source, offersSource: source });
 }
 
-/** From the sign-up form's "Check your email" step into the app. */
-async function verifyFromCheckEmail(page: Page, email: string) {
-  await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
-    timeout: 30_000,
-  });
-  await verifySignup(page, email);
-}
-
 /** A fresh unasked account on the dashboard, with the dialog up. */
 async function dialogForNewAccount(page: Page, prefix: string): Promise<string> {
   const email = `${prefix}-${Date.now()}@example.com`;
@@ -114,50 +98,11 @@ async function unsubscribeLinkIn(page: Page, email: string, footer: string): Pro
 }
 
 test.describe("marketing email opt-in", () => {
-  test("the sign-up boxes start unticked and ticking only news opts in to news alone", async ({
-    page,
-  }) => {
+  test("sign-up asks nothing about email: onboarding does, last", async ({ page }) => {
     await page.goto("/signup");
-    await expect(page.getByLabel(NEWS_BOX)).not.toBeChecked();
-    await expect(page.getByLabel(OFFERS_BOX)).not.toBeChecked();
-    await page.getByLabel(NEWS_BOX).check();
-
-    const email = `news-yes-${Date.now()}@gmail.com`;
-    await page.getByLabel("Email", { exact: true }).fill(email);
-    await page.getByLabel("Password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Sign up" }).click();
-    await verifyFromCheckEmail(page, email);
-
-    // Answered at sign-up, so the dialog never asks.
-    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(dialog(page)).toHaveCount(0);
-    const row = await settledConsent(page, email, (r) => r.newsSource === "signup");
-    expect(row.news).not.toBeNull();
-    expect(row).toMatchObject({ offers: null, offersSource: "signup" });
-    expect(row.asked).not.toBeNull();
-  });
-
-  test("an unticked sign-up records a no to both and is not asked again", async ({ page }) => {
-    const email = `news-no-${Date.now()}@gmail.com`;
-    await submitSignup(page, email, PASSWORD);
-    await verifyFromCheckEmail(page, email);
-    await expectAnsweredNo(page, email, "signup");
-  });
-
-  test("the Google button saves the ticked boxes before it leaves for Google", async ({ page }) => {
-    await page.route("**/api/auth/sign-in/social**", (route) =>
-      route.fulfill({ status: 200, body: "" }),
-    );
-    await page.goto("/signup");
-    await page.getByLabel(OFFERS_BOX).check();
-    const button = page.getByRole("button", { name: /Continue with Google/i });
-    await expect(button).toBeEnabled();
-    await button.click();
-    await expect
-      .poll(() => page.evaluate(() => sessionStorage.getItem("rdyrct:marketingChoice")))
-      .toMatch(/"news":false,"offers":true/);
+    await expect(page.getByLabel("Password")).toBeVisible();
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await expect(page.getByText(/product news|offers/i)).toHaveCount(0);
   });
 
   test("an account that was never asked sees the dialog once, and a dismissal ends it", async ({
@@ -242,20 +187,20 @@ test.describe("marketing email opt-in", () => {
     await expect(page.getByRole("row").filter({ hasText: offersReader })).toHaveCount(0);
 
     await page.goto("/admin/newsletter");
-    const audience = page.getByRole("group", { name: "Send to" });
-    await expect(audience.getByRole("button", { name: "Product news" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(page.getByText("Product news · everyone")).toBeVisible({ timeout: 15_000 });
     const reach = page.getByTestId("newsletter-audience");
     await expect(reach).toHaveText(/^\d+ (person|people) on Product news\.$/, { timeout: 15_000 });
-    await audience.getByRole("button", { name: "Offers" }).click();
+    // The list and filters sit behind Edit audience, as three selects.
+    await page.getByRole("button", { name: "Edit audience" }).click();
+    const picker = page.getByRole("dialog", { name: "Audience" });
+    await picker.getByLabel("List").selectOption("offers");
     await expect(reach).toHaveText(/^\d+ (person|people) on Offers\.$/);
-    await expect(page.getByRole("heading", { name: "Offers", level: 3 })).toBeVisible();
 
     // The readers here made no link and are on Free: New and Free keep them.
-    await page.getByRole("group", { name: "Stage" }).getByRole("button", { name: "New" }).click();
-    await page.getByRole("group", { name: "Plan" }).getByRole("button", { name: "Free" }).click();
+    await picker.getByLabel("Stage").selectOption("new");
+    await picker.getByLabel("Plan").selectOption("free");
+    await picker.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByText("Offers · Free accounts with no link yet")).toBeVisible();
     const narrowed =
       /^(\d+) (person|people) on Offers who are on Free and have not made a link yet\.$/;
     await expect(reach).toHaveText(narrowed);
@@ -263,7 +208,7 @@ test.describe("marketing email opt-in", () => {
     expect(reached).toBeGreaterThanOrEqual(2);
 
     // A form error marks its fields; nothing is sent.
-    await page.getByRole("button", { name: /^Send to \d/ }).click();
+    await page.getByRole("button", { name: "Send now" }).click();
     await expect(page.getByText("Add a subject")).toBeVisible();
     await expect(page.getByText("Write the email")).toBeVisible();
     const editor = page.getByRole("textbox", { name: "Message" });
@@ -292,16 +237,21 @@ test.describe("marketing email opt-in", () => {
     await expect(editor.locator("strong")).toHaveText("big");
     await expect(editor.locator('a[href="https://rdyrct.com/docs"]')).toHaveText("docs");
 
-    await page.getByRole("button", { name: /^Send to \d/ }).click();
+    await page.getByRole("button", { name: "Send now" }).click();
     const confirm = page.getByRole("dialog", { name: "Send newsletter" });
     await expect(
       confirm.getByText(
-        /^This emails \d+ (person|people) on Offers who are on Free and have not made a link yet\. It cannot be recalled\.$/,
+        /^This emails \d+ (person|people) on Offers who are on Free and have not made a link yet now\. It cannot be recalled\.$/,
       ),
     ).toBeVisible();
     await confirm.getByRole("button", { name: /^Send to \d/ }).click();
-    await expect(page.getByText(/^Sent to \d/)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/^Offers · New · Free · /).first()).toBeVisible();
+    await expect(page.getByText("Sending", { exact: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    // The workflow sends it; the history follows it to Sent.
+    const sendRow = page.getByRole("listitem").filter({ hasText: subject });
+    await expect(sendRow).toContainText(/Offers · New · Free · /);
+    await expect(sendRow.getByText("Sent", { exact: true })).toBeVisible({ timeout: 30_000 });
 
     const footer = "You get this because you opted in to offers from rdyrct.";
     const link = await unsubscribeLinkIn(page, offersReader, footer);
@@ -341,6 +291,64 @@ test.describe("marketing email opt-in", () => {
     await expect(page.getByRole("heading", { name: "You are unsubscribed" })).toBeVisible();
     await expect(page.getByText(/You will not get any rdyrct email/)).toBeVisible();
     expect(await consentOf(page, offersReader)).toMatchObject({ offers: null, news: null });
+  });
+
+  test("an admin schedules a send for later, sees it waiting with Cancel, and cancels it", async ({
+    page,
+  }) => {
+    const stamp = Date.now();
+    await subscriber(page, `sched-reader-${stamp}@example.com`, { news: true });
+    const admin = `sched-admin-${stamp}@example.com`;
+    await signUpAndVerify(page, admin, PASSWORD);
+    await makePlatformAdmin(page, admin);
+    await page.goto("/admin/newsletter");
+
+    const subject = `Later ${stamp}`;
+    await page.getByLabel("Subject").fill(subject);
+    await page.getByRole("textbox", { name: "Message" }).click();
+    await page.keyboard.type("Coming soon.");
+
+    await page.getByRole("button", { name: "Schedule", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Schedule the send" });
+    const when = picker.getByLabel("Date and time");
+    // Starts on tomorrow at 9, said back in words with the time zone.
+    await expect(when).toHaveValue(/T09:00$/);
+    await expect(
+      picker.getByText(/^Goes \w+day \d+ \w+ at 09:00, your time \(.+\)\.$/),
+    ).toBeVisible();
+    // A time already gone is marked on the field.
+    await when.fill("2020-01-01T09:00");
+    await picker.getByRole("button", { name: "Schedule send" }).click();
+    await expect(when).toHaveAttribute("aria-invalid", "true");
+    // A month ahead at 10:30, in the browser's own time.
+    const later = new Date();
+    later.setDate(later.getDate() + 30);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    await when.fill(
+      `${later.getFullYear()}-${pad(later.getMonth() + 1)}-${pad(later.getDate())}T10:30`,
+    );
+    const words = `${later.toLocaleDateString("en-GB", { weekday: "long" })} ${later.getDate()} ${later.toLocaleDateString("en-GB", { month: "long" })} at 10:30`;
+    await expect(picker.getByText(`Goes ${words}`, { exact: false })).toBeVisible();
+    await picker.getByRole("button", { name: "Schedule send" }).click();
+    await expect(page.getByText(`Scheduled for ${words}`)).toBeVisible({ timeout: 15_000 });
+
+    // Listed first, waiting, with Cancel.
+    const sends = page.getByRole("region", { name: "Sends" }).getByRole("listitem");
+    const waiting = sends.first();
+    await expect(waiting).toContainText(subject);
+    await expect(waiting).toContainText("Scheduled");
+    await expect(waiting).toContainText(`goes ${words}`);
+    await waiting.getByRole("button", { name: `Cancel ${subject}` }).click();
+    await expect(page.getByText("Send cancelled")).toBeVisible();
+    const cancelled = sends.filter({ hasText: subject });
+    await expect(cancelled).toContainText("Cancelled");
+    await expect(cancelled.getByRole("button", { name: /^Cancel/ })).toHaveCount(0);
+    const [row] = await queryRows<{ status: string; sent: number }>(
+      page,
+      "SELECT status, sent FROM newsletter_sends WHERE subject = ?",
+      [subject],
+    );
+    expect(row).toEqual({ status: "cancelled", sent: 0 });
   });
 
   test("an unsubscribe link with a bad token says so", async ({ page }) => {

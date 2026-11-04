@@ -277,7 +277,8 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   renameable in Settings, so nobody meets a dead app behind a form asking
   for a company name. A new org's owner goes through a **setup flow**
   on a screen of its own (`/welcome`, `components/setup-flow.tsx`): its
-  name, its first link, a domain of its own, its team, each with a way
+  name, its first link, a domain of its own, its team, whether to hear from
+  us by email (only for an account not yet asked), each with a way
   past it, beside an organization card that fills in as they answer. The
   sign-in card (email code, Google, or Polar's return) becomes that card,
   and at the end it becomes the org switcher as the app builds around it
@@ -338,13 +339,14 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   covers both (migration 0053). They are the source of truth, never a
   provider's list, and everyone starts opted in to neither: no pre-ticked
   box, and a verified address is not consent. Only `src/worker/marketing.ts`
-  reads or writes them. Three ways to answer: two unticked boxes on the
-  sign-up form (email and Google; the choice rides `sessionStorage` to the
-  first signed-in app load, `lib/marketing.ts`), a one-time dialog with the
-  same two boxes for accounts not yet asked (`MarketingPrompt` in the
-  shell, never in `/welcome`; Save with nothing ticked, "No thanks" and
-  closing it are all a no to both), and a Settings switch per list. Any
-  answer sets `marketing_asked_at`. A sign-up or dialog answer applies only
+  reads or writes them. The sign-up form asks nothing. Three ways to answer:
+  the last step of the `/welcome` setup flow, two switches, both off
+  (`EmailStep` in `setup-flow.tsx`; Skip is a no to both), a one-time
+  dialog with the same two switches for accounts not yet asked
+  (`MarketingPrompt` in the shell, never in `/welcome`; Save with both off,
+  "No thanks" and closing it are all a no to both), and a Settings switch
+  per list. Any answer sets `marketing_asked_at`. An onboarding or dialog
+  answer applies only
   to an account that has not answered, so a stale one cannot overwrite a
   decision; Settings always applies, to the list it names.
   `PUT /api/user/marketing` (`{ source, news?, offers? }`) is the one write,
@@ -366,13 +368,22 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   nothing; POST (the button, or a mail client's one-click) takes the reader
   off that list only, and a second, smaller button (`scope=all`) off both.
   Platform admins send from Platform > Newsletter (`/api/admin/newsletter`:
-  pick the list, counts and answers per list, a test to themselves, send to
-  that list; `newsletter_sends.list` records which). A send goes out in batches of
-  100 people read fresh from D1 (so whoever unsubscribes mid-send is left
-  out), at most 40 batches a request; `newsletter_sends` records how far it
-  got after each batch, and sending again with the screen's `sendId` carries
-  on from there. Each batch's idempotency key is the send id and its first
-  recipient, so a retry never sends anybody the issue twice.
+  the audience as one line with its list and filters behind Edit, a test to
+  themselves, Send now or Schedule, the sends with Cancel on the scheduled
+  ones, and the answers per list). Send now and Schedule store the issue
+  (subject and editor JSON) on a `newsletter_sends` row and start a
+  `NewsletterSendWorkflow` (binding `NEWSLETTER_SEND`) whose instance id
+  is the send id (`src/worker/newsletter-send.ts`). It sleeps until
+  `scheduled_for`, then sends each batch of 100 people, read fresh from D1
+  with the row's list and filters, as its own step, saving `sent` and
+  `cursor` after each; so whoever unsubscribes mid-send is left out, and
+  there is no batch limit. Each batch's idempotency key is the send id and
+  its first recipient, so a retried step never sends anybody the issue
+  twice. `status` is scheduled, sending, sent, cancelled or failed; Cancel
+  marks the row and terminates the instance. The audit log has the schedule,
+  the cancel and the completion. Worker tests drive the steps one by one
+  (`marketing.worker.ts`) and the real workflow through the test pool's
+  introspection (`newsletter-workflow.worker.ts`).
 - **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
   client in `src/app/lib/turnstile.ts`) guards signup and password reset
   (an `x-turnstile-token` header, verified against `siteverify` in

@@ -28,7 +28,7 @@ const FORMS: GuardedForm[] = [
     open: (page) => page.goto("/signup").then(() => undefined),
     container: (page) => page.locator("form").filter({ has: page.getByLabel("Password") }),
     submit: (form) => form.getByRole("button", { name: "Sign up" }),
-    start: (page) => page.getByLabel("Email", { exact: true }).fill("slot-probe@example.com"),
+    start: (page) => page.getByLabel("Email").fill("slot-probe@example.com"),
   },
   {
     name: "password reset",

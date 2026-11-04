@@ -8,11 +8,11 @@
  * account, and no new one that leaves a box unticked, is ever sent mail for
  * that list. A verified address is not consent (rdyrct-email skill).
  *
- * Three ways in (sign-up form, the one-time dialog, Settings) share one rule:
- * a "settings" answer always applies, while "signup" and "prompt" apply only
- * to an account that has not answered yet. That is what stops a stale answer
- * (a second tab, a leftover sign-up choice after a Google sign-in to an old
- * account) from overwriting a decision the person already made.
+ * Three ways in (the last onboarding step, the one-time dialog, Settings)
+ * share one rule: a "settings" answer always applies, while "onboarding" and
+ * "prompt" apply only to an account that has not answered yet. That is what
+ * stops a stale answer (a second tab, an old onboarding screen left open)
+ * from overwriting a decision the person already made.
  *
  * The unsubscribe link carries an HMAC of the list and the user id, so it
  * needs no login and no cookie. The key is derived from BETTER_AUTH_SECRET under its own
@@ -293,7 +293,7 @@ async function listAnswers(db: DB, list: MarketingList): Promise<NewsletterAnswe
     .from(schema.user)
     .groupBy(sql`1, 2, 3`);
   const answers: NewsletterAnswers = {
-    yes: { signup: 0, prompt: 0, settings: 0 },
+    yes: { onboarding: 0, prompt: 0, settings: 0 },
     no: 0,
     unasked: 0,
   };

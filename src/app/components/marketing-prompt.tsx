@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type Ref } from "react";
+import { useId, useRef, useState, type Ref } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Button } from "../ui/button";
 import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
@@ -7,17 +7,12 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { errorMessage } from "../lib/error-message";
 import { useCurrentUser } from "../lib/hooks";
-import {
-  forgetSignupChoice,
-  peekSignupChoice,
-  useSetMarketing,
-  type SignupChoice,
-} from "../lib/marketing";
+import { useSetMarketing, type ListChoice } from "../lib/marketing";
 
 /** One list's row in the dialog: its name and what it sends on the left,
  * a switch on the right. The whole row is the target. Nothing saves until
  * Save. */
-function ListRow({
+export function ListRow({
   label,
   hint,
   checked,
@@ -53,53 +48,24 @@ function ListRow({
 /**
  * The one-time "hear from rdyrct by email?" question, for an account that has
  * not answered. Two switches, both off, one per list (product news, offers).
- * Every existing account starts there; one that answered at sign-up (ticked
- * or not) never sees it.
+ * Every existing account starts there; one that answered in onboarding (the
+ * last step of the /welcome setup flow) never sees it.
  *
  * Any answer ends it: Save with both off, "No thanks" and closing the
  * dialog are all a no to both lists. It never shows during the /welcome
- * setup flow. It also sends the sign-up form's remembered choice first
- * (lib/marketing.ts), and stays closed until that has landed, so a person who
- * just ticked a box at sign-up is not asked again.
+ * setup flow, which asks the same question as its last step.
  */
 export function MarketingPrompt() {
   const currentUser = useCurrentUser();
   const pathname = useLocation({ select: (l) => l.pathname });
   const toast = useToast();
   const set = useSetMarketing();
-  // True while a sign-up choice waits to be sent or is on its way.
-  const [flushing, setFlushing] = useState(() => peekSignupChoice() !== null);
-  const [choice, setChoice] = useState<SignupChoice>({ news: false, offers: false });
+  const [choice, setChoice] = useState<ListChoice>({ news: false, offers: false });
   const [pressed, setPressed] = useState<"save" | "no" | null>(null);
   const firstSwitch = useRef<HTMLButtonElement>(null);
 
   const marketing = currentUser.data?.user.marketing;
-  useEffect(() => {
-    if (!flushing || !marketing) return;
-    const remembered = peekSignupChoice();
-    if (remembered === null || marketing.asked) {
-      forgetSignupChoice();
-      setFlushing(false);
-      return;
-    }
-    // Forgotten only once it is saved. A failed save keeps the choice for the
-    // next load and keeps the dialog shut meanwhile: closing the dialog would
-    // record a no the person never gave.
-    set.mutate(
-      { source: "signup", ...remembered },
-      {
-        onSuccess: () => {
-          forgetSignupChoice();
-          setFlushing(false);
-        },
-      },
-    );
-    // `set` is a new object each render; the guard above is what runs this once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flushing, marketing]);
-
-  const open =
-    Boolean(marketing && !marketing.asked) && !flushing && !pathname.startsWith("/welcome");
+  const open = Boolean(marketing && !marketing.asked) && !pathname.startsWith("/welcome");
 
   const answer = (kind: "save" | "no") => {
     setPressed(kind);

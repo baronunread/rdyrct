@@ -23,11 +23,6 @@ import type { MarketingList } from "@/shared/types";
 /** The provider takes up to 100 messages per call. */
 export const BATCH_SIZE = 100;
 
-/** Batches one request posts, well inside a Worker's subrequest budget.
- * Past it the send stops with its progress saved, and the admin sends again
- * to carry on (routes/admin-newsletter.ts). */
-export const BATCHES_PER_REQUEST = 40;
-
 export interface Issue {
   /** Who it goes to, and which list its unsubscribe link takes them off. */
   list: MarketingList;
@@ -122,7 +117,7 @@ async function postBatch(
       message: "The email provider refused a batch",
       status: 502,
       why: `Provider answered ${res.status}`,
-      fix: "Send again: the send carries on from the last batch that went",
+      fix: "The send retries this batch on its own, from the last batch that went",
       internal: { status: res.status, body: detail },
     });
   }
@@ -130,7 +125,7 @@ async function postBatch(
 }
 
 /** The sender, or a structured 409 when this instance cannot send. */
-function newsletterSender(env: Env): string {
+export function newsletterSender(env: Env): string {
   const from = env.NEWSLETTER_FROM;
   if (!from || !newsletterConfigured(env)) {
     throw createError({

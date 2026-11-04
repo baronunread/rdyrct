@@ -181,6 +181,11 @@
       "name": "rdyrct-link-import",
       "class_name": "LinkImportWorkflow",
     },
+    {
+      "binding": "NEWSLETTER_SEND",
+      "name": "rdyrct-newsletter-send",
+      "class_name": "NewsletterSendWorkflow",
+    },
   ],
   // Cloudflare Workers Rate Limiting counters. Namespace IDs are unique within
   // this account. Counters are permissive and local to each Cloudflare location,
@@ -410,6 +415,11 @@
           "binding": "LINK_IMPORT",
           "name": "rdyrct-playwright-link-import",
           "class_name": "LinkImportWorkflow",
+        },
+        {
+          "binding": "NEWSLETTER_SEND",
+          "name": "rdyrct-playwright-newsletter-send",
+          "class_name": "NewsletterSendWorkflow",
         },
       ],
       "ratelimits": [

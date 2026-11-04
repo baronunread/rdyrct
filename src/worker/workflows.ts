@@ -11,6 +11,7 @@ import {
   syncDomainMsg,
 } from "./storage";
 import { finishImport, importNextChunk, stopImport } from "./routes/link-import";
+import { beginSend, finishSend, sendNextBatch, sendTime } from "./newsletter-send";
 import { cfDeleteHostname, ensureHostname, probeDelaySeconds, probeDomain } from "./routes/domains";
 
 interface OrgDeleteParams {
@@ -127,5 +128,48 @@ export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: stri
       throw err;
     }
     await step.do("finish", () => finishImport(this.env, importId));
+  }
+}
+
+/** A provider hiccup is retried for about ten minutes before the send fails. */
+const BATCH_RETRIES = {
+  retries: { limit: 6, delay: "10 seconds", backoff: "exponential" },
+} as const;
+
+/**
+ * One newsletter send (newsletter-send.ts), keyed by its send id. It waits
+ * until the scheduled time, if there is one, then sends one batch of people
+ * per step until nobody is left, so a Worker restart or a provider error
+ * retries one batch, not the whole send, and there is no limit on how many
+ * batches one send takes. The steps run in this order:
+ *
+ *   load -> wait (scheduled only) -> start -> batch-0, batch-1, ... -> finish
+ *
+ * Cancelling a scheduled send marks its row and terminates the instance;
+ * `start` also finds the row cancelled if the instance outlives that.
+ */
+export class NewsletterSendWorkflow extends WorkflowEntrypoint<Env, { sendId: string }> {
+  async run(event: Readonly<WorkflowEvent<{ sendId: string }>>, step: WorkflowStep): Promise<void> {
+    const { sendId } = event.payload;
+    const at = await step.do("load", () => sendTime(this.env, sendId));
+    if (at === null) return;
+    // A time already past returns at once.
+    if (at > 0) await step.sleepUntil("wait", at);
+    const startedAt = await step.do("start", () => beginSend(this.env, sendId));
+    if (startedAt === null) return;
+    try {
+      for (let batch = 0; ; batch++) {
+        const sent = await step.do(`batch-${batch}`, BATCH_RETRIES, () =>
+          sendNextBatch(this.env, sendId, startedAt),
+        );
+        if (sent === 0) break;
+      }
+    } catch (err) {
+      // A batch that failed every retry: the send ends as failed, with what
+      // went counted, rather than show as sending for good.
+      await step.do("give up", () => finishSend(this.env, sendId, "failed"));
+      throw err;
+    }
+    await step.do("finish", () => finishSend(this.env, sendId, "sent"));
   }
 }

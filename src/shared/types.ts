@@ -248,7 +248,7 @@ export interface User {
 }
 
 /** Where a marketing answer was given. */
-export const MARKETING_SOURCES = ["signup", "prompt", "settings"] as const;
+export const MARKETING_SOURCES = ["onboarding", "prompt", "settings"] as const;
 export type MarketingSource = (typeof MARKETING_SOURCES)[number];
 
 /** The two marketing lists, each its own consent: product news (new features
@@ -273,7 +273,7 @@ export interface MarketingState {
 }
 
 /** One answer, from one place. A list left out stays as it is, so Settings
- * can change one list; the sign-up form and the dialog send both. */
+ * can change one list; onboarding and the dialog send both. */
 export interface MarketingAnswer {
   source: MarketingSource;
   news?: boolean;
@@ -315,23 +315,29 @@ export interface NewsletterAnswers {
   unasked: number;
 }
 
-/** One newsletter that went out, for the send history. Tests are not kept. */
+/** Where a send stands: waiting for its time, going out, done, cancelled
+ * before it went, or stopped by a batch that failed every retry. */
+export type NewsletterSendStatus = "scheduled" | "sending" | "sent" | "cancelled" | "failed";
+
+/** One newsletter, sent or waiting, for the send history. Tests are not kept. */
 export interface NewsletterSendRow {
   id: string;
-  /** The list it went to. */
+  /** The list it goes to. */
   list: MarketingList;
   /** Who in the list it was narrowed to. */
   audience: AudienceFilter;
   subject: string;
   /** Email of the admin who sent it; null once that account is gone. */
   sentBy: string | null;
-  /** ms epoch. */
-  sentAt: number;
-  /** Emails the provider accepted. */
+  /** When the admin pressed Send now or Schedule, ms epoch. */
+  createdAt: number;
+  /** When it goes, ms epoch; null for Send now. */
+  scheduledFor: number | null;
+  status: NewsletterSendStatus;
+  /** Emails the provider accepted so far. */
   sent: number;
-  /** False while people are left: the send stopped part way and sending the
-   * same issue again carries on. */
-  done: boolean;
+  /** When it ended (sent, cancelled or failed), ms epoch. */
+  finishedAt: number | null;
 }
 
 /** What the admin newsletter screen reads. */
@@ -357,12 +363,16 @@ export interface NewsletterAudienceCount {
   filter: AudienceFilter;
 }
 
-export interface NewsletterSendResult {
-  /** Emails the provider accepted, in all requests for this send so far. */
+/** What a test send answers. */
+export interface NewsletterTestResult {
   sent: number;
-  /** False when the request stopped at its batch limit with people left:
-   * sending again with the same send id carries on. Always true for a test. */
-  done: boolean;
+}
+
+/** What Send now and Schedule answer: the send, as it now stands. */
+export interface NewsletterSendState {
+  id: string;
+  status: NewsletterSendStatus;
+  scheduledFor: number | null;
 }
 
 export interface QrOverrides {

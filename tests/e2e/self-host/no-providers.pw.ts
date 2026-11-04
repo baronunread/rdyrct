@@ -27,7 +27,7 @@ test("sign-up lands signed in, with no code step", async ({ page }) => {
 
 test("forgot password says this instance cannot send the reset", async ({ page }) => {
   await page.goto("/login");
-  await page.getByLabel("Email", { exact: true }).fill(`selfhost-forgot-${Date.now()}@example.com`);
+  await page.getByLabel("Email").fill(`selfhost-forgot-${Date.now()}@example.com`);
   await page.getByRole("button", { name: "Forgot it?" }).click();
   await page.getByRole("button", { name: "Send reset link" }).click();
   await expect(

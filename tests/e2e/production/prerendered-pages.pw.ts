@@ -131,9 +131,9 @@ test("the auth pages render with query params and stay usable", async ({ page })
     expect(async () => {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-      await page.getByLabel("Email", { exact: true }).fill("someone@example.com");
+      await page.getByLabel("Email").fill("someone@example.com");
       await page.waitForTimeout(500);
-      await expect(page.getByLabel("Email", { exact: true })).toHaveValue("someone@example.com");
+      await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
     }).toPass({ timeout: 15_000 });
 
   await typeEmail("/signup?next=/billing%3Fplan%3Dpro", "Create an account");

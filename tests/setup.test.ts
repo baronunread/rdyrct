@@ -66,6 +66,7 @@ test("a copy named links gets resources of its own, never rdyrct.com's", () => {
     "links-org-delete",
     "links-domain-activate",
     "links-link-import",
+    "links-newsletter-send",
   ]);
   // Nothing at the top level still names an rdyrct resource.
   const { env: _playwright, ...top } = config;

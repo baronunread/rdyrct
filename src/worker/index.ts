@@ -75,7 +75,12 @@ import {
 import { countAnonClick, enqueueClick, sweepDedupeIds } from "./clicks";
 import { sweepOldRollups } from "./rollups";
 
-export { OrgDeleteWorkflow, DomainActivateWorkflow, LinkImportWorkflow } from "./workflows";
+export {
+  OrgDeleteWorkflow,
+  DomainActivateWorkflow,
+  LinkImportWorkflow,
+  NewsletterSendWorkflow,
+} from "./workflows";
 export { ClickBuffer } from "./click-buffer";
 
 /**

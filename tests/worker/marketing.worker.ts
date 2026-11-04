@@ -3,14 +3,18 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import type { CurrentUser, JsonValue, MarketingState } from "../../src/shared/types";
 import { signUnsubscribeToken, verifyUnsubscribeToken } from "../../src/worker/marketing";
+import { beginSend, finishSend, sendNextBatch, sendTime } from "../../src/worker/newsletter-send";
 import {
   adminCookie,
+  captureBatches,
   applyTestMigrations,
   authEnv,
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
   overrideEnv,
+  overriding,
+  type Posted,
 } from "./support";
 
 beforeEach(applyTestMigrations);
@@ -63,13 +67,13 @@ describe("the consent endpoint", () => {
           new Request("http://localhost/api/user/marketing", {
             method: "PUT",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ news: true, source: "signup" }),
+            body: JSON.stringify({ news: true, source: "onboarding" }),
           }),
         )
       ).status,
     ).toBe(401);
     const cookie = await freeOwnerCookie();
-    expect((await put(cookie, { news: "yes", source: "signup" })).status).toBe(400);
+    expect((await put(cookie, { news: "yes", source: "onboarding" })).status).toBe(400);
     expect((await put(cookie, { news: true, source: "email" })).status).toBe(400);
     // An answer about neither list is not an answer.
     expect((await put(cookie, { source: "settings" })).status).toBe(400);
@@ -79,14 +83,14 @@ describe("the consent endpoint", () => {
   it("records each list's own time and source", async () => {
     const cookie = await freeOwnerCookie();
     const before = Date.now();
-    const res = await put(cookie, { source: "signup", news: false, offers: true });
+    const res = await put(cookie, { source: "onboarding", news: false, offers: true });
     expect(await jsonBody<MarketingState>(res)).toEqual({
       news: false,
       offers: true,
       asked: true,
     });
     const row = await consentRow("free-1");
-    expect(row).toMatchObject({ news: null, newsSource: "signup", offersSource: "signup" });
+    expect(row).toMatchObject({ news: null, newsSource: "onboarding", offersSource: "onboarding" });
     expect(row?.offers).toBeGreaterThanOrEqual(before);
     expect(row?.asked).toBe(row?.offers);
   });
@@ -104,11 +108,11 @@ describe("the consent endpoint", () => {
     expect(row?.asked).not.toBeNull();
   });
 
-  it("ignores a sign-up or dialog answer once the account has answered, but not Settings", async () => {
+  it("ignores an onboarding or dialog answer once the account has answered, but not Settings", async () => {
     const cookie = await freeOwnerCookie();
     await put(cookie, { source: "settings", news: true });
-    // A stale sign-up answer touches neither list, even the one Settings left alone.
-    const stale = await put(cookie, { source: "signup", news: false, offers: true });
+    // A stale onboarding answer touches neither list, even the one Settings left alone.
+    const stale = await put(cookie, { source: "onboarding", news: false, offers: true });
     expect(await jsonBody<MarketingState>(stale)).toEqual({
       news: true,
       offers: false,
@@ -298,41 +302,6 @@ describe("the unsubscribe page", () => {
   });
 });
 
-interface Posted {
-  from: string;
-  to: string[];
-  subject: string;
-  html: string;
-  text: string;
-  headers: Record<string, string>;
-}
-
-/** Stands in for the provider's batch endpoint. */
-/** Stands in for the provider's batch endpoint. `status` answers each call
- * by its index (from 0), so a test can fail one batch and not the others. */
-function captureBatches(status: (call: number) => number = () => 200) {
-  const batches: { key: string | null; emails: Posted[] }[] = [];
-  let calls = 0;
-  const original = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    const url = String(input instanceof Request ? input.url : input);
-    if (!url.endsWith("/emails/batch")) return original(input, init);
-    const headers = new Headers(init?.headers);
-    // SAFETY: the only sender of this request is deliverBatch(), which posts
-    // an array of exactly these fields.
-    const emails = JSON.parse(String(init?.body ?? "[]")) as Posted[];
-    const answer = status(calls);
-    calls += 1;
-    if (answer === 409) {
-      return Response.json({ name: "invalid_idempotent_request" }, { status: 409 });
-    }
-    if (answer !== 200) return new Response("down", { status: answer });
-    batches.push({ key: headers.get("idempotency-key"), emails });
-    return Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) });
-  };
-  return { batches, restore: () => (globalThis.fetch = original) };
-}
-
 type Captured = ReturnType<typeof captureBatches>;
 
 /** Every address a send reached, in order, repeats kept. */
@@ -376,6 +345,34 @@ const button = (href: string, label = "Read more") => ({
   content: [{ type: "text", text: label }],
 });
 
+/** What NewsletterSendWorkflow does once its wait is over, step by step:
+ * the worker tests stub the binding, so this is the workflow here. */
+async function drive(id: string) {
+  if ((await sendTime(authEnv(), id)) === null) return;
+  const startedAt = await beginSend(authEnv(), id);
+  if (startedAt === null) return;
+  try {
+    while ((await sendNextBatch(authEnv(), id, startedAt)) > 0);
+  } catch (error) {
+    await finishSend(authEnv(), id, "failed");
+    throw error;
+  }
+  await finishSend(authEnv(), id, "sent");
+}
+
+/** A send's row as the workflow leaves it. */
+const sendRow = (id: string) =>
+  env.DB.prepare("select status, sent, cursor from newsletter_sends where id = ?")
+    .bind(id)
+    .first<{ status: string; sent: number; cursor: string }>();
+
+/** Send now through the route, then the workflow's steps. */
+async function sendNow(cookie: string, body: { sendId: string; [field: string]: JsonValue }) {
+  const res = await json(cookie, "POST", "/api/admin/newsletter/send", body);
+  if (res.ok) await drive(body.sendId);
+  return res;
+}
+
 describe("sending a newsletter", () => {
   it("404s for anyone who is not a platform admin", async () => {
     const mail = captureBatches();
@@ -410,7 +407,7 @@ describe("sending a newsletter", () => {
     );
     expect(status).toMatchObject({ optedIn: { news: 2 }, configured: true });
 
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+    const res = await sendNow(cookie, {
       list: "news",
       subject: issue.subject,
       doc: doc(
@@ -440,7 +437,8 @@ describe("sending a newsletter", () => {
       sendId: "send-0001",
     });
     expect(res.status).toBe(200);
-    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 2, done: true });
+    expect(await jsonBody(res)).toEqual({ id: "send-0001", status: "sending", scheduledFor: null });
+    expect(await sendRow("send-0001")).toMatchObject({ status: "sent", sent: 2 });
 
     const sent = mail.batches.flatMap((b) => b.emails);
     expect(sent.map((e) => e.to[0]).sort()).toEqual(["yes-1@example.com", "yes-2@example.com"]);
@@ -499,10 +497,10 @@ describe("sending a newsletter", () => {
     const before = await status();
     // The unverified yes counts as a yes, but gets no send.
     expect(before.optedIn).toEqual({ news: 1, offers: 0 });
-    expect(before.answers.news.yes).toEqual({ signup: 0, prompt: 0, settings: 2 });
+    expect(before.answers.news.yes).toEqual({ onboarding: 0, prompt: 0, settings: 2 });
     expect(before.answers.news.no).toBe(1);
     expect(before.answers.news.unasked).toBeGreaterThanOrEqual(1);
-    expect(before.answers.offers.yes).toEqual({ signup: 0, prompt: 0, settings: 0 });
+    expect(before.answers.offers.yes).toEqual({ onboarding: 0, prompt: 0, settings: 0 });
     // Asked once covers both lists: the no to news is a no to offers too.
     expect(before.answers.offers.no).toBe(1);
     expect(before.sends).toEqual([]);
@@ -512,10 +510,7 @@ describe("sending a newsletter", () => {
     expect((await status()).sends).toEqual([]);
 
     for (let i = 0; i < 2; i++) {
-      const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-        ...issue,
-        sendId: "send-history",
-      });
+      const res = await sendNow(cookie, { ...issue, sendId: "send-history" });
       expect(res.status).toBe(200);
     }
     // The retry of a finished send posts nothing: one batch for this send.
@@ -526,7 +521,9 @@ describe("sending a newsletter", () => {
       id: "send-history",
       list: "news",
       subject: issue.subject,
+      status: "sent",
       sent: 1,
+      scheduledFor: null,
     });
     expect(after.sends[0].sentBy).toMatch(/@/);
 
@@ -647,7 +644,7 @@ describe("sending a newsletter", () => {
     mail.restore();
   });
 
-  it("carries a stopped send on from where it stopped, and nobody gets it twice", async () => {
+  it("retries a failed batch from where it stopped, and nobody gets it twice", async () => {
     // 150 people: two batches. The second batch fails the first time.
     let failed = false;
     const mail = captureBatches((call) => (call === 1 && !failed ? ((failed = true), 500) : 200));
@@ -655,23 +652,30 @@ describe("sending a newsletter", () => {
     await env.DB.batch(
       Array.from({ length: 150 }, (_, i) => seedUser(`p${String(i).padStart(3, "0")}`, 5)),
     );
-    const send = () =>
-      json(cookie, "POST", "/api/admin/newsletter/send", { ...issue, sendId: "send-resume" });
-
-    expect((await send()).status).toBe(502);
-    const stopped = await env.DB.prepare(
-      "select sent, cursor, done from newsletter_sends where id = 'send-resume'",
-    ).first<{ sent: number; cursor: string; done: number }>();
-    expect(stopped).toMatchObject({ sent: 100, cursor: "p099", done: 0 });
-
-    const res = await send();
+    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      sendId: "send-resume",
+    });
     expect(res.status).toBe(200);
-    expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 150, done: true });
+    // The workflow's steps, the second batch failing once and retried.
+    const startedAt = (await beginSend(authEnv(), "send-resume"))!;
+    expect(await sendNextBatch(authEnv(), "send-resume", startedAt)).toBe(100);
+    await expect(sendNextBatch(authEnv(), "send-resume", startedAt)).rejects.toThrow();
+    expect(await sendRow("send-resume")).toMatchObject({
+      status: "sending",
+      sent: 100,
+      cursor: "p099",
+    });
+    expect(await sendNextBatch(authEnv(), "send-resume", startedAt)).toBe(50);
+    expect(await sendNextBatch(authEnv(), "send-resume", startedAt)).toBe(0);
+    await finishSend(authEnv(), "send-resume", "sent");
     expectEachOnce(mail, 150);
 
-    // Done: sending the same issue again sends nothing more.
-    expect(await jsonBody<{ sent: number }>(await send())).toEqual({ sent: 150, done: true });
+    // Sent: the same send id again starts nothing and sends nothing more.
+    const again = await sendNow(cookie, { ...issue, sendId: "send-resume" });
+    expect(await jsonBody(again)).toMatchObject({ status: "sent" });
     expect(mail.batches.flatMap((b) => b.emails)).toHaveLength(150);
+    expect(await sendRow("send-resume")).toMatchObject({ status: "sent", sent: 150 });
     mail.restore();
   });
 
@@ -685,12 +689,9 @@ describe("sending a newsletter", () => {
     const restoreFetch = duringFirstBatch(async () => {
       await env.DB.prepare("update user set news_opt_in_at = null where id = 'q100'").run();
     });
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      sendId: "send-unsub",
-    });
+    await sendNow(cookie, { ...issue, sendId: "send-unsub" });
     restoreFetch();
-    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 100, done: true });
+    expect(await sendRow("send-unsub")).toMatchObject({ status: "sent", sent: 100 });
     expect(mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]))).not.toContain(
       "q100@example.com",
     );
@@ -701,24 +702,40 @@ describe("sending a newsletter", () => {
     const mail = captureBatches(() => 409);
     const cookie = await adminCookie();
     await env.DB.batch([seedUser("yes-1", 5)]);
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      sendId: "send-replay",
-    });
-    expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 1, done: true });
+    await sendNow(cookie, { ...issue, sendId: "send-replay" });
+    expect(await sendRow("send-replay")).toMatchObject({ status: "sent", sent: 1 });
     mail.restore();
   });
 
-  it("answers a provider failure with an error, not a success", async () => {
+  it("ends a send whose batch fails every retry as failed, with what went counted", async () => {
     const mail = captureBatches(() => 500);
     const cookie = await adminCookie();
     await env.DB.batch([seedUser("yes-1", 5)]);
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      sendId: "send-0004",
-    });
-    expect(res.status).toBe(502);
+    await expect(sendNow(cookie, { ...issue, sendId: "send-0004" })).rejects.toThrow();
+    expect(await sendRow("send-0004")).toMatchObject({ status: "failed", sent: 0 });
     mail.restore();
+  });
+
+  it("marks a send failed when its workflow cannot start", async () => {
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("yes-1", 5)]);
+    const refusing = overrideEnv({
+      ...authEnv(),
+      NEWSLETTER_SEND: overriding(authEnv().NEWSLETTER_SEND, {
+        get: () => Promise.reject(new Error("not found")),
+        create: () => Promise.reject(new Error("injected workflow start failure")),
+      }),
+    });
+    const res = await fetchWorker(
+      new Request("http://localhost/api/admin/newsletter/send", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ ...issue, sendId: "send-nostart" }),
+      }),
+      refusing,
+    );
+    expect(res.status).toBe(502);
+    expect(await sendRow("send-nostart")).toMatchObject({ status: "failed", sent: 0 });
   });
 });
 
@@ -736,17 +753,10 @@ describe("sending to one list", () => {
     );
     expect(status.optedIn).toEqual({ news: 2, offers: 2 });
 
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      list: "offers",
-      sendId: "send-offers",
-    });
-    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 2, done: true });
+    await sendNow(cookie, { ...issue, list: "offers", sendId: "send-offers" });
+    expect(await sendRow("send-offers")).toMatchObject({ status: "sent", sent: 2 });
+    expect(addressesOf(mail).sort()).toEqual(["both@example.com", "offers-only@example.com"]);
     const sent = mail.batches.flatMap((b) => b.emails);
-    expect(sent.map((e) => e.to[0]).sort()).toEqual([
-      "both@example.com",
-      "offers-only@example.com",
-    ]);
     for (const email of sent) {
       expect(email.text).toContain("You get this because you opted in to offers from rdyrct.");
       const link = new URL(email.headers["List-Unsubscribe"].slice(1, -1));
@@ -764,8 +774,7 @@ describe("sending to one list", () => {
     const mail = captureBatches();
     const cookie = await adminCookie();
     await env.DB.batch([seedUser("news-only", 5)]);
-    const send = (list: string, sendId: string) =>
-      json(cookie, "POST", "/api/admin/newsletter/send", { ...issue, list, sendId });
+    const send = (list: string, sendId: string) => sendNow(cookie, { ...issue, list, sendId });
     expect((await send("offers", "send-nobody")).status).toBe(409);
     expect((await send("news", "send-mixed")).status).toBe(200);
     expect((await send("offers", "send-mixed")).status).toBe(409);
@@ -840,12 +849,7 @@ describe("narrowing a send", () => {
     const cookie = await adminCookie();
     await seedStages();
     const send = async (audience: JsonValue, sendId: string) => {
-      const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-        ...issue,
-        list: "offers",
-        sendId,
-        audience,
-      });
+      const res = await sendNow(cookie, { ...issue, list: "offers", sendId, audience });
       expect(res.status).toBe(200);
       return mail.batches.flatMap((b) => (b.key?.startsWith(sendId) ? b.emails : []));
     };
@@ -885,9 +889,8 @@ describe("narrowing a send", () => {
     mail.restore();
   });
 
-  it("carries a stopped send on to the same audience, and refuses other filters on it", async () => {
-    let failed = false;
-    const mail = captureBatches((call) => (call === 1 && !failed ? ((failed = true), 500) : 200));
+  it("keeps the filters for every batch, and refuses other filters on the same send", async () => {
+    const mail = captureBatches();
     const cookie = await adminCookie();
     // 150 people with no link and 150 with one, ids interleaved.
     const ids = Array.from({ length: 150 }, (_, i) => String(i).padStart(3, "0"));
@@ -902,19 +905,20 @@ describe("narrowing a send", () => {
         sendId: "send-resume-new",
         audience,
       });
-    expect((await send({ stage: "new" })).status).toBe(502);
-    const stopped = await env.DB.prepare(
-      "select sent, audience from newsletter_sends where id = 'send-resume-new'",
-    ).first<{ sent: number; audience: string }>();
-    expect(stopped?.sent).toBe(100);
-    expect(JSON.parse(stopped?.audience ?? "")).toEqual({ stage: "new", plan: "any" });
+    expect((await send({ stage: "new" })).status).toBe(200);
+    const stored = await env.DB.prepare(
+      "select audience from newsletter_sends where id = 'send-resume-new'",
+    ).first<{ audience: string }>();
+    expect(JSON.parse(stored?.audience ?? "")).toEqual({ stage: "new", plan: "any" });
 
     // The same send with other filters would mix two audiences.
     expect((await send({ stage: "active" })).status).toBe(409);
     expect((await send({})).status).toBe(409);
+    // The same filters again is a retry: it answers the send as it stands.
+    expect((await send({ stage: "new" })).status).toBe(200);
 
-    const res = await send({ stage: "new" });
-    expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 150, done: true });
+    await drive("send-resume-new");
+    expect(await sendRow("send-resume-new")).toMatchObject({ status: "sent", sent: 150 });
     const everyone = expectEachOnce(mail, 150);
     expect(everyone.every((address) => address.includes("-a-new@"))).toBe(true);
     mail.restore();
@@ -931,13 +935,9 @@ describe("narrowing a send", () => {
     const restoreFetch = duringFirstBatch(async () => {
       await linkBy("r100").run();
     });
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      sendId: "send-leaves",
-      audience: { stage: "new" },
-    });
+    await sendNow(cookie, { ...issue, sendId: "send-leaves", audience: { stage: "new" } });
     restoreFetch();
-    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 100, done: true });
+    expect(await sendRow("send-leaves")).toMatchObject({ status: "sent", sent: 100 });
     mail.restore();
   });
 });

@@ -4,7 +4,8 @@ import { PLAN_PRICES, PLAN_PRICES_YEARLY } from "@/shared/types";
 
 /**
  * A new organization's setup flow (components/setup-flow.tsx): its name, its
- * first link, a domain of its own, its team.
+ * first link, a domain of its own, its team, and whether to hear from us by
+ * email.
  *
  * Kept per browser, and only what the server cannot say: that this browser
  * started the flow for this org, the step it was on (a checkout from the
@@ -13,7 +14,7 @@ import { PLAN_PRICES, PLAN_PRICES_YEARLY } from "@/shared/types";
  * links never starts one (see useWelcomeList).
  */
 
-const FLOW_STEPS = ["name", "link", "domain", "team"] as const;
+const FLOW_STEPS = ["name", "link", "domain", "team", "email"] as const;
 export type FlowStep = (typeof FLOW_STEPS)[number];
 
 const PlanIntent = v.object({

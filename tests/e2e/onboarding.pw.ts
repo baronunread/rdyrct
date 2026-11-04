@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { enterCode, signUpAndVerify, submitSignup } from "./resend";
+import { enterCode, signUpAndVerify, skipSetup, submitSignup } from "./resend";
 import { queryRows, setPlan } from "./db";
 import { createQuickLink } from "./orgs";
 
@@ -78,7 +78,13 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await page.getByRole("button", { name: "Send invite" }).click();
   await expect(page.getByText("1 invite sent.")).toBeVisible();
   await expect(card(page)).toContainText("1 invited");
-  await page.getByRole("button", { name: "Open rdyrct" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Last, email: both lists off until turned on. Offers on, then Continue.
+  await expect(heading(page, "Hear from rdyrct by email?")).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Product news" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Offers" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   // Into the app, as a dashboard, under the new name.
   await expect(page).toHaveURL(/\/dashboard$/);
@@ -90,6 +96,15 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
     [email],
   );
   expect(org.name).toBe("Acme Coffee");
+  const [consent] = await queryRows<{ news: number | null; offers: number | null; source: string }>(
+    page,
+    "select news_opt_in_at as news, offers_opt_in_at as offers, offers_opt_in_source as source from user where email = ?",
+    [email],
+  );
+  expect(consent).toMatchObject({ news: null, source: "onboarding" });
+  expect(consent.offers).not.toBeNull();
+  // Answered in onboarding, so the one-time dialog never opens.
+  await expect(page.getByRole("dialog", { name: "Hear from rdyrct by email?" })).toHaveCount(0);
 
   // Link, click and an invite: nothing left, so no setup list.
   await expect(page.getByRole("button", { name: /Account menu/ })).toBeVisible();
@@ -98,6 +113,23 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   // Done is done: /welcome moves straight on.
   await page.goto("/welcome");
   await expect(page).toHaveURL(/\/dashboard$/);
+});
+
+test("skipping the email step answers no to both lists", async ({ page }) => {
+  const email = `onboard-email-skip-${Date.now()}@example.org`;
+  await page.request.post("/__dev/test-account", { data: { email, password, asked: false } });
+  await page.goto("/welcome");
+  // Every step skipped, the email step last (resend.ts).
+  await skipSetup(page);
+  await expect(heading(page, "Dashboard")).toBeVisible();
+  const [row] = await queryRows<{ news: number | null; offers: number | null; asked: number }>(
+    page,
+    "select news_opt_in_at as news, offers_opt_in_at as offers, marketing_asked_at as asked from user where email = ?",
+    [email],
+  );
+  expect(row).toMatchObject({ news: null, offers: null });
+  expect(row.asked).not.toBeNull();
+  await expect(page.getByRole("dialog", { name: "Hear from rdyrct by email?" })).toHaveCount(0);
 });
 
 test("what is left of the setup waits in the sidebar", async ({ page }) => {

@@ -13,8 +13,8 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import type { AppEnv, DB, Env } from "../env";
-import { desc, eq } from "drizzle-orm";
+import type { AppEnv, DB } from "../env";
+import { desc, eq, sql } from "drizzle-orm";
 import {
   AUDIENCE_PLANS,
   AUDIENCE_STAGES,
@@ -22,18 +22,14 @@ import {
   MARKETING_LISTS,
   type JsonValue,
   type NewsletterAudienceCount,
-  type NewsletterSendResult,
   type NewsletterSendRow,
+  type NewsletterSendState,
+  type NewsletterTestResult,
   type NewsletterStatus,
 } from "../../shared/types";
-import { countOptedIn, newsletterAnswers, optedInRecipients, sameAudience } from "../marketing";
-import {
-  BATCHES_PER_REQUEST,
-  BATCH_SIZE,
-  deliverBatch,
-  newsletterConfigured,
-  type Issue,
-} from "../newsletter";
+import { countOptedIn, newsletterAnswers } from "../marketing";
+import { deliverBatch, newsletterConfigured, type Issue } from "../newsletter";
+import { cancelSend, startSend } from "../newsletter-send";
 import { createError } from "evlog";
 import { parseBody } from "../schemas";
 import { docToBlocks, newsletterDocSchema } from "../newsletter-doc";
@@ -74,6 +70,10 @@ const sendSchema = v.object({
   // the same id, so a double click or a retry cannot send twice.
   sendId: v.pipe(v.string("sendId is required"), v.regex(/^[\w-]{8,64}$/, "sendId is not valid")),
   audience: v.optional(audienceSchema, EVERYONE),
+  // When it goes, epoch ms; left out, it goes now.
+  scheduledFor: v.optional(
+    v.pipe(v.number("scheduledFor must be a time"), v.integer("scheduledFor must be a time")),
+  ),
 });
 
 type IssueFields = v.InferOutput<typeof testSchema>;
@@ -87,24 +87,39 @@ export const adminNewsletterRoutes = new Hono<AppEnv>();
 /** How many past sends the screen lists. */
 const NEWSLETTER_HISTORY = 20;
 
-/** The latest sends, newest first, with the sender as an email. */
+const sends = schema.newsletterSends;
+const waiting = sql`${sends.status} = 'scheduled'`;
+
+/** Scheduled sends first, soonest first, then the rest, newest first, with
+ * the sender as an email. */
 async function recentSends(db: DB): Promise<NewsletterSendRow[]> {
   const rows = await db
     .select({
-      id: schema.newsletterSends.id,
-      list: schema.newsletterSends.list,
-      audience: schema.newsletterSends.audience,
-      subject: schema.newsletterSends.subject,
+      id: sends.id,
+      list: sends.list,
+      audience: sends.audience,
+      subject: sends.subject,
       sentBy: schema.user.email,
-      sentAt: schema.newsletterSends.sentAt,
-      sent: schema.newsletterSends.sent,
-      done: schema.newsletterSends.done,
+      createdAt: sends.createdAt,
+      scheduledFor: sends.scheduledFor,
+      status: sends.status,
+      sent: sends.sent,
+      finishedAt: sends.finishedAt,
     })
-    .from(schema.newsletterSends)
-    .leftJoin(schema.user, eq(schema.user.id, schema.newsletterSends.sentBy))
-    .orderBy(desc(schema.newsletterSends.sentAt))
+    .from(sends)
+    .leftJoin(schema.user, eq(schema.user.id, sends.sentBy))
+    .orderBy(
+      desc(waiting),
+      sql`case when ${waiting} then ${sends.scheduledFor} end`,
+      desc(sql`coalesce(${sends.scheduledFor}, ${sends.createdAt})`),
+    )
     .limit(NEWSLETTER_HISTORY);
-  return rows.map((row) => ({ ...row, sentAt: row.sentAt.getTime() }));
+  return rows.map((row) => ({
+    ...row,
+    createdAt: row.createdAt.getTime(),
+    scheduledFor: row.scheduledFor?.getTime() ?? null,
+    finishedAt: row.finishedAt?.getTime() ?? null,
+  }));
 }
 
 adminNewsletterRoutes.get("/", async (c) => {
@@ -147,131 +162,83 @@ adminNewsletterRoutes.post("/test", async (c) => {
     `test-${crypto.randomUUID()}`,
   );
   log.set({ newsletter: { test: true, list: body.list, sent: 1 } });
-  return c.json({ sent: 1, done: true } satisfies NewsletterSendResult);
+  return c.json({ sent: 1 } satisfies NewsletterTestResult);
 });
 
-/** A send's row, every field present: what saveProgress writes. */
-type SendProgress = typeof schema.newsletterSends.$inferSelect;
+/** The furthest ahead a send can be scheduled. */
+const MAX_AHEAD_MS = 366 * 24 * 60 * 60 * 1000;
 
-/** Saves how far a send got, after every batch, so a stopped send carries on. */
-function saveProgress(db: DB, row: SendProgress) {
-  const { id: _, ...progress } = row;
-  return db
-    .insert(schema.newsletterSends)
-    .values(row)
-    .onConflictDoUpdate({ target: schema.newsletterSends.id, set: progress });
-}
-
-/** The send's row as it stands: where an earlier request stopped, or a new
- * one. Null when there is nothing to do because it finished. A send id that
- * already went to the other list, or to other filters, is refused: carrying
- * it on would mix two audiences in one send. */
-async function progressOf(
-  db: DB,
-  sendId: string,
-  start: Omit<SendProgress, "id" | "sent" | "cursor" | "done">,
-): Promise<SendProgress | null> {
-  const [earlier] = await db
-    .select()
-    .from(schema.newsletterSends)
-    .where(eq(schema.newsletterSends.id, sendId));
-  if (earlier && earlier.list !== start.list) {
-    throw createError({
-      message: "This send already went to the other list",
-      status: 409,
-      why: `Send ${sendId} started on ${earlier.list}, not ${start.list}`,
-      fix: "Reload the page to start a new send",
-    });
-  }
-  if (earlier && !sameAudience(earlier.audience, start.audience)) {
-    throw createError({
-      message: "This send already went to other filters",
-      status: 409,
-      why: `Send ${sendId} started on ${JSON.stringify(earlier.audience)}`,
-      fix: "Reload the page to start a new send",
-    });
-  }
-  if (earlier?.done) return null;
-  return earlier ?? { id: sendId, ...start, sent: 0, cursor: "", done: false };
-}
-
-/**
- * Posts batches from where `row` stopped, at most BATCHES_PER_REQUEST of
- * them, and saves the row after each. People are read fresh for every batch,
- * so whoever unsubscribed in the meantime is left out. Each batch's provider
- * key is the send id and its first recipient, the same on a retry.
- */
-async function sendBatches(env: Env, db: DB, issue: Issue, row: SendProgress) {
-  // One line for the whole request between active and slipping away.
+/** A scheduled time must be ahead of now (a minute of slack for the clock
+ * between the browser and here) and inside a year. */
+function checkScheduledFor(at: number | undefined): Date | null {
+  if (at === undefined) return null;
   const now = Date.now();
-  const next = () =>
-    optedInRecipients(db, row.list, BATCH_SIZE, { after: row.cursor, filter: row.audience, now });
-  let page = await next();
-  for (let batch = 0; batch < BATCHES_PER_REQUEST; batch += 1) {
-    const [first] = page;
-    const last = page.at(-1);
-    if (!first || !last) break;
-    await deliverBatch(env, issue, page, `${row.id}-${first.id}`);
-    row.sent += page.length;
-    row.cursor = last.id;
-    await saveProgress(db, row);
-    page = await next();
+  if (at < now - 60_000 || at > now + MAX_AHEAD_MS) {
+    throw createError({
+      message: at < now ? "Pick a time in the future" : "Pick a time within a year",
+      status: 400,
+      why: `scheduledFor ${at} is outside the next year`,
+      fix: "Choose another date and time",
+    });
   }
-  row.done = page.length === 0;
-  await saveProgress(db, row);
+  return new Date(at);
 }
 
 /**
- * Sends an issue in batches of people read fresh from D1, oldest id first.
- * A request that stops (a provider error, or the batch limit) leaves its
- * progress saved, and sending again with the same send id carries on from
- * there; nobody gets it twice.
+ * Send now or Schedule. Stores the issue and starts the send's workflow
+ * (newsletter-send.ts), which waits for the time and sends batch by batch.
+ * The same send id again (a double click, a retry) answers the first one's
+ * state and sends nothing twice.
  */
 adminNewsletterRoutes.post("/send", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
-  const db = drizzle(c.env.DB, { schema });
   const body = parseBody(sendSchema, await c.req.json<JsonValue>().catch(() => null));
-  const issue = toIssue(body);
-  const row = await progressOf(db, body.sendId, {
+  // Parsed here so a bad document is a 400 now, not a failure at send time.
+  docToBlocks(body.doc);
+  const state = await startSend(c.env, {
+    id: body.sendId,
     list: body.list,
     audience: body.audience,
-    subject: issue.subject,
+    subject: body.subject,
+    doc: body.doc,
     sentBy: admin.id,
-    sentAt: new Date(),
+    scheduledFor: checkScheduledFor(body.scheduledFor),
   });
-  if (!row) {
-    const [done] = await db
-      .select({ sent: schema.newsletterSends.sent })
-      .from(schema.newsletterSends)
-      .where(eq(schema.newsletterSends.id, body.sendId));
-    return c.json({ sent: done?.sent ?? 0, done: true } satisfies NewsletterSendResult);
-  }
-  if (row.sent === 0 && !(await countOptedIn(db, row.list, row.audience))) {
-    throw createError({
-      message: "Nobody on this list matches, so there is nobody to send to",
-      status: 409,
-      why: `No verified, unbanned account on ${row.list} matches ${JSON.stringify(row.audience)}`,
-      fix: "Loosen the filters, or wait for more people to opt in",
-    });
-  }
-  await sendBatches(c.env, db, issue, row);
   log.set({
     newsletter: {
       test: false,
-      list: row.list,
-      audience: row.audience,
-      sendId: row.id,
-      sent: row.sent,
-      done: row.done,
+      list: body.list,
+      audience: body.audience,
+      sendId: state.id,
+      status: state.status,
+      scheduledFor: state.scheduledFor,
     },
   });
-  // After the send is stored: an audit that says success has to be true.
   log.audit({
-    action: "newsletter.send",
+    action: "newsletter.send.scheduled",
+    actor: { type: "user", id: admin.id },
+    target: { type: "newsletter", id: state.id },
+    outcome: "success",
+  });
+  return c.json(state satisfies NewsletterSendState);
+});
+
+/** Cancels a send that is waiting for its time. */
+adminNewsletterRoutes.post("/sends/:id/cancel", async (c) => {
+  const log = c.get("log");
+  const admin = c.var.user!;
+  const row = await cancelSend(c.env, c.req.param("id"));
+  log.set({ newsletter: { sendId: row.id, list: row.list, status: row.status } });
+  log.audit({
+    action: "newsletter.send.cancelled",
     actor: { type: "user", id: admin.id },
     target: { type: "newsletter", id: row.id },
     outcome: "success",
   });
-  return c.json({ sent: row.sent, done: row.done } satisfies NewsletterSendResult);
+  return c.json({
+    id: row.id,
+    status: row.status,
+    scheduledFor: row.scheduledFor?.getTime() ?? null,
+  } satisfies NewsletterSendState);
 });

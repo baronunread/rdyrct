@@ -79,7 +79,7 @@ async function latestOtp(page: Page, email: string) {
 /** Fills in and submits the sign-up form, and stops there. */
 export async function submitSignup(page: Page, email: string, password: string) {
   await page.goto("/signup");
-  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign up" }).click();
 }
@@ -112,6 +112,15 @@ export async function skipSetup(page: Page) {
   await page.getByRole("button", { name: "Skip" }).click();
   await page.getByRole("button", { name: "Not now" }).click();
   await page.getByRole("button", { name: "Not now" }).click();
+  // An account not yet asked about email gets one more step; one that
+  // answered before (a Google sign-in to an existing address) goes straight in.
+  const emailStep = page.getByRole("heading", { name: "Hear from rdyrct by email?" });
+  const app = page.getByRole("heading", { name: "Dashboard", level: 1 });
+  await expect(emailStep.or(app)).toBeVisible({ timeout: 30_000 });
+  if (await emailStep.isVisible()) {
+    await expect(page.getByRole("img", { name: "Step 5 of 5" })).toBeVisible();
+    await page.getByRole("button", { name: "Skip" }).click();
+  }
 }
 
 /**

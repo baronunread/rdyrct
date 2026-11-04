@@ -40,7 +40,6 @@ import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 import type { CurrentUser } from "@/shared/types";
 import { isAppPage, SETUP_ARRIVE, SETUP_FLOW } from "../lib/setup-arrive";
-import { forgetSignupChoice, rememberSignupChoice, type SignupChoice } from "../lib/marketing";
 import { loadShell } from "../lib/shell-loader";
 import { loadWelcome } from "../lib/welcome-loader";
 
@@ -449,54 +448,6 @@ function GoogleG() {
   );
 }
 
-/** One of the sign-up form's optional boxes. A native checkbox, unticked:
- * consent has to be a choice. */
-function OptInBox({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <label className="flex min-h-8 cursor-pointer items-center gap-2.5 text-sm text-muted">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="size-4 shrink-0 cursor-pointer accent-accent"
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-/** The two lists, one box each; the Google button above reads them too. */
-function MarketingOptIns({
-  choice,
-  onChange,
-}: {
-  choice: SignupChoice;
-  onChange: (next: SignupChoice) => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      <OptInBox
-        label="Email me product news"
-        checked={choice.news}
-        onChange={(news) => onChange({ ...choice, news })}
-      />
-      <OptInBox
-        label="Email me offers on paid plans"
-        checked={choice.offers}
-        onChange={(offers) => onChange({ ...choice, offers })}
-      />
-    </div>
-  );
-}
-
 function AuthFormView({
   mode,
   busy,
@@ -546,12 +497,7 @@ function AuthFormView({
     defaultValues: { email: "", password: "" },
   });
 
-  // Unticked unless the person ticks them: no pre-ticked consent.
-  const [optIns, setOptIns] = useState<SignupChoice>({ news: false, offers: false });
-
   const startGoogle = () => {
-    if (mode === "signup") rememberSignupChoice(optIns);
-    else forgetSignupChoice();
     setLastAuth("google");
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
@@ -570,13 +516,7 @@ function AuthFormView({
 
   const password = watch("password");
   const onFormSubmit = handleSubmit(
-    (data) => {
-      // Signed-up choice rides to the first signed-in load (lib/marketing.ts);
-      // a login drops any older one rather than apply it to this account.
-      if (mode === "signup") rememberSignupChoice(optIns);
-      else forgetSignupChoice();
-      onSubmit(data.email, data.password);
-    },
+    (data) => onSubmit(data.email, data.password),
     (errors) => {
       if (mode === "signup")
         posthog.capture(SIGNUP_FAILED, { reason: `invalid_${Object.keys(errors).join("_")}` });
@@ -611,7 +551,6 @@ function AuthFormView({
           password={password}
           onForgot={() => onForgot(getValues("email"))}
         />
-        {mode === "signup" && <MarketingOptIns choice={optIns} onChange={setOptIns} />}
         {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
           type="submit"

@@ -57,7 +57,7 @@ export const optionalText = v.optional(v.fallback(v.string(), ""), "");
  * for each list it covers. A list left out stays as it was; one is needed. */
 export const marketingBodySchema = v.pipe(
   v.object({
-    source: v.picklist(MARKETING_SOURCES, "source must be signup, prompt or settings"),
+    source: v.picklist(MARKETING_SOURCES, "source must be onboarding, prompt or settings"),
     news: v.optional(v.boolean("news must be true or false")),
     offers: v.optional(v.boolean("offers must be true or false")),
   }),

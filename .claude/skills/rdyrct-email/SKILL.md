@@ -103,11 +103,14 @@ How it is sent:
   body written in Resend's editor (`@react-email/editor`, cut down in
   `routes/admin/newsletter-editor.tsx` to paragraphs, two heading sizes,
   lists, bold, italic, underline, links, line breaks, a divider and buttons),
-  sends a test to the admin alone, and sends to the list picked above the
-  form (Product news or Offers), narrowed by stage (New, Active, Slipping
-  away; defined in `marketing.ts`, from D1 only) and plan (Free, Paid). The
-  count updates as the filters change, and the send keeps its filters on its
-  `newsletter_sends` row so a resumed send reaches the same people. The browser sends the
+  sends a test to the admin alone, and sends now or at a scheduled time to
+  the audience above the form: a list (Product news or Offers) narrowed by
+  stage (New, Active, Slipping away; defined in `marketing.ts`, from D1
+  only) and plan (Free, Paid), shown as one line with the three choices
+  behind Edit audience. The count updates as the filters change, and the
+  send keeps the issue and its filters on its `newsletter_sends` row, so
+  every batch, and a scheduled send when it goes, renders the same issue
+  for the same people. The browser sends the
   editor's JSON, never HTML: `worker/newsletter-doc.ts` parses it against the
   same allow-list (anything else is a 400 naming it) into the layout's
   `blocks` slot, which escapes every string and drops any link or button that
@@ -115,8 +118,11 @@ How it is sent:
   new ones. To allow another node, add it to the editor, the schema and
   `blockHtml`/`blockText` in one commit.
 - One wide event per send, with the list and counts, never addresses. A
-  send goes in batches and saves its progress after each, so one that stops
-  carries on when the admin sends again (`newsletter_sends`).
+  send is a Cloudflare Workflow (`NewsletterSendWorkflow`,
+  `worker/newsletter-send.ts`): it waits for the scheduled time, then sends
+  one batch per step and saves its progress after each, so a failed batch
+  is retried on its own and nobody gets the issue twice. A scheduled send
+  can be cancelled until it begins.
 
 Tests for the rule are `tests/worker/marketing.worker.ts` (only accounts
 opted in to the list, verified and unbanned get mail; headers present;
