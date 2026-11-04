@@ -992,8 +992,8 @@ export const oauthClientAssertion = sqliteTable("oauth_client_assertion", {
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
 });
 
-/** One newsletter that went out (migration 0054). The id is the composer's
- * send id, so a retried send updates its row. Written by
+/** One newsletter send and how far it got (migration 0054). The id is the
+ * composer's send id, so sending again carries on from `cursor`. Written by
  * routes/admin-newsletter.ts. */
 export const newsletterSends = sqliteTable(
   "newsletter_sends",
@@ -1003,6 +1003,9 @@ export const newsletterSends = sqliteTable(
     sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
     sentAt: integer("sent_at", { mode: "timestamp_ms" }).notNull(),
     sent: integer("sent").notNull(),
+    // The last recipient id a batch reached; the next batch starts after it.
+    cursor: text("cursor").notNull().default(""),
+    done: integer("done", { mode: "boolean" }).notNull().default(false),
   },
   (t) => [index("idx_newsletter_sends_sent_at").on(t.sentAt)],
 );

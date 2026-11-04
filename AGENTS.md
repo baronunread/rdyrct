@@ -357,9 +357,12 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   so rotating that secret also breaks links already mailed. GET shows a button
   and changes nothing; POST (button or a mail client's one-click) unsubscribes.
   Platform admins send from Platform > Newsletter (`/api/admin/newsletter`:
-  count, a test to themselves, send to all). One send is capped at 5,000
-  recipients and refused beyond that; each batch carries an idempotency key from
-  the screen's `sendId`, so a retry never sends twice.
+  count, a test to themselves, send to all). A send goes out in batches of
+  100 people read fresh from D1 (so whoever unsubscribes mid-send is left
+  out), at most 40 batches a request; `newsletter_sends` records how far it
+  got after each batch, and sending again with the screen's `sendId` carries
+  on from there. Each batch's idempotency key is the send id and its first
+  recipient, so a retry never sends anybody the issue twice.
 - **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
   client in `src/app/lib/turnstile.ts`) guards signup and password reset
   (an `x-turnstile-token` header, verified against `siteverify` in

@@ -30,12 +30,23 @@ export function MarketingPrompt() {
   useEffect(() => {
     if (!flushing || !marketing) return;
     const optIn = peekSignupChoice();
-    forgetSignupChoice();
     if (optIn === null || marketing.asked) {
+      forgetSignupChoice();
       setFlushing(false);
       return;
     }
-    set.mutate({ optIn, source: "signup" }, { onSettled: () => setFlushing(false) });
+    // Forgotten only once it is saved. A failed save keeps the choice for the
+    // next load and keeps the dialog shut meanwhile: closing the dialog would
+    // record a no the person never gave.
+    set.mutate(
+      { optIn, source: "signup" },
+      {
+        onSuccess: () => {
+          forgetSignupChoice();
+          setFlushing(false);
+        },
+      },
+    );
     // `set` is a new object each render; the guard above is what runs this once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flushing, marketing]);

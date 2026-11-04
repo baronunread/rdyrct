@@ -45,6 +45,14 @@ async function settledConsent(
   return consentOf(page, email);
 }
 
+/** The dialog is gone and the account's answer is a no, given at `source`. */
+async function expectAnsweredNo(page: Page, email: string, source: string) {
+  await expect(dialog(page)).toHaveCount(0);
+  const row = await settledConsent(page, email, (r) => r.asked !== null);
+  expect(row.at).toBeNull();
+  expect(row.source).toBe(source);
+}
+
 /** From the sign-up form's "Check your email" step into the app. */
 async function verifyFromCheckEmail(page: Page, email: string) {
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
@@ -89,13 +97,10 @@ test.describe("product news opt-in", () => {
     const email = `news-no-${Date.now()}@gmail.com`;
     await submitSignup(page, email, PASSWORD);
     await verifyFromCheckEmail(page, email);
-    await expect(dialog(page)).toHaveCount(0);
-    const row = await settledConsent(page, email, (r) => r.asked !== null);
-    expect(row.at).toBeNull();
-    expect(row.source).toBe("signup");
+    await expectAnsweredNo(page, email, "signup");
   });
 
-  test("the Google button carries the ticked box through the redirect", async ({ page }) => {
+  test("the Google button saves the ticked box before it leaves for Google", async ({ page }) => {
     await page.route("**/api/auth/sign-in/social**", (route) =>
       route.fulfill({ status: 200, body: "" }),
     );
@@ -114,10 +119,7 @@ test.describe("product news opt-in", () => {
   }) => {
     const email = await dialogForNewAccount(page, "news-dismiss");
     await page.keyboard.press("Escape");
-    await expect(dialog(page)).toHaveCount(0);
-    const row = await settledConsent(page, email, (r) => r.asked !== null);
-    expect(row.at).toBeNull();
-    expect(row.source).toBe("prompt");
+    await expectAnsweredNo(page, email, "prompt");
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({

@@ -219,7 +219,9 @@ function EmailGroup({ user }: { user: User | undefined }) {
   return (
     <SettingsGroup title="Updates">
       <SettingsRow label="Product news" hint="New features and tips, now and then.">
-        <Switch label="Product news" checked={optedIn} onCheckedChange={change} />
+        {/* Off and unanswerable until /user answers: an account that failed
+            to load is not one that said no. */}
+        <Switch label="Product news" checked={optedIn} onCheckedChange={change} disabled={!user} />
       </SettingsRow>
     </SettingsGroup>
   );

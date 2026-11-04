@@ -19,7 +19,7 @@
  * BETTER_AUTH_SECRET also breaks the links in mail already sent, so rotate it
  * only when you have to.
  */
-import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import type { MarketingSource, MarketingState, NewsletterAnswers } from "@/shared/types";
@@ -194,15 +194,18 @@ export async function countOptedIn(db: DB): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** Oldest id first, so the batches of a retried send fall the same way. */
+/** The next page of people a send reaches, by id after `after`. Read fresh
+ * for every batch, so somebody who unsubscribes while a send is running is
+ * left out of the batches still to go. */
 export async function optedInRecipients(
   db: DB,
   limit: number,
+  after = "",
 ): Promise<{ id: string; email: string }[]> {
   return db
     .select({ id: schema.user.id, email: schema.user.email })
     .from(schema.user)
-    .where(reachable)
+    .where(and(reachable, gt(schema.user.id, after)))
     .orderBy(asc(schema.user.id))
     .limit(limit);
 }

@@ -19,12 +19,12 @@ import type { Env } from "./env";
 import { unsubscribeUrl } from "./marketing";
 
 /** The provider takes up to 100 messages per call. */
-const BATCH_SIZE = 100;
+export const BATCH_SIZE = 100;
 
-/** The most one send reaches: 50 calls, well inside a Worker's subrequest
- * budget. A bigger list is refused rather than cut short, so nobody is left
- * out without the admin knowing. Past this, send through a Workflow. */
-export const MAX_RECIPIENTS = BATCH_SIZE * 50;
+/** Batches one request posts, well inside a Worker's subrequest budget.
+ * Past it the send stops with its progress saved, and the admin sends again
+ * to carry on (routes/admin-newsletter.ts). */
+export const BATCHES_PER_REQUEST = 40;
 
 export interface Issue {
   subject: string;
@@ -86,8 +86,15 @@ async function outgoing(
 }
 
 /** The provider call. `idempotencyKey` makes a retry of the same batch a
- * no-op there, so a double click or a timed-out request does not send twice. */
-async function postBatch(env: Env, emails: OutgoingEmail[], idempotencyKey: string) {
+ * no-op there, so a double click or a timed-out request does not send twice.
+ * A key the provider has seen with a different list of people (a retry after
+ * someone in the batch unsubscribed) is refused with a 409: that batch went
+ * already, so it counts as sent, not as a failure. */
+async function postBatch(
+  env: Env,
+  emails: OutgoingEmail[],
+  idempotencyKey: string,
+): Promise<"sent" | "sent-before"> {
   const base = env.RESEND_BASE_URL || "https://api.resend.com";
   const res = await fetch(`${base}/emails/batch`, {
     method: "POST",
@@ -98,29 +105,20 @@ async function postBatch(env: Env, emails: OutgoingEmail[], idempotencyKey: stri
     },
     body: JSON.stringify(emails),
   });
-  if (!res.ok) {
-    throw createError({
-      message: "The email provider refused a batch",
-      status: 502,
-      why: `Provider answered ${res.status}`,
-      fix: "Send again with the same send id: batches already sent are not repeated",
-      internal: { status: res.status, body: await res.text().catch(() => "") },
-    });
-  }
+  if (res.ok) return "sent";
+  const detail = await res.text().catch(() => "");
+  if (res.status === 409 && detail.includes("invalid_idempotent_request")) return "sent-before";
+  throw createError({
+    message: "The email provider refused a batch",
+    status: 502,
+    why: `Provider answered ${res.status}`,
+    fix: "Send again: the send carries on from the last batch that went",
+    internal: { status: res.status, body: detail },
+  });
 }
 
-/**
- * Sends `issue` to each recipient and returns how many went out. Throws a
- * structured error, never a partial success: the admin sees a failure and
- * resends with the same `sendId`, which the provider answers from its record
- * for every batch that already went.
- */
-export async function deliverNewsletter(
-  env: Env,
-  issue: Issue,
-  recipients: Recipient[],
-  sendId: string,
-): Promise<number> {
+/** The sender, or a structured 409 when this instance cannot send. */
+function newsletterSender(env: Env): string {
   const from = env.NEWSLETTER_FROM;
   if (!from || !newsletterConfigured(env)) {
     throw createError({
@@ -130,21 +128,21 @@ export async function deliverNewsletter(
       fix: "Set NEWSLETTER_FROM to a sender on its own subdomain, and RESEND_API_KEY",
     });
   }
-  if (recipients.length > MAX_RECIPIENTS) {
-    throw createError({
-      message: `More than ${MAX_RECIPIENTS} people are opted in`,
-      status: 409,
-      why: "One send is limited to what a Worker can post in one request",
-      fix: "Send through a Workflow instead",
-    });
-  }
-  let sent = 0;
-  for (let at = 0; at < recipients.length; at += BATCH_SIZE) {
-    const batch = await Promise.all(
-      recipients.slice(at, at + BATCH_SIZE).map((to) => outgoing(env, from, issue, to)),
-    );
-    await postBatch(env, batch, `${sendId}-${at / BATCH_SIZE}`);
-    sent += batch.length;
-  }
-  return sent;
+  return from;
+}
+
+/**
+ * Sends `issue` to one batch of at most BATCH_SIZE people, each with their
+ * own unsubscribe link. `key` names the batch for the provider's
+ * idempotency check; "sent-before" means the provider had it already.
+ */
+export async function deliverBatch(
+  env: Env,
+  issue: Issue,
+  recipients: Recipient[],
+  key: string,
+): Promise<"sent" | "sent-before"> {
+  const from = newsletterSender(env);
+  const emails = await Promise.all(recipients.map((to) => outgoing(env, from, issue, to)));
+  return postBatch(env, emails, key);
 }

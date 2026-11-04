@@ -9,11 +9,14 @@ export function Switch({
   checked,
   onCheckedChange,
   label,
+  disabled,
   className,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
+  /** Not answerable yet, e.g. while the value it shows is still loading. */
+  disabled?: boolean;
   className?: string;
 }) {
   return (
@@ -21,9 +24,10 @@ export function Switch({
       checked={checked}
       onCheckedChange={onCheckedChange}
       aria-label={label}
+      disabled={disabled}
       className={cn(
         // after: reaches the press target to 28px tall without moving it.
-        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-border bg-surface-2 transition-colors after:absolute after:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent data-[checked]:border-accent data-[checked]:bg-accent",
+        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-border bg-surface-2 transition-colors after:absolute after:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent data-[checked]:border-accent data-[checked]:bg-accent data-[disabled]:cursor-default data-[disabled]:opacity-50",
         className,
       )}
     >

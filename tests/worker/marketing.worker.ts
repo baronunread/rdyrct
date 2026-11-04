@@ -168,20 +168,27 @@ interface Posted {
 }
 
 /** Stands in for the provider's batch endpoint. */
-function captureBatches(status = 200) {
+/** Stands in for the provider's batch endpoint. `status` answers each call
+ * by its index (from 0), so a test can fail one batch and not the others. */
+function captureBatches(status: (call: number) => number = () => 200) {
   const batches: { key: string | null; emails: Posted[] }[] = [];
+  let calls = 0;
   const original = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.endsWith("/emails/batch")) return original(input, init);
     const headers = new Headers(init?.headers);
-    // SAFETY: the only sender of this request is deliverNewsletter(), which
-    // posts an array of exactly these fields.
+    // SAFETY: the only sender of this request is deliverBatch(), which posts
+    // an array of exactly these fields.
     const emails = JSON.parse(String(init?.body ?? "[]")) as Posted[];
+    const answer = status(calls);
+    calls += 1;
+    if (answer === 409) {
+      return Response.json({ name: "invalid_idempotent_request" }, { status: 409 });
+    }
+    if (answer !== 200) return new Response("down", { status: answer });
     batches.push({ key: headers.get("idempotency-key"), emails });
-    return status === 200
-      ? Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) })
-      : new Response("down", { status });
+    return Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) });
   };
   return { batches, restore: () => (globalThis.fetch = original) };
 }
@@ -263,11 +270,12 @@ describe("sending a newsletter", () => {
       sendId: "send-0001",
     });
     expect(res.status).toBe(200);
-    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 2 });
+    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 2, done: true });
 
     const sent = mail.batches.flatMap((b) => b.emails);
     expect(sent.map((e) => e.to[0]).sort()).toEqual(["yes-1@example.com", "yes-2@example.com"]);
-    expect(mail.batches[0].key).toBe("send-0001-0");
+    // The send id and the batch's first recipient: the same on a retry.
+    expect(mail.batches[0].key).toBe("send-0001-yes-1");
     for (const email of sent) {
       expect(email.from).toMatch(/<[^>]+>$/);
       expect(email.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
@@ -332,6 +340,8 @@ describe("sending a newsletter", () => {
       });
       expect(res.status).toBe(200);
     }
+    // The retry of a finished send posts nothing: one batch for this send.
+    expect(mail.batches.filter((b) => b.key?.startsWith("send-history-"))).toHaveLength(1);
     const after = await status();
     expect(after.sends).toHaveLength(1);
     expect(after.sends[0]).toMatchObject({ id: "send-history", subject: issue.subject, sent: 1 });
@@ -437,8 +447,95 @@ describe("sending a newsletter", () => {
     mail.restore();
   });
 
+  it("refuses a send nobody would get, and keeps no history for it", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("never", null)]);
+    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      sendId: "send-empty",
+    });
+    expect(res.status).toBe(409);
+    expect(mail.batches).toHaveLength(0);
+    const rows = await env.DB.prepare("select count(*) as n from newsletter_sends").first<{
+      n: number;
+    }>();
+    expect(rows?.n).toBe(0);
+    mail.restore();
+  });
+
+  it("carries a stopped send on from where it stopped, and nobody gets it twice", async () => {
+    // 150 people: two batches. The second batch fails the first time.
+    let failed = false;
+    const mail = captureBatches((call) => (call === 1 && !failed ? ((failed = true), 500) : 200));
+    const cookie = await adminCookie();
+    await env.DB.batch(
+      Array.from({ length: 150 }, (_, i) => seedUser(`p${String(i).padStart(3, "0")}`, 5)),
+    );
+    const send = () =>
+      json(cookie, "POST", "/api/admin/newsletter/send", { ...issue, sendId: "send-resume" });
+
+    expect((await send()).status).toBe(502);
+    const stopped = await env.DB.prepare(
+      "select sent, cursor, done from newsletter_sends where id = 'send-resume'",
+    ).first<{ sent: number; cursor: string; done: number }>();
+    expect(stopped).toMatchObject({ sent: 100, cursor: "p099", done: 0 });
+
+    const res = await send();
+    expect(res.status).toBe(200);
+    expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 150, done: true });
+    const everyone = mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));
+    expect(everyone).toHaveLength(150);
+    expect(new Set(everyone).size).toBe(150);
+
+    // Done: sending the same issue again sends nothing more.
+    expect(await jsonBody<{ sent: number }>(await send())).toEqual({ sent: 150, done: true });
+    expect(mail.batches.flatMap((b) => b.emails)).toHaveLength(150);
+    mail.restore();
+  });
+
+  it("leaves out somebody who unsubscribed while the send was running", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch(
+      Array.from({ length: 101 }, (_, i) => seedUser(`q${String(i).padStart(3, "0")}`, 5)),
+    );
+    // The last person unsubscribes as the first batch goes out.
+    const original = globalThis.fetch;
+    let first = true;
+    globalThis.fetch = async (input, init) => {
+      if (first && String(input instanceof Request ? input.url : input).endsWith("/emails/batch")) {
+        first = false;
+        await env.DB.prepare("update user set marketing_opt_in_at = null where id = 'q100'").run();
+      }
+      return original(input, init);
+    };
+    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      sendId: "send-unsub",
+    });
+    globalThis.fetch = original;
+    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 100, done: true });
+    expect(mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]))).not.toContain(
+      "q100@example.com",
+    );
+    mail.restore();
+  });
+
+  it("counts a batch the provider already has under its key as sent", async () => {
+    const mail = captureBatches(() => 409);
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("yes-1", 5)]);
+    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      sendId: "send-replay",
+    });
+    expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 1, done: true });
+    mail.restore();
+  });
+
   it("answers a provider failure with an error, not a success", async () => {
-    const mail = captureBatches(500);
+    const mail = captureBatches(() => 500);
     const cookie = await adminCookie();
     await env.DB.batch([seedUser("yes-1", 5)]);
     const res = await json(cookie, "POST", "/api/admin/newsletter/send", {

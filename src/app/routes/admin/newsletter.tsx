@@ -46,6 +46,9 @@ function buttonWithoutLink(editor: Editor | null): boolean {
   return missing;
 }
 
+/** All the text a body may hold; the server refuses more (newsletter-doc.ts). */
+const MAX_TEXT = 20_000;
+
 const people = (n: number) => `${fullNumber(n)} ${n === 1 ? "person" : "people"}`;
 
 /** The draft, its field errors, and the two sends. The body lives in the
@@ -73,7 +76,9 @@ function useComposer() {
   const check = (form: HTMLFormElement | null) => {
     const found: Problems = {};
     if (!subject.trim()) found.subject = "Add a subject";
-    if (!editorRef.current?.getText().trim()) found.body = "Write the email";
+    const text = editorRef.current?.getText() ?? "";
+    if (!text.trim()) found.body = "Write the email";
+    else if (text.length > MAX_TEXT) found.body = "The email is too long";
     else if (buttonWithoutLink(editorRef.current)) found.body = "A button needs a link";
     setProblems(found);
     if (found.subject) form?.querySelector<HTMLElement>('[name="subject"]')?.focus();
@@ -110,10 +115,14 @@ function useComposer() {
         method: "POST",
         body: { ...payload(), sendId: (sendId.current ??= crypto.randomUUID()) },
       });
+      await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
+      // Stopped at the per-request limit with people left: the same send id
+      // and the same issue carry on from where it stopped.
+      if (!result.done)
+        return `Sent to ${people(result.sent)} so far. Send again to reach the rest.`;
       setSubjectValue("");
       editorRef.current?.commands.clearContent();
       sendId.current = null;
-      await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
       return `Sent to ${people(result.sent)}`;
     });
 
@@ -186,6 +195,7 @@ function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
               <span className="min-w-0 truncate font-medium">{send.subject}</span>
               <span className="text-xs text-muted">
                 {shortDate(send.sentAt)} · to {fullNumber(send.sent)}
+                {send.done ? "" : " so far, not finished"}
                 {send.sentBy ? ` · by ${send.sentBy}` : ""}
               </span>
             </li>

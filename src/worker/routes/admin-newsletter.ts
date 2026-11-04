@@ -11,7 +11,7 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import type { AppEnv, DB } from "../env";
+import type { AppEnv, DB, Env } from "../env";
 import { desc, eq } from "drizzle-orm";
 import type {
   JsonValue,
@@ -20,7 +20,14 @@ import type {
   NewsletterStatus,
 } from "../../shared/types";
 import { countOptedIn, newsletterAnswers, optedInRecipients } from "../marketing";
-import { MAX_RECIPIENTS, deliverNewsletter, newsletterConfigured, type Issue } from "../newsletter";
+import {
+  BATCHES_PER_REQUEST,
+  BATCH_SIZE,
+  deliverBatch,
+  newsletterConfigured,
+  type Issue,
+} from "../newsletter";
+import { createError } from "evlog";
 import { parseBody } from "../schemas";
 import { docToBlocks, newsletterDocSchema } from "../newsletter-doc";
 
@@ -64,6 +71,7 @@ async function recentSends(db: DB): Promise<NewsletterSendRow[]> {
       sentBy: schema.user.email,
       sentAt: schema.newsletterSends.sentAt,
       sent: schema.newsletterSends.sent,
+      done: schema.newsletterSends.done,
     })
     .from(schema.newsletterSends)
     .leftJoin(schema.user, eq(schema.user.id, schema.newsletterSends.sentBy))
@@ -84,7 +92,6 @@ adminNewsletterRoutes.get("/", async (c) => {
     answers,
     sends,
     configured: newsletterConfigured(c.env),
-    maxRecipients: MAX_RECIPIENTS,
   };
   return c.json(status);
 });
@@ -95,38 +102,104 @@ adminNewsletterRoutes.post("/test", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
   const body = parseBody(testSchema, await c.req.json<JsonValue>().catch(() => null));
-  const sent = await deliverNewsletter(
+  await deliverBatch(
     c.env,
     toIssue(body),
     [{ id: admin.id, email: admin.email }],
     `test-${crypto.randomUUID()}`,
   );
-  log.set({ newsletter: { test: true, sent } });
-  return c.json({ sent } satisfies NewsletterSendResult);
+  log.set({ newsletter: { test: true, sent: 1 } });
+  return c.json({ sent: 1, done: true } satisfies NewsletterSendResult);
 });
 
+/** A send's row, every field present: what saveProgress writes. */
+type SendProgress = typeof schema.newsletterSends.$inferSelect;
+
+/** Saves how far a send got, after every batch, so a stopped send carries on. */
+function saveProgress(db: DB, row: SendProgress) {
+  const { id: _, ...progress } = row;
+  return db
+    .insert(schema.newsletterSends)
+    .values(row)
+    .onConflictDoUpdate({ target: schema.newsletterSends.id, set: progress });
+}
+
+/** The send's row as it stands: where an earlier request stopped, or a new
+ * one. Null when there is nothing to do because it finished. */
+async function progressOf(
+  db: DB,
+  sendId: string,
+  start: Omit<SendProgress, "id" | "sent" | "cursor" | "done">,
+): Promise<SendProgress | null> {
+  const [earlier] = await db
+    .select()
+    .from(schema.newsletterSends)
+    .where(eq(schema.newsletterSends.id, sendId));
+  if (earlier?.done) return null;
+  return earlier ?? { id: sendId, ...start, sent: 0, cursor: "", done: false };
+}
+
+/**
+ * Posts batches from where `row` stopped, at most BATCHES_PER_REQUEST of
+ * them, and saves the row after each. People are read fresh for every batch,
+ * so whoever unsubscribed in the meantime is left out. Each batch's provider
+ * key is the send id and its first recipient, the same on a retry.
+ */
+async function sendBatches(env: Env, db: DB, issue: Issue, row: SendProgress) {
+  let page = await optedInRecipients(db, BATCH_SIZE, row.cursor);
+  for (let batch = 0; batch < BATCHES_PER_REQUEST; batch += 1) {
+    const [first] = page;
+    const last = page.at(-1);
+    if (!first || !last) break;
+    await deliverBatch(env, issue, page, `${row.id}-${first.id}`);
+    row.sent += page.length;
+    row.cursor = last.id;
+    await saveProgress(db, row);
+    page = await optedInRecipients(db, BATCH_SIZE, row.cursor);
+  }
+  row.done = page.length === 0;
+  await saveProgress(db, row);
+}
+
+/**
+ * Sends an issue in batches of people read fresh from D1, oldest id first.
+ * A request that stops (a provider error, or the batch limit) leaves its
+ * progress saved, and sending again with the same send id carries on from
+ * there; nobody gets it twice.
+ */
 adminNewsletterRoutes.post("/send", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
+  const db = drizzle(c.env.DB, { schema });
   const body = parseBody(sendSchema, await c.req.json<JsonValue>().catch(() => null));
   const issue = toIssue(body);
-  // One past the cap, so deliverNewsletter can tell "exactly full" from "over".
-  const recipients = await optedInRecipients(drizzle(c.env.DB, { schema }), MAX_RECIPIENTS + 1);
-  log.set({ newsletter: { test: false, recipients: recipients.length, sendId: body.sendId } });
+  const row = await progressOf(db, body.sendId, {
+    subject: issue.subject,
+    sentBy: admin.id,
+    sentAt: new Date(),
+  });
+  if (!row) {
+    const [done] = await db
+      .select({ sent: schema.newsletterSends.sent })
+      .from(schema.newsletterSends)
+      .where(eq(schema.newsletterSends.id, body.sendId));
+    return c.json({ sent: done?.sent ?? 0, done: true } satisfies NewsletterSendResult);
+  }
+  if (row.sent === 0 && !(await countOptedIn(db))) {
+    throw createError({
+      message: "Nobody is opted in, so there is nobody to send to",
+      status: 409,
+      why: "No verified, unbanned account has opted in to product news",
+    });
+  }
+  await sendBatches(c.env, db, issue, row);
+  log.set({ newsletter: { test: false, sendId: row.id, sent: row.sent, done: row.done } });
+  // After the send is stored: an audit that says success has to be true.
   log.audit({
     action: "newsletter.send",
     actor: { type: "user", id: admin.id },
-    target: { type: "newsletter", id: body.sendId },
+    target: { type: "newsletter", id: row.id },
     outcome: "success",
   });
-  const sent = await deliverNewsletter(c.env, issue, recipients, body.sendId);
-  log.set({ newsletter: { sent } });
-  // Recorded once it went. A retry of the same issue (same send id) rewrites
-  // its row rather than listing the issue twice.
-  const row = { subject: issue.subject, sentBy: admin.id, sentAt: new Date(), sent };
-  await drizzle(c.env.DB, { schema })
-    .insert(schema.newsletterSends)
-    .values({ id: body.sendId, ...row })
-    .onConflictDoUpdate({ target: schema.newsletterSends.id, set: row });
-  return c.json({ sent } satisfies NewsletterSendResult);
+  return c.json({ sent: row.sent, done: row.done } satisfies NewsletterSendResult);
 });

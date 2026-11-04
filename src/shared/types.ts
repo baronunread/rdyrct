@@ -280,6 +280,9 @@ export interface NewsletterSendRow {
   sentAt: number;
   /** Emails the provider accepted. */
   sent: number;
+  /** False while people are left: the send stopped part way and sending the
+   * same issue again carries on. */
+  done: boolean;
 }
 
 /** What the admin newsletter screen reads. */
@@ -291,13 +294,14 @@ export interface NewsletterStatus {
   sends: NewsletterSendRow[];
   /** NEWSLETTER_FROM is set. Without it a send is refused. */
   configured: boolean;
-  /** The most one send reaches. A bigger list is refused, not cut short. */
-  maxRecipients: number;
 }
 
 export interface NewsletterSendResult {
-  /** Emails the provider accepted. */
+  /** Emails the provider accepted, in all requests for this send so far. */
   sent: number;
+  /** False when the request stopped at its batch limit with people left:
+   * sending again with the same send id carries on. Always true for a test. */
+  done: boolean;
 }
 
 export interface QrOverrides {
