@@ -1,5 +1,5 @@
 import { lazyRouteComponent, type AnyRouter, type HistoryLocation } from "@tanstack/react-router";
-import { isChunkLoadError, signalNewVersionAvailable } from "./new-version";
+import { forgetBlockedTarget, isChunkLoadError, signalNewVersionAvailable } from "./new-version";
 
 /**
  * Stops a click from breaking the app when the page it opens is gone.
@@ -36,34 +36,54 @@ export function lazyPage<M extends Record<string, any>, K extends keyof M>(
   return component;
 }
 
+/** How long a click waits on its chunk before the router takes over. Every
+ * later navigation queues behind this one, so a request that hangs must not
+ * hold them all; past this the navigation goes ahead and the router's own
+ * pending page and error handling apply, as they did before the guard. */
+const CHECK_TIMEOUT_MS = 8_000;
+
 /** A failed import stays failed in the browser's module map, so asking again
  * is instant and fails the same way: no network cost to a second click. */
 async function missingChunk(loads: Promise<object>[]): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), CHECK_TIMEOUT_MS);
+  });
+  const settled = Promise.all(loads).then(
+    () => false,
+    (error) => error instanceof Error && isChunkLoadError(error),
+  );
   try {
-    await Promise.all(loads);
-    return false;
-  } catch (error) {
-    return error instanceof Error && isChunkLoadError(error);
+    return await Promise.race([settled, timedOut]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 /**
  * Installs the blocker on `router`. `extra` names chunks a route needs beyond
- * its own component, by route id: the app shell, which every app page draws
- * inside, and the welcome page, which loads its own way.
+ * its own `lazyPage` component, by route id: the app shell, which every app
+ * page draws inside, and the pages and layouts that load through React.lazy
+ * or a loader of their own.
  */
 export function guardStaleChunks(router: AnyRouter, extra: Record<string, Importer>) {
   /** Whether to stop a navigation to `next`: only when its code is gone. */
-  const blocks = async (next: HistoryLocation): Promise<boolean> => {
+  const blocks = async (next: HistoryLocation, from: HistoryLocation): Promise<boolean> => {
     const loads = router.matchRoutes(router.parseLocation(next)).flatMap((match) => {
       const route = router.routesById[match.routeId];
       const component = route?.options.component;
       const own = component ? importers.get(component) : undefined;
       return [own, extra[match.routeId]].filter((load) => load !== undefined).map((load) => load());
     });
-    if (!loads.length || !(await missingChunk(loads))) return false;
-    signalNewVersionAvailable(next.href);
-    return true;
+    if (loads.length && (await missingChunk(loads))) {
+      signalNewVersionAvailable(next.href);
+      return true;
+    }
+    // Another page opened: the banner may stay, but its reload is no longer
+    // for the page an earlier blocked click was opening. Only another page: a
+    // page rewriting its own query string is not the visitor going anywhere.
+    if (next.pathname !== from.pathname) forgetBlockedTarget();
+    return false;
   };
 
   // Answers go out in the order the navigations were asked for. Each one waits
@@ -74,9 +94,17 @@ export function guardStaleChunks(router: AnyRouter, extra: Record<string, Import
     // A blocker asks the browser to confirm leaving the site by default. This
     // one never stops anybody leaving.
     enableBeforeUnload: false,
-    blockerFn: ({ nextLocation, action }: { nextLocation: HistoryLocation; action: string }) => {
+    blockerFn: ({
+      currentLocation,
+      nextLocation,
+      action,
+    }: {
+      currentLocation: HistoryLocation;
+      nextLocation: HistoryLocation;
+      action: string;
+    }) => {
       if (action !== "PUSH" && action !== "REPLACE") return false;
-      const answer = previous.then(() => blocks(nextLocation));
+      const answer = previous.then(() => blocks(nextLocation, currentLocation));
       previous = answer.then(
         () => {},
         () => {},

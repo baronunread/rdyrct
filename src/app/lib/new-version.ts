@@ -39,6 +39,12 @@ export function signalNewVersionAvailable(href?: string) {
   emit();
 }
 
+/** A later navigation went through: Reload is for the page on screen again.
+ * The banner stays; only the target goes. */
+export function forgetBlockedTarget() {
+  target = undefined;
+}
+
 export function dismissNewVersion() {
   if (!available) return;
   available = false;

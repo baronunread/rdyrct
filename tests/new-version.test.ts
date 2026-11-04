@@ -15,6 +15,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   dismissNewVersion,
+  forgetBlockedTarget,
+  getNewVersion,
   isChunkLoadError,
   reloadForNewVersion,
   reloadNow,
@@ -107,5 +109,20 @@ test("a later signal with no page keeps the page a blocked click was opening", (
   signalNewVersionAvailable();
   reloadNow();
   expect(assigned).toBe("/pricing");
+  dismissNewVersion();
+});
+
+test("a navigation that went through after a blocked one reloads the page on screen", () => {
+  let reloaded = false;
+  let assigned = "";
+  Object.assign(globalThis.window, {
+    location: { assign: (href: string) => (assigned = href), reload: () => (reloaded = true) },
+  });
+  signalNewVersionAvailable("/pricing");
+  forgetBlockedTarget();
+  reloadNow();
+  expect(assigned).toBe("");
+  expect(reloaded).toBe(true);
+  expect(getNewVersion()).toBe(true);
   dismissNewVersion();
 });

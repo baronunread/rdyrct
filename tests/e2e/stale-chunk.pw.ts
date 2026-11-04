@@ -38,7 +38,10 @@ test("a click into a page whose chunk is gone keeps the page and offers a reload
   await page.unroute(membersChunk);
   await banner.getByRole("button", { name: "Reload" }).click();
   await expect(page).toHaveURL(/\/members/);
-  await expect(sheet.getByRole("heading", { name: "Members", level: 1 })).toBeVisible();
+  // A full page load on a cold dev server can take a while.
+  await expect(sheet.getByRole("heading", { name: "Members", level: 1 })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(banner).toBeHidden();
 });
 

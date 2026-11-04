@@ -59,15 +59,16 @@ import { RDYRCT_SITE } from "@/shared/site";
 // Router-managed lazy components can preload before navigation commits.
 const LoginPage = lazyPage(() => import("./routes/auth"), "LoginPage");
 const SignupPage = lazyPage(() => import("./routes/auth"), "SignupPage");
+// React.lazy pages: named imports, so the stale-chunk guard can ask for them
+// too (guardStaleChunks below).
+const resetPassword = () => import("./routes/reset-password");
+const invite = () => import("./routes/invite");
+const consent = () => import("./routes/consent");
 const ResetPasswordPage = lazy(() =>
-  import("./routes/reset-password").then((m) => ({
-    default: m.ResetPasswordPage,
-  })),
+  resetPassword().then((m) => ({ default: m.ResetPasswordPage })),
 );
-const InvitePage = lazy(() => import("./routes/invite").then((m) => ({ default: m.InvitePage })));
-const ConsentPage = lazy(() =>
-  import("./routes/consent").then((m) => ({ default: m.ConsentPage })),
-);
+const InvitePage = lazy(() => invite().then((m) => ({ default: m.InvitePage })));
+const ConsentPage = lazy(() => consent().then((m) => ({ default: m.ConsentPage })));
 
 // The app's pages are router-managed (lazyPage, lib/chunk-guard.ts) rather than
 // React.lazy: the router fetches a page's chunk and its data (the loaders
@@ -90,9 +91,8 @@ const adminLinks = () => import("./routes/admin/links");
 const adminOrgs = () => import("./routes/admin/orgs");
 const adminUsers = () => import("./routes/admin/users");
 const adminAudit = () => import("./routes/admin/audit");
-const AdminLayout = lazy(() =>
-  import("./routes/admin/layout").then((m) => ({ default: m.AdminLayout })),
-);
+const adminLayout = () => import("./routes/admin/layout");
+const AdminLayout = lazy(() => adminLayout().then((m) => ({ default: m.AdminLayout })));
 
 // A self-hosted copy has no landing page: its front door is the app, which
 // sends anybody signed out on to /login.
@@ -413,7 +413,14 @@ const router = globalThis.window
 // A click into a page whose code is gone (a tab older than the last deploy)
 // stays where it is and offers a reload, instead of a blank screen.
 if (globalThis.window)
-  guardStaleChunks(router, { [appShellRoute.id]: loadShell, [welcomeRoute.id]: loadWelcome });
+  guardStaleChunks(router, {
+    [appShellRoute.id]: loadShell,
+    [welcomeRoute.id]: loadWelcome,
+    [adminRoute.id]: adminLayout,
+    [resetPasswordRoute.id]: resetPassword,
+    [inviteRoute.id]: invite,
+    [consentRoute.id]: consent,
+  });
 
 declare module "@tanstack/react-router" {
   interface Register {
