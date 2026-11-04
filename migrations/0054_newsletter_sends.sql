@@ -1,6 +1,9 @@
 -- Newsletter sends: one row per issue (tests are not kept), keyed by the
 -- composer's send id. list is who it went to: 'news' (product news) or
--- 'offers', and only people opted in to that list get it. A send goes out in
+-- 'offers', and only people opted in to that list get it. audience narrows
+-- that list further, as JSON ({"stage":"new","plan":"free"}, see
+-- AudienceFilter in src/shared/types.ts); a resumed send reads it from here,
+-- so it carries on to the same people. A send goes out in
 -- batches of people ordered by id; after each batch the row records how many
 -- went and the last id reached (cursor), so a send that stopped (a provider
 -- error, or the per-request batch limit) carries on from there when the admin
@@ -9,6 +12,7 @@
 CREATE TABLE newsletter_sends (
   id TEXT PRIMARY KEY,
   list TEXT NOT NULL CHECK (list IN ('news','offers')),
+  audience TEXT NOT NULL DEFAULT '{"stage":"any","plan":"any"}' CHECK (json_valid(audience)),
   subject TEXT NOT NULL,
   sent_by TEXT REFERENCES user(id) ON DELETE SET NULL,
   sent_at INTEGER NOT NULL,

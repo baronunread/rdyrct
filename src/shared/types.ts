@@ -280,6 +280,30 @@ export interface MarketingAnswer {
   offers?: boolean;
 }
 
+/** Where an account is with the product, for narrowing a newsletter send.
+ * What each one means is decided in worker/marketing.ts. */
+export const AUDIENCE_STAGES = ["any", "new", "active", "slipping"] as const;
+export type AudienceStage = (typeof AUDIENCE_STAGES)[number];
+
+/** Days without a visit after which an account that made a link is
+ * slipping away rather than active. */
+export const ACTIVE_WITHIN_DAYS = 30;
+
+/** Which plans a send reaches. Paid is Hobby or Pro, comps included. */
+export const AUDIENCE_PLANS = ["any", "free", "paid"] as const;
+export type AudiencePlan = (typeof AUDIENCE_PLANS)[number];
+
+/** What narrows a send beyond its list. Every filter holds at once (AND),
+ * and "any" leaves that one out. A new filter is a new field here with an
+ * "any" default, plus its clause in marketing.ts's `audienceWhere`. */
+export interface AudienceFilter {
+  stage: AudienceStage;
+  plan: AudiencePlan;
+}
+
+/** Nobody left out: what a send with no filters, and an older send, used. */
+export const EVERYONE: AudienceFilter = { stage: "any", plan: "any" };
+
 /** How every account has answered one list, for the admin newsletter screen. */
 export interface NewsletterAnswers {
   /** Opted in now, by where the yes came from. Counts every account, so the
@@ -296,6 +320,8 @@ export interface NewsletterSendRow {
   id: string;
   /** The list it went to. */
   list: MarketingList;
+  /** Who in the list it was narrowed to. */
+  audience: AudienceFilter;
   subject: string;
   /** Email of the admin who sent it; null once that account is gone. */
   sentBy: string | null;
@@ -321,6 +347,11 @@ export interface NewsletterStatus {
 
 /** An account's answer about one list, as one word. */
 export type ConsentAnswer = "on" | "off" | "unasked";
+
+/** How many people a send to one list, narrowed by a filter, reaches now. */
+export interface NewsletterAudienceCount {
+  count: number;
+}
 
 export interface NewsletterSendResult {
   /** Emails the provider accepted, in all requests for this send so far. */

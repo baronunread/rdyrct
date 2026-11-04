@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type Ref } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
+import { Mail } from "../ui/icons";
+import { Switch } from "../ui/switch";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { errorMessage } from "../lib/error-message";
@@ -13,48 +15,53 @@ import {
   type SignupChoice,
 } from "../lib/marketing";
 
-/** One list's box in the dialog: its name, and what it sends under it. */
-function ListBox({
+/** One list's row in the dialog: its name and what it sends on the left,
+ * a switch on the right. The whole row is the target. Nothing saves until
+ * Save. */
+function ListRow({
   label,
   hint,
   checked,
   onChange,
-  inputRef,
+  switchRef,
 }: {
   label: string;
   hint: string;
   checked: boolean;
   onChange: (next: boolean) => void;
-  inputRef?: RefObject<HTMLInputElement | null>;
+  switchRef?: Ref<HTMLButtonElement>;
 }) {
+  const hintId = useId();
   return (
-    <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg px-2 py-2 transition-colors duration-150 ease-out [@media(hover:hover)]:hover:bg-surface-2">
-      <input
-        ref={inputRef}
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-accent"
-      />
-      <span className="flex flex-col gap-0.5">
+    <label className="flex min-h-14 cursor-pointer items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 ease-out [@media(hover:hover)]:hover:bg-surface-2/60">
+      <span className="flex min-w-0 flex-col gap-0.5">
         <span className="text-sm font-medium">{label}</span>
-        <span className="text-xs text-muted">{hint}</span>
+        <span id={hintId} className="text-xs text-muted">
+          {hint}
+        </span>
       </span>
+      <Switch
+        ref={switchRef}
+        label={label}
+        describedBy={hintId}
+        checked={checked}
+        onCheckedChange={onChange}
+      />
     </label>
   );
 }
 
 /**
  * The one-time "hear from rdyrct by email?" question, for an account that has
- * not answered. Two unticked boxes, one per list (product news, offers).
+ * not answered. Two switches, both off, one per list (product news, offers).
  * Every existing account starts there; one that answered at sign-up (ticked
  * or not) never sees it.
  *
- * Any answer ends it: Save with nothing ticked, "No thanks" and closing the
+ * Any answer ends it: Save with both off, "No thanks" and closing the
  * dialog are all a no to both lists. It never shows during the /welcome
  * setup flow. It also sends the sign-up form's remembered choice first
  * (lib/marketing.ts), and stays closed until that has landed, so a person who
- * just ticked a box is not asked again.
+ * just ticked a box at sign-up is not asked again.
  */
 export function MarketingPrompt() {
   const currentUser = useCurrentUser();
@@ -65,7 +72,7 @@ export function MarketingPrompt() {
   const [flushing, setFlushing] = useState(() => peekSignupChoice() !== null);
   const [choice, setChoice] = useState<SignupChoice>({ news: false, offers: false });
   const [pressed, setPressed] = useState<"save" | "no" | null>(null);
-  const firstBox = useRef<HTMLInputElement>(null);
+  const firstSwitch = useRef<HTMLButtonElement>(null);
 
   const marketing = currentUser.data?.user.marketing;
   useEffect(() => {
@@ -110,26 +117,42 @@ export function MarketingPrompt() {
       onOpenChange={(next) => !next && !set.isPending && answer("no")}
       title="Hear from rdyrct by email?"
       size="sm"
-      initialFocus={firstBox}
+      bare
+      initialFocus={firstSwitch}
     >
-      <div className="flex flex-col gap-4">
-        <div className="-mx-2 flex flex-col">
-          <ListBox
+      <div className="flex flex-col px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <span
+            aria-hidden
+            className="grid size-10 place-items-center rounded-full bg-surface-2 text-text smooth-shadow-ring-xs"
+          >
+            <Mail size={20} stroke={1.75} />
+          </span>
+          <DialogClose className="-m-1.5" />
+        </div>
+        <DialogTitle className="mt-4 text-lg">Hear from rdyrct by email?</DialogTitle>
+        <p className="mt-1 text-sm text-pretty text-muted">
+          Choose what you want. Each stays off until you turn it on.
+        </p>
+        <div className="mt-5 overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
+          <ListRow
             label="Product news"
             hint="New features and tips"
             checked={choice.news}
             onChange={(news) => setChoice((c) => ({ ...c, news }))}
-            inputRef={firstBox}
+            switchRef={firstSwitch}
           />
-          <ListBox
+          <ListRow
             label="Offers"
             hint="Deals on paid plans"
             checked={choice.offers}
             onChange={(offers) => setChoice((c) => ({ ...c, offers }))}
           />
         </div>
-        <p className="text-sm text-muted">Unsubscribe any time, from any email or in Settings.</p>
-        <div className="flex justify-end gap-2">
+        <p className="mt-3 text-xs text-muted">
+          Unsubscribe any time, from any email or in Settings.
+        </p>
+        <div className="mt-6 flex justify-end gap-2 max-sm:[&>*]:flex-1">
           <Button variant="ghost" disabled={set.isPending} onClick={() => answer("no")}>
             <BusyContent busy={set.isPending && pressed === "no"}>No thanks</BusyContent>
           </Button>

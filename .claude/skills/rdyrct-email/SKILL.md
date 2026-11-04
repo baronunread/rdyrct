@@ -75,8 +75,8 @@ its list, and that fact lives in our own D1 (`user.news_opt_in_at` and
 `offers_opt_in_source`), never only at a provider. The default is opted in to
 neither, for existing accounts and for new ones.
 `optedInRecipients(db, list, …)` in `marketing.ts` is the one query that says
-who gets mail (opted in to that list, verified, not banned); do not write a
-second, and never email an export of the user table. Mail to a person who
+who gets mail (opted in to that list, verified, not banned, inside the send's
+audience filters); do not write a second, and never email an export of the user table. Mail to a person who
 has not opted in is transactional or it does not go.
 
 How it is sent:
@@ -94,15 +94,20 @@ How it is sent:
   `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
   headers (RFC 8058, which Gmail and Yahoo require of bulk mail) carry the
   same signed link. Never send a newsletter without them. The token names
-  the list, so the link (and one-click) takes the reader off that list only;
-  the page offers a second button for both. The footer line names the list:
+  the list, so one-click takes the reader off that list only, with no page.
+  Opened in a browser, the link shows a box per list, ticked as the reader
+  stands, with Save and a smaller "Unsubscribe from all"; GET never changes
+  anything. The footer line names the list:
   "You get this because you opted in to offers from rdyrct."
 - The composer is Platform > Newsletter (admin only). It takes a subject and a
   body written in Resend's editor (`@react-email/editor`, cut down in
   `routes/admin/newsletter-editor.tsx` to paragraphs, two heading sizes,
   lists, bold, italic, underline, links, line breaks, a divider and buttons),
   sends a test to the admin alone, and sends to the list picked above the
-  form (Product news or Offers). The browser sends the
+  form (Product news or Offers), narrowed by stage (New, Active, Slipping
+  away; defined in `marketing.ts`, from D1 only) and plan (Free, Paid). The
+  count updates as the filters change, and the send keeps its filters on its
+  `newsletter_sends` row so a resumed send reaches the same people. The browser sends the
   editor's JSON, never HTML: `worker/newsletter-doc.ts` parses it against the
   same allow-list (anything else is a 400 naming it) into the layout's
   `blocks` slot, which escapes every string and drops any link or button that

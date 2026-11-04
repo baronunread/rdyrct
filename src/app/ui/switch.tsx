@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import { cn } from "./cn";
 
@@ -9,21 +10,29 @@ export function Switch({
   checked,
   onCheckedChange,
   label,
+  describedBy,
   disabled,
   className,
+  ref,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
+  /** The id of a line that says more about it, such as a row's hint. */
+  describedBy?: string;
   /** Not answerable yet, e.g. while the value it shows is still loading. */
   disabled?: boolean;
   className?: string;
+  /** The switch's button, for a dialog that focuses it first. */
+  ref?: Ref<HTMLButtonElement>;
 }) {
   return (
     <BaseSwitch.Root
+      ref={ref}
       checked={checked}
       onCheckedChange={onCheckedChange}
       aria-label={label}
+      aria-describedby={describedBy}
       disabled={disabled}
       className={cn(
         // after: reaches the press target to 28px tall without moving it.

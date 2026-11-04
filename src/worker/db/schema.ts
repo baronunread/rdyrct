@@ -9,7 +9,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
-import { REPORT_REASONS } from "../../shared/types";
+import { REPORT_REASONS, type AudienceFilter } from "../../shared/types";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
 // Shapes follow the BetterAuth core schema (bunx @better-auth/cli generate),
@@ -1002,6 +1002,10 @@ export const newsletterSends = sqliteTable(
     id: text("id").primaryKey(),
     // Who it went to: everyone opted in to this list.
     list: text("list", { enum: ["news", "offers"] }).notNull(),
+    // Who in the list: the filters it was sent with, so a resumed send
+    // reaches the same people. Only routes/admin-newsletter.ts writes it,
+    // from a parsed AudienceFilter.
+    audience: text("audience", { mode: "json" }).$type<AudienceFilter>().notNull(),
     subject: text("subject").notNull(),
     sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
     sentAt: integer("sent_at", { mode: "timestamp_ms" }).notNull(),

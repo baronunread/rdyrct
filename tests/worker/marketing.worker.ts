@@ -194,40 +194,97 @@ describe("the unsubscribe page", () => {
     );
   };
 
-  it("shows the list's button and an all button on GET, and changes nothing", async () => {
-    await seedUser("reader-1", 5, "", 7).run();
+  /** The form as the page posts it: the button pressed and the ticked boxes. */
+  const form = (action: string, ...ticked: string[]) =>
+    new URLSearchParams([["action", action], ...ticked.map((list) => [list, "on"])]).toString();
+
+  it("shows each list ticked as the reader stands, the email's list first, and GET changes nothing", async () => {
+    await seedUser("reader-1", null, "", 7).run();
     const token = await signUnsubscribeToken(authEnv(), "reader-1", "offers");
-    const page = await visit(token);
-    expect(page.status).toBe(200);
-    const html = await page.text();
-    expect(html).toContain("Unsubscribe from offers?");
-    expect(html).toContain("Unsubscribe from all rdyrct email");
-    expect(html).toContain("scope=all");
-    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
-    const news = await visit(await signUnsubscribeToken(authEnv(), "reader-1", "news"));
-    expect(await news.text()).toContain("Unsubscribe from product news?");
+    const res = await visit(token);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Which emails do you want from rdyrct?");
+    expect(html).toContain('name="offers" value="on" checked');
+    expect(html).toContain('name="news" value="on">');
+    expect(html.indexOf('name="offers"')).toBeLessThan(html.indexOf('name="news"'));
+    expect(html).toContain('value="save">Save<');
+    expect(html).toContain('value="all" class="quiet">Unsubscribe from all<');
+    // Fetched twice, as a link preview would: nothing moves.
+    await visit(token);
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: 7, asked: null });
+    const news = await (
+      await visit(await signUnsubscribeToken(authEnv(), "reader-1", "news"))
+    ).text();
+    expect(news.indexOf('name="news"')).toBeLessThan(news.indexOf('name="offers"'));
   });
 
-  it("takes a one-click POST off that list only, with no session", async () => {
+  it("saves each combination from the form, as a Settings answer", async () => {
+    const cases = [
+      { ticked: ["news", "offers"], said: "You get product news and offers." },
+      { ticked: ["news"], said: "You get product news only." },
+      { ticked: ["offers"], said: "You get offers only." },
+      { ticked: [], said: "You will not get any rdyrct email." },
+    ];
+    for (const [i, { ticked, said }] of cases.entries()) {
+      const id = `reader-${i}`;
+      await seedUser(id, 5).run();
+      await env.DB.prepare("update user set marketing_asked_at = 3 where id = ?").bind(id).run();
+      const token = await signUnsubscribeToken(authEnv(), id, "news");
+      const res = await visit(token, "POST", form("save", ...ticked));
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain(said);
+      const row = await consentRow(id);
+      // A list left on keeps its first opt-in; a changed one is a Settings answer.
+      expect(row?.news === null).toBe(!ticked.includes("news"));
+      expect(row?.offers === null).toBe(!ticked.includes("offers"));
+      if (ticked.includes("news")) expect(row).toMatchObject({ news: 5, newsSource: "settings" });
+      if (ticked.includes("offers")) expect(row?.offersSource).toBe("settings");
+      else expect(row?.offersSource).toBeNull();
+      // Asked stays the first time they answered.
+      expect(row?.asked).toBe(3);
+    }
+  });
+
+  it("takes the reader off both lists from Unsubscribe from all, whatever is ticked", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    const res = await visit(token, "POST", form("all", "news", "offers"));
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("You are unsubscribed");
+    expect(html).toContain("You will not get any rdyrct email.");
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null });
+    // The query form an older page posted still works.
+    await env.DB.prepare("update user set news_opt_in_at = 5 where id = 'reader-1'").run();
+    await visit(token, "POST", undefined, "&scope=all");
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null });
+  });
+
+  it("takes a one-click POST off the email's list only, with no session", async () => {
     await seedUser("reader-1", 5, "", 7).run();
     const token = await signUnsubscribeToken(authEnv(), "reader-1", "offers");
     const res = await visit(token, "POST", "List-Unsubscribe=One-Click");
     expect(res.status).toBe(200);
+    expect(await res.text()).toContain("You get product news only.");
     const row = await consentRow("reader-1");
     expect(row).toMatchObject({ news: 5, offers: null });
     expect(row?.asked).not.toBeNull();
     // Again: still 200, still off.
     expect((await visit(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
     expect((await consentRow("reader-1"))?.news).toBe(5);
+    // With no body at all, a client that skips it: the same.
+    const news = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    expect((await visit(news, "POST")).status).toBe(200);
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null });
   });
 
-  it("takes the reader off both lists from the all button", async () => {
+  it("refuses a form it does not know, and changes nothing", async () => {
     await seedUser("reader-1", 5, "", 7).run();
     const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
-    const res = await visit(token, "POST", undefined, "&scope=all");
-    expect(res.status).toBe(200);
-    expect(await res.text()).toContain("product news or offers");
-    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null });
+    expect((await visit(token, "POST", "action=delete")).status).toBe(400);
+    expect((await visit(token, "POST", "action=save&news=yes")).status).toBe(400);
+    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
   });
 
   it("refuses an invalid token and leaves the account alone", async () => {
@@ -236,6 +293,7 @@ describe("the unsubscribe page", () => {
     expect((await visit(forged)).status).toBe(400);
     expect((await visit(forged, "POST", "List-Unsubscribe=One-Click")).status).toBe(400);
     expect((await visit(forged, "POST", undefined, "&scope=all")).status).toBe(400);
+    expect((await visit(forged, "POST", "action=save")).status).toBe(400);
     expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
   });
 });
@@ -693,6 +751,181 @@ describe("sending to one list", () => {
     expect((await send("offers", "send-mixed")).status).toBe(409);
     expect((await send("everyone", "send-other")).status).toBe(400);
     expect(mail.batches.flatMap((b) => b.emails)).toHaveLength(1);
+    mail.restore();
+  });
+});
+
+describe("narrowing a send", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const org = () =>
+    env.DB.prepare("insert into orgs (id, name, created_at) values ('org-a', 'A', 0)");
+  /** One link, made by `userId`. */
+  const linkBy = (userId: string) =>
+    env.DB.prepare(
+      "insert into links (id, org_id, slug, destination, created_at, created_by) values (?, 'org-a', ?, 'https://example.com', 0, ?)",
+    ).bind(`link-${userId}`, `s-${userId}`, userId);
+  /** An offers reader on `plan`, last seen `seenDaysAgo` days back (null: never). */
+  const reader = (id: string, plan: string, seenDaysAgo: number | null) => [
+    seedUser(id, null, "", 5),
+    env.DB.prepare("update user set plan = ?, last_seen_at = ? where id = ?").bind(
+      plan,
+      seenDaysAgo === null ? null : Date.now() - seenDaysAgo * DAY,
+      id,
+    ),
+  ];
+  const count = async (cookie: string, query: string) => {
+    const res = await json(cookie, "GET", `/api/admin/newsletter/audience?list=offers&${query}`);
+    expect(res.status).toBe(200);
+    return (await jsonBody<{ count: number }>(res)).count;
+  };
+
+  async function seedStages() {
+    await env.DB.batch([
+      org(),
+      ...reader("fresh-free", "free", 1),
+      ...reader("fresh-paid", "hobby", 1),
+      ...reader("active-free", "free", 1),
+      // Seen through a session only: last_seen_at has not caught up.
+      ...reader("active-pro", "pro", null),
+      env.DB.prepare(
+        "insert into session (id, token, user_id, expires_at, created_at, updated_at) values ('s1', 't1', 'active-pro', ?, 0, ?)",
+      ).bind(Date.now() + DAY, Date.now() - 2 * DAY),
+      ...reader("slipping-free", "free", 40),
+      ...reader("slipping-never", "pro", null),
+      ...["active-free", "active-pro", "slipping-free", "slipping-never"].map(linkBy),
+      // On news only: no filter brings them into an offers send.
+      seedUser("news-only", 5),
+    ]);
+  }
+
+  it("counts each stage and plan, and every pair of them", async () => {
+    const cookie = await adminCookie();
+    await seedStages();
+    expect(await count(cookie, "")).toBe(6);
+    expect(await count(cookie, "stage=new")).toBe(2);
+    expect(await count(cookie, "stage=active")).toBe(2);
+    expect(await count(cookie, "stage=slipping")).toBe(2);
+    expect(await count(cookie, "plan=free")).toBe(3);
+    expect(await count(cookie, "plan=paid")).toBe(3);
+    expect(await count(cookie, "stage=new&plan=free")).toBe(1);
+    expect(await count(cookie, "stage=active&plan=paid")).toBe(1);
+    expect(await count(cookie, "stage=slipping&plan=free")).toBe(1);
+    expect(await count(cookie, "stage=any&plan=any")).toBe(6);
+    const bad = await json(cookie, "GET", "/api/admin/newsletter/audience?list=offers&stage=old");
+    expect(bad.status).toBe(400);
+  });
+
+  it("sends only to the people the filters pick, and keeps the filters on the row", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await seedStages();
+    const send = async (audience: JsonValue, sendId: string) => {
+      const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+        ...issue,
+        list: "offers",
+        sendId,
+        audience,
+      });
+      expect(res.status).toBe(200);
+      return mail.batches.flatMap((b) => (b.key?.startsWith(sendId) ? b.emails : []));
+    };
+    const to = (emails: Posted[]) => emails.map((e) => e.to[0].split("@")[0]).sort();
+    expect(to(await send({ stage: "new", plan: "free" }, "send-new-free"))).toEqual(["fresh-free"]);
+    expect(to(await send({ stage: "active" }, "send-active"))).toEqual([
+      "active-free",
+      "active-pro",
+    ]);
+    expect(to(await send({ stage: "slipping", plan: "paid" }, "send-slip-paid"))).toEqual([
+      "slipping-never",
+    ]);
+    expect(to(await send({ plan: "paid" }, "send-paid"))).toEqual([
+      "active-pro",
+      "fresh-paid",
+      "slipping-never",
+    ]);
+    const history = await jsonBody<{ sends: { id: string; audience: JsonValue }[] }>(
+      await json(cookie, "GET", "/api/admin/newsletter"),
+    );
+    expect(history.sends.find((s) => s.id === "send-new-free")?.audience).toEqual({
+      stage: "new",
+      plan: "free",
+    });
+    expect(history.sends.find((s) => s.id === "send-paid")?.audience).toEqual({
+      stage: "any",
+      plan: "paid",
+    });
+    // Filters nobody matches: refused, as an empty list is.
+    const none = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      list: "news",
+      sendId: "send-none",
+      audience: { stage: "active" },
+    });
+    expect(none.status).toBe(409);
+    mail.restore();
+  });
+
+  it("carries a stopped send on to the same audience, and refuses other filters on it", async () => {
+    let failed = false;
+    const mail = captureBatches((call) => (call === 1 && !failed ? ((failed = true), 500) : 200));
+    const cookie = await adminCookie();
+    // 150 people with no link and 150 with one, ids interleaved.
+    const ids = Array.from({ length: 150 }, (_, i) => String(i).padStart(3, "0"));
+    await env.DB.batch([
+      org(),
+      ...ids.flatMap((i) => [seedUser(`p${i}-a-new`, 5), seedUser(`p${i}-b-link`, 5)]),
+      ...ids.map((i) => linkBy(`p${i}-b-link`)),
+    ]);
+    const send = (audience: JsonValue) =>
+      json(cookie, "POST", "/api/admin/newsletter/send", {
+        ...issue,
+        sendId: "send-resume-new",
+        audience,
+      });
+    expect((await send({ stage: "new" })).status).toBe(502);
+    const stopped = await env.DB.prepare(
+      "select sent, audience from newsletter_sends where id = 'send-resume-new'",
+    ).first<{ sent: number; audience: string }>();
+    expect(stopped?.sent).toBe(100);
+    expect(JSON.parse(stopped?.audience ?? "")).toEqual({ stage: "new", plan: "any" });
+
+    // The same send with other filters would mix two audiences.
+    expect((await send({ stage: "active" })).status).toBe(409);
+    expect((await send({})).status).toBe(409);
+
+    const res = await send({ stage: "new" });
+    expect(await jsonBody<{ sent: number; done: boolean }>(res)).toEqual({ sent: 150, done: true });
+    const everyone = mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));
+    expect(everyone).toHaveLength(150);
+    expect(new Set(everyone).size).toBe(150);
+    expect(everyone.every((address) => address.includes("-a-new@"))).toBe(true);
+    mail.restore();
+  });
+
+  it("leaves out somebody who leaves the filter while the send runs", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([
+      org(),
+      ...Array.from({ length: 101 }, (_, i) => seedUser(`r${String(i).padStart(3, "0")}`, 5)),
+    ]);
+    // The last person makes a link as the first batch goes out: no longer new.
+    const original = globalThis.fetch;
+    let first = true;
+    globalThis.fetch = async (input, init) => {
+      if (first && String(input instanceof Request ? input.url : input).endsWith("/emails/batch")) {
+        first = false;
+        await linkBy("r100").run();
+      }
+      return original(input, init);
+    };
+    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      sendId: "send-leaves",
+      audience: { stage: "new" },
+    });
+    globalThis.fetch = original;
+    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 100, done: true });
     mail.restore();
   });
 });

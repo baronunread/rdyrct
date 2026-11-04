@@ -5,41 +5,71 @@
  * no sign-in, no cookie and no script, and in a self-hosted copy exactly as
  * on rdyrct.com (a fork that sends newsletters needs it too).
  *
- * GET only shows a button. A mail scanner or a link preview fetches every URL
- * in a message, and a GET that unsubscribed would remove people who never
- * clicked. POST does it, from the button or from a mail client's RFC 8058
- * one-click request (`List-Unsubscribe=One-Click`, token in the query).
+ * GET only shows a form: a box per list, ticked as the person stands now,
+ * Save, and a smaller "Unsubscribe from all". A mail scanner or a link
+ * preview fetches every URL in a message, and a GET that changed anything
+ * would remove people who never clicked. POST does it:
  *
- * The token names the list the email went to, and the main button (and a
- * mail client's one-click) takes the reader off that list only. A smaller
- * second button, `scope=all` in the query, takes them off both.
+ * - `action=save` from the form: each list on or off as ticked, the same
+ *   meaning as a Settings answer.
+ * - `action=all` from the form (or `scope=all` in the query, from a page
+ *   served before the form had boxes): off both lists.
+ * - anything else, which is a mail client's RFC 8058 one-click request
+ *   (`List-Unsubscribe=One-Click`, token in the query): off the list the
+ *   email came from, and only that one, with no page in between.
+ *
+ * The token names the list the email went to. Besides one-click, that only
+ * decides which box comes first.
  */
 import { Hono } from "hono";
+import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
-import type { AppEnv } from "./env";
+import type { AppEnv, DB } from "./env";
 import { escapeHtml } from "./email-html";
-import { UNSUBSCRIBE_PATH, unsubscribeUser, verifyUnsubscribeToken } from "./marketing";
-import type { MarketingList } from "@/shared/types";
+import {
+  UNSUBSCRIBE_PATH,
+  marketingState,
+  setMarketing,
+  unsubscribeUser,
+  verifyUnsubscribeToken,
+} from "./marketing";
+import {
+  MARKETING_LIST_LABELS,
+  MARKETING_LISTS,
+  type MarketingList,
+  type MarketingState,
+} from "@/shared/types";
 
 export const unsubscribeRoutes = new Hono<AppEnv>();
 
 const STYLE = `
-:root{color-scheme:light dark;--bg:#f7f4ef;--surface:#fff;--border:#ddd5c8;--text:#2a2733;--muted:#6e6880;--accent:#7a5fc2;--on-accent:#fff}
-@media (prefers-color-scheme:dark){:root{--bg:#17151f;--surface:#1f1c2b;--border:#34304a;--text:#eae7f2;--muted:#9d95b3;--accent:#cdb9f5;--on-accent:#17151f}}
+:root{color-scheme:light dark;--bg:#f7f4ef;--surface:#fff;--surface-2:#efeae2;--border:#ddd5c8;--text:#2a2733;--muted:#544f61;--accent:#745ab8;--on-accent:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#17151f;--surface:#1f1c2b;--surface-2:#262336;--border:#34304a;--text:#eae7f2;--muted:#c6c2d3;--accent:#cdb9f5;--on-accent:#17151f}}
 *{box-sizing:border-box}
-body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--text);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{width:100%;max-width:420px;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
-p.brand{margin:0 0 16px;font-weight:800;font-size:18px}
-h1{margin:0 0 8px;font-size:20px;line-height:1.35}
+body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--text);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+main{width:100%;max-width:440px;padding:28px 24px 24px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+p.brand{margin:0 0 20px;font-weight:800;font-size:17px;letter-spacing:-0.02em}
+h1{margin:0 0 6px;font-size:20px;line-height:1.3;text-wrap:balance}
 p{margin:0 0 16px;color:var(--muted)}
 p:last-child{margin-bottom:0}
-button,a.button{display:inline-block;height:40px;padding:0 18px;border:0;border-radius:8px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:600;line-height:40px;text-decoration:none;cursor:pointer}
-form+form{margin-top:8px}
-button.quiet{height:28px;padding:0;background:none;color:var(--muted);font-size:13px;font-weight:400;line-height:28px;text-decoration:underline;text-underline-offset:2px}
-button.quiet:hover{color:var(--text)}
-button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-a{color:var(--text)}
+fieldset{margin:0 0 20px;padding:4px;border:1px solid var(--border);border-radius:12px}
+legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+label.list{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border-radius:8px;cursor:pointer}
+label.list+label.list{box-shadow:inset 0 1px 0 var(--border);border-radius:0 0 8px 8px}
+label.list:first-of-type{border-radius:8px 8px 0 0}
+@media (hover:hover){label.list:hover{background:var(--surface-2)}}
+label.list span{display:flex;flex-direction:column;gap:1px}
+label.list b{font-weight:600}
+label.list small{color:var(--muted);font-size:13px}
+input[type=checkbox]{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent);cursor:pointer}
+.actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+button,a.button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;border:0;border-radius:8px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+button.quiet{padding:0 4px;background:none;color:var(--muted);font-size:14px;font-weight:400;text-decoration:underline;text-underline-offset:3px}
+@media (hover:hover){button.quiet:hover{color:var(--text)}}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--text);text-underline-offset:3px}
+p.change{display:flex;align-items:center;min-height:44px;margin:4px 0 0}
 `;
 
 function page(status: 200 | 400, title: string, body: string): Response {
@@ -62,56 +92,122 @@ const invalid = () =>
     `<h1>This link is not valid</h1><p>Copy the whole link from the email, or turn these emails off in Settings after you sign in.</p>`,
   );
 
-/** What each list is called in a sentence, and what stops. */
-const LIST_COPY = {
-  news: {
-    name: "product news",
-    stops: "You will stop getting product news and tips from rdyrct.",
-    again: "Turn it back on in Settings.",
-  },
-  offers: {
-    name: "offers",
-    stops: "You will stop getting deals on paid plans from rdyrct.",
-    again: "Turn them back on in Settings.",
-  },
-} satisfies Record<MarketingList, { name: string; stops: string; again: string }>;
+/** What each list sends, under its name. */
+const LIST_HINTS = {
+  news: "New features and tips",
+  offers: "Deals on paid plans",
+} satisfies Record<MarketingList, string>;
 
 const ACCOUNT_MAIL = "Account email, such as sign-in codes, still arrives.";
 
+/** The page's own address, token and all. */
+const selfUrl = (token: string) => `${UNSUBSCRIBE_PATH}?t=${encodeURIComponent(token)}`;
+
+/** The token's list first: it is the one the reader came about. */
+const listsFrom = (first: MarketingList) => [
+  first,
+  ...MARKETING_LISTS.filter((list) => list !== first),
+];
+
+function listRow(list: MarketingList, checked: boolean): string {
+  return `<label class="list"><input type="checkbox" name="${list}" value="on"${checked ? " checked" : ""}><span><b>${MARKETING_LIST_LABELS[list]}</b><small>${LIST_HINTS[list]}</small></span></label>`;
+}
+
+/** What the reader gets now, as one sentence. */
+function nowGets(state: MarketingState): string {
+  if (state.news && state.offers) return "You get product news and offers.";
+  if (state.news) return "You get product news only.";
+  if (state.offers) return "You get offers only.";
+  return `You will not get any rdyrct email. ${ACCOUNT_MAIL}`;
+}
+
 unsubscribeRoutes.get("/", async (c) => {
-  const token = c.req.query("t");
+  const token = c.req.query("t") ?? "";
   const named = await verifyUnsubscribeToken(c.env, token);
   if (!named) return invalid();
-  const copy = LIST_COPY[named.list];
-  const action = `${UNSUBSCRIBE_PATH}?t=${encodeURIComponent(token ?? "")}`;
+  const state = await marketingState(drizzle(c.env.DB, { schema }), named.userId);
+  const rows = listsFrom(named.list)
+    .map((list) => listRow(list, state[list]))
+    .join("");
+  const title = "Which emails do you want from rdyrct?";
   return page(
     200,
-    `Unsubscribe from ${copy.name}`,
-    `<h1>Unsubscribe from ${copy.name}?</h1><p>${copy.stops} ${ACCOUNT_MAIL}</p><form method="post" action="${escapeHtml(action)}"><button type="submit">Unsubscribe</button></form><form method="post" action="${escapeHtml(`${action}&scope=all`)}"><button type="submit" class="quiet">Unsubscribe from all rdyrct email</button></form>`,
+    title,
+    `<h1>${title}</h1><p>Untick a list to stop it. ${ACCOUNT_MAIL}</p><form method="post" action="${escapeHtml(selfUrl(token))}"><fieldset><legend>Lists</legend>${rows}</fieldset><div class="actions"><button type="submit" name="action" value="save">Save</button><button type="submit" name="action" value="all" class="quiet">Unsubscribe from all</button></div></form>`,
   );
 });
 
-// Both the page's buttons and a mail client's one-click request: 200 either
-// way. One-click carries no scope, so it only ever takes the token's list.
+/** The form's fields. A one-click body (`List-Unsubscribe=One-Click`) has
+ * none of them, which is what tells the two apart. */
+const formSchema = v.object({
+  action: v.optional(v.picklist(["save", "all"])),
+  news: v.optional(v.literal("on")),
+  offers: v.optional(v.literal("on")),
+});
+
+/** What a POST asks for. */
+type Wanted =
+  | { kind: "save"; news: boolean; offers: boolean }
+  | { kind: "off"; from: MarketingList | "all" };
+
+function wantedOf(
+  form: v.InferOutput<typeof formSchema>,
+  list: MarketingList,
+  scope: string | undefined,
+): Wanted {
+  if (form.action === "save") {
+    return { kind: "save", news: form.news === "on", offers: form.offers === "on" };
+  }
+  if (form.action === "all" || scope === "all") return { kind: "off", from: "all" };
+  return { kind: "off", from: list };
+}
+
+/** Records what a POST asks for; false when the account is gone. */
+async function applyWanted(db: DB, userId: string, wanted: Wanted): Promise<boolean> {
+  if (wanted.kind === "off") return unsubscribeUser(db, userId, wanted.from);
+  // Only a list that changes is written, so a list left on keeps the time
+  // and source of its opt-in.
+  const before = await marketingState(db, userId);
+  const changed = (list: MarketingList) =>
+    before[list] === wanted[list] ? undefined : wanted[list];
+  const answer = { source: "settings" as const, news: changed("news"), offers: changed("offers") };
+  return (await setMarketing(db, userId, answer)).applied;
+}
+
+// The form and a mail client's one-click request: 200 either way.
 unsubscribeRoutes.post("/", async (c) => {
   const log = c.get("log");
-  const named = await verifyUnsubscribeToken(c.env, c.req.query("t"));
+  const token = c.req.query("t") ?? "";
+  const named = await verifyUnsubscribeToken(c.env, token);
   if (!named) {
     log?.set({ unsubscribe: { valid: false } });
     return invalid();
   }
-  const from = c.req.query("scope") === "all" ? "all" : named.list;
-  const found = await unsubscribeUser(drizzle(c.env.DB, { schema }), named.userId, from);
-  log?.set({ unsubscribe: { valid: true, from, found } });
+  const parsed = v.safeParse(formSchema, await c.req.parseBody().catch(() => ({})));
+  if (!parsed.success) {
+    log?.set({ unsubscribe: { valid: true, form: "invalid" } });
+    return page(
+      400,
+      "Not saved",
+      `<h1>That did not save</h1><p><a href="${escapeHtml(selfUrl(token))}">Open the page again</a> and choose your lists.</p>`,
+    );
+  }
+  const wanted = wantedOf(parsed.output, named.list, c.req.query("scope"));
+  const db = drizzle(c.env.DB, { schema });
+  const found = await applyWanted(db, named.userId, wanted);
+  const state = await marketingState(db, named.userId);
+  log?.set({ unsubscribe: { valid: true, list: named.list, wanted, found } });
   log?.audit({
-    action: "marketing.unsubscribe",
+    action: wanted.kind === "save" ? "marketing.consent" : "marketing.unsubscribe",
     actor: { type: "user", id: named.userId },
     target: { type: "user", id: named.userId },
-    outcome: "success",
+    outcome: found ? "success" : "failure",
   });
-  const said =
-    from === "all"
-      ? `You will not get product news or offers from rdyrct any more. ${ACCOUNT_MAIL} Changed your mind? Turn them back on in Settings.`
-      : `You will not get ${LIST_COPY[from].name} from rdyrct any more. Changed your mind? ${LIST_COPY[from].again}`;
-  return page(200, "Unsubscribed", `<h1>You are unsubscribed</h1><p>${said}</p>`);
+  const heading =
+    wanted.kind === "save" && (state.news || state.offers) ? "Saved" : "You are unsubscribed";
+  return page(
+    200,
+    heading,
+    `<h1>${heading}</h1><p>${nowGets(state)}</p><p class="change"><a href="${escapeHtml(selfUrl(token))}">Change which emails you get</a></p>`,
+  );
 });

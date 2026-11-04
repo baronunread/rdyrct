@@ -2,11 +2,18 @@
  * Newsletter composer (platform admin). One issue at a time, to one list
  * (product news or offers): a subject and a body written in the email editor
  * (headings, lists, links, a button). A test goes to the admin alone; a send
- * goes to everyone opted in to that list (worker/marketing.ts decides who).
+ * goes to everyone opted in to that list, narrowed by stage and plan
+ * (worker/marketing.ts decides who).
  */
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/react";
-import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  queryOptions,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { settle } from "../../lib/route-preload";
 import { errorMessage } from "../../lib/error-message";
@@ -16,13 +23,22 @@ import { Field, FieldReason, Input } from "../../ui/field";
 import { BusyContent } from "../../ui/spinner";
 import { useToast } from "../../ui/toast";
 import { Segmented } from "../../ui/segmented";
+import { Skeleton } from "../../ui/skeleton";
 import { SectionHeading, fullNumber } from "./admin-kit";
 import { NewsletterEditor } from "./newsletter-editor";
 import { shortDate } from "../../lib/dates";
 import {
+  ACTIVE_WITHIN_DAYS,
+  AUDIENCE_PLANS,
+  AUDIENCE_STAGES,
+  EVERYONE,
   MARKETING_LIST_LABELS,
   MARKETING_LISTS,
+  type AudienceFilter,
+  type AudiencePlan,
+  type AudienceStage,
   type MarketingList,
+  type NewsletterAudienceCount,
   type NewsletterAnswers,
   type NewsletterSendResult,
   type NewsletterSendRow,
@@ -34,7 +50,21 @@ const newsletterQuery = queryOptions<NewsletterStatus>({
   queryFn: () => api("/admin/newsletter"),
 });
 
-export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(newsletterQuery)]);
+/** How many people a send to `list` with `filter` reaches, asked again as
+ * either changes. The last answer stays up while the next one loads. */
+const audienceQuery = (list: MarketingList, filter: AudienceFilter) =>
+  queryOptions<NewsletterAudienceCount>({
+    queryKey: ["admin", "newsletter", "audience", list, filter.stage, filter.plan],
+    queryFn: () =>
+      api(`/admin/newsletter/audience?${new URLSearchParams({ list, ...filter }).toString()}`),
+    placeholderData: keepPreviousData,
+  });
+
+export const preload = (qc: QueryClient) =>
+  settle([
+    qc.ensureQueryData(newsletterQuery),
+    qc.ensureQueryData(audienceQuery("news", EVERYONE)),
+  ]);
 
 type Problems = { subject?: string; body?: string };
 
@@ -59,9 +89,52 @@ const people = (n: number) => `${fullNumber(n)} ${n === 1 ? "person" : "people"}
 /** The audience picker's choices. */
 const LIST_ITEMS = MARKETING_LISTS.map((id) => ({ id, label: MARKETING_LIST_LABELS[id] }));
 
+const STAGE_LABELS = {
+  any: "Everyone",
+  new: "New",
+  active: "Active",
+  slipping: "Slipping away",
+} satisfies Record<AudienceStage, string>;
+const STAGE_ITEMS = AUDIENCE_STAGES.map((id) => ({ id, label: STAGE_LABELS[id] }));
+
+const PLAN_LABELS = { any: "Any", free: "Free", paid: "Paid" } satisfies Record<
+  AudiencePlan,
+  string
+>;
+const PLAN_ITEMS = AUDIENCE_PLANS.map((id) => ({ id, label: PLAN_LABELS[id] }));
+
+/** What each filter keeps, as the end of "people on Offers who …". */
+const STAGE_WORDS = {
+  any: null,
+  new: "have not made a link yet",
+  active: `made a link and came back in the last ${ACTIVE_WITHIN_DAYS} days`,
+  slipping: `made a link but have not been back for ${ACTIVE_WITHIN_DAYS} days`,
+} satisfies Record<AudienceStage, string | null>;
+const PLAN_WORDS = {
+  any: null,
+  free: "are on Free",
+  paid: "are on a paid plan",
+} satisfies Record<AudiencePlan, string | null>;
+
+/** "people on Offers who are on Free and have not made a link yet", after
+ * a count of `n`. */
+function audienceTail(n: number, list: MarketingList, filter: AudienceFilter): string {
+  const clauses = [PLAN_WORDS[filter.plan], STAGE_WORDS[filter.stage]].filter(Boolean);
+  const who = clauses.length > 0 ? ` who ${clauses.join(" and ")}` : "";
+  return `${n === 1 ? "person" : "people"} on ${MARKETING_LIST_LABELS[list]}${who}`;
+}
+
+/** The filters a past send used, for its history line; nothing for none. */
+function filterLabels(filter: AudienceFilter): string[] {
+  return [
+    filter.stage === "any" ? null : STAGE_LABELS[filter.stage],
+    filter.plan === "any" ? null : PLAN_LABELS[filter.plan],
+  ].filter((label) => label !== null);
+}
+
 /** The draft, its field errors, and the two sends. The body lives in the
  * editor; it is read from there when a send needs it. */
-function useComposer(list: MarketingList) {
+function useComposer(list: MarketingList, audience: AudienceFilter) {
   const qc = useQueryClient();
   const toast = useToast();
   const [subject, setSubjectValue] = useState("");
@@ -121,7 +194,7 @@ function useComposer(list: MarketingList) {
     run("send", async () => {
       const result = await api<NewsletterSendResult>("/admin/newsletter/send", {
         method: "POST",
-        body: { ...payload(), sendId: (sendId.current ??= crypto.randomUUID()) },
+        body: { ...payload(), audience, sendId: (sendId.current ??= crypto.randomUUID()) },
       });
       await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
       // Stopped at the per-request limit with people left: the same send id
@@ -134,8 +207,9 @@ function useComposer(list: MarketingList) {
       return `Sent to ${people(result.sent)}`;
     });
 
-  /** A send to another list is another send: the next one gets a new id. */
-  const listChanged = () => {
+  /** A send to another list, or other filters, is another send: the next
+   * one gets a new id. */
+  const audienceChanged = () => {
     sendId.current = null;
   };
 
@@ -149,7 +223,7 @@ function useComposer(list: MarketingList) {
     check,
     sendTest,
     sendAll,
-    listChanged,
+    audienceChanged,
   };
 }
 
@@ -193,28 +267,70 @@ function ListAnswers({ list, answers }: { list: MarketingList; answers: Newslett
   );
 }
 
+/** One filter: what it is called, and its choices. */
+function FilterRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-xs text-muted sm:w-14 sm:shrink-0">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+/** Who a send reaches: the list, the filters, and how many people that is. */
 function Audience({
   status,
   list,
+  filter,
+  count,
   onList,
+  onFilter,
 }: {
   status: NewsletterStatus | undefined;
   list: MarketingList;
+  filter: AudienceFilter;
+  count: number | undefined;
   onList: (list: MarketingList) => void;
+  onFilter: (filter: AudienceFilter) => void;
 }) {
-  const optedIn = status?.optedIn[list] ?? 0;
   const answers = status?.answers;
   return (
     <div className="flex flex-col gap-4 rounded-xl bg-surface-2 p-4 text-sm">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-xs text-muted">Send to</span>
-        <Segmented label="Send to" items={LIST_ITEMS} value={list} onChange={onList} />
+      <div className="flex flex-col gap-3">
+        <FilterRow label="Send to">
+          <Segmented label="Send to" items={LIST_ITEMS} value={list} onChange={onList} />
+        </FilterRow>
+        <FilterRow label="Stage">
+          <Segmented
+            label="Stage"
+            items={STAGE_ITEMS}
+            value={filter.stage}
+            onChange={(stage) => onFilter({ ...filter, stage })}
+          />
+        </FilterRow>
+        <FilterRow label="Plan">
+          <Segmented
+            label="Plan"
+            items={PLAN_ITEMS}
+            value={filter.plan}
+            onChange={(plan) => onFilter({ ...filter, plan })}
+          />
+        </FilterRow>
       </div>
-      <p>
-        <span className="font-semibold tabular-nums">{fullNumber(optedIn)}</span>{" "}
-        {optedIn === 1 ? "person gets" : "people get"} a send to{" "}
-        {MARKETING_LIST_LABELS[list].toLowerCase()}: opted in, verified and not banned.
-      </p>
+      {/* Two lines kept whatever the filters say, so the box does not jump. */}
+      <div aria-live="polite" className="flex min-h-11 flex-col gap-0.5">
+        {count === undefined ? (
+          <Skeleton className="h-5 w-64 max-w-full" />
+        ) : (
+          <p data-testid="newsletter-audience">
+            <span className="font-semibold tabular-nums">{fullNumber(count)}</span>{" "}
+            {audienceTail(count, list, filter)}.
+          </p>
+        )}
+        <p className="text-xs text-muted">
+          Only people who opted in, verified their address and are not banned.
+        </p>
+      </div>
       {answers && (
         <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
           {MARKETING_LISTS.map((id) => (
@@ -246,8 +362,8 @@ function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
             <li key={send.id} className="flex flex-col gap-0.5 px-4 py-3 text-sm">
               <span className="min-w-0 truncate font-medium">{send.subject}</span>
               <span className="text-xs text-muted">
-                {MARKETING_LIST_LABELS[send.list]} · {shortDate(send.sentAt)} · to{" "}
-                {fullNumber(send.sent)}
+                {[MARKETING_LIST_LABELS[send.list], ...filterLabels(send.audience)].join(" · ")} ·{" "}
+                {shortDate(send.sentAt)} · to {fullNumber(send.sent)}
                 {send.done ? "" : " so far, not finished"}
                 {send.sentBy ? ` · by ${send.sentBy}` : ""}
               </span>
@@ -300,22 +416,35 @@ function IssueFields({ composer }: { composer: ReturnType<typeof useComposer> })
 export function AdminNewsletterPage() {
   const status = useQuery(newsletterQuery).data;
   const [list, setList] = useState<MarketingList>("news");
-  const composer = useComposer(list);
-  const { busy, check, sendTest, sendAll, listChanged } = composer;
+  const [filter, setFilter] = useState<AudienceFilter>(EVERYONE);
+  const count = useQuery(audienceQuery(list, filter)).data?.count;
+  const composer = useComposer(list, filter);
+  const { busy, check, sendTest, sendAll, audienceChanged } = composer;
   const [confirming, setConfirming] = useState(false);
-  const optedIn = status?.optedIn[list] ?? 0;
-  const listName = MARKETING_LIST_LABELS[list].toLowerCase();
   const pickList = (next: MarketingList) => {
     if (next === list || busy !== null) return;
     setList(next);
-    listChanged();
+    audienceChanged();
+  };
+  const pickFilter = (next: AudienceFilter) => {
+    if (busy !== null) return;
+    setFilter(next);
+    audienceChanged();
   };
   const locked = !status?.configured || busy !== null;
+  const reach = count ?? 0;
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <SectionHeading>Newsletter</SectionHeading>
-      <Audience status={status} list={list} onList={pickList} />
+      <Audience
+        status={status}
+        list={list}
+        filter={filter}
+        count={count}
+        onList={pickList}
+        onFilter={pickFilter}
+      />
 
       <form
         noValidate
@@ -338,8 +467,8 @@ export function AdminNewsletterPage() {
           >
             <BusyContent busy={busy === "test"}>Send test to me</BusyContent>
           </Button>
-          <Button type="submit" variant="primary" disabled={locked || optedIn === 0}>
-            Send to {fullNumber(optedIn)}
+          <Button type="submit" variant="primary" disabled={locked || reach === 0}>
+            Send to {fullNumber(reach)}
           </Button>
         </div>
       </form>
@@ -349,11 +478,12 @@ export function AdminNewsletterPage() {
         open={confirming}
         onClose={() => busy === null && setConfirming(false)}
         onConfirm={() => void sendAll().then((sent) => sent && setConfirming(false))}
-        confirmLabel={`Send to ${fullNumber(optedIn)}`}
+        confirmLabel={`Send to ${fullNumber(reach)}`}
         pending={busy === "send"}
       >
         <p>
-          This emails {people(optedIn)} opted in to {listName} now. It cannot be recalled.
+          This emails {fullNumber(reach)} {audienceTail(reach, list, filter)}. It cannot be
+          recalled.
         </p>
       </ConfirmDialog>
 
