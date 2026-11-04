@@ -93,7 +93,7 @@ export function marketingStateOf(row: {
   return { optedIn: row.marketingOptInAt !== null, asked: row.marketingAskedAt !== null };
 }
 
-export async function marketingState(db: DB, userId: string): Promise<MarketingState> {
+async function marketingState(db: DB, userId: string): Promise<MarketingState> {
   const [row] = await db
     .select({
       marketingOptInAt: schema.user.marketingOptInAt,

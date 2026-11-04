@@ -19,7 +19,7 @@ import type { Env } from "./env";
 import { unsubscribeUrl } from "./marketing";
 
 /** The provider takes up to 100 messages per call. */
-export const BATCH_SIZE = 100;
+const BATCH_SIZE = 100;
 
 /** The most one send reaches: 50 calls, well inside a Worker's subrequest
  * budget. A bigger list is refused rather than cut short, so nobody is left

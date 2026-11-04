@@ -32,6 +32,36 @@ async function unaskedAccount(page: Page, email: string) {
 
 const dialog = (page: Page) => page.getByRole("dialog", { name: "Product news by email?" });
 
+/** The account's row once `ready` holds: the answer is written after the
+ * page that sent it has drawn, so it is waited for, not read at once. */
+async function settledConsent(
+  page: Page,
+  email: string,
+  ready: (row: Consent) => boolean,
+): Promise<Consent> {
+  await expect
+    .poll(async () => ready(await consentOf(page, email)), { timeout: 15_000 })
+    .toBe(true);
+  return consentOf(page, email);
+}
+
+/** From the sign-up form's "Check your email" step into the app. */
+async function verifyFromCheckEmail(page: Page, email: string) {
+  await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await verifySignup(page, email);
+}
+
+/** A fresh unasked account on the dashboard, with the dialog up. */
+async function dialogForNewAccount(page: Page, prefix: string): Promise<string> {
+  const email = `${prefix}-${Date.now()}@example.com`;
+  await unaskedAccount(page, email);
+  await page.goto("/dashboard");
+  await expect(dialog(page)).toBeVisible({ timeout: 30_000 });
+  return email;
+}
+
 test.describe("product news opt-in", () => {
   test("the sign-up box starts unticked and a ticked one opts the account in", async ({ page }) => {
     await page.goto("/signup");
@@ -43,18 +73,14 @@ test.describe("product news opt-in", () => {
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign up" }).click();
-    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
-      timeout: 30_000,
-    });
-    await verifySignup(page, email);
+    await verifyFromCheckEmail(page, email);
 
     // Answered at sign-up, so the dialog never asks.
-    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(dialog(page)).toHaveCount(0);
-    await expect
-      .poll(async () => (await consentOf(page, email)).source, { timeout: 15_000 })
-      .toBe("signup");
-    const row = await consentOf(page, email);
+    const row = await settledConsent(page, email, (r) => r.source === "signup");
     expect(row.at).not.toBeNull();
     expect(row.asked).not.toBeNull();
   });
@@ -62,22 +88,14 @@ test.describe("product news opt-in", () => {
   test("an unticked sign-up records a no and is not asked again", async ({ page }) => {
     const email = `news-no-${Date.now()}@gmail.com`;
     await submitSignup(page, email, PASSWORD);
-    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
-      timeout: 30_000,
-    });
-    await verifySignup(page, email);
+    await verifyFromCheckEmail(page, email);
     await expect(dialog(page)).toHaveCount(0);
-    await expect
-      .poll(async () => (await consentOf(page, email)).asked, { timeout: 15_000 })
-      .not.toBeNull();
-    const row = await consentOf(page, email);
+    const row = await settledConsent(page, email, (r) => r.asked !== null);
     expect(row.at).toBeNull();
     expect(row.source).toBe("signup");
   });
 
   test("the Google button carries the ticked box through the redirect", async ({ page }) => {
-    const cfg = await (await page.request.get("/api/config")).json();
-    test.skip(!cfg.googleEnabled, "Google sign-in not configured");
     await page.route("**/api/auth/sign-in/social**", (route) =>
       route.fulfill({ status: 200, body: "" }),
     );
@@ -94,40 +112,30 @@ test.describe("product news opt-in", () => {
   test("an account that was never asked sees the dialog once, and a dismissal ends it", async ({
     page,
   }) => {
-    const email = `news-dismiss-${Date.now()}@example.com`;
-    await unaskedAccount(page, email);
-    await page.goto("/dashboard");
-    await expect(dialog(page)).toBeVisible({ timeout: 30_000 });
-
+    const email = await dialogForNewAccount(page, "news-dismiss");
     await page.keyboard.press("Escape");
     await expect(dialog(page)).toHaveCount(0);
-    await expect
-      .poll(async () => (await consentOf(page, email)).asked, { timeout: 15_000 })
-      .not.toBeNull();
-    const row = await consentOf(page, email);
+    const row = await settledConsent(page, email, (r) => r.asked !== null);
     expect(row.at).toBeNull();
     expect(row.source).toBe("prompt");
 
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(dialog(page)).toHaveCount(0);
   });
 
   test("saying yes in the dialog opts in, and Settings turns it off and on", async ({ page }) => {
-    const email = `news-settings-${Date.now()}@example.com`;
-    await unaskedAccount(page, email);
-    await page.goto("/dashboard");
-    await expect(dialog(page)).toBeVisible({ timeout: 30_000 });
+    const email = await dialogForNewAccount(page, "news-settings");
     await dialog(page).getByRole("button", { name: "Yes, email me" }).click();
     await expect(dialog(page)).toHaveCount(0);
-    await expect
-      .poll(async () => (await consentOf(page, email)).source, { timeout: 15_000 })
-      .toBe("prompt");
-    expect((await consentOf(page, email)).at).not.toBeNull();
+    const row = await settledConsent(page, email, (r) => r.source === "prompt");
+    expect(row.at).not.toBeNull();
 
     await page.goto("/settings");
     const toggle = page.getByRole("switch", { name: "Product news" });
-    await expect(toggle).toBeChecked();
+    await expect(toggle).toBeChecked({ timeout: 15_000 });
     await toggle.click();
     await expect(page.getByText("Product news is off")).toBeVisible();
     await expect(toggle).not.toBeChecked();
@@ -145,7 +153,7 @@ test.describe("product news opt-in", () => {
     await makePlatformAdmin(page, email);
 
     await page.goto("/settings");
-    await page.getByRole("switch", { name: "Product news" }).click();
+    await page.getByRole("switch", { name: "Product news" }).click({ timeout: 15_000 });
     await expect(page.getByText("Product news is on")).toBeVisible();
 
     await page.goto("/admin/newsletter");
