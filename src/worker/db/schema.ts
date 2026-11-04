@@ -991,3 +991,18 @@ export const oauthClientAssertion = sqliteTable("oauth_client_assertion", {
   id: text("id").primaryKey(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+/** One newsletter that went out (migration 0054). The id is the composer's
+ * send id, so a retried send updates its row. Written by
+ * routes/admin-newsletter.ts. */
+export const newsletterSends = sqliteTable(
+  "newsletter_sends",
+  {
+    id: text("id").primaryKey(),
+    subject: text("subject").notNull(),
+    sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }).notNull(),
+    sent: integer("sent").notNull(),
+  },
+  (t) => [index("idx_newsletter_sends_sent_at").on(t.sentAt)],
+);

@@ -156,8 +156,17 @@ test.describe("product news opt-in", () => {
     await page.getByRole("switch", { name: "Product news" }).click({ timeout: 15_000 });
     await expect(page.getByText("Product news is on")).toBeVisible();
 
+    // Platform › Users marks who opted in, and filters to them.
+    await page.goto("/admin/users");
+    await page.getByRole("button", { name: /Product news/ }).click({ timeout: 15_000 });
+    const me = page.getByRole("row").filter({ hasText: email });
+    await expect(me).toBeVisible();
+    await expect(me.getByText("news", { exact: true })).toBeVisible();
+
     await page.goto("/admin/newsletter");
     await expect(page.getByText(/opted in/).first()).toBeVisible();
+    await expect(page.getByText("Said yes")).toBeVisible();
+    await expect(page.getByText("Nothing sent yet.")).toBeVisible();
     await page.getByRole("button", { name: "Send to" }).click();
     // A form error marks its fields; nothing is sent.
     await expect(page.getByText("Add a subject")).toBeVisible();

@@ -238,6 +238,7 @@ function PersonMarks({ user }: { user: AdminUserRow }) {
       {user.isAdmin && <Badge color="butter">admin</Badge>}
       {!user.emailVerified && <Badge color="muted">unverified</Badge>}
       {user.disposable && <Badge color="accent">disposable</Badge>}
+      {user.news === "on" && <Badge color="muted">news</Badge>}
     </>
   );
 }
@@ -436,6 +437,7 @@ const FILTERS = [
   { id: "comped", label: "Comped", test: (u) => !!u.compPlan },
   { id: "banned", label: "Banned", test: (u) => u.banned },
   { id: "admins", label: "Admins", test: (u) => u.isAdmin },
+  { id: "news", label: "Product news", test: (u) => u.news === "on" },
 ] as const satisfies readonly { id: string; label: string; test: (u: AdminUserRow) => boolean }[];
 type UserFilter = (typeof FILTERS)[number]["id"];
 
@@ -444,6 +446,7 @@ const filterTest = (id: UserFilter) => FILTERS.find((f) => f.id === id)?.test ??
 /** What an empty table says: the search it found nothing for, or the filter. */
 function emptyMessage(filter: UserFilter, term: string): string {
   if (term) return `No users match “${term}”.`;
+  if (filter === "news") return "Nobody has opted in to product news yet.";
   const label = FILTERS.find((f) => f.id === filter)?.label.toLowerCase();
   return filter === "all" ? "No users yet." : `No ${label} users.`;
 }

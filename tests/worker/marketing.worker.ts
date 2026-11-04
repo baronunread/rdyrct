@@ -252,6 +252,61 @@ describe("sending a newsletter", () => {
     mail.restore();
   });
 
+  it("counts every answer and keeps one history row per issue, however often it is retried", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([
+      seedUser("yes-1", 5),
+      seedUser("unverified", 5, "0, 0"),
+      seedUser("never", null),
+      env.DB.prepare(
+        `insert into user (id, name, email, email_verified, banned, marketing_asked_at, created_at, updated_at)
+         values ('said-no', 'said-no', 'said-no@example.com', 1, 0, 5, 0, 0)`,
+      ),
+    ]);
+    type Status = {
+      optedIn: number;
+      answers: { yes: Record<string, number>; no: number; unasked: number };
+      sends: { id: string; subject: string; sent: number; sentBy: string | null }[];
+    };
+    const status = async () => jsonBody<Status>(await json(cookie, "GET", "/api/admin/newsletter"));
+
+    const before = await status();
+    // The unverified yes counts as a yes, but gets no send.
+    expect(before.optedIn).toBe(1);
+    expect(before.answers.yes).toEqual({ signup: 0, prompt: 0, settings: 2 });
+    expect(before.answers.no).toBe(1);
+    expect(before.answers.unasked).toBeGreaterThanOrEqual(1);
+    expect(before.sends).toEqual([]);
+
+    // A test send is not history.
+    await json(cookie, "POST", "/api/admin/newsletter/test", issue);
+    expect((await status()).sends).toEqual([]);
+
+    for (let i = 0; i < 2; i++) {
+      const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+        ...issue,
+        sendId: "send-history",
+      });
+      expect(res.status).toBe(200);
+    }
+    const after = await status();
+    expect(after.sends).toHaveLength(1);
+    expect(after.sends[0]).toMatchObject({ id: "send-history", subject: issue.subject, sent: 1 });
+    expect(after.sends[0].sentBy).toMatch(/@/);
+
+    const users = await jsonBody<{ email: string; news: string }[]>(
+      await json(cookie, "GET", "/api/admin/users"),
+    );
+    const news = Object.fromEntries(users.map((u) => [u.email, u.news]));
+    expect(news).toMatchObject({
+      "yes-1@example.com": "on",
+      "said-no@example.com": "off",
+      "never@example.com": "unasked",
+    });
+    mail.restore();
+  });
+
   it("sends a test to the admin alone", async () => {
     const mail = captureBatches();
     const cookie = await adminCookie();

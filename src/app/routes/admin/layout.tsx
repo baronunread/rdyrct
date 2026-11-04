@@ -65,11 +65,14 @@ export function AdminLayout() {
           {onUsage && <RangeControl />}
         </div>
         {/* Underline tabs, drawn as inset shadows so the hairline adds nothing
-            to the box (rdyrct-design, "Depth from layered shadows"). */}
+            to the box (rdyrct-design, "Depth from layered shadows"). On a
+            phone the row is wider than the screen: the right edge fades so
+            the tabs past it read as more, and the end padding lets the last
+            one scroll clear of the fade. */}
         <nav
           ref={bar}
           aria-label="Platform sections"
-          className="relative flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
+          className="relative flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)] max-sm:pr-10 max-sm:[mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)]"
         >
           {TABS.map(({ to, end, label }) => (
             <Link

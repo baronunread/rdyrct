@@ -14,7 +14,13 @@ import { Field, Input, Textarea } from "../../ui/field";
 import { BusyContent } from "../../ui/spinner";
 import { useToast } from "../../ui/toast";
 import { SectionHeading, fullNumber } from "./admin-kit";
-import type { NewsletterSendResult, NewsletterStatus } from "@/shared/types";
+import { shortDate } from "../../lib/dates";
+import type {
+  NewsletterAnswers,
+  NewsletterSendResult,
+  NewsletterSendRow,
+  NewsletterStatus,
+} from "@/shared/types";
 
 const newsletterQuery = queryOptions<NewsletterStatus>({
   queryKey: ["admin", "newsletter"],
@@ -113,20 +119,79 @@ function useComposer() {
   return { draft, problems, busy, set, check, sendTest, sendAll };
 }
 
+/** One count with its label, for the answers row. */
+function Count({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="text-base font-semibold tabular-nums">{fullNumber(value)}</dd>
+    </div>
+  );
+}
+
+/** Where the yeses came from, as a line under the counts. */
+function yesSources(yes: NewsletterAnswers["yes"]): string {
+  return [
+    `${fullNumber(yes.signup)} at sign-up`,
+    `${fullNumber(yes.prompt)} from the dialog`,
+    `${fullNumber(yes.settings)} in Settings`,
+  ].join(" · ");
+}
+
 function Audience({ status }: { status: NewsletterStatus | undefined }) {
   const optedIn = status?.optedIn ?? 0;
+  const answers = status?.answers;
   return (
-    <div className="rounded-xl bg-surface-2 p-4 text-sm">
+    <div className="flex flex-col gap-3 rounded-xl bg-surface-2 p-4 text-sm">
       <p>
         <span className="font-semibold tabular-nums">{fullNumber(optedIn)}</span>{" "}
-        {optedIn === 1 ? "person has" : "people have"} opted in. Only they get a send.
+        {optedIn === 1 ? "person gets" : "people get"} a send: opted in, verified and not banned.
       </p>
+      {answers && (
+        <>
+          <dl className="grid grid-cols-3 gap-3">
+            <Count
+              label="Said yes"
+              value={answers.yes.signup + answers.yes.prompt + answers.yes.settings}
+            />
+            <Count label="Said no" value={answers.no} />
+            <Count label="Not asked yet" value={answers.unasked} />
+          </dl>
+          <p className="text-xs text-muted">{yesSources(answers.yes)}</p>
+        </>
+      )}
       {status?.configured === false && (
-        <p className="mt-1 text-muted">
+        <p className="text-muted">
           Sending is off. Set NEWSLETTER_FROM and the email provider key first.
         </p>
       )}
     </div>
+  );
+}
+
+/** The issues that went out, newest first. */
+function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
+  return (
+    <section aria-labelledby="sent-heading" className="flex flex-col gap-2">
+      <h3 id="sent-heading" className="text-sm font-semibold">
+        Sent
+      </h3>
+      {sends.length === 0 ? (
+        <p className="text-sm text-muted">Nothing sent yet.</p>
+      ) : (
+        <ol className="divide-y divide-border rounded-xl border border-border">
+          {sends.map((send) => (
+            <li key={send.id} className="flex flex-col gap-0.5 px-4 py-3 text-sm">
+              <span className="min-w-0 truncate font-medium">{send.subject}</span>
+              <span className="text-xs text-muted">
+                {shortDate(send.sentAt)} · to {fullNumber(send.sent)}
+                {send.sentBy ? ` · by ${send.sentBy}` : ""}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -223,6 +288,8 @@ export function AdminNewsletterPage() {
       >
         <p>This emails {people(optedIn)} now. It cannot be recalled.</p>
       </ConfirmDialog>
+
+      <SendHistory sends={status?.sends ?? []} />
     </div>
   );
 }

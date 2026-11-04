@@ -22,7 +22,7 @@
 import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import type { MarketingSource, MarketingState } from "@/shared/types";
+import type { MarketingSource, MarketingState, NewsletterAnswers } from "@/shared/types";
 
 const TOKEN_LABEL = "rdyrct:newsletter-unsubscribe:v1";
 
@@ -151,6 +151,40 @@ const reachable = and(
   eq(schema.user.emailVerified, true),
   eq(schema.user.banned, false),
 );
+
+/** An account's answer as one word, for the admin users list. */
+export function newsStateOf(row: {
+  marketingOptInAt: Date | null;
+  marketingAskedAt: Date | null;
+}): "on" | "off" | "unasked" {
+  if (row.marketingOptInAt) return "on";
+  return row.marketingAskedAt ? "off" : "unasked";
+}
+
+/** How every account has answered: one grouped read over the user table. */
+export async function newsletterAnswers(db: DB): Promise<NewsletterAnswers> {
+  const rows = await db
+    .select({
+      source: schema.user.marketingOptInSource,
+      optedIn: sql<number>`${schema.user.marketingOptInAt} is not null`,
+      asked: sql<number>`${schema.user.marketingAskedAt} is not null`,
+      n: sql<number>`count(*)`,
+    })
+    .from(schema.user)
+    .groupBy(sql`1, 2, 3`);
+  const answers: NewsletterAnswers = {
+    yes: { signup: 0, prompt: 0, settings: 0 },
+    no: 0,
+    unasked: 0,
+  };
+  for (const row of rows) {
+    // An opt-in always records its source (setMarketing writes both).
+    if (row.optedIn && row.source) answers.yes[row.source] += row.n;
+    else if (row.asked) answers.no += row.n;
+    else answers.unasked += row.n;
+  }
+  return answers;
+}
 
 export async function countOptedIn(db: DB): Promise<number> {
   const [row] = await db

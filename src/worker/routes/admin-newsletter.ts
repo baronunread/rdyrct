@@ -12,10 +12,16 @@ import { HTTPException } from "hono/http-exception";
 import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import type { AppEnv } from "../env";
-import type { JsonValue, NewsletterSendResult, NewsletterStatus } from "../../shared/types";
+import type { AppEnv, DB } from "../env";
+import { desc, eq } from "drizzle-orm";
+import type {
+  JsonValue,
+  NewsletterSendResult,
+  NewsletterSendRow,
+  NewsletterStatus,
+} from "../../shared/types";
 import { safeUrl } from "../email-html";
-import { countOptedIn, optedInRecipients } from "../marketing";
+import { countOptedIn, newsletterAnswers, optedInRecipients } from "../marketing";
 import { MAX_RECIPIENTS, deliverNewsletter, newsletterConfigured, type Issue } from "../newsletter";
 import { parseBody } from "../schemas";
 
@@ -64,9 +70,37 @@ function toIssue(fields: IssueFields): Issue {
 
 export const adminNewsletterRoutes = new Hono<AppEnv>();
 
+/** How many past sends the screen lists. */
+const NEWSLETTER_HISTORY = 20;
+
+/** The latest sends, newest first, with the sender as an email. */
+async function recentSends(db: DB): Promise<NewsletterSendRow[]> {
+  const rows = await db
+    .select({
+      id: schema.newsletterSends.id,
+      subject: schema.newsletterSends.subject,
+      sentBy: schema.user.email,
+      sentAt: schema.newsletterSends.sentAt,
+      sent: schema.newsletterSends.sent,
+    })
+    .from(schema.newsletterSends)
+    .leftJoin(schema.user, eq(schema.user.id, schema.newsletterSends.sentBy))
+    .orderBy(desc(schema.newsletterSends.sentAt))
+    .limit(NEWSLETTER_HISTORY);
+  return rows.map((row) => ({ ...row, sentAt: row.sentAt.getTime() }));
+}
+
 adminNewsletterRoutes.get("/", async (c) => {
+  const db = drizzle(c.env.DB, { schema });
+  const [optedIn, answers, sends] = await Promise.all([
+    countOptedIn(db),
+    newsletterAnswers(db),
+    recentSends(db),
+  ]);
   const status: NewsletterStatus = {
-    optedIn: await countOptedIn(drizzle(c.env.DB, { schema })),
+    optedIn,
+    answers,
+    sends,
     configured: newsletterConfigured(c.env),
     maxRecipients: MAX_RECIPIENTS,
   };
@@ -105,5 +139,12 @@ adminNewsletterRoutes.post("/send", async (c) => {
   });
   const sent = await deliverNewsletter(c.env, issue, recipients, body.sendId);
   log.set({ newsletter: { sent } });
+  // Recorded once it went. A retry of the same issue (same send id) rewrites
+  // its row rather than listing the issue twice.
+  const row = { subject: issue.subject, sentBy: admin.id, sentAt: new Date(), sent };
+  await drizzle(c.env.DB, { schema })
+    .insert(schema.newsletterSends)
+    .values({ id: body.sendId, ...row })
+    .onConflictDoUpdate({ target: schema.newsletterSends.id, set: row });
   return c.json({ sent } satisfies NewsletterSendResult);
 });

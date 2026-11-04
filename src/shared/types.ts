@@ -259,10 +259,36 @@ export interface MarketingState {
   asked: boolean;
 }
 
+/** How every account has answered, for the admin newsletter screen. */
+export interface NewsletterAnswers {
+  /** Opted in now, by where the yes came from. Counts every account, so the
+   * total can be above `optedIn` (unverified or banned accounts get no send). */
+  yes: Record<MarketingSource, number>;
+  /** Answered no, dismissed the dialog, or unsubscribed later. */
+  no: number;
+  /** Never asked: the dialog still owes them the question. */
+  unasked: number;
+}
+
+/** One newsletter that went out, for the send history. Tests are not kept. */
+export interface NewsletterSendRow {
+  id: string;
+  subject: string;
+  /** Email of the admin who sent it; null once that account is gone. */
+  sentBy: string | null;
+  /** ms epoch. */
+  sentAt: number;
+  /** Emails the provider accepted. */
+  sent: number;
+}
+
 /** What the admin newsletter screen reads. */
 export interface NewsletterStatus {
   /** Verified, not banned, opted in: who a send reaches. */
   optedIn: number;
+  answers: NewsletterAnswers;
+  /** Newest first, at most NEWSLETTER_HISTORY of them. */
+  sends: NewsletterSendRow[];
   /** NEWSLETTER_FROM is set. Without it a send is refused. */
   configured: boolean;
   /** The most one send reaches. A bigger list is refused, not cut short. */
@@ -867,6 +893,8 @@ export interface AdminUserRow {
   emailVerified: boolean;
   /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
+  /** Product news: opted in now, answered no, or never asked. */
+  news: "on" | "off" | "unasked";
   /** Effective plan: what this user may do. A comp counts here (#81). */
   plan: StoredPlan;
   /** What Polar says, separately from what the user may do. `null` means no

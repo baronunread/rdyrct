@@ -40,6 +40,7 @@ import { banUser, ownedDestinationHosts, unbanUser } from "../abuse-hold";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { adminNewsletterRoutes } from "./admin-newsletter";
+import { newsStateOf } from "../marketing";
 import { recordAdminAction } from "../audit";
 import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
 import {
@@ -733,6 +734,8 @@ adminRoutes.get("/users", async (c) => {
         where grantor.id = "user".comp_granted_by
       )`,
         createdAt: schema.user.createdAt,
+        marketingOptInAt: schema.user.marketingOptInAt,
+        marketingAskedAt: schema.user.marketingAskedAt,
         orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
       )`,
@@ -753,8 +756,9 @@ adminRoutes.get("/users", async (c) => {
   ]);
   const emails = new Map(rows.map((r) => [r.id, r.email]));
   return c.json(
-    rows.map((r) => ({
+    rows.map(({ marketingOptInAt, marketingAskedAt, ...r }) => ({
       ...r,
+      news: newsStateOf({ marketingOptInAt, marketingAskedAt }),
       image: adminAvatarUrl(r.id, r.image),
       links: links.get(r.id) ?? 0,
       ...limitFields(r.plan, settings.get(r.id), emails),
