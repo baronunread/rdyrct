@@ -3,7 +3,7 @@
  * paragraphs and an optional button. A test goes to the admin alone; a send
  * goes to everyone who opted in (worker/marketing.ts decides who that is).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { settle } from "../../lib/route-preload";
@@ -53,8 +53,8 @@ export function AdminNewsletterPage() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState<"test" | "send" | null>(null);
   // One per composed issue: the provider skips batches it already sent under
-  // it, so a retry after a failure cannot send twice.
-  const [sendId, setSendId] = useState(() => crypto.randomUUID());
+  // it, so a retry after a failure cannot send twice. A ref: nothing shows it.
+  const sendId = useRef(crypto.randomUUID());
 
   const set = (key: keyof Draft) => (value: string) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -91,11 +91,11 @@ export function AdminNewsletterPage() {
     try {
       const result = await api<NewsletterSendResult>("/admin/newsletter/send", {
         method: "POST",
-        body: { ...payload, sendId },
+        body: { ...payload, sendId: sendId.current },
       });
       toast(`Sent to ${fullNumber(result.sent)} ${result.sent === 1 ? "person" : "people"}`);
       setDraft(EMPTY);
-      setSendId(crypto.randomUUID());
+      sendId.current = crypto.randomUUID();
       setConfirming(false);
       await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
     } catch (error) {
