@@ -54,7 +54,8 @@ export function AdminNewsletterPage() {
   const [busy, setBusy] = useState<"test" | "send" | null>(null);
   // One per composed issue: the provider skips batches it already sent under
   // it, so a retry after a failure cannot send twice. A ref: nothing shows it.
-  const sendId = useRef(crypto.randomUUID());
+  // Made on the first send and cleared after a success, for the next issue.
+  const sendId = useRef<string | null>(null);
 
   const set = (key: keyof Draft) => (value: string) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -91,11 +92,11 @@ export function AdminNewsletterPage() {
     try {
       const result = await api<NewsletterSendResult>("/admin/newsletter/send", {
         method: "POST",
-        body: { ...payload, sendId: sendId.current },
+        body: { ...payload, sendId: (sendId.current ??= crypto.randomUUID()) },
       });
       toast(`Sent to ${fullNumber(result.sent)} ${result.sent === 1 ? "person" : "people"}`);
       setDraft(EMPTY);
-      sendId.current = crypto.randomUUID();
+      sendId.current = null;
       setConfirming(false);
       await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
     } catch (error) {
