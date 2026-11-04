@@ -105,16 +105,18 @@ async function postBatch(
     },
     body: JSON.stringify(emails),
   });
-  if (res.ok) return "sent";
-  const detail = await res.text().catch(() => "");
-  if (res.status === 409 && detail.includes("invalid_idempotent_request")) return "sent-before";
-  throw createError({
-    message: "The email provider refused a batch",
-    status: 502,
-    why: `Provider answered ${res.status}`,
-    fix: "Send again: the send carries on from the last batch that went",
-    internal: { status: res.status, body: detail },
-  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    if (res.status === 409 && detail.includes("invalid_idempotent_request")) return "sent-before";
+    throw createError({
+      message: "The email provider refused a batch",
+      status: 502,
+      why: `Provider answered ${res.status}`,
+      fix: "Send again: the send carries on from the last batch that went",
+      internal: { status: res.status, body: detail },
+    });
+  }
+  return "sent";
 }
 
 /** The sender, or a structured 409 when this instance cannot send. */
