@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type Ref } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Button } from "../ui/button";
 import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
-import { Mail } from "../ui/icons";
 import { Switch } from "../ui/switch";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -122,15 +121,9 @@ export function MarketingPrompt() {
     >
       <div className="flex flex-col px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
         <div className="flex items-start justify-between gap-3">
-          <span
-            aria-hidden
-            className="grid size-10 place-items-center rounded-full bg-surface-2 text-text smooth-shadow-ring-xs"
-          >
-            <Mail size={20} stroke={1.75} />
-          </span>
+          <DialogTitle className="text-lg">Hear from rdyrct by email?</DialogTitle>
           <DialogClose className="-m-1.5" />
         </div>
-        <DialogTitle className="mt-4 text-lg">Hear from rdyrct by email?</DialogTitle>
         <p className="mt-1 text-sm text-pretty text-muted">
           Choose what you want. Each stays off until you turn it on.
         </p>
