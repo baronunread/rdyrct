@@ -41,3 +41,26 @@ test("a click into a page whose chunk is gone keeps the page and offers a reload
   await expect(sheet.getByRole("heading", { name: "Members", level: 1 })).toBeVisible();
   await expect(banner).toBeHidden();
 });
+
+// In a build, hovering a link preloads its chunk, so a deleted one raises the
+// notice before the click (Vite's preloadError; the dev server has no such
+// helper, so here the first click raises it). The notice must not cover the
+// link: it used to be a bar across the top, over the header, and the next
+// click never landed.
+test("the notice leaves the header link clickable", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.route(
+    (url) =>
+      url.pathname.includes("routes/pricing") || /\/assets\/pricing-[\w-]+\.js$/.test(url.pathname),
+    (route) => route.fulfill({ status: 404, body: "" }),
+  );
+  await page.goto("/", { waitUntil: "networkidle" });
+  const link = page.locator("header").getByRole("link", { name: "Pricing" }).first();
+  await link.click();
+  const banner = page.getByRole("alert").filter({ hasText: "A new version is available." });
+  await expect(banner).toBeVisible();
+  // Playwright refuses a click another element would receive.
+  await link.click({ timeout: 5000 });
+  await expect(page).toHaveURL(/\/$/);
+  await expect(banner).toBeVisible();
+});
