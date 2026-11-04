@@ -79,7 +79,7 @@ async function latestOtp(page: Page, email: string) {
 /** Fills in and submits the sign-up form, and stops there. */
 export async function submitSignup(page: Page, email: string, password: string) {
   await page.goto("/signup");
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign up" }).click();
 }

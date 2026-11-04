@@ -100,7 +100,7 @@ test("signing in from an invite lands back on the invite", async ({ page, browse
   await guest.goto(`/invite/${token}`);
   await guest.getByRole("button", { name: "Sign in to accept" }).click();
   await expect(guest).toHaveURL(/\/login\?next=/);
-  await guest.getByLabel("Email").fill(email);
+  await guest.getByLabel("Email", { exact: true }).fill(email);
   await guest.getByLabel("Password").fill("test-password-123");
   await guest.getByRole("button", { name: "Sign in", exact: true }).click();
 

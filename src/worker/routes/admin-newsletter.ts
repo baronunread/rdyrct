@@ -2,8 +2,9 @@
  * The newsletter composer's API (admin only, under /api/admin, so it 404s for
  * everyone else like the rest of it).
  *
- * Who gets a send is decided in marketing.ts (opted in, verified, not banned)
- * and how it is delivered in newsletter.ts. This file is the doorway: it
+ * Every issue goes to one list, product news or offers. Who gets a send is
+ * decided in marketing.ts (opted in to that list, verified, not banned) and
+ * how it is delivered in newsletter.ts. This file is the doorway: it
  * parses the issue, counts, sends, and writes one wide event per request with
  * counts, never addresses.
  */
@@ -13,11 +14,12 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { desc, eq } from "drizzle-orm";
-import type {
-  JsonValue,
-  NewsletterSendResult,
-  NewsletterSendRow,
-  NewsletterStatus,
+import {
+  MARKETING_LISTS,
+  type JsonValue,
+  type NewsletterSendResult,
+  type NewsletterSendRow,
+  type NewsletterStatus,
 } from "../../shared/types";
 import { countOptedIn, newsletterAnswers, optedInRecipients } from "../marketing";
 import {
@@ -32,6 +34,7 @@ import { parseBody } from "../schemas";
 import { docToBlocks, newsletterDocSchema } from "../newsletter-doc";
 
 const issueFields = {
+  list: v.picklist(MARKETING_LISTS, "list must be news or offers"),
   subject: v.pipe(
     v.string("subject is required"),
     v.trim(),
@@ -54,7 +57,7 @@ const sendSchema = v.object({
 type IssueFields = v.InferOutput<typeof testSchema>;
 
 function toIssue(fields: IssueFields): Issue {
-  return { subject: fields.subject, blocks: docToBlocks(fields.doc) };
+  return { list: fields.list, subject: fields.subject, blocks: docToBlocks(fields.doc) };
 }
 
 export const adminNewsletterRoutes = new Hono<AppEnv>();
@@ -67,6 +70,7 @@ async function recentSends(db: DB): Promise<NewsletterSendRow[]> {
   const rows = await db
     .select({
       id: schema.newsletterSends.id,
+      list: schema.newsletterSends.list,
       subject: schema.newsletterSends.subject,
       sentBy: schema.user.email,
       sentAt: schema.newsletterSends.sentAt,
@@ -82,13 +86,14 @@ async function recentSends(db: DB): Promise<NewsletterSendRow[]> {
 
 adminNewsletterRoutes.get("/", async (c) => {
   const db = drizzle(c.env.DB, { schema });
-  const [optedIn, answers, sends] = await Promise.all([
-    countOptedIn(db),
+  const [news, offers, answers, sends] = await Promise.all([
+    countOptedIn(db, "news"),
+    countOptedIn(db, "offers"),
     newsletterAnswers(db),
     recentSends(db),
   ]);
   const status: NewsletterStatus = {
-    optedIn,
+    optedIn: { news, offers },
     answers,
     sends,
     configured: newsletterConfigured(c.env),
@@ -97,7 +102,7 @@ adminNewsletterRoutes.get("/", async (c) => {
 });
 
 // A test goes to the admin alone, through the same path as a real send, so the
-// headers and the footer link are the ones recipients get.
+// headers and the footer link (for the chosen list) are the ones recipients get.
 adminNewsletterRoutes.post("/test", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
@@ -108,7 +113,7 @@ adminNewsletterRoutes.post("/test", async (c) => {
     [{ id: admin.id, email: admin.email }],
     `test-${crypto.randomUUID()}`,
   );
-  log.set({ newsletter: { test: true, sent: 1 } });
+  log.set({ newsletter: { test: true, list: body.list, sent: 1 } });
   return c.json({ sent: 1, done: true } satisfies NewsletterSendResult);
 });
 
@@ -125,7 +130,9 @@ function saveProgress(db: DB, row: SendProgress) {
 }
 
 /** The send's row as it stands: where an earlier request stopped, or a new
- * one. Null when there is nothing to do because it finished. */
+ * one. Null when there is nothing to do because it finished. A send id that
+ * already went to the other list is refused: carrying it on would mix the
+ * two lists in one send. */
 async function progressOf(
   db: DB,
   sendId: string,
@@ -135,6 +142,14 @@ async function progressOf(
     .select()
     .from(schema.newsletterSends)
     .where(eq(schema.newsletterSends.id, sendId));
+  if (earlier && earlier.list !== start.list) {
+    throw createError({
+      message: "This send already went to the other list",
+      status: 409,
+      why: `Send ${sendId} started on ${earlier.list}, not ${start.list}`,
+      fix: "Reload the page to start a new send",
+    });
+  }
   if (earlier?.done) return null;
   return earlier ?? { id: sendId, ...start, sent: 0, cursor: "", done: false };
 }
@@ -146,7 +161,7 @@ async function progressOf(
  * key is the send id and its first recipient, the same on a retry.
  */
 async function sendBatches(env: Env, db: DB, issue: Issue, row: SendProgress) {
-  let page = await optedInRecipients(db, BATCH_SIZE, row.cursor);
+  let page = await optedInRecipients(db, row.list, BATCH_SIZE, row.cursor);
   for (let batch = 0; batch < BATCHES_PER_REQUEST; batch += 1) {
     const [first] = page;
     const last = page.at(-1);
@@ -155,7 +170,7 @@ async function sendBatches(env: Env, db: DB, issue: Issue, row: SendProgress) {
     row.sent += page.length;
     row.cursor = last.id;
     await saveProgress(db, row);
-    page = await optedInRecipients(db, BATCH_SIZE, row.cursor);
+    page = await optedInRecipients(db, row.list, BATCH_SIZE, row.cursor);
   }
   row.done = page.length === 0;
   await saveProgress(db, row);
@@ -174,6 +189,7 @@ adminNewsletterRoutes.post("/send", async (c) => {
   const body = parseBody(sendSchema, await c.req.json<JsonValue>().catch(() => null));
   const issue = toIssue(body);
   const row = await progressOf(db, body.sendId, {
+    list: body.list,
     subject: issue.subject,
     sentBy: admin.id,
     sentAt: new Date(),
@@ -185,15 +201,17 @@ adminNewsletterRoutes.post("/send", async (c) => {
       .where(eq(schema.newsletterSends.id, body.sendId));
     return c.json({ sent: done?.sent ?? 0, done: true } satisfies NewsletterSendResult);
   }
-  if (row.sent === 0 && !(await countOptedIn(db))) {
+  if (row.sent === 0 && !(await countOptedIn(db, row.list))) {
     throw createError({
-      message: "Nobody is opted in, so there is nobody to send to",
+      message: "Nobody is opted in to this list, so there is nobody to send to",
       status: 409,
-      why: "No verified, unbanned account has opted in to product news",
+      why: `No verified, unbanned account has opted in to ${row.list}`,
     });
   }
   await sendBatches(c.env, db, issue, row);
-  log.set({ newsletter: { test: false, sendId: row.id, sent: row.sent, done: row.done } });
+  log.set({
+    newsletter: { test: false, list: row.list, sendId: row.id, sent: row.sent, done: row.done },
+  });
   // After the send is stored: an audit that says success has to be true.
   log.audit({
     action: "newsletter.send",

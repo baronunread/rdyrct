@@ -559,10 +559,13 @@ async function seed() {
     }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
       comp ? u.createdAt : "NULL"
     }, ${
-      // Every fourth account opted in (so the admin newsletter screen has a
-      // count), and all are already asked: nobody meets the one-time dialog
-      // by accident. The "unasked" scenario is the account that does.
+      // Every fourth account opted in to product news and every fifth to
+      // offers (so the admin newsletter screen has counts for both), and all
+      // are already asked: nobody meets the one-time dialog by accident. The
+      // "unasked" scenario is the account that does.
       index % 4 === 0 ? `${u.createdAt}, 'settings'` : "NULL, NULL"
+    }, ${
+      index % 5 === 0 ? `${u.createdAt}, 'signup'` : "NULL, NULL"
     }, ${u.createdAt}, ${u.createdAt}, ${u.createdAt})`;
   });
   const accountRows = users.map(
@@ -573,8 +576,8 @@ async function seed() {
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
        subscription_status, polar_subscription_id, polar_customer_id,
        polar_subscription_cancel_at_period_end, polar_subscription_current_period_end,
-       comp_plan, comp_reason, comp_granted_at, marketing_opt_in_at,
-       marketing_opt_in_source, marketing_asked_at, created_at, updated_at)
+       comp_plan, comp_reason, comp_granted_at, news_opt_in_at, news_opt_in_source,
+       offers_opt_in_at, offers_opt_in_source, marketing_asked_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);
@@ -1195,8 +1198,8 @@ async function seedScenarioAccounts(passwordHash: string, now: number, day: numb
       org: defaultOrgName("sam.rivera@gmail.com", "Sam Rivera"),
     },
     {
-      // An existing account that has never been asked about product news: the
-      // one-time dialog opens on its first app page.
+      // An existing account that has never been asked about marketing email:
+      // the one-time dialog opens on its first app page.
       key: "unasked",
       name: "Nico Pending",
       email: "unasked.account@seed.test",

@@ -1,7 +1,8 @@
 /**
- * Newsletter composer (platform admin). One issue at a time: a subject and a
- * body written in the email editor (headings, lists, links, a button). A test goes to the admin alone; a send
- * goes to everyone who opted in (worker/marketing.ts decides who that is).
+ * Newsletter composer (platform admin). One issue at a time, to one list
+ * (product news or offers): a subject and a body written in the email editor
+ * (headings, lists, links, a button). A test goes to the admin alone; a send
+ * goes to everyone opted in to that list (worker/marketing.ts decides who).
  */
 import { useId, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
@@ -14,14 +15,18 @@ import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { Field, FieldReason, Input } from "../../ui/field";
 import { BusyContent } from "../../ui/spinner";
 import { useToast } from "../../ui/toast";
+import { Segmented } from "../../ui/segmented";
 import { SectionHeading, fullNumber } from "./admin-kit";
 import { NewsletterEditor } from "./newsletter-editor";
 import { shortDate } from "../../lib/dates";
-import type {
-  NewsletterAnswers,
-  NewsletterSendResult,
-  NewsletterSendRow,
-  NewsletterStatus,
+import {
+  MARKETING_LIST_LABELS,
+  MARKETING_LISTS,
+  type MarketingList,
+  type NewsletterAnswers,
+  type NewsletterSendResult,
+  type NewsletterSendRow,
+  type NewsletterStatus,
 } from "@/shared/types";
 
 const newsletterQuery = queryOptions<NewsletterStatus>({
@@ -51,9 +56,12 @@ const MAX_TEXT = 20_000;
 
 const people = (n: number) => `${fullNumber(n)} ${n === 1 ? "person" : "people"}`;
 
+/** The audience picker's choices. */
+const LIST_ITEMS = MARKETING_LISTS.map((id) => ({ id, label: MARKETING_LIST_LABELS[id] }));
+
 /** The draft, its field errors, and the two sends. The body lives in the
  * editor; it is read from there when a send needs it. */
-function useComposer() {
+function useComposer(list: MarketingList) {
   const qc = useQueryClient();
   const toast = useToast();
   const [subject, setSubjectValue] = useState("");
@@ -70,7 +78,7 @@ function useComposer() {
     setProblems((p) => ({ ...p, subject: undefined }));
   };
   const bodyChanged = () => setProblems((p) => (p.body ? { ...p, body: undefined } : p));
-  const payload = () => ({ subject, doc: editorRef.current?.getJSON() });
+  const payload = () => ({ list, subject, doc: editorRef.current?.getJSON() });
   /** Marks what is wrong, field by field, and focuses the first. The server
    * checks again. */
   const check = (form: HTMLFormElement | null) => {
@@ -126,7 +134,23 @@ function useComposer() {
       return `Sent to ${people(result.sent)}`;
     });
 
-  return { subject, problems, busy, editorRef, setSubject, bodyChanged, check, sendTest, sendAll };
+  /** A send to another list is another send: the next one gets a new id. */
+  const listChanged = () => {
+    sendId.current = null;
+  };
+
+  return {
+    subject,
+    problems,
+    busy,
+    editorRef,
+    setSubject,
+    bodyChanged,
+    check,
+    sendTest,
+    sendAll,
+    listChanged,
+  };
 }
 
 /** One count with its label, for the answers row. */
@@ -148,27 +172,55 @@ function yesSources(yes: NewsletterAnswers["yes"]): string {
   ].join(" · ");
 }
 
-function Audience({ status }: { status: NewsletterStatus | undefined }) {
-  const optedIn = status?.optedIn ?? 0;
+/** One list's answers: yes, no, not asked, and where the yeses came from. */
+function ListAnswers({ list, answers }: { list: MarketingList; answers: NewsletterAnswers }) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2">
+      <h3 id={headingId} className="text-sm font-semibold">
+        {MARKETING_LIST_LABELS[list]}
+      </h3>
+      <dl className="grid grid-cols-3 gap-3">
+        <Count
+          label="Said yes"
+          value={answers.yes.signup + answers.yes.prompt + answers.yes.settings}
+        />
+        <Count label="Said no" value={answers.no} />
+        <Count label="Not asked yet" value={answers.unasked} />
+      </dl>
+      <p className="text-xs text-muted">{yesSources(answers.yes)}</p>
+    </section>
+  );
+}
+
+function Audience({
+  status,
+  list,
+  onList,
+}: {
+  status: NewsletterStatus | undefined;
+  list: MarketingList;
+  onList: (list: MarketingList) => void;
+}) {
+  const optedIn = status?.optedIn[list] ?? 0;
   const answers = status?.answers;
   return (
-    <div className="flex flex-col gap-3 rounded-xl bg-surface-2 p-4 text-sm">
+    <div className="flex flex-col gap-4 rounded-xl bg-surface-2 p-4 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-xs text-muted">Send to</span>
+        <Segmented label="Send to" items={LIST_ITEMS} value={list} onChange={onList} />
+      </div>
       <p>
         <span className="font-semibold tabular-nums">{fullNumber(optedIn)}</span>{" "}
-        {optedIn === 1 ? "person gets" : "people get"} a send: opted in, verified and not banned.
+        {optedIn === 1 ? "person gets" : "people get"} a send to{" "}
+        {MARKETING_LIST_LABELS[list].toLowerCase()}: opted in, verified and not banned.
       </p>
       {answers && (
-        <>
-          <dl className="grid grid-cols-3 gap-3">
-            <Count
-              label="Said yes"
-              value={answers.yes.signup + answers.yes.prompt + answers.yes.settings}
-            />
-            <Count label="Said no" value={answers.no} />
-            <Count label="Not asked yet" value={answers.unasked} />
-          </dl>
-          <p className="text-xs text-muted">{yesSources(answers.yes)}</p>
-        </>
+        <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+          {MARKETING_LISTS.map((id) => (
+            <ListAnswers key={id} list={id} answers={answers[id]} />
+          ))}
+        </div>
       )}
       {status?.configured === false && (
         <p className="text-muted">
@@ -194,7 +246,8 @@ function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
             <li key={send.id} className="flex flex-col gap-0.5 px-4 py-3 text-sm">
               <span className="min-w-0 truncate font-medium">{send.subject}</span>
               <span className="text-xs text-muted">
-                {shortDate(send.sentAt)} · to {fullNumber(send.sent)}
+                {MARKETING_LIST_LABELS[send.list]} · {shortDate(send.sentAt)} · to{" "}
+                {fullNumber(send.sent)}
                 {send.done ? "" : " so far, not finished"}
                 {send.sentBy ? ` · by ${send.sentBy}` : ""}
               </span>
@@ -246,16 +299,23 @@ function IssueFields({ composer }: { composer: ReturnType<typeof useComposer> })
 
 export function AdminNewsletterPage() {
   const status = useQuery(newsletterQuery).data;
-  const composer = useComposer();
-  const { busy, check, sendTest, sendAll } = composer;
+  const [list, setList] = useState<MarketingList>("news");
+  const composer = useComposer(list);
+  const { busy, check, sendTest, sendAll, listChanged } = composer;
   const [confirming, setConfirming] = useState(false);
-  const optedIn = status?.optedIn ?? 0;
+  const optedIn = status?.optedIn[list] ?? 0;
+  const listName = MARKETING_LIST_LABELS[list].toLowerCase();
+  const pickList = (next: MarketingList) => {
+    if (next === list || busy !== null) return;
+    setList(next);
+    listChanged();
+  };
   const locked = !status?.configured || busy !== null;
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <SectionHeading>Newsletter</SectionHeading>
-      <Audience status={status} />
+      <Audience status={status} list={list} onList={pickList} />
 
       <form
         noValidate
@@ -292,7 +352,9 @@ export function AdminNewsletterPage() {
         confirmLabel={`Send to ${fullNumber(optedIn)}`}
         pending={busy === "send"}
       >
-        <p>This emails {people(optedIn)} now. It cannot be recalled.</p>
+        <p>
+          This emails {people(optedIn)} opted in to {listName} now. It cannot be recalled.
+        </p>
       </ConfirmDialog>
 
       <SendHistory sends={status?.sends ?? []} />

@@ -1,7 +1,8 @@
 /**
- * Product news consent, client side. The rules are the server's
- * (worker/marketing.ts); this is the wiring the three places share: the
- * sign-up form's choice, the one-time dialog and the Settings toggle.
+ * Marketing consent (product news and offers), client side. The rules are
+ * the server's (worker/marketing.ts); this is the wiring the three places
+ * share: the sign-up form's boxes, the one-time dialog and the Settings
+ * toggles.
  *
  * The sign-up choice is held in sessionStorage until the first signed-in app
  * load sends it. One mechanism for both ways in: Google sign-up is a full-page
@@ -15,17 +16,26 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as v from "valibot";
 import { api } from "./api";
-import type { CurrentUser, MarketingSource, MarketingState } from "@/shared/types";
+import type { CurrentUser, MarketingAnswer, MarketingState } from "@/shared/types";
 
 const KEY = "rdyrct:marketingChoice";
 const MAX_AGE_MS = 60 * 60 * 1000;
 
-const choiceSchema = v.object({ optIn: v.boolean(), at: v.number() });
+const choiceSchema = v.object({ news: v.boolean(), offers: v.boolean(), at: v.number() });
 
-/** The sign-up form's box, kept for the first signed-in load. */
-export function rememberSignupChoice(optIn: boolean) {
+/** The sign-up form's two boxes. */
+export interface SignupChoice {
+  news: boolean;
+  offers: boolean;
+}
+
+/** The sign-up form's boxes, kept for the first signed-in load. */
+export function rememberSignupChoice(choice: SignupChoice) {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify({ optIn, at: Date.now() }));
+    sessionStorage.setItem(
+      KEY,
+      JSON.stringify({ news: choice.news, offers: choice.offers, at: Date.now() }),
+    );
   } catch {
     /* storage off: the dialog asks later instead */
   }
@@ -40,13 +50,13 @@ export function forgetSignupChoice() {
 }
 
 /** The remembered choice, or null when there is none or it has gone stale. */
-export function peekSignupChoice(): boolean | null {
+export function peekSignupChoice(): SignupChoice | null {
   try {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = v.safeParse(choiceSchema, JSON.parse(raw));
     return parsed.success && Date.now() - parsed.output.at < MAX_AGE_MS
-      ? parsed.output.optIn
+      ? { news: parsed.output.news, offers: parsed.output.offers }
       : null;
   } catch {
     return null;
@@ -57,7 +67,7 @@ export function peekSignupChoice(): boolean | null {
 export function useSetMarketing() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (answer: { optIn: boolean; source: MarketingSource }) =>
+    mutationFn: (answer: MarketingAnswer) =>
       api<MarketingState>("/user/marketing", { method: "PUT", body: answer }),
     onSuccess: (marketing) =>
       qc.setQueryData<CurrentUser | null>(["user"], (current) =>

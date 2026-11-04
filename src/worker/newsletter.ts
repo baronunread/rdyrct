@@ -9,14 +9,16 @@
  * The same plain `fetch` and RESEND_BASE_URL as sendEmail, so the dev
  * emulator receives newsletters too.
  *
- * Every email carries its own unsubscribe link, in the footer and in the
- * RFC 8058 one-click headers Gmail and Yahoo require of bulk mail.
+ * Every email carries its own unsubscribe link for the list it went to, in
+ * the footer and in the RFC 8058 one-click headers Gmail and Yahoo require of
+ * bulk mail.
  */
 import { createError } from "evlog";
 import { emailConfigured } from "./email";
 import { type EmailBlock, blocksPreview, renderEmail } from "./email-layout";
 import type { Env } from "./env";
 import { unsubscribeUrl } from "./marketing";
+import type { MarketingList } from "@/shared/types";
 
 /** The provider takes up to 100 messages per call. */
 export const BATCH_SIZE = 100;
@@ -27,6 +29,8 @@ export const BATCH_SIZE = 100;
 export const BATCHES_PER_REQUEST = 40;
 
 export interface Issue {
+  /** Who it goes to, and which list its unsubscribe link takes them off. */
+  list: MarketingList;
   subject: string;
   /** The body, written in the admin editor (newsletter-doc.ts parses it). */
   blocks: EmailBlock[];
@@ -51,6 +55,12 @@ export function newsletterConfigured(env: Env): boolean {
   return emailConfigured(env) && Boolean(env.NEWSLETTER_FROM);
 }
 
+/** Why the reader gets it, in the footer: the list, by name. */
+const FOOTER_LINE = {
+  news: "You get this because you opted in to product news from rdyrct.",
+  offers: "You get this because you opted in to offers from rdyrct.",
+} satisfies Record<MarketingList, string>;
+
 /** One person's copy: their own link in the footer and in the headers. */
 async function outgoing(
   env: Env,
@@ -58,14 +68,14 @@ async function outgoing(
   issue: Issue,
   to: Recipient,
 ): Promise<OutgoingEmail> {
-  const link = await unsubscribeUrl(env, to.id);
+  const link = await unsubscribeUrl(env, to.id, issue.list);
   const body = renderEmail(
     {
       preheader: blocksPreview(issue.blocks) || issue.subject,
       heading: issue.subject,
       paragraphs: [],
       blocks: issue.blocks,
-      footerLine: "You get this because you opted in to product news.",
+      footerLine: FOOTER_LINE[issue.list],
       unsubscribeUrl: link,
     },
     env.APP_URL,

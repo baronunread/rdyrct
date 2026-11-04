@@ -1,12 +1,14 @@
 -- Newsletter sends: one row per issue (tests are not kept), keyed by the
--- composer's send id. A send goes out in batches of people ordered by id;
--- after each batch the row records how many went and the last id reached
--- (cursor), so a send that stopped (a provider error, or the per-request
--- batch limit) carries on from there when the admin sends again. done is 1
--- once nobody is left. sent_by is the admin's user id, nulled if that
--- account is deleted.
+-- composer's send id. list is who it went to: 'news' (product news) or
+-- 'offers', and only people opted in to that list get it. A send goes out in
+-- batches of people ordered by id; after each batch the row records how many
+-- went and the last id reached (cursor), so a send that stopped (a provider
+-- error, or the per-request batch limit) carries on from there when the admin
+-- sends again. done is 1 once nobody is left. sent_by is the admin's user id,
+-- nulled if that account is deleted.
 CREATE TABLE newsletter_sends (
   id TEXT PRIMARY KEY,
+  list TEXT NOT NULL CHECK (list IN ('news','offers')),
   subject TEXT NOT NULL,
   sent_by TEXT REFERENCES user(id) ON DELETE SET NULL,
   sent_at INTEGER NOT NULL,

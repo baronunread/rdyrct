@@ -223,7 +223,7 @@ constantly and each one otherwise re-derives the same conventions out of
 
 **rdyrct-email** (`.claude/skills/rdyrct-email`, symlinked from
 `.agents/skills`) is how mail gets built and previewed on `renderEmail()`,
-and why a Broadcast only ever goes to people who opted in.
+and why a newsletter only ever goes to people who opted in to its list.
 
 **ship-issue** (`.claude/skills/ship-issue`, symlinked from `.agents/skills`)
 is how work gets landed: evaluate the issue before branching, mutation-test
@@ -330,34 +330,44 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   one left ownerless would have no plan, no billing and nobody who could
   delete it. Settings names each org in the confirmation first. Orgs the
   account only belongs to are untouched.
-- **Product news (newsletter) needs consent, and consent lives in D1.** The
-  three `user.marketing_*` columns (`marketing_opt_in_at`,
-  `marketing_opt_in_source`, `marketing_asked_at`; migration 0053) are the
-  source of truth, never a provider's list, and everyone starts not opted in:
-  no pre-ticked box, and a verified address is not consent. Only
-  `src/worker/marketing.ts` reads or writes them. Three ways to answer: an
-  unticked box on the sign-up form (email and Google; the choice rides
-  `sessionStorage` to the first signed-in app load, `lib/marketing.ts`), a
-  one-time dialog for accounts not yet asked (`MarketingPrompt` in the shell,
-  never in `/welcome`; closing it is a "no"), and a Settings toggle. Any answer
-  sets `marketing_asked_at`. A sign-up or dialog answer applies only to an
-  account that has not answered, so a stale one cannot overwrite a decision;
-  Settings always applies. `PUT /api/user/marketing` is the one write, audited.
+- **Marketing email is two lists, each needing its own consent, and consent
+  lives in D1.** Product news (new features and tips) and Offers (deals on
+  paid plans). Each list has its own time and source
+  (`news_opt_in_at`/`news_opt_in_source`,
+  `offers_opt_in_at`/`offers_opt_in_source`), and one `marketing_asked_at`
+  covers both (migration 0053). They are the source of truth, never a
+  provider's list, and everyone starts opted in to neither: no pre-ticked
+  box, and a verified address is not consent. Only `src/worker/marketing.ts`
+  reads or writes them. Three ways to answer: two unticked boxes on the
+  sign-up form (email and Google; the choice rides `sessionStorage` to the
+  first signed-in app load, `lib/marketing.ts`), a one-time dialog with the
+  same two boxes for accounts not yet asked (`MarketingPrompt` in the
+  shell, never in `/welcome`; Save with nothing ticked, "No thanks" and
+  closing it are all a no to both), and a Settings switch per list. Any
+  answer sets `marketing_asked_at`. A sign-up or dialog answer applies only
+  to an account that has not answered, so a stale one cannot overwrite a
+  decision; Settings always applies, to the list it names.
+  `PUT /api/user/marketing` (`{ source, news?, offers? }`) is the one write,
+  audited.
   Dev test accounts (`/__dev/test-account`) and seeded accounts are already
   asked, so the dialog does not open over other specs; the `unasked` scenario
   and `asked: false` give one that has not.
-  Sending is the app's own job, one email per opted-in, verified, unbanned
-  user, in `src/worker/newsletter.ts`: the only file that knows the provider
+  Sending is the app's own job: each issue goes to one list, one email per
+  user opted in to that list, verified and unbanned, in
+  `src/worker/newsletter.ts`: the only file that knows the provider
   (Resend's batch endpoint, plain `fetch`, `RESEND_BASE_URL`; no list is kept
   there). It sends from `NEWSLETTER_FROM`, a subdomain sender, and refuses
   when that is unset. Every email has its own unsubscribe link in the footer
-  and the RFC 8058 one-click headers. The link is `/unsubscribe?t=`, a Worker
-  page (`unsubscribe.ts`, in self-hosted builds too, reserved from slugs) over
-  an HMAC of the user id keyed from `BETTER_AUTH_SECRET` under its own label,
-  so rotating that secret also breaks links already mailed. GET shows a button
-  and changes nothing; POST (button or a mail client's one-click) unsubscribes.
+  and the RFC 8058 one-click headers, and its footer names the list. The
+  link is `/unsubscribe?t=`, a Worker page (`unsubscribe.ts`, in self-hosted
+  builds too, reserved from slugs) over an HMAC of the list and the user id
+  keyed from `BETTER_AUTH_SECRET` under its own label, so rotating that
+  secret also breaks links already mailed. GET shows a button and changes
+  nothing; POST (the button, or a mail client's one-click) takes the reader
+  off that list only, and a second, smaller button (`scope=all`) off both.
   Platform admins send from Platform > Newsletter (`/api/admin/newsletter`:
-  count, a test to themselves, send to all). A send goes out in batches of
+  pick the list, counts and answers per list, a test to themselves, send to
+  that list; `newsletter_sends.list` records which). A send goes out in batches of
   100 people read fresh from D1 (so whoever unsubscribes mid-send is left
   out), at most 40 batches a request; `newsletter_sends` records how far it
   got after each batch, and sending again with the screen's `sendId` carries

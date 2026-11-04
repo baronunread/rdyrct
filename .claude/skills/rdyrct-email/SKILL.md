@@ -57,25 +57,32 @@ What a preview must pass before it ships: light and dark both readable, no
 horizontal scroll at 380px, the preheader invisible in the body, links
 http(s) only, and the footer intact (sender, recipient, "Not you?").
 
-## Newsletters (marketing) are sent by this app, to people who opted in
+## Newsletters (marketing) are sent by this app, to people who opted in to that list
 
 Transactional mail (verification codes, invites, grace warnings) is
 `renderEmail()` + `sendEmail()`. A newsletter or announcement is a different
 thing with a different rule, and it goes through `src/worker/newsletter.ts`.
 
-**A verified address is not consent to marketing.** The only people a
-newsletter may reach have opted in, and that fact lives in our own D1
-(`user.marketing_opt_in_at`, with when and how: `marketing_opt_in_source`),
-never only at a provider. The default is not opted in, for existing accounts
-and for new ones. `optedInRecipients()` in `marketing.ts` is the one query that
-says who gets mail (opted in, verified, not banned); do not write a second, and
-never email an export of the user table. Mail to a person who has not opted in
-is transactional or it does not go.
+There are two lists, and each is its own consent: **Product news** (new
+features and tips) and **Offers** (deals on paid plans). An issue goes to
+one of them. Pick by what the email is: anything that sells a plan, a
+discount or a deadline is an offer, even inside a feature announcement.
+
+**A verified address is not consent to marketing**, and a yes to one list is
+not a yes to the other. The only people an issue may reach have opted in to
+its list, and that fact lives in our own D1 (`user.news_opt_in_at` and
+`user.offers_opt_in_at`, each with how: `news_opt_in_source`,
+`offers_opt_in_source`), never only at a provider. The default is opted in to
+neither, for existing accounts and for new ones.
+`optedInRecipients(db, list, …)` in `marketing.ts` is the one query that says
+who gets mail (opted in to that list, verified, not banned); do not write a
+second, and never email an export of the user table. Mail to a person who
+has not opted in is transactional or it does not go.
 
 How it is sent:
 
-- No subscriber list is kept at Resend. The app sends one email per opted-in
-  user through Resend's batch endpoint (up to 100 per call), over plain
+- No subscriber list is kept at Resend. The app sends one email per user
+  opted in to the issue's list through Resend's batch endpoint (up to 100 per call), over plain
   `fetch` with `RESEND_BASE_URL`, so the dev emulator receives it.
   `newsletter.ts` is the only file that knows the provider. Switching provider
   means rewriting its `postBatch` and `emailConfigured()` in `email.ts`.
@@ -86,24 +93,29 @@ How it is sent:
   `unsubscribeUrl`: the link shows in the footer of both parts, and the
   `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
   headers (RFC 8058, which Gmail and Yahoo require of bulk mail) carry the
-  same signed link. Never send a newsletter without them.
+  same signed link. Never send a newsletter without them. The token names
+  the list, so the link (and one-click) takes the reader off that list only;
+  the page offers a second button for both. The footer line names the list:
+  "You get this because you opted in to offers from rdyrct."
 - The composer is Platform > Newsletter (admin only). It takes a subject and a
   body written in Resend's editor (`@react-email/editor`, cut down in
   `routes/admin/newsletter-editor.tsx` to paragraphs, two heading sizes,
   lists, bold, italic, underline, links, line breaks, a divider and buttons),
-  sends a test to the admin alone, and sends to all. The browser sends the
+  sends a test to the admin alone, and sends to the list picked above the
+  form (Product news or Offers). The browser sends the
   editor's JSON, never HTML: `worker/newsletter-doc.ts` parses it against the
   same allow-list (anything else is a 400 naming it) into the layout's
   `blocks` slot, which escapes every string and drops any link or button that
   is not http(s). The palette and type scale stay the layout's; do not invent
   new ones. To allow another node, add it to the editor, the schema and
   `blockHtml`/`blockText` in one commit.
-- One wide event per send, with counts and never addresses. A send over 5,000
-  recipients is refused, not cut short; past that, move it to a Workflow.
+- One wide event per send, with the list and counts, never addresses. A
+  send goes in batches and saves its progress after each, so one that stops
+  carries on when the admin sends again (`newsletter_sends`).
 
-Tests for the rule are `tests/worker/marketing.worker.ts` (only opted-in,
-verified, unbanned accounts get mail; headers present; non-admins get a 404;
-tampered tokens fail) and `tests/e2e/marketing-opt-in.pw.ts`.
+Tests for the rule are `tests/worker/marketing.worker.ts` (only accounts
+opted in to the list, verified and unbanned get mail; headers present;
+non-admins get a 404; a token names its list, and tampered tokens fail) and `tests/e2e/marketing-opt-in.pw.ts`.
 
 ## Tests
 

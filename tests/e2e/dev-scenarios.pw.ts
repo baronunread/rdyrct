@@ -63,7 +63,7 @@ test("a scenario link signs in as its seeded account and lands on the page", asy
   await rawSql(
     page,
     "INSERT INTO user (id, name, email, email_verified, plan, marketing_asked_at, created_at, updated_at) VALUES (?, 'Sam Rivera', 'fresh.account@seed.test', 1, 'free', ?, ?, ?)",
-    // Already asked about product news, as the seeder writes it: the one-time
+    // Already asked about marketing email, as the seeder writes it: the one-time
     // dialog would otherwise open over the page this test is looking at.
     [userId, now, now, now],
   );

@@ -77,13 +77,14 @@ export const user = sqliteTable("user", {
   polarEventAt: integer("polar_event_at", { mode: "timestamp_ms" }),
   // When the welcome email was claimed for sending. Null means not yet.
   welcomeSentAt: integer("welcome_sent_at", { mode: "timestamp_ms" }),
-  // Marketing consent (migration 0053), proof included. Null opt-in means not
-  // opted in; the default for everyone. `asked` is set by any answer, so the
-  // one-time dialog never asks twice. Written only by worker/marketing.ts.
-  marketingOptInAt: integer("marketing_opt_in_at", { mode: "timestamp_ms" }),
-  marketingOptInSource: text("marketing_opt_in_source", {
-    enum: ["signup", "prompt", "settings"],
-  }),
+  // Marketing consent (migration 0053), two lists, proof included. Null
+  // opt-in means not opted in; the default for everyone. `asked` is set by
+  // any answer about either list, so the one-time dialog never asks twice.
+  // Written only by worker/marketing.ts.
+  newsOptInAt: integer("news_opt_in_at", { mode: "timestamp_ms" }),
+  newsOptInSource: text("news_opt_in_source", { enum: ["signup", "prompt", "settings"] }),
+  offersOptInAt: integer("offers_opt_in_at", { mode: "timestamp_ms" }),
+  offersOptInSource: text("offers_opt_in_source", { enum: ["signup", "prompt", "settings"] }),
   marketingAskedAt: integer("marketing_asked_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
@@ -999,6 +1000,8 @@ export const newsletterSends = sqliteTable(
   "newsletter_sends",
   {
     id: text("id").primaryKey(),
+    // Who it went to: everyone opted in to this list.
+    list: text("list", { enum: ["news", "offers"] }).notNull(),
     subject: text("subject").notNull(),
     sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
     sentAt: integer("sent_at", { mode: "timestamp_ms" }).notNull(),

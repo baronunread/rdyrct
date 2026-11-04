@@ -53,11 +53,19 @@ export function parseOptionalBody<const TSchema extends v.GenericSchema>(
  */
 export const optionalText = v.optional(v.fallback(v.string(), ""), "");
 
-/** The answer to "email me product news": who gave it and where. */
-export const marketingBodySchema = v.object({
-  optIn: v.boolean("optIn must be true or false"),
-  source: v.picklist(MARKETING_SOURCES, "source must be signup, prompt or settings"),
-});
+/** An answer about the marketing lists: where it was given, and yes or no
+ * for each list it covers. A list left out stays as it was; one is needed. */
+export const marketingBodySchema = v.pipe(
+  v.object({
+    source: v.picklist(MARKETING_SOURCES, "source must be signup, prompt or settings"),
+    news: v.optional(v.boolean("news must be true or false")),
+    offers: v.optional(v.boolean("offers must be true or false")),
+  }),
+  v.check(
+    (body) => body.news !== undefined || body.offers !== undefined,
+    "Answer for news, offers or both",
+  ),
+);
 
 /** The same for a flag, where anything that is not a boolean is not an answer. */
 export const optionalFlag = v.optional(v.fallback(v.nullable(v.boolean()), null));

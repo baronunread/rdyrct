@@ -243,7 +243,7 @@ export interface User {
   comped: boolean;
   /** Same-origin serving URL for the user's avatar, or null (blobatar). */
   image: string | null;
-  /** Product news consent. Never read off the cached user: see marketing.ts. */
+  /** Marketing consent, per list. Never read off the cached user: see marketing.ts. */
   marketing: MarketingState;
 }
 
@@ -251,15 +251,36 @@ export interface User {
 export const MARKETING_SOURCES = ["signup", "prompt", "settings"] as const;
 export type MarketingSource = (typeof MARKETING_SOURCES)[number];
 
+/** The two marketing lists, each its own consent: product news (new features
+ * and tips) and offers (deals on paid plans). */
+export const MARKETING_LISTS = ["news", "offers"] as const;
+export type MarketingList = (typeof MARKETING_LISTS)[number];
+
+/** What each list is called on screen. */
+export const MARKETING_LIST_LABELS = {
+  news: "Product news",
+  offers: "Offers",
+} satisfies Record<MarketingList, string>;
+
 export interface MarketingState {
   /** Opted in to product news right now. */
-  optedIn: boolean;
-  /** Answered anywhere, even by dismissing the dialog. False means the
-   * one-time dialog still owes them the question. */
+  news: boolean;
+  /** Opted in to offers right now. */
+  offers: boolean;
+  /** Answered anywhere, about either list, even by dismissing the dialog.
+   * False means the one-time dialog still owes them the question. */
   asked: boolean;
 }
 
-/** How every account has answered, for the admin newsletter screen. */
+/** One answer, from one place. A list left out stays as it is, so Settings
+ * can change one list; the sign-up form and the dialog send both. */
+export interface MarketingAnswer {
+  source: MarketingSource;
+  news?: boolean;
+  offers?: boolean;
+}
+
+/** How every account has answered one list, for the admin newsletter screen. */
 export interface NewsletterAnswers {
   /** Opted in now, by where the yes came from. Counts every account, so the
    * total can be above `optedIn` (unverified or banned accounts get no send). */
@@ -273,6 +294,8 @@ export interface NewsletterAnswers {
 /** One newsletter that went out, for the send history. Tests are not kept. */
 export interface NewsletterSendRow {
   id: string;
+  /** The list it went to. */
+  list: MarketingList;
   subject: string;
   /** Email of the admin who sent it; null once that account is gone. */
   sentBy: string | null;
@@ -287,14 +310,17 @@ export interface NewsletterSendRow {
 
 /** What the admin newsletter screen reads. */
 export interface NewsletterStatus {
-  /** Verified, not banned, opted in: who a send reaches. */
-  optedIn: number;
-  answers: NewsletterAnswers;
+  /** Per list: verified, not banned, opted in. Who a send to it reaches. */
+  optedIn: Record<MarketingList, number>;
+  answers: Record<MarketingList, NewsletterAnswers>;
   /** Newest first, at most NEWSLETTER_HISTORY of them. */
   sends: NewsletterSendRow[];
   /** NEWSLETTER_FROM is set. Without it a send is refused. */
   configured: boolean;
 }
+
+/** An account's answer about one list, as one word. */
+export type ConsentAnswer = "on" | "off" | "unasked";
 
 export interface NewsletterSendResult {
   /** Emails the provider accepted, in all requests for this send so far. */
@@ -897,8 +923,9 @@ export interface AdminUserRow {
   emailVerified: boolean;
   /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
-  /** Product news: opted in now, answered no, or never asked. */
-  news: "on" | "off" | "unasked";
+  /** Each list: opted in now, answered no, or never asked. */
+  news: ConsentAnswer;
+  offers: ConsentAnswer;
   /** Effective plan: what this user may do. A comp counts here (#81). */
   plan: StoredPlan;
   /** What Polar says, separately from what the user may do. `null` means no

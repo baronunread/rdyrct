@@ -52,7 +52,7 @@ const userSchema = v.object({
   image: v.nullable(v.string()),
   // Parsed so the record stays whole. Never read from the cache: the dialog
   // and the Settings toggle wait for the real answer (useCurrentUser).
-  marketing: v.object({ optedIn: v.boolean(), asked: v.boolean() }),
+  marketing: v.object({ news: v.boolean(), offers: v.boolean(), asked: v.boolean() }),
 });
 
 const orgSchema = v.object({

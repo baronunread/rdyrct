@@ -24,20 +24,36 @@ const json = (cookie: string, method: string, path: string, body?: JsonValue) =>
 
 const put = (cookie: string, body: JsonValue) => json(cookie, "PUT", "/api/user/marketing", body);
 
+interface ConsentRow {
+  news: number | null;
+  newsSource: string | null;
+  offers: number | null;
+  offersSource: string | null;
+  asked: number | null;
+}
+
 async function consentRow(id: string) {
   return env.DB.prepare(
-    "select marketing_opt_in_at as at, marketing_opt_in_source as source, marketing_asked_at as asked from user where id = ?",
+    `select news_opt_in_at as news, news_opt_in_source as newsSource,
+            offers_opt_in_at as offers, offers_opt_in_source as offersSource,
+            marketing_asked_at as asked from user where id = ?`,
   )
     .bind(id)
-    .first<{ at: number | null; source: string | null; asked: number | null }>();
+    .first<ConsentRow>();
 }
 
 describe("the consent endpoint", () => {
-  it("starts everyone not opted in and not asked", async () => {
+  it("starts everyone not opted in to either list and not asked", async () => {
     const cookie = await freeOwnerCookie();
     const me = await jsonBody<CurrentUser>(await json(cookie, "GET", "/api/user"));
-    expect(me.user.marketing).toEqual({ optedIn: false, asked: false });
-    expect(await consentRow("free-1")).toEqual({ at: null, source: null, asked: null });
+    expect(me.user.marketing).toEqual({ news: false, offers: false, asked: false });
+    expect(await consentRow("free-1")).toEqual({
+      news: null,
+      newsSource: null,
+      offers: null,
+      offersSource: null,
+      asked: null,
+    });
   });
 
   it("requires a session and a well-formed answer", async () => {
@@ -47,58 +63,98 @@ describe("the consent endpoint", () => {
           new Request("http://localhost/api/user/marketing", {
             method: "PUT",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ optIn: true, source: "signup" }),
+            body: JSON.stringify({ news: true, source: "signup" }),
           }),
         )
       ).status,
     ).toBe(401);
     const cookie = await freeOwnerCookie();
-    expect((await put(cookie, { optIn: "yes", source: "signup" })).status).toBe(400);
-    expect((await put(cookie, { optIn: true, source: "email" })).status).toBe(400);
+    expect((await put(cookie, { news: "yes", source: "signup" })).status).toBe(400);
+    expect((await put(cookie, { news: true, source: "email" })).status).toBe(400);
+    // An answer about neither list is not an answer.
+    expect((await put(cookie, { source: "settings" })).status).toBe(400);
     expect((await consentRow("free-1"))?.asked).toBeNull();
   });
 
-  it("records when and where an opt-in came from", async () => {
+  it("records each list's own time and source", async () => {
     const cookie = await freeOwnerCookie();
     const before = Date.now();
-    const res = await put(cookie, { optIn: true, source: "signup" });
-    expect(await jsonBody<MarketingState>(res)).toEqual({ optedIn: true, asked: true });
+    const res = await put(cookie, { source: "signup", news: false, offers: true });
+    expect(await jsonBody<MarketingState>(res)).toEqual({
+      news: false,
+      offers: true,
+      asked: true,
+    });
     const row = await consentRow("free-1");
-    expect(row?.source).toBe("signup");
-    expect(row?.at).toBeGreaterThanOrEqual(before);
-    expect(row?.asked).toBe(row?.at);
+    expect(row).toMatchObject({ news: null, newsSource: "signup", offersSource: "signup" });
+    expect(row?.offers).toBeGreaterThanOrEqual(before);
+    expect(row?.asked).toBe(row?.offers);
   });
 
-  it("takes a dismissal as a no and as answered", async () => {
+  it("takes a dismissal as a no to both and as answered", async () => {
     const cookie = await freeOwnerCookie();
-    await put(cookie, { optIn: false, source: "prompt" });
+    await put(cookie, { source: "prompt", news: false, offers: false });
     const row = await consentRow("free-1");
-    expect(row).toMatchObject({ at: null, source: "prompt" });
+    expect(row).toMatchObject({
+      news: null,
+      newsSource: "prompt",
+      offers: null,
+      offersSource: "prompt",
+    });
     expect(row?.asked).not.toBeNull();
   });
 
   it("ignores a sign-up or dialog answer once the account has answered, but not Settings", async () => {
     const cookie = await freeOwnerCookie();
-    await put(cookie, { optIn: true, source: "settings" });
-    const stale = await put(cookie, { optIn: false, source: "signup" });
-    expect(await jsonBody<MarketingState>(stale)).toEqual({ optedIn: true, asked: true });
-    expect((await consentRow("free-1"))?.source).toBe("settings");
-    const off = await put(cookie, { optIn: false, source: "settings" });
-    expect(await jsonBody<MarketingState>(off)).toEqual({ optedIn: false, asked: true });
+    await put(cookie, { source: "settings", news: true });
+    // A stale sign-up answer touches neither list, even the one Settings left alone.
+    const stale = await put(cookie, { source: "signup", news: false, offers: true });
+    expect(await jsonBody<MarketingState>(stale)).toEqual({
+      news: true,
+      offers: false,
+      asked: true,
+    });
+    expect(await consentRow("free-1")).toMatchObject({
+      newsSource: "settings",
+      offersSource: null,
+    });
+    const off = await put(cookie, { source: "settings", news: false });
+    expect(await jsonBody<MarketingState>(off)).toEqual({
+      news: false,
+      offers: false,
+      asked: true,
+    });
+  });
+
+  it("changes only the list a Settings answer names", async () => {
+    const cookie = await freeOwnerCookie();
+    await put(cookie, { source: "prompt", news: true, offers: true });
+    const res = await put(cookie, { source: "settings", offers: false });
+    expect(await jsonBody<MarketingState>(res)).toEqual({ news: true, offers: false, asked: true });
+    expect(await consentRow("free-1")).toMatchObject({
+      newsSource: "prompt",
+      offers: null,
+      offersSource: "settings",
+    });
   });
 });
 
 describe("the unsubscribe token", () => {
-  it("names the user it was signed for", async () => {
-    const token = await signUnsubscribeToken(authEnv(), "user-42");
-    expect(await verifyUnsubscribeToken(authEnv(), token)).toBe("user-42");
+  it("names the user and the list it was signed for", async () => {
+    for (const list of ["news", "offers"] as const) {
+      const token = await signUnsubscribeToken(authEnv(), "user-42", list);
+      expect(await verifyUnsubscribeToken(authEnv(), token)).toEqual({ userId: "user-42", list });
+    }
   });
 
   it("rejects a tampered, foreign or malformed token", async () => {
-    const token = await signUnsubscribeToken(authEnv(), "user-42");
+    const token = await signUnsubscribeToken(authEnv(), "user-42", "offers");
     const [, mac] = token.split(".");
-    const forged = `${btoa("user-43").replace(/=+$/, "")}.${mac}`;
+    const forged = `${btoa("offers:user-43").replace(/=+$/, "")}.${mac}`;
     expect(await verifyUnsubscribeToken(authEnv(), forged)).toBeNull();
+    // The same user, the other list: the list is signed too.
+    const otherList = `${btoa("news:user-42").replace(/=+$/, "")}.${mac}`;
+    expect(await verifyUnsubscribeToken(authEnv(), otherList)).toBeNull();
     expect(await verifyUnsubscribeToken(authEnv(), `${token}x`)).toBeNull();
     expect(await verifyUnsubscribeToken(authEnv(), token.split(".")[0])).toBeNull();
     expect(await verifyUnsubscribeToken(authEnv(), "")).toBeNull();
@@ -110,51 +166,77 @@ describe("the unsubscribe token", () => {
   });
 });
 
-const seedUser = (id: string, at: number | null, extra = "") =>
+/** A user opted in to news at `news` and to offers at `offers` (null: not). */
+const seedUser = (id: string, news: number | null, extra = "", offers: number | null = null) =>
   env.DB.prepare(
-    `insert into user (id, name, email, email_verified, banned, marketing_opt_in_at, marketing_opt_in_source, created_at, updated_at)
-     values (?, ?, ?, ${extra || "1, 0"}, ?, ?, 0, 0)`,
-  ).bind(id, id, `${id}@example.com`, at, at === null ? null : "settings");
+    `insert into user (id, name, email, email_verified, banned, news_opt_in_at, news_opt_in_source,
+       offers_opt_in_at, offers_opt_in_source, created_at, updated_at)
+     values (?, ?, ?, ${extra || "1, 0"}, ?, ?, ?, ?, 0, 0)`,
+  ).bind(
+    id,
+    id,
+    `${id}@example.com`,
+    news,
+    news === null ? null : "settings",
+    offers,
+    offers === null ? null : "prompt",
+  );
 
 describe("the unsubscribe page", () => {
-  const visit = (token: string, method = "GET", body?: string) => {
+  const visit = (token: string, method = "GET", body?: string, query = "") => {
     const init: RequestInit = { method };
     if (body) {
       init.headers = { "content-type": "application/x-www-form-urlencoded" };
       init.body = body;
     }
     return fetchWorker(
-      new Request(`http://localhost/unsubscribe?t=${encodeURIComponent(token)}`, init),
+      new Request(`http://localhost/unsubscribe?t=${encodeURIComponent(token)}${query}`, init),
     );
   };
 
-  it("shows a button on GET and changes nothing until the POST", async () => {
-    await seedUser("reader-1", 5).run();
-    const token = await signUnsubscribeToken(authEnv(), "reader-1");
+  it("shows the list's button and an all button on GET, and changes nothing", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "offers");
     const page = await visit(token);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("<button");
-    expect((await consentRow("reader-1"))?.at).toBe(5);
+    const html = await page.text();
+    expect(html).toContain("Unsubscribe from offers?");
+    expect(html).toContain("Unsubscribe from all rdyrct email");
+    expect(html).toContain("scope=all");
+    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
+    const news = await visit(await signUnsubscribeToken(authEnv(), "reader-1", "news"));
+    expect(await news.text()).toContain("Unsubscribe from product news?");
   });
 
-  it("takes a one-click POST from a mail client, with no session", async () => {
-    await seedUser("reader-1", 5).run();
-    const token = await signUnsubscribeToken(authEnv(), "reader-1");
+  it("takes a one-click POST off that list only, with no session", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "offers");
     const res = await visit(token, "POST", "List-Unsubscribe=One-Click");
     expect(res.status).toBe(200);
     const row = await consentRow("reader-1");
-    expect(row?.at).toBeNull();
+    expect(row).toMatchObject({ news: 5, offers: null });
     expect(row?.asked).not.toBeNull();
     // Again: still 200, still off.
     expect((await visit(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
+    expect((await consentRow("reader-1"))?.news).toBe(5);
+  });
+
+  it("takes the reader off both lists from the all button", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    const res = await visit(token, "POST", undefined, "&scope=all");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("product news or offers");
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null });
   });
 
   it("refuses an invalid token and leaves the account alone", async () => {
-    await seedUser("reader-1", 5).run();
-    const forged = `${btoa("reader-1").replace(/=+$/, "")}.AAAA`;
+    await seedUser("reader-1", 5, "", 7).run();
+    const forged = `${btoa("news:reader-1").replace(/=+$/, "")}.AAAA`;
     expect((await visit(forged)).status).toBe(400);
     expect((await visit(forged, "POST", "List-Unsubscribe=One-Click")).status).toBe(400);
-    expect((await consentRow("reader-1"))?.at).toBe(5);
+    expect((await visit(forged, "POST", undefined, "&scope=all")).status).toBe(400);
+    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
   });
 });
 
@@ -197,6 +279,7 @@ function captureBatches(status: (call: number) => number = () => 200) {
 const para = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
 const doc = (...content: JsonValue[]) => ({ type: "doc", content });
 const issue = {
+  list: "news",
   subject: "What is new",
   doc: doc(para("First paragraph."), para("Second paragraph.")),
 };
@@ -236,12 +319,13 @@ describe("sending a newsletter", () => {
       seedUser("banned", 5, "1, 1"),
     ]);
 
-    const status = await jsonBody<{ optedIn: number; configured: boolean }>(
+    const status = await jsonBody<{ optedIn: { news: number }; configured: boolean }>(
       await json(cookie, "GET", "/api/admin/newsletter"),
     );
-    expect(status).toMatchObject({ optedIn: 2, configured: true });
+    expect(status).toMatchObject({ optedIn: { news: 2 }, configured: true });
 
     const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      list: "news",
       subject: issue.subject,
       doc: doc(
         { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Big <news>" }] },
@@ -283,6 +367,9 @@ describe("sending a newsletter", () => {
       expect(link).toMatch(/^http:\/\/localhost\/unsubscribe\?t=/);
       expect(email.html).toContain("Unsubscribe");
       expect(email.text).toContain(`Unsubscribe: ${link}`);
+      expect(email.text).toContain(
+        "You get this because you opted in to product news from rdyrct.",
+      );
       expect(email.html).toContain("Read more");
       expect(email.html).toContain("<h2");
       expect(email.html).toContain("Big &lt;news&gt;");
@@ -298,7 +385,8 @@ describe("sending a newsletter", () => {
     expect(first.headers["List-Unsubscribe"]).not.toBe(second.headers["List-Unsubscribe"]);
     const token = new URL(first.headers["List-Unsubscribe"].slice(1, -1)).searchParams.get("t");
     const owner = await verifyUnsubscribeToken(authEnv(), token ?? "");
-    expect(owner && first.to[0].startsWith(owner)).toBe(true);
+    expect(owner?.list).toBe("news");
+    expect(owner && first.to[0].startsWith(owner.userId)).toBe(true);
     mail.restore();
   });
 
@@ -314,19 +402,23 @@ describe("sending a newsletter", () => {
          values ('said-no', 'said-no', 'said-no@example.com', 1, 0, 5, 0, 0)`,
       ),
     ]);
+    type Answers = { yes: Record<string, number>; no: number; unasked: number };
     type Status = {
-      optedIn: number;
-      answers: { yes: Record<string, number>; no: number; unasked: number };
-      sends: { id: string; subject: string; sent: number; sentBy: string | null }[];
+      optedIn: { news: number; offers: number };
+      answers: { news: Answers; offers: Answers };
+      sends: { id: string; list: string; subject: string; sent: number; sentBy: string | null }[];
     };
     const status = async () => jsonBody<Status>(await json(cookie, "GET", "/api/admin/newsletter"));
 
     const before = await status();
     // The unverified yes counts as a yes, but gets no send.
-    expect(before.optedIn).toBe(1);
-    expect(before.answers.yes).toEqual({ signup: 0, prompt: 0, settings: 2 });
-    expect(before.answers.no).toBe(1);
-    expect(before.answers.unasked).toBeGreaterThanOrEqual(1);
+    expect(before.optedIn).toEqual({ news: 1, offers: 0 });
+    expect(before.answers.news.yes).toEqual({ signup: 0, prompt: 0, settings: 2 });
+    expect(before.answers.news.no).toBe(1);
+    expect(before.answers.news.unasked).toBeGreaterThanOrEqual(1);
+    expect(before.answers.offers.yes).toEqual({ signup: 0, prompt: 0, settings: 0 });
+    // Asked once covers both lists: the no to news is a no to offers too.
+    expect(before.answers.offers.no).toBe(1);
     expect(before.sends).toEqual([]);
 
     // A test send is not history.
@@ -344,17 +436,22 @@ describe("sending a newsletter", () => {
     expect(mail.batches.filter((b) => b.key?.startsWith("send-history-"))).toHaveLength(1);
     const after = await status();
     expect(after.sends).toHaveLength(1);
-    expect(after.sends[0]).toMatchObject({ id: "send-history", subject: issue.subject, sent: 1 });
+    expect(after.sends[0]).toMatchObject({
+      id: "send-history",
+      list: "news",
+      subject: issue.subject,
+      sent: 1,
+    });
     expect(after.sends[0].sentBy).toMatch(/@/);
 
-    const users = await jsonBody<{ email: string; news: string }[]>(
+    const users = await jsonBody<{ email: string; news: string; offers: string }[]>(
       await json(cookie, "GET", "/api/admin/users"),
     );
-    const news = Object.fromEntries(users.map((u) => [u.email, u.news]));
-    expect(news).toMatchObject({
-      "yes-1@example.com": "on",
-      "said-no@example.com": "off",
-      "never@example.com": "unasked",
+    const answers = Object.fromEntries(users.map((u) => [u.email, [u.news, u.offers]]));
+    expect(answers).toMatchObject({
+      "yes-1@example.com": ["on", "unasked"],
+      "said-no@example.com": ["off", "off"],
+      "never@example.com": ["unasked", "unasked"],
     });
     mail.restore();
   });
@@ -506,7 +603,7 @@ describe("sending a newsletter", () => {
     globalThis.fetch = async (input, init) => {
       if (first && String(input instanceof Request ? input.url : input).endsWith("/emails/batch")) {
         first = false;
-        await env.DB.prepare("update user set marketing_opt_in_at = null where id = 'q100'").run();
+        await env.DB.prepare("update user set news_opt_in_at = null where id = 'q100'").run();
       }
       return original(input, init);
     };
@@ -543,6 +640,59 @@ describe("sending a newsletter", () => {
       sendId: "send-0004",
     });
     expect(res.status).toBe(502);
+    mail.restore();
+  });
+});
+
+describe("sending to one list", () => {
+  it("reaches only people opted in to that list, with that list's link and footer", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([
+      seedUser("news-only", 5),
+      seedUser("offers-only", null, "", 6),
+      seedUser("both", 5, "", 6),
+    ]);
+    const status = await jsonBody<{ optedIn: { news: number; offers: number } }>(
+      await json(cookie, "GET", "/api/admin/newsletter"),
+    );
+    expect(status.optedIn).toEqual({ news: 2, offers: 2 });
+
+    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
+      ...issue,
+      list: "offers",
+      sendId: "send-offers",
+    });
+    expect(await jsonBody<{ sent: number }>(res)).toEqual({ sent: 2, done: true });
+    const sent = mail.batches.flatMap((b) => b.emails);
+    expect(sent.map((e) => e.to[0]).sort()).toEqual([
+      "both@example.com",
+      "offers-only@example.com",
+    ]);
+    for (const email of sent) {
+      expect(email.text).toContain("You get this because you opted in to offers from rdyrct.");
+      const link = new URL(email.headers["List-Unsubscribe"].slice(1, -1));
+      const named = await verifyUnsubscribeToken(authEnv(), link.searchParams.get("t") ?? "");
+      expect(named?.list).toBe("offers");
+    }
+    const history = await jsonBody<{ sends: { id: string; list: string }[] }>(
+      await json(cookie, "GET", "/api/admin/newsletter"),
+    );
+    expect(history.sends).toEqual([expect.objectContaining({ id: "send-offers", list: "offers" })]);
+    mail.restore();
+  });
+
+  it("refuses a list nobody is opted in to, and a send id carried to the other list", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("news-only", 5)]);
+    const send = (list: string, sendId: string) =>
+      json(cookie, "POST", "/api/admin/newsletter/send", { ...issue, list, sendId });
+    expect((await send("offers", "send-nobody")).status).toBe(409);
+    expect((await send("news", "send-mixed")).status).toBe(200);
+    expect((await send("offers", "send-mixed")).status).toBe(409);
+    expect((await send("everyone", "send-other")).status).toBe(400);
+    expect(mail.batches.flatMap((b) => b.emails)).toHaveLength(1);
     mail.restore();
   });
 });

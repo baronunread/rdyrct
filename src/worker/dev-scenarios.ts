@@ -128,8 +128,8 @@ const SCENARIOS = {
       ORDER BY c.clicks DESC LIMIT 1`,
   },
   unasked: {
-    title: "Not asked about product news",
-    about: "An existing account the one-time product news dialog has not asked yet.",
+    title: "Not asked about email",
+    about: "An existing account the one-time product news and offers dialog has not asked yet.",
     start: "/dashboard",
     sql: ownerOf("u.email = 'unasked.account@seed.test'"),
   },
@@ -238,7 +238,7 @@ location.replace(${inScript(target)});
 const testAccountSchema = v.object({
   email: v.pipe(v.string(), v.email()),
   password: v.pipe(v.string(), v.minLength(8)),
-  // Test accounts are already asked about product news, so the one-time
+  // Test accounts are already asked about marketing email, so the one-time
   // dialog does not open over every spec. A spec about that dialog sends
   // `asked: false` to get an account that has not answered.
   asked: v.optional(v.boolean(), true),

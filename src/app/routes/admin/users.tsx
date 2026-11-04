@@ -437,6 +437,7 @@ const FILTERS = [
   { id: "banned", label: "Banned", test: (u) => u.banned },
   { id: "admins", label: "Admins", test: (u) => u.isAdmin },
   { id: "news", label: "Product news", test: (u) => u.news === "on" },
+  { id: "offers", label: "Offers", test: (u) => u.offers === "on" },
 ] as const satisfies readonly { id: string; label: string; test: (u: AdminUserRow) => boolean }[];
 type UserFilter = (typeof FILTERS)[number]["id"];
 
@@ -446,6 +447,7 @@ const filterTest = (id: UserFilter) => FILTERS.find((f) => f.id === id)?.test ??
 function emptyMessage(filter: UserFilter, term: string): string {
   if (term) return `No users match “${term}”.`;
   if (filter === "news") return "Nobody has opted in to product news yet.";
+  if (filter === "offers") return "Nobody has opted in to offers yet.";
   const label = FILTERS.find((f) => f.id === filter)?.label.toLowerCase();
   return filter === "all" ? "No users yet." : `No ${label} users.`;
 }
