@@ -238,7 +238,6 @@ function PersonMarks({ user }: { user: AdminUserRow }) {
       {user.isAdmin && <Badge color="butter">admin</Badge>}
       {!user.emailVerified && <Badge color="muted">unverified</Badge>}
       {user.disposable && <Badge color="accent">disposable</Badge>}
-      {user.news === "on" && <Badge color="muted">news</Badge>}
     </>
   );
 }
