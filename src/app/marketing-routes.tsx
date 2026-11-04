@@ -1,4 +1,5 @@
-import { createRoute, lazyRouteComponent, Outlet } from "@tanstack/react-router";
+import { createRoute, Outlet } from "@tanstack/react-router";
+import { lazyPage } from "./lib/chunk-guard";
 import { LandingHeader } from "./components/landing-header";
 import { readAuthHint } from "./lib/user-cache";
 import { rootRoute } from "./root-route";
@@ -32,7 +33,7 @@ function PublicPages() {
 /**
  * What stands in while a marketing page's chunk is on its way.
  *
- * The router loads that chunk itself now (lazyRouteComponent below), so
+ * The router loads that chunk itself now (lazyPage below), so
  * there is no Suspense boundary left to fall back to. On a navigation the
  * router keeps the page you are on rather than showing this, which is the
  * point; this is for the cold load, where the alternative is an empty screen
@@ -77,22 +78,22 @@ export function marketingRoutes() {
     createRoute({
       ...child,
       path: "/",
-      component: lazyRouteComponent(() => import("./routes/landing"), "LandingPage"),
+      component: lazyPage(() => import("./routes/landing"), "LandingPage"),
     }),
     createRoute({
       ...child,
       path: "/qr-code-generator",
-      component: lazyRouteComponent(() => import("./routes/qr-generator"), "QrGeneratorPage"),
+      component: lazyPage(() => import("./routes/qr-generator"), "QrGeneratorPage"),
     }),
     createRoute({
       ...child,
       path: "/utm-builder",
-      component: lazyRouteComponent(() => import("./routes/utm-builder"), "UtmBuilderPage"),
+      component: lazyPage(() => import("./routes/utm-builder"), "UtmBuilderPage"),
     }),
     createRoute({
       ...child,
       path: "/branded-link-shortener",
-      component: lazyRouteComponent(
+      component: lazyPage(
         () => import("./routes/branded-link-shortener"),
         "BrandedLinkShortenerPage",
       ),
@@ -100,95 +101,92 @@ export function marketingRoutes() {
     createRoute({
       ...child,
       path: "/pricing",
-      component: lazyRouteComponent(() => import("./routes/pricing"), "PricingPage"),
+      component: lazyPage(() => import("./routes/pricing"), "PricingPage"),
     }),
     createRoute({
       ...child,
       path: "/roadmap",
-      component: lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage"),
+      component: lazyPage(() => import("./routes/roadmap"), "RoadmapPage"),
     }),
     createRoute({
       ...child,
       path: "/changelog",
-      component: lazyRouteComponent(() => import("./routes/changelog"), "ChangelogPage"),
+      component: lazyPage(() => import("./routes/changelog"), "ChangelogPage"),
     }),
     createRoute({
       ...child,
       path: "/compare",
-      component: lazyRouteComponent(alternatives, "ComparePage"),
+      component: lazyPage(alternatives, "ComparePage"),
     }),
     createRoute({
       ...child,
       path: "/bitly-alternative",
-      component: lazyRouteComponent(alternatives, "BitlyAlternativePage"),
+      component: lazyPage(alternatives, "BitlyAlternativePage"),
     }),
     createRoute({
       ...child,
       path: "/rebrandly-alternative",
-      component: lazyRouteComponent(alternatives, "RebrandlyAlternativePage"),
+      component: lazyPage(alternatives, "RebrandlyAlternativePage"),
     }),
     createRoute({
       ...child,
       path: "/dub-alternative",
-      component: lazyRouteComponent(alternatives, "DubAlternativePage"),
+      component: lazyPage(alternatives, "DubAlternativePage"),
     }),
     createRoute({
       ...child,
       path: "/short-io-alternative",
-      component: lazyRouteComponent(alternatives, "ShortIoAlternativePage"),
+      component: lazyPage(alternatives, "ShortIoAlternativePage"),
     }),
     createRoute({
       ...child,
       path: "/google-url-shortener",
-      component: lazyRouteComponent(
-        () => import("./routes/google-url-shortener"),
-        "GoogleUrlShortenerPage",
-      ),
+      component: lazyPage(() => import("./routes/google-url-shortener"), "GoogleUrlShortenerPage"),
     }),
     createRoute({
       ...child,
       path: "/whatsapp-qr-code",
-      component: lazyRouteComponent(qrTypes, "WhatsappQrPage"),
+      component: lazyPage(qrTypes, "WhatsappQrPage"),
     }),
     createRoute({
       ...child,
       path: "/vcard-qr-code",
-      component: lazyRouteComponent(qrTypes, "VcardQrPage"),
+      component: lazyPage(qrTypes, "VcardQrPage"),
     }),
     createRoute({
       ...child,
       path: "/wifi-qr-code",
-      component: lazyRouteComponent(qrTypes, "WifiQrPage"),
+      component: lazyPage(qrTypes, "WifiQrPage"),
     }),
     createRoute({
       ...child,
       path: "/qr-code-monkey-alternative",
-      component: lazyRouteComponent(alternatives, "QrCodeMonkeyAlternativePage"),
+      component: lazyPage(alternatives, "QrCodeMonkeyAlternativePage"),
     }),
     createRoute({
       ...child,
       path: "/tinyurl-alternative",
-      component: lazyRouteComponent(alternatives, "TinyUrlAlternativePage"),
+      component: lazyPage(alternatives, "TinyUrlAlternativePage"),
     }),
     createRoute({
       ...child,
       path: "/docs",
-      component: lazyRouteComponent(() => import("./routes/docs"), "DocsPage"),
+      component: lazyPage(() => import("./routes/docs"), "DocsPage"),
     }),
     createRoute({
       ...child,
       path: "/privacy",
-      component: lazyRouteComponent(() => import("./routes/privacy"), "PrivacyPage"),
+      component: lazyPage(() => import("./routes/privacy"), "PrivacyPage"),
     }),
     createRoute({
       ...child,
       path: "/terms",
-      component: lazyRouteComponent(() => import("./routes/terms"), "TermsPage"),
+      component: lazyPage(() => import("./routes/terms"), "TermsPage"),
     }),
     createRoute({
       ...child,
       path: "/report",
-      component: lazyRouteComponent(() => import("./routes/report"), "ReportPage"),
+      component: lazyPage(() => import("./routes/report"), "ReportPage"),
     }),
   ]);
 }

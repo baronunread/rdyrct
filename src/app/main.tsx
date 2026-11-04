@@ -16,9 +16,9 @@ import {
   createRouter,
   redirect,
   RouterProvider,
-  lazyRouteComponent,
   type ParsedLocation,
 } from "@tanstack/react-router";
+import { guardStaleChunks, lazyPage } from "./lib/chunk-guard";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // Figtree carries everything anybody reads; JetBrains Mono is kept for
 // identifiers, the strings a person copies or types. See the rdyrct-design
@@ -57,8 +57,8 @@ import { RDYRCT_SITE } from "@/shared/site";
 // marketing landing never download the app, and the app never downloads the
 // admin pages unless the user is the platform admin.
 // Router-managed lazy components can preload before navigation commits.
-const LoginPage = lazyRouteComponent(() => import("./routes/auth"), "LoginPage");
-const SignupPage = lazyRouteComponent(() => import("./routes/auth"), "SignupPage");
+const LoginPage = lazyPage(() => import("./routes/auth"), "LoginPage");
+const SignupPage = lazyPage(() => import("./routes/auth"), "SignupPage");
 const ResetPasswordPage = lazy(() =>
   import("./routes/reset-password").then((m) => ({
     default: m.ResetPasswordPage,
@@ -69,7 +69,7 @@ const ConsentPage = lazy(() =>
   import("./routes/consent").then((m) => ({ default: m.ConsentPage })),
 );
 
-// The app's pages are router-managed (lazyRouteComponent) rather than
+// The app's pages are router-managed (lazyPage, lib/chunk-guard.ts) rather than
 // React.lazy: the router fetches a page's chunk and its data (the loaders
 // below) before it swaps pages, so the page you are on stays until the next
 // one can draw whole. See lib/route-preload.ts.
@@ -209,67 +209,67 @@ const appPage = {
 const dashboardRoute = createRoute({
   ...appPage,
   path: "/dashboard",
-  component: lazyRouteComponent(dashboard, "Dashboard"),
+  component: lazyPage(dashboard, "Dashboard"),
   loader: pageLoader(dashboard),
 });
 const analyticsRoute = createRoute({
   ...appPage,
   path: "/analytics",
-  component: lazyRouteComponent(analytics, "Analytics"),
+  component: lazyPage(analytics, "Analytics"),
   loader: pageLoader(analytics),
 });
 const linksRoute = createRoute({
   ...appPage,
   path: "/links",
-  component: lazyRouteComponent(links, "LinksPage"),
+  component: lazyPage(links, "LinksPage"),
   loader: pageLoader(links),
 });
 const linkDetailRoute = createRoute({
   ...appPage,
   path: "/links/$slug",
-  component: lazyRouteComponent(linkDetail, "LinkDetailPage"),
+  component: lazyPage(linkDetail, "LinkDetailPage"),
   loader: pageLoader(linkDetail),
 });
 const linkImportRoute = createRoute({
   ...appPage,
   path: "/import",
-  component: lazyRouteComponent(linkImport, "LinkImportPage"),
+  component: lazyPage(linkImport, "LinkImportPage"),
   loader: pageLoader(linkImportPreload),
 });
 const membersRoute = createRoute({
   ...appPage,
   path: "/members",
-  component: lazyRouteComponent(members, "MembersPage"),
+  component: lazyPage(members, "MembersPage"),
   loader: pageLoader(members),
 });
 const billingRoute = createRoute({
   ...appPage,
   path: "/billing",
-  component: lazyRouteComponent(billing, "BillingPage"),
+  component: lazyPage(billing, "BillingPage"),
   loader: pageLoader(billing),
 });
 const domainsRoute = createRoute({
   ...appPage,
   path: "/domains",
-  component: lazyRouteComponent(domains, "DomainsPage"),
+  component: lazyPage(domains, "DomainsPage"),
   loader: pageLoader(domains),
 });
 const settingsRoute = createRoute({
   ...appPage,
   path: "/settings",
-  component: lazyRouteComponent(settings, "SettingsPage"),
+  component: lazyPage(settings, "SettingsPage"),
   loader: pageLoader(settings),
 });
 const apiKeysRoute = createRoute({
   ...appPage,
   path: "/api-keys",
-  component: lazyRouteComponent(apiKeys, "ApiKeysPage"),
+  component: lazyPage(apiKeys, "ApiKeysPage"),
   loader: pageLoader(apiKeys),
 });
 const organizationRoute = createRoute({
   ...appPage,
   path: "/organization",
-  component: lazyRouteComponent(organization, "OrganizationPage"),
+  component: lazyPage(organization, "OrganizationPage"),
   loader: pageLoader(organization),
 });
 
@@ -296,31 +296,31 @@ const adminPage = {
 const adminUsageRoute = createRoute({
   ...adminPage,
   path: "/",
-  component: lazyRouteComponent(adminUsage, "AdminUsagePage"),
+  component: lazyPage(adminUsage, "AdminUsagePage"),
   loader: adminLoader(adminUsage),
 });
 const adminLinksRoute = createRoute({
   ...adminPage,
   path: "links",
-  component: lazyRouteComponent(adminLinks, "AdminLinksPage"),
+  component: lazyPage(adminLinks, "AdminLinksPage"),
   loader: adminLoader(adminLinks),
 });
 const adminOrgsRoute = createRoute({
   ...adminPage,
   path: "orgs",
-  component: lazyRouteComponent(adminOrgs, "AdminOrgsPage"),
+  component: lazyPage(adminOrgs, "AdminOrgsPage"),
   loader: adminLoader(adminOrgs),
 });
 const adminUsersRoute = createRoute({
   ...adminPage,
   path: "users",
-  component: lazyRouteComponent(adminUsers, "AdminUsersPage"),
+  component: lazyPage(adminUsers, "AdminUsersPage"),
   loader: adminLoader(adminUsers),
 });
 const adminAuditRoute = createRoute({
   ...adminPage,
   path: "audit",
-  component: lazyRouteComponent(adminAudit, "AdminAuditPage"),
+  component: lazyPage(adminAudit, "AdminAuditPage"),
   loader: adminLoader(adminAudit),
 });
 
@@ -409,6 +409,11 @@ const router = globalThis.window
       defaultPreload: false,
       history: createMemoryHistory({ initialEntries: ["/"] }),
     });
+
+// A click into a page whose code is gone (a tab older than the last deploy)
+// stays where it is and offers a reload, instead of a blank screen.
+if (globalThis.window)
+  guardStaleChunks(router, { [appShellRoute.id]: loadShell, [welcomeRoute.id]: loadWelcome });
 
 declare module "@tanstack/react-router" {
   interface Register {

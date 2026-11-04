@@ -11,8 +11,10 @@ import {
 /**
  * Shown when a code-split chunk fails to load: almost always a stale tab after
  * a deploy, whose old asset names no longer exist. We point the visitor at a
- * reload instead of crashing or auto-reloading under them. Mounted outside the
- * error boundary so it survives the boundary catching the chunk failure.
+ * reload instead of crashing or auto-reloading under them; after a blocked
+ * click (lib/chunk-guard.ts) the reload opens the page they clicked. Mounted
+ * outside the error boundary so it survives the boundary catching the chunk
+ * failure.
  */
 export function NewVersionBanner() {
   const available = useSyncExternalStore(subscribeNewVersion, getNewVersion, () => false);

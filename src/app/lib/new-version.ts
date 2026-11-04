@@ -1,29 +1,48 @@
 // A code-split chunk failing to load almost always means a stale tab: a
 // visitor has a tab open whose hashed asset filenames no longer exist after a
 // deploy. When it fails in the background (`vite:preloadError`, the visitor
-// still on a working page) we surface this "new version available" banner and
-// let them reload when they choose. When it fails while rendering a route
-// they just navigated to, the old UI is already gone, so the error boundary
-// forces a reload instead (`reloadForNewVersion`), with nothing shown while
-// that can still work. This store is the bridge between the non-React
-// `vite:preloadError` handler and the React banner.
+// still on a working page) or on a click (lib/chunk-guard.ts, which keeps the
+// page they were on) we surface this "new version available" banner and let
+// them reload when they choose. When it fails while rendering, the old UI is
+// already gone, so the error boundary forces a reload instead
+// (`reloadForNewVersion`), with nothing shown while that can still work. This
+// store is the bridge between those non-React callers and the React banner.
+
+const CHUNK_LOAD_ERROR =
+  /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load a dynamic application chunk|is not a valid javascript mime type/i;
+
+/** Whether `error` is a code-split chunk that failed to load (each browser
+ * words it its own way). A deleted chunk comes back as the SPA's HTML with a
+ * 200, not a 404 (production/assets.pw.ts), which Safari reports as a MIME
+ * type error rather than a failed fetch. */
+export function isChunkLoadError(error: Error): boolean {
+  return CHUNK_LOAD_ERROR.test(error.message);
+}
 
 let available = false;
+/** The page a blocked click was opening, for the banner's reload to land on. */
+let target: string | undefined;
 const listeners = new Set<() => void>();
 
 function emit() {
   listeners.forEach((l) => l());
 }
 
-export function signalNewVersionAvailable() {
-  if (available) return;
+/** `href` is the page a blocked click was opening. A later signal with none
+ * (Vite's `vite:preloadError` for the same chunk, which Safari fires after
+ * the blocker has spoken) keeps it. */
+export function signalNewVersionAvailable(href?: string) {
+  const next = href ?? target;
+  if (available && next === target) return;
   available = true;
+  target = next;
   emit();
 }
 
 export function dismissNewVersion() {
   if (!available) return;
   available = false;
+  target = undefined;
   emit();
 }
 
@@ -36,8 +55,11 @@ export function getNewVersion(): boolean {
   return available;
 }
 
+/** Loads the current build: at the page a blocked click was opening, or the
+ * page on screen. */
 export function reloadNow() {
-  window.location.reload();
+  if (target) window.location.assign(target);
+  else window.location.reload();
 }
 
 const RELOAD_COUNT_PREFIX = "rdyrct:chunk-reload-count:";

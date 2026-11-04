@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
 import { captureClientException } from "../lib/sentry";
-import { dismissNewVersion, reloadForNewVersion } from "../lib/new-version";
+import { dismissNewVersion, isChunkLoadError, reloadForNewVersion } from "../lib/new-version";
 
 type Props = {
   children: ReactNode;
@@ -16,19 +16,6 @@ type State = { crashed: boolean; chunkError: boolean; giveUp: boolean };
  * component's own branching stays flat. */
 function pendingReload(state: State): boolean {
   return state.crashed && state.chunkError && !state.giveUp;
-}
-
-/**
- * A failed code-split chunk load almost always means a stale build: a visitor
- * has a tab open whose hashed asset filenames no longer exist after a deploy.
- * It is recoverable by reloading onto the current build, so we prompt a reload
- * rather than render the crash page.
- */
-const CHUNK_LOAD_ERROR =
-  /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load a dynamic application chunk/i;
-
-function isChunkLoadError(error: Error): boolean {
-  return CHUNK_LOAD_ERROR.test(error.message);
 }
 
 /**

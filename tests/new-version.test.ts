@@ -13,7 +13,13 @@
  * This tests the guard, which is the whole of the new logic.
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { reloadForNewVersion } from "../src/app/lib/new-version";
+import {
+  dismissNewVersion,
+  isChunkLoadError,
+  reloadForNewVersion,
+  reloadNow,
+  signalNewVersionAvailable,
+} from "../src/app/lib/new-version";
 
 const A = "Failed to fetch dynamically imported module: /assets/links-a1b2c3.js";
 const B = "Failed to fetch dynamically imported module: /assets/domains-d4e5f6.js";
@@ -77,4 +83,29 @@ test("shows the notice instead of reloading when sessionStorage is unavailable",
   // No way to count the attempt, so an unguarded one could loop: fall back.
   expect(reloadForNewVersion(A)).toBe(false);
   expect(reloads).toBe(0);
+});
+
+test("recognises a deleted chunk in each engine's wording, as production serves it", () => {
+  // A chunk gone after a deploy comes back as the SPA's HTML with a 200.
+  // Messages copied from Chromium, Firefox and WebKit importing one.
+  const url = "https://rdyrct.com/assets/pricing-CUkH27n3.js";
+  for (const message of [
+    `Failed to fetch dynamically imported module: ${url}`,
+    `error loading dynamically imported module: ${url}`,
+    `'text/html' is not a valid JavaScript MIME type for module script '${url}'.`,
+    "Importing a module script failed.",
+  ])
+    expect(isChunkLoadError(new TypeError(message))).toBe(true);
+  expect(isChunkLoadError(new TypeError("Cannot read properties of undefined"))).toBe(false);
+});
+
+test("a later signal with no page keeps the page a blocked click was opening", () => {
+  let assigned = "";
+  Object.assign(globalThis.window, { location: { assign: (href: string) => (assigned = href) } });
+  signalNewVersionAvailable("/pricing");
+  // Vite's preloadError for the same chunk, which Safari fires afterwards.
+  signalNewVersionAvailable();
+  reloadNow();
+  expect(assigned).toBe("/pricing");
+  dismissNewVersion();
 });

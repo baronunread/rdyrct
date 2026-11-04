@@ -139,6 +139,18 @@ export const useBillingDetails = (enabled: boolean) => useQuery(billingDetailsQu
 // back to the current origin's host while config is still loading.
 export const useLinkHost = () => useConfig().data?.linkHost ?? window.location.host;
 
+let signedOutOnPurpose = false;
+
+/** Whether the last sign-out was somebody pressing Sign out, read once.
+ * RequireAuth sends a deliberate sign-out to plain /login, the same place the
+ * menu's own navigation goes, so whichever of the two lands last, the URL
+ * carries no ?next= back to the page they chose to leave. */
+export function takeDeliberateSignOut(): boolean {
+  const was = signedOutOnPurpose;
+  signedOutOnPurpose = false;
+  return was;
+}
+
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
@@ -147,6 +159,7 @@ export function useLogout() {
       if (error) throw new Error(error.message ?? "Could not sign out");
     },
     onSuccess: () => {
+      signedOutOnPurpose = true;
       posthog.reset();
       writeCachedUser(null);
       qc.setQueryData(["user"], null);

@@ -23,7 +23,7 @@ import {
 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
-import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
+import { takeDeliberateSignOut, useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
 import { useShellOrgs } from "../lib/current-org";
 import { claimPendingLinks, storedAnonLinks } from "../lib/anon-links";
 import { api, ApiError } from "../lib/api";
@@ -93,9 +93,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     // The router can already be on the sign-in page while this is still
     // mounted (its chunk loads before the old route unmounts), and sending
     // that page back to itself as ?next= would be a loop in waiting.
+    const deliberate = takeDeliberateSignOut();
     if (AUTH_PAGES.has(window.location.pathname)) return;
     const from = window.location.pathname + window.location.search;
-    void navigate({ href: `/login?next=${encodeURIComponent(from)}`, replace: true });
+    const href = deliberate ? "/login" : `/login?next=${encodeURIComponent(from)}`;
+    void navigate({ href, replace: true });
   }, [signedOut, navigate]);
   if (signedOut) return null;
   // The cache carries the shell through the wait. A browser that has none is
