@@ -481,6 +481,18 @@ replies, since the sending subdomain has none), `POSTAL_ADDRESS` (a var, optiona
 for every newsletter footer; unset, the footer has none), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
 Web Risk).
 
+**Adding a var to `wrangler.jsonc`** touches more than the worker:
+
+1. Declare it in `src/worker/env.ts`.
+2. If its value is rdyrct.com's own (an address, an account, a sender), add
+   it to `RDYRCT_ONLY_VARS` in `scripts/setup.ts`, so a fork's copy drops it.
+   Then run `bun test tests/setup.test.ts`.
+3. Decide what a fork without it does, and check that with
+   `bun run e2e:self-host`. A feature that needs it should be hidden there,
+   not half-shown.
+4. A worker test that reads the value compares against `env`, never the
+   literal.
+
 ## Layout
 
 ```
