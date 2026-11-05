@@ -92,9 +92,9 @@
     "NEWSLETTER_FROM": "Andrea at rdyrct <andrea@news.rdyrct.com>",
     // news.rdyrct.com receives no mail: replies go to the inbox Email Routing serves.
     "NEWSLETTER_REPLY_TO": "andrea@mail.rdyrct.com",
-    // Optional: a postal address for every newsletter's footer (CAN-SPAM asks
-    // for one when mailing US recipients). Unset, the footer has none:
-    // "POSTAL_ADDRESS": "rdyrct, 1 Example Street, 00100 Rome, Italy",
+    // The postal address in every newsletter's footer (CAN-SPAM asks for one
+    // when mailing US recipients). The same one the site shows (shared/business.ts).
+    "POSTAL_ADDRESS": "Andrea Bruno, Viale Gabriele D'Annunzio 23, 34138 Trieste (TS), Italy",
     // "production" or "sandbox" — the SDK maps this to the API base URL.
     "POLAR_SERVER": "production",
     "POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",

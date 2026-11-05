@@ -426,11 +426,11 @@ TinyURL shortens a link for free, with no account. Its branded domains and analy
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 26 October 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 5 November 2026.
 
 ## Data controller
 
-Andrea Bruno is the data controller for rdyrct. For a privacy request or question, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).
+Andrea Bruno (Viale Gabriele D'Annunzio 23, 34138 Trieste (TS), Italy; P.IVA 01457780326) is the data controller for rdyrct. For a privacy request or question, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).
 
 ## Data we collect
 
@@ -462,7 +462,7 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 5 November 2026.
 
 ## Acceptance and acceptable use
 

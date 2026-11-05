@@ -1,5 +1,6 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL, GITHUB_URL } from "../ui/footer";
+import { BUSINESS } from "@/shared/business";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { useSeo } from "../lib/seo";
@@ -19,7 +20,7 @@ export function TermsPage() {
     <LegalPageLayout
       authed={authed}
       title="Terms of service"
-      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026."
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 5 November 2026."
     >
       <WebMcpMarketingTools />
 
@@ -137,6 +138,7 @@ export function TermsPage() {
       <section>
         <h2 className="mb-2 font-bold">Contact</h2>
         <p className="text-muted">
+          rdyrct is run by {BUSINESS.name}, {BUSINESS.address}, P.IVA {BUSINESS.vatNumber}.
           Questions about these terms can be sent to{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
             {SUPPORT_EMAIL}

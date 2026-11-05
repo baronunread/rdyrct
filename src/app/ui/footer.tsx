@@ -6,6 +6,7 @@ import { CookieSettingsButton } from "./consent-banner";
 import { Moon, Sun } from "./icons";
 import { Logo } from "./logo";
 import { SUPPORT_EMAIL } from "@/shared/support";
+import { BUSINESS } from "@/shared/business";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
 export { SUPPORT_EMAIL };
@@ -311,7 +312,9 @@ export function Footer({ featured = false }: { featured?: boolean }) {
           {/* On a phone the credit stacks under the copyright, and the dot
               between them goes, so nothing dangles at a line end. */}
           <div className="flex items-center gap-x-2 max-sm:flex-col max-sm:items-start max-sm:gap-y-2">
-            <span>© {new Date().getFullYear()} Andrea Bruno</span>
+            <span>
+              © {new Date().getFullYear()} {BUSINESS.name} · P.IVA {BUSINESS.vatNumber}
+            </span>
             {featured && (
               <>
                 <span aria-hidden="true" className="max-sm:hidden">

@@ -1,5 +1,6 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL } from "../ui/footer";
+import { BUSINESS } from "@/shared/business";
 import { CookieSettingsButton } from "../ui/consent-banner";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
@@ -18,15 +19,16 @@ export function PrivacyPage() {
     <LegalPageLayout
       authed={authed}
       title="Privacy policy"
-      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 26 October 2026."
+      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 5 November 2026."
     >
       <WebMcpMarketingTools />
 
       <section>
         <h2 className="mb-2 font-bold">Data controller</h2>
         <p className="text-muted">
-          The data controller for rdyrct is <span className="text-text">Andrea Bruno</span>. For any
-          privacy request or question, contact{" "}
+          The data controller for rdyrct is <span className="text-text">{BUSINESS.name}</span>,{" "}
+          {BUSINESS.address}, P.IVA {BUSINESS.vatNumber}. For any privacy request or question,
+          contact{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
             {SUPPORT_EMAIL}
           </a>
