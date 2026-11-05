@@ -370,7 +370,7 @@ export function SettingsPage() {
       <div className="flex max-w-[760px] flex-col gap-8">
         <AccountGroup user={currentUser.data?.user} />
         <SigningInGroup />
-        <EmailGroup user={currentUser.data?.user} />
+        {currentUser.data?.user.marketingOffered && <EmailGroup user={currentUser.data.user} />}
         <DeleteAccountGroup
           disabled={accountDeleteDisabled}
           owned={ownedOrgs}

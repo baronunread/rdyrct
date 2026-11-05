@@ -15,6 +15,7 @@ import { effectiveLimits, tierOf } from "@/shared/limits";
 import { loadLimitOverrides } from "../limit-overrides";
 import { parseOver } from "../reconcile";
 import { consentColumns, marketingStateOf, setMarketing } from "../marketing";
+import { newsletterConfigured } from "../newsletter";
 import { marketingBodySchema, parseBody } from "../schemas";
 import type { JsonValue } from "@/shared/types";
 
@@ -26,6 +27,7 @@ userRoutes.use("*", jsonBodyLimit());
 async function currentUserFor(
   db: AppEnv["Variables"]["db"],
   user: NonNullable<AppEnv["Variables"]["user"]>,
+  marketingOffered: boolean,
 ): Promise<CurrentUser> {
   // Each org's effective plan is its OWNER's plan, so join through the org's
   // owner membership to that user's subscription (self-joins on members/user).
@@ -113,6 +115,7 @@ async function currentUserFor(
       marketing: marketingStateOf(
         billingRows[0] ?? { newsOptInAt: null, offersOptInAt: null, marketingAskedAt: null },
       ),
+      marketingOffered,
     },
     orgs,
   };
@@ -121,7 +124,7 @@ async function currentUserFor(
 userRoutes.get("/user", requireUser, async (c) => {
   const log = c.get("log");
   log.set({ userId: c.var.user!.id });
-  return c.json(await currentUserFor(c.var.db, c.var.user!));
+  return c.json(await currentUserFor(c.var.db, c.var.user!, newsletterConfigured(c.env)));
 });
 
 // Marketing consent, both lists: the sign-up form's choice, the one-time

@@ -65,7 +65,9 @@ export function MarketingPrompt() {
   const firstSwitch = useRef<HTMLButtonElement>(null);
 
   const marketing = currentUser.data?.user.marketing;
-  const open = Boolean(marketing && !marketing.asked) && !pathname.startsWith("/welcome");
+  const offered = currentUser.data?.user.marketingOffered;
+  const open =
+    Boolean(offered && marketing && !marketing.asked) && !pathname.startsWith("/welcome");
 
   const answer = (kind: "save" | "no") => {
     setPressed(kind);

@@ -65,8 +65,9 @@ const ORDER: FlowStep[] = ["name", "link", "domain", "team", "email"];
  * not answered it (the one-time dialog, or another tab, may have). Read once,
  * so answering it does not pull the step out from under the screen. */
 function useSteps(): FlowStep[] {
-  const asked = useCurrentUser().data?.user.marketing.asked;
-  const [steps] = useState(() => (asked ? ORDER.filter((s) => s !== "email") : ORDER));
+  const user = useCurrentUser().data?.user;
+  const skip = Boolean(user?.marketing.asked) || user?.marketingOffered === false;
+  const [steps] = useState(() => (skip ? ORDER.filter((s) => s !== "email") : ORDER));
   return steps;
 }
 

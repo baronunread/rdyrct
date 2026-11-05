@@ -66,6 +66,18 @@ describe("the consent endpoint", () => {
     });
   });
 
+  it("offers the question only where newsletters can be sent", async () => {
+    const cookie = await freeOwnerCookie();
+    const me = await jsonBody<CurrentUser>(await json(cookie, "GET", "/api/user"));
+    expect(me.user.marketingOffered).toBe(true);
+    const unset = overrideEnv({ ...authEnv(), NEWSLETTER_FROM: undefined });
+    const res = await fetchWorker(
+      new Request("http://localhost/api/user", { headers: { cookie } }),
+      unset,
+    );
+    expect((await jsonBody<CurrentUser>(res)).user.marketingOffered).toBe(false);
+  });
+
   it("requires a session and a well-formed answer", async () => {
     expect(
       (

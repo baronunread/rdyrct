@@ -245,6 +245,9 @@ export interface User {
   image: string | null;
   /** Marketing consent, per list. Never read off the cached user: see marketing.ts. */
   marketing: MarketingState;
+  /** This instance can send newsletters (newsletterConfigured). Without it
+   * nobody is asked: no dialog, no setup step, no Settings switches. */
+  marketingOffered: boolean;
 }
 
 /** Where a marketing answer was given. */
