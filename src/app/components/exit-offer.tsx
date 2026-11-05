@@ -6,7 +6,7 @@ import posthog from "../lib/posthog";
 import {
   EXIT_OFFER_MIN_VISIT_MS,
   exitOfferEligible,
-  leftThroughTop,
+  leftTowardTabs,
   readExitOfferMemory,
   rememberExitOfferFinal,
   rememberExitOfferShown,
@@ -51,7 +51,7 @@ export function ExitOffer() {
     if (!enabled) return;
     void loadCard();
     const onLeave = (event: MouseEvent) => {
-      if (!leftThroughTop(event)) return;
+      if (!leftTowardTabs(event, window.innerWidth)) return;
       const eligible = exitOfferEligible({
         pathname: location.pathname,
         search: location.search,

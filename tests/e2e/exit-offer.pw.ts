@@ -95,6 +95,19 @@ test("a leaving visitor sees the code and can copy it", async ({ page, context }
   await expectAnswered(page);
 });
 
+test("leaving through the left edge, toward vertical tabs, shows it too", async ({ page }) => {
+  await openOnDesktop(page, "/");
+  await page.clock.fastForward(11_000);
+  await page.mouse.move(200, 400);
+  await page.mouse.move(5, 400, { steps: 4 });
+  await page.evaluate(() =>
+    document.documentElement.dispatchEvent(
+      new MouseEvent("mouseout", { bubbles: true, clientX: -1, clientY: 400, relatedTarget: null }),
+    ),
+  );
+  await expect(card(page)).toBeVisible();
+});
+
 test("See plans opens the pricing page", async ({ page }) => {
   await openCard(page);
   await card(page).getByRole("link", { name: "See plans" }).click();

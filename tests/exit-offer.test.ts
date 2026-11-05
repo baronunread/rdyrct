@@ -3,7 +3,7 @@ import {
   EXIT_OFFER_COOLDOWN_MS,
   EXIT_OFFER_MIN_VISIT_MS,
   exitOfferEligible,
-  leftThroughTop,
+  leftTowardTabs,
   readExitOfferMemory,
   rememberExitOfferFinal,
   rememberExitOfferShown,
@@ -107,10 +107,23 @@ describe("how often", () => {
 });
 
 describe("the exit", () => {
-  test("only through the top edge, out of the page", () => {
-    expect(leftThroughTop({ clientY: 0, relatedTarget: null })).toBe(true);
-    expect(leftThroughTop({ clientY: -3, relatedTarget: null })).toBe(true);
-    expect(leftThroughTop({ clientY: 400, relatedTarget: null })).toBe(false);
+  const out = (clientX: number, clientY: number) =>
+    leftTowardTabs({ clientX, clientY, relatedTarget: null }, 1280);
+  test("through the top, toward the tab bar", () => {
+    expect(out(640, 0)).toBe(true);
+    expect(out(640, -3)).toBe(true);
+  });
+  test("through either side, toward vertical tabs", () => {
+    expect(out(0, 400)).toBe(true);
+    expect(out(-2, 400)).toBe(true);
+    expect(out(1279, 400)).toBe(true);
+  });
+  test("not through the bottom, onto the scrollbar, or inside the page", () => {
+    expect(out(640, 900)).toBe(false);
+    expect(out(1270, 400)).toBe(false);
+    expect(out(640, 400)).toBe(false);
+    const div = { clientX: 0, clientY: 0, relatedTarget: new EventTarget() };
+    expect(leftTowardTabs(div, 1280)).toBe(false);
   });
 });
 

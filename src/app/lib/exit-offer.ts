@@ -91,14 +91,17 @@ export function exitOfferEligible(ctx: ExitOfferContext): boolean {
   return true;
 }
 
-/** Whether a mouse leaving the page went out through the top edge: toward
- * the tab bar or the address bar, which is where somebody about to leave
- * goes. Leaving through a side or the bottom is just moving around. */
-export function leftThroughTop(event: {
-  clientY: number;
-  relatedTarget: EventTarget | null;
-}): boolean {
-  return event.relatedTarget === null && event.clientY <= 0;
+/** Whether a mouse leaving the page went toward the browser's tabs: out
+ * through the top (tabs and address bar) or a side (vertical tabs sit on the
+ * left or the right). The right edge counts only past the scrollbar, so
+ * reaching for it is not leaving. The bottom is the Dock or the taskbar:
+ * just moving around. */
+export function leftTowardTabs(
+  event: { clientX: number; clientY: number; relatedTarget: EventTarget | null },
+  viewportWidth: number,
+): boolean {
+  if (event.relatedTarget !== null) return false;
+  return event.clientY <= 0 || event.clientX <= 0 || event.clientX >= viewportWidth - 1;
 }
 
 export function readExitOfferMemory(): ExitOfferMemory | null {
