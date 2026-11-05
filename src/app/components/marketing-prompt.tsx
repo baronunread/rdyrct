@@ -6,7 +6,7 @@ import { Switch } from "../ui/switch";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { errorMessage } from "../lib/error-message";
-import { useCurrentUser } from "../lib/hooks";
+import { useConfig, useCurrentUser } from "../lib/hooks";
 import { useSetMarketing, type ListChoice } from "../lib/marketing";
 
 /** One list's row in the dialog: its name and what it sends on the left,
@@ -65,7 +65,13 @@ export function MarketingPrompt() {
   const firstSwitch = useRef<HTMLButtonElement>(null);
 
   const marketing = currentUser.data?.user.marketing;
-  const open = Boolean(marketing && !marketing.asked) && !pathname.startsWith("/welcome");
+  // An instance with no email provider has no newsletter to ask about, so the
+  // question waits: a self-hosted sign-up skips the /welcome flow, and without
+  // this it would meet the question the moment it lands on the dashboard. Once
+  // the operator sets a provider, the accounts it never asked see it then.
+  const emailEnabled = useConfig().data?.emailEnabled === true;
+  const open =
+    Boolean(emailEnabled && marketing && !marketing.asked) && !pathname.startsWith("/welcome");
 
   const answer = (kind: "save" | "no") => {
     setPressed(kind);
