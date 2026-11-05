@@ -32,7 +32,8 @@ async function unaskedAccount(page: Page, email: string) {
   expect(res.status(), await res.text()).toBe(201);
 }
 
-const dialog = (page: Page) => page.getByRole("dialog", { name: "Hear from rdyrct by email?" });
+const dialog = (page: Page) =>
+  page.getByRole("dialog", { name: "What should we email you about?" });
 
 /** The account's row once `ready` holds: the answer is written after the
  * page that sent it has drawn, so it is waited for, not read at once. */

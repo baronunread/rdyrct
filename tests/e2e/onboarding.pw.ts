@@ -81,7 +81,7 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Last, email: both lists off until turned on. Offers on, then Continue.
-  await expect(heading(page, "Hear from rdyrct by email?")).toBeVisible();
+  await expect(heading(page, "What should we email you about?")).toBeVisible();
   await expect(page.getByRole("switch", { name: "Product news" })).not.toBeChecked();
   await page.getByRole("switch", { name: "Offers" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -104,7 +104,9 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   expect(consent).toMatchObject({ news: null, source: "onboarding" });
   expect(consent.offers).not.toBeNull();
   // Answered in onboarding, so the one-time dialog never opens.
-  await expect(page.getByRole("dialog", { name: "Hear from rdyrct by email?" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "What should we email you about?" })).toHaveCount(
+    0,
+  );
 
   // Link, click and an invite: nothing left, so no setup list.
   await expect(page.getByRole("button", { name: /Account menu/ })).toBeVisible();
@@ -129,7 +131,9 @@ test("skipping the email step answers no to both lists", async ({ page }) => {
   );
   expect(row).toMatchObject({ news: null, offers: null });
   expect(row.asked).not.toBeNull();
-  await expect(page.getByRole("dialog", { name: "Hear from rdyrct by email?" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "What should we email you about?" })).toHaveCount(
+    0,
+  );
 });
 
 test("what is left of the setup waits in the sidebar", async ({ page }) => {

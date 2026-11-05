@@ -114,7 +114,7 @@ export async function skipSetup(page: Page) {
   await page.getByRole("button", { name: "Not now" }).click();
   // An account not yet asked about email gets one more step; one that
   // answered before (a Google sign-in to an existing address) goes straight in.
-  const emailStep = page.getByRole("heading", { name: "Hear from rdyrct by email?" });
+  const emailStep = page.getByRole("heading", { name: "What should we email you about?" });
   const app = page.getByRole("heading", { name: "Dashboard", level: 1 });
   await expect(emailStep.or(app)).toBeVisible({ timeout: 30_000 });
   if (await emailStep.isVisible()) {

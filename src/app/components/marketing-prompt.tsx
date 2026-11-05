@@ -80,18 +80,18 @@ export function MarketingPrompt() {
     <Dialog
       open={open}
       onOpenChange={(next) => !next && !set.isPending && answer("no")}
-      title="Hear from rdyrct by email?"
+      title="What should we email you about?"
       size="sm"
       bare
       initialFocus={firstSwitch}
     >
       <div className="flex flex-col px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
         <div className="flex items-start justify-between gap-3">
-          <DialogTitle className="text-lg">Hear from rdyrct by email?</DialogTitle>
+          <DialogTitle className="text-lg">What should we email you about?</DialogTitle>
           <DialogClose className="-m-1.5" />
         </div>
         <p className="mt-1 text-sm text-pretty text-muted">
-          Choose what you want. Each stays off until you turn it on.
+          Pick any or none. You can change this in Settings.
         </p>
         <div className="mt-5 overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
           <ListRow

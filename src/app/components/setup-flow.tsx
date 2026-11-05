@@ -1029,9 +1029,8 @@ function EmailStep({ onNext }: { onNext: () => void }) {
   };
   return (
     <div className="flex flex-col">
-      <StepHead title="Hear from rdyrct by email?">
-        Choose what you want. Each stays off until you turn it on, and every email has a link to
-        stop.
+      <StepHead title="What should we email you about?">
+        Pick any or none. You can change this in Settings.
       </StepHead>
       <div className="mt-6 overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
         <ListRow
