@@ -699,6 +699,7 @@ export async function seedFillerLinks(
 export interface Posted {
   from: string;
   to: string[];
+  reply_to?: string;
   subject: string;
   html: string;
   text: string;

@@ -49,6 +49,9 @@ export interface Env {
   // reputation of the sign-in mail's MAIL_FROM. Unset, a newsletter send is
   // refused (newsletter.ts).
   NEWSLETTER_FROM?: string;
+  // var, optional: where replies to a newsletter go. The sending subdomain
+  // has no inbox, so without it a reply bounces.
+  NEWSLETTER_REPLY_TO?: string;
   // var, e.g. "rdyrct, 1 Example Street, 00100 Rome, Italy". The sender's
   // postal address, printed in the footer of every newsletter: the US
   // CAN-SPAM Act requires one in marketing mail, and EU practice expects it.

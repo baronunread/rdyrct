@@ -514,6 +514,9 @@ describe("sending a newsletter", () => {
     expect(mail.batches[0].key).toBe("send-0001-batch-0");
     for (const email of sent) {
       expect(email.from).toMatch(/<[^>]+>$/);
+      // The sending subdomain has no inbox: replies go to a real one.
+      expect(env.NEWSLETTER_REPLY_TO).toBeTruthy();
+      expect(email.reply_to).toBe(env.NEWSLETTER_REPLY_TO);
       expect(email.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
       const link = email.headers["List-Unsubscribe"].slice(1, -1);
       expect(link).toMatch(/^http:\/\/localhost\/unsubscribe\?t=/);

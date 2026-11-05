@@ -39,6 +39,8 @@ export interface Recipient {
 interface OutgoingEmail {
   from: string;
   to: string[];
+  /** Where a reply goes: the sending subdomain has no inbox. */
+  reply_to?: string;
   subject: string;
   html: string;
   text: string;
@@ -89,7 +91,7 @@ async function outgoing(
   to: Recipient,
 ): Promise<OutgoingEmail> {
   const { body, link } = await renderIssue(env, issue, to);
-  return {
+  const email: OutgoingEmail = {
     from,
     to: [to.email],
     subject: issue.subject,
@@ -101,6 +103,8 @@ async function outgoing(
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
   };
+  if (env.NEWSLETTER_REPLY_TO) email.reply_to = env.NEWSLETTER_REPLY_TO;
+  return email;
 }
 
 /** The provider call. `idempotencyKey` makes a retry of the same batch a

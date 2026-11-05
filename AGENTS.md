@@ -476,7 +476,8 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
 `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` (optional; unset switches the
 check off), `NEWSLETTER_FROM` (a var on its own sending subdomain; unset refuses
-newsletter sends), `POSTAL_ADDRESS` (a var, the postal address every
+newsletter sends), `NEWSLETTER_REPLY_TO` (a var, optional: a real inbox for
+replies, since the sending subdomain has none), `POSTAL_ADDRESS` (a var, the postal address every
 newsletter footer carries for CAN-SPAM; unset refuses newsletter sends), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
 Web Risk).
 

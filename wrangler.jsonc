@@ -90,6 +90,8 @@
     // marketing complaint cannot hurt sign-in mail. Verify the domain in
     // Resend first. Unset (forks), a newsletter send is refused.
     "NEWSLETTER_FROM": "Andrea at rdyrct <andrea@news.rdyrct.com>",
+    // news.rdyrct.com receives no mail: replies go to the inbox Email Routing serves.
+    "NEWSLETTER_REPLY_TO": "andrea@mail.rdyrct.com",
     // The postal address in every newsletter's footer (CAN-SPAM requires
     // one). Unset, a newsletter send is refused. A street address or a PO box:
     // "POSTAL_ADDRESS": "rdyrct, 1 Example Street, 00100 Rome, Italy",
@@ -325,6 +327,7 @@
         "MAIL_FROM": "rdyrct <no-reply@localhost>",
         "WELCOME_FROM": "Andrea at rdyrct <andrea@localhost>",
         "NEWSLETTER_FROM": "Andrea at rdyrct <news@localhost>",
+        "NEWSLETTER_REPLY_TO": "andrea@localhost",
         "POSTAL_ADDRESS": "rdyrct, 1 Example Street, 00100 Rome, Italy",
         "POLAR_SERVER": "sandbox",
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
