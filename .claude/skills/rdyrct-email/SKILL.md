@@ -87,17 +87,21 @@ How it is sent:
   `newsletter.ts` is the only file that knows the provider. Switching provider
   means rewriting its `postBatch` and `emailConfigured()` in `email.ts`.
 - The sender is `NEWSLETTER_FROM`, on a subdomain of its own, so a marketing
-  complaint cannot reach the reputation of sign-in mail. Unset, a send is
-  refused with an error.
+  complaint cannot reach the reputation of sign-in mail. Every newsletter
+  footer carries `POSTAL_ADDRESS` under the unsubscribe link, in both parts
+  (CAN-SPAM). Either unset, a send or a test is refused with a 409 that
+  names it.
 - Every email is rendered per person with `renderEmail()` and
   `unsubscribeUrl`: the link shows in the footer of both parts, and the
   `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
   headers (RFC 8058, which Gmail and Yahoo require of bulk mail) carry the
   same signed link. Never send a newsletter without them. The token names
   the list, so one-click takes the reader off that list only, with no page.
-  Opened in a browser, the link shows a box per list, ticked as the reader
-  stands, with Save and a smaller "Unsubscribe from all"; GET never changes
-  anything. The footer line names the list:
+  Opened in a browser, the link only ever turns lists off (the email may
+  have been forwarded): a ticked box for each list the reader is on, Save,
+  and a smaller "Unsubscribe from all"; a list they are not on shows as off,
+  with a link to Settings, where signing in turns it on. GET never changes
+  anything, and a POST naming a list the reader is not on is ignored. The footer line names the list:
   "You get this because you opted in to offers from rdyrct."
 - The composer is Platform > Newsletter (admin only). It takes a subject and a
   body written in Resend's editor (`@react-email/editor`, cut down in
@@ -119,10 +123,22 @@ How it is sent:
   `blockHtml`/`blockText` in one commit.
 - One wide event per send, with the list and counts, never addresses. A
   send is a Cloudflare Workflow (`NewsletterSendWorkflow`,
-  `worker/newsletter-send.ts`): it waits for the scheduled time, then sends
-  one batch per step and saves its progress after each, so a failed batch
-  is retried on its own and nobody gets the issue twice. A scheduled send
-  can be cancelled until it begins.
+  `worker/newsletter-send.ts`): it waits for the scheduled time, then goes
+  batch by batch. Each batch is two steps: one picks who (Workflows keeps
+  that list), one delivers exactly that list under the key
+  `<sendId>-batch-<n>` after checking consent again, and moves the cursor
+  past it. A retried delivery is the same list under the same key, so
+  nobody gets the issue twice. Workflows caps steps per instance, so an
+  audience over `MAX_BATCHES` batches is refused before it starts. A
+  scheduled send can be cancelled until it begins. A send id reused with
+  another subject, body or time is a 409; the composer makes a new id after
+  any edit.
+- The composer's Preview renders the issue through the same
+  `renderIssue`/`renderEmail` path with the admin as the reader, in a
+  sandboxed frame with a Light/Dark switch. Duplicate on a past or cancelled
+  send loads its subject, body and audience as a new send.
+- Outlook for Windows gets a 520px ghost table around the card and a VML
+  button whose whole shape is the link (`email-layout.ts`).
 
 Tests for the rule are `tests/worker/marketing.worker.ts` (only accounts
 opted in to the list, verified and unbanned get mail; headers present;

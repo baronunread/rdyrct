@@ -340,6 +340,36 @@ export interface NewsletterSendRow {
   finishedAt: number | null;
 }
 
+/** The newsletter body as the admin editor writes it (a TipTap JSON
+ * document): only the nodes and marks the email layout renders.
+ * worker/newsletter-doc.ts parses a document against this allow-list. */
+export type DocMark =
+  | { type: "bold" | "italic" | "underline" }
+  | { type: "link"; attrs: { href: string } };
+export type DocInline = { type: "text"; text: string; marks?: DocMark[] } | { type: "hardBreak" };
+export type DocListItem = { type: "listItem"; content: DocBlock[] };
+export type DocBlock =
+  | { type: "paragraph"; content?: DocInline[] }
+  | { type: "heading"; attrs: { level: 2 | 3 }; content?: DocInline[] }
+  | { type: "horizontalRule" }
+  | { type: "button"; attrs: { href: string }; content?: DocInline[] }
+  | { type: "bulletList"; content: DocListItem[] }
+  | { type: "orderedList"; attrs?: { start?: number | null }; content: DocListItem[] };
+export type NewsletterDoc = { type: "doc"; content: DocBlock[] };
+
+/** A past send loaded back into the composer by Duplicate. */
+export interface NewsletterDraft {
+  list: MarketingList;
+  audience: AudienceFilter;
+  subject: string;
+  doc: NewsletterDoc;
+}
+
+/** The composer's Preview: the issue as the admin would get it. */
+export interface NewsletterPreview {
+  html: string;
+}
+
 /** What the admin newsletter screen reads. */
 export interface NewsletterStatus {
   /** Per list: verified, not banned, opted in. Who a send to it reaches. */
@@ -347,8 +377,11 @@ export interface NewsletterStatus {
   answers: Record<MarketingList, NewsletterAnswers>;
   /** Newest first, at most NEWSLETTER_HISTORY of them. */
   sends: NewsletterSendRow[];
-  /** NEWSLETTER_FROM is set. Without it a send is refused. */
+  /** NEWSLETTER_FROM, the provider and POSTAL_ADDRESS are all set. Without
+   * them a send is refused. */
   configured: boolean;
+  /** POSTAL_ADDRESS is set, so the page can name what is missing. */
+  postalAddress: boolean;
 }
 
 /** An account's answer about one list, as one word. */

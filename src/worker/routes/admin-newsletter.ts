@@ -22,13 +22,15 @@ import {
   MARKETING_LISTS,
   type JsonValue,
   type NewsletterAudienceCount,
+  type NewsletterDraft,
+  type NewsletterPreview,
   type NewsletterSendRow,
   type NewsletterSendState,
   type NewsletterTestResult,
   type NewsletterStatus,
 } from "../../shared/types";
 import { countOptedIn, newsletterAnswers } from "../marketing";
-import { deliverBatch, newsletterConfigured, type Issue } from "../newsletter";
+import { deliverBatch, newsletterConfigured, renderIssue, type Issue } from "../newsletter";
 import { cancelSend, startSend } from "../newsletter-send";
 import { createError } from "evlog";
 import { parseBody } from "../schemas";
@@ -135,6 +137,7 @@ adminNewsletterRoutes.get("/", async (c) => {
     answers,
     sends,
     configured: newsletterConfigured(c.env),
+    postalAddress: Boolean(c.env.POSTAL_ADDRESS),
   };
   return c.json(status);
 });
@@ -163,6 +166,40 @@ adminNewsletterRoutes.post("/test", async (c) => {
   );
   log.set({ newsletter: { test: true, list: body.list, sent: 1 } });
   return c.json({ sent: 1 } satisfies NewsletterTestResult);
+});
+
+// The issue rendered as the admin would get it, by the same renderEmail call
+// a send makes, for the composer's Preview. Nothing is sent.
+adminNewsletterRoutes.post("/preview", async (c) => {
+  const log = c.get("log");
+  const admin = c.var.user!;
+  const body = parseBody(testSchema, await c.req.json<JsonValue>().catch(() => null));
+  const { body: rendered } = await renderIssue(c.env, toIssue(body), {
+    id: admin.id,
+    email: admin.email,
+  });
+  log.set({ newsletter: { preview: true, list: body.list } });
+  return c.json({ html: rendered.html.html } satisfies NewsletterPreview);
+});
+
+// One send's issue and audience, for Duplicate in the history.
+adminNewsletterRoutes.get("/sends/:id", async (c) => {
+  const log = c.get("log");
+  const id = c.req.param("id");
+  const [row] = await drizzle(c.env.DB, { schema })
+    .select({ list: sends.list, audience: sends.audience, subject: sends.subject, doc: sends.doc })
+    .from(sends)
+    .where(eq(sends.id, id));
+  log.set({ newsletter: { sendId: id, found: Boolean(row) } });
+  if (!row) {
+    throw createError({
+      message: "That send is gone",
+      status: 404,
+      why: `No newsletter send ${id}`,
+      fix: "Reload the page",
+    });
+  }
+  return c.json(row satisfies NewsletterDraft);
 });
 
 /** The furthest ahead a send can be scheduled. */

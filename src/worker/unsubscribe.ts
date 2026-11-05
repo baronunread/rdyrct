@@ -5,13 +5,18 @@
  * no sign-in, no cookie and no script, and in a self-hosted copy exactly as
  * on rdyrct.com (a fork that sends newsletters needs it too).
  *
- * GET only shows a form: a box per list, ticked as the person stands now,
- * Save, and a smaller "Unsubscribe from all". A mail scanner or a link
- * preview fetches every URL in a message, and a GET that changed anything
- * would remove people who never clicked. POST does it:
+ * The page only ever turns lists off. The token is in an email, and an
+ * email can be forwarded: whoever holds it may stop that person's mail, but
+ * never start it. GET shows a ticked box for each list the person is on,
+ * Save, and a smaller "Unsubscribe from all"; a list they are not on shows
+ * as off, with a link to Settings, where signing in is what lets them turn
+ * it on. A mail scanner or a link preview fetches every URL in a message,
+ * and a GET that changed anything would remove people who never clicked.
+ * POST does it:
  *
- * - `action=save` from the form: each list on or off as ticked, the same
- *   meaning as a Settings answer.
+ * - `action=save` from the form: each list the person is on and left
+ *   unticked goes off. A box for a list they are not on is ignored, so a
+ *   forged form cannot opt anyone in.
  * - `action=all` from the form (or `scope=all` in the query, from a page
  *   served before the form had boxes): off both lists.
  * - anything else, which is a mail client's RFC 8058 one-click request
@@ -58,6 +63,17 @@ legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50
 label.list{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border-radius:8px;cursor:pointer}
 label.list+label.list{box-shadow:inset 0 1px 0 var(--border);border-radius:0 0 8px 8px}
 label.list:first-of-type{border-radius:8px 8px 0 0}
+label.list:only-of-type{border-radius:8px}
+div.off{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:8px 16px}
+div.off+div.off{box-shadow:inset 0 1px 0 var(--border)}
+div.off span{display:flex;flex-direction:column;gap:1px}
+div.off b{font-weight:600}
+div.off small{color:var(--muted);font-size:13px}
+div.off em{flex:none;color:var(--muted);font-size:13px;font-style:normal}
+section.offs{margin:24px 0 0;padding:4px 0 0;border-top:1px solid var(--border)}
+section.offs h2{margin:12px 0 4px;font-size:15px;line-height:1.4}
+section.offs .rows{margin:0 0 8px}
+section.offs p{margin:0;font-size:14px}
 @media (hover:hover){label.list:hover{background:var(--surface-2)}}
 label.list span{display:flex;flex-direction:column;gap:1px}
 label.list b{font-weight:600}
@@ -109,8 +125,24 @@ const listsFrom = (first: MarketingList) => [
   ...MARKETING_LISTS.filter((list) => list !== first),
 ];
 
-function listRow(list: MarketingList, checked: boolean): string {
-  return `<label class="list"><input type="checkbox" name="${list}" value="on"${checked ? " checked" : ""}><span><b>${MARKETING_LIST_LABELS[list]}</b><small>${LIST_HINTS[list]}</small></span></label>`;
+/** A list the reader is on: a ticked box, to untick. */
+function listRow(list: MarketingList): string {
+  return `<label class="list"><input type="checkbox" name="${list}" value="on" checked><span><b>${MARKETING_LIST_LABELS[list]}</b><small>${LIST_HINTS[list]}</small></span></label>`;
+}
+
+/** A list the reader is not on: no box, because this page cannot turn one on. */
+function offRow(list: MarketingList): string {
+  return `<div class="off"><span><b>${MARKETING_LIST_LABELS[list]}</b><small>${LIST_HINTS[list]}</small></span><em>Off</em></div>`;
+}
+
+/** The lists the reader is not on, and where to turn them on. */
+function offSection(lists: MarketingList[]): string {
+  if (lists.length === 0) return "";
+  const how =
+    lists.length === 1
+      ? `To get it, turn it on in <a href="/settings">Settings</a> after signing in.`
+      : `To get these, turn them on in <a href="/settings">Settings</a> after signing in.`;
+  return `<section class="offs" aria-labelledby="offs-heading"><h2 id="offs-heading">Not getting</h2><div class="rows">${lists.map(offRow).join("")}</div><p>${how}</p></section>`;
 }
 
 /** What the reader gets now, as one sentence. */
@@ -126,14 +158,18 @@ unsubscribeRoutes.get("/", async (c) => {
   const named = await verifyUnsubscribeToken(c.env, token);
   if (!named) return invalid();
   const state = await marketingState(drizzle(c.env.DB, { schema }), named.userId);
-  const rows = listsFrom(named.list)
-    .map((list) => listRow(list, state[list]))
-    .join("");
-  const title = "Which emails do you want from rdyrct?";
+  const lists = listsFrom(named.list);
+  const on = lists.filter((list) => state[list]);
+  const off = lists.filter((list) => !state[list]);
+  if (on.length === 0) {
+    const title = "You get no rdyrct email";
+    return page(200, title, `<h1>${title}</h1><p>${ACCOUNT_MAIL}</p>${offSection(off)}`);
+  }
+  const title = "Stop rdyrct emails";
   return page(
     200,
     title,
-    `<h1>${title}</h1><p>Untick a list to stop it. ${ACCOUNT_MAIL}</p><form method="post" action="${escapeHtml(selfUrl(token))}"><fieldset><legend>Lists</legend>${rows}</fieldset><div class="actions"><button type="submit" name="action" value="save">Save</button><button type="submit" name="action" value="all" class="quiet">Unsubscribe from all</button></div></form>`,
+    `<h1>${title}</h1><p>Untick a list to stop it. ${ACCOUNT_MAIL}</p><form method="post" action="${escapeHtml(selfUrl(token))}"><fieldset><legend>Lists you get</legend>${on.map(listRow).join("")}</fieldset><div class="actions"><button type="submit" name="action" value="save">Save</button><button type="submit" name="action" value="all" class="quiet">Unsubscribe from all</button></div></form>${offSection(off)}`,
   );
 });
 
@@ -145,9 +181,10 @@ const formSchema = v.object({
   offers: v.optional(v.literal("on")),
 });
 
-/** What a POST asks for. */
+/** What a POST asks for. `keep` is the boxes left ticked: a list in it
+ * stays as it is, on or off. */
 type Wanted =
-  | { kind: "save"; news: boolean; offers: boolean }
+  | { kind: "save"; keep: Record<MarketingList, boolean> }
   | { kind: "off"; from: MarketingList | "all" };
 
 function wantedOf(
@@ -156,13 +193,12 @@ function wantedOf(
   scope: string | undefined,
 ): Wanted {
   if (form.action === "save") {
-    return { kind: "save", news: form.news === "on", offers: form.offers === "on" };
+    return { kind: "save", keep: { news: form.news === "on", offers: form.offers === "on" } };
   }
   if (form.action === "all" || scope === "all") return { kind: "off", from: "all" };
   return { kind: "off", from: list };
 }
 
-/** Records what a POST asks for; false when the account is gone. */
 /** Applies the answer; `found` is false for an account that is gone, and
  * `state` is where the reader stands after it. */
 async function applyWanted(
@@ -174,12 +210,12 @@ async function applyWanted(
     const found = await unsubscribeUser(db, userId, wanted.from);
     return { found, state: await marketingState(db, userId) };
   }
-  // Only a list that changes is written, so a list left on keeps the time
-  // and source of its opt-in.
+  // Only a list that is on and was unticked is written: one left on keeps
+  // the time and source of its opt-in, and one that is off stays off
+  // whatever the form says.
   const before = await marketingState(db, userId);
-  const changed = (list: MarketingList) =>
-    before[list] === wanted[list] ? undefined : wanted[list];
-  const answer = { source: "settings" as const, news: changed("news"), offers: changed("offers") };
+  const stop = (list: MarketingList) => (before[list] && !wanted.keep[list] ? false : undefined);
+  const answer = { source: "settings" as const, news: stop("news"), offers: stop("offers") };
   const { applied, state } = await setMarketing(db, userId, answer);
   return { found: applied, state };
 }
@@ -207,16 +243,16 @@ unsubscribeRoutes.post("/", async (c) => {
   const { found, state } = await applyWanted(db, named.userId, wanted);
   log?.set({ unsubscribe: { valid: true, list: named.list, wanted, found } });
   log?.audit({
-    action: wanted.kind === "save" ? "marketing.consent" : "marketing.unsubscribe",
+    // The page only turns lists off, from the form or from one click.
+    action: "marketing.unsubscribe",
     actor: { type: "user", id: named.userId },
     target: { type: "user", id: named.userId },
     outcome: found ? "success" : "failure",
   });
-  const heading =
-    wanted.kind === "save" && (state.news || state.offers) ? "Saved" : "You are unsubscribed";
-  return page(
-    200,
-    heading,
-    `<h1>${heading}</h1><p>${nowGets(state)}</p><p class="change"><a href="${escapeHtml(selfUrl(token))}">Change which emails you get</a></p>`,
-  );
+  const stillGets = state.news || state.offers;
+  const heading = wanted.kind === "save" && stillGets ? "Saved" : "You are unsubscribed";
+  const next = stillGets
+    ? `<p class="change"><a href="${escapeHtml(selfUrl(token))}">Stop more emails</a></p>`
+    : `<p>To get them again, turn them on in <a href="/settings">Settings</a> after signing in.</p>`;
+  return page(200, heading, `<h1>${heading}</h1><p>${nowGets(state)}</p>${next}`);
 });

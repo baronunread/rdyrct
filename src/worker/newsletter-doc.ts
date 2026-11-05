@@ -10,20 +10,9 @@
 import * as v from "valibot";
 import type { EmailBlock, EmailInline } from "./email-layout";
 import { safeUrl } from "./email-html";
+import type { DocBlock, DocInline, DocMark, NewsletterDoc } from "@/shared/types";
 
-type DocMark =
-  | { type: "bold" | "italic" | "underline" }
-  | { type: "link"; attrs: { href: string } };
-type DocInline = { type: "text"; text: string; marks?: DocMark[] } | { type: "hardBreak" };
-type DocListItem = { type: "listItem"; content: DocBlock[] };
-type DocBlock =
-  | { type: "paragraph"; content?: DocInline[] }
-  | { type: "heading"; attrs: { level: 2 | 3 }; content?: DocInline[] }
-  | { type: "horizontalRule" }
-  | { type: "button"; attrs: { href: string }; content?: DocInline[] }
-  | { type: "bulletList"; content: DocListItem[] }
-  | { type: "orderedList"; attrs?: { start?: number | null }; content: DocListItem[] };
-export type NewsletterDoc = { type: "doc"; content: DocBlock[] };
+export type { NewsletterDoc };
 
 /** Lists inside lists, at most this deep. */
 const MAX_LIST_DEPTH = 4;

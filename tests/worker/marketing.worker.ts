@@ -3,7 +3,13 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import type { CurrentUser, JsonValue, MarketingState } from "../../src/shared/types";
 import { signUnsubscribeToken, verifyUnsubscribeToken } from "../../src/worker/marketing";
-import { beginSend, finishSend, sendNextBatch, sendTime } from "../../src/worker/newsletter-send";
+import {
+  beginSend,
+  deliverPicked,
+  finishSend,
+  pickBatch,
+  sendTime,
+} from "../../src/worker/newsletter-send";
 import {
   adminCookie,
   captureBatches,
@@ -202,28 +208,64 @@ describe("the unsubscribe page", () => {
   const form = (action: string, ...ticked: string[]) =>
     new URLSearchParams([["action", action], ...ticked.map((list) => [list, "on"])]).toString();
 
-  it("shows each list ticked as the reader stands, the email's list first, and GET changes nothing", async () => {
+  it("offers a box only for lists the reader is on, and GET changes nothing", async () => {
     await seedUser("reader-1", null, "", 7).run();
     const token = await signUnsubscribeToken(authEnv(), "reader-1", "offers");
     const res = await visit(token);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Which emails do you want from rdyrct?");
+    expect(html).toContain("Stop rdyrct emails");
     expect(html).toContain('name="offers" value="on" checked');
-    expect(html).toContain('name="news" value="on">');
-    expect(html.indexOf('name="offers"')).toBeLessThan(html.indexOf('name="news"'));
+    // Off lists show as off, with the way to turn them on, and no box.
+    expect(html).not.toContain('name="news"');
+    expect(html).toMatch(/<b>Product news<\/b>.*<em>Off<\/em>/);
+    expect(html).toContain(
+      'To get it, turn it on in <a href="/settings">Settings</a> after signing in.',
+    );
     expect(html).toContain('value="save">Save<');
     expect(html).toContain('value="all" class="quiet">Unsubscribe from all<');
     // Fetched twice, as a link preview would: nothing moves.
     await visit(token);
     expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: 7, asked: null });
-    const news = await (
-      await visit(await signUnsubscribeToken(authEnv(), "reader-1", "news"))
+
+    // On both: the email's list first, nothing shown as off.
+    await seedUser("reader-2", 5, "", 7).run();
+    const both = await (
+      await visit(await signUnsubscribeToken(authEnv(), "reader-2", "news"))
     ).text();
-    expect(news.indexOf('name="news"')).toBeLessThan(news.indexOf('name="offers"'));
+    expect(both.indexOf('name="news"')).toBeLessThan(both.indexOf('name="offers"'));
+    expect(both).not.toContain("Not getting");
+
+    // On neither: no form, both lists off, and the plural line.
+    await seedUser("reader-3", null).run();
+    const none = await (
+      await visit(await signUnsubscribeToken(authEnv(), "reader-3", "news"))
+    ).text();
+    expect(none).toContain("You get no rdyrct email");
+    expect(none).not.toContain("<form");
+    expect(none).toContain("To get these, turn them on in");
   });
 
-  it("saves each combination from the form, as a Settings answer", async () => {
+  it("never turns a list on, whatever the form says", async () => {
+    await seedUser("reader-1", 5).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    // A forged form: offers ticked, though the reader never opted in.
+    const res = await visit(token, "POST", form("save", "news", "offers"));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("You get product news only.");
+    expect(await consentRow("reader-1")).toMatchObject({
+      news: 5,
+      newsSource: "settings",
+      offers: null,
+      offersSource: null,
+    });
+    // Once off, a box for it does not bring it back.
+    await visit(token, "POST", form("save"));
+    await visit(token, "POST", form("save", "news", "offers"));
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null });
+  });
+
+  it("stops each list left unticked, and leaves a ticked one as it was", async () => {
     const cases = [
       { ticked: ["news", "offers"], said: "You get product news and offers." },
       { ticked: ["news"], said: "You get product news only." },
@@ -232,19 +274,21 @@ describe("the unsubscribe page", () => {
     ];
     for (const [i, { ticked, said }] of cases.entries()) {
       const id = `reader-${i}`;
-      await seedUser(id, 5).run();
+      await seedUser(id, 5, "", 7).run();
       await env.DB.prepare("update user set marketing_asked_at = 3 where id = ?").bind(id).run();
       const token = await signUnsubscribeToken(authEnv(), id, "news");
       const res = await visit(token, "POST", form("save", ...ticked));
       expect(res.status).toBe(200);
       expect(await res.text()).toContain(said);
       const row = await consentRow(id);
-      // A list left on keeps its first opt-in; a changed one is a Settings answer.
+      // A list left on keeps its opt-in, time and source; a stopped one is a
+      // Settings answer.
       expect(row?.news === null).toBe(!ticked.includes("news"));
       expect(row?.offers === null).toBe(!ticked.includes("offers"));
       if (ticked.includes("news")) expect(row).toMatchObject({ news: 5, newsSource: "settings" });
-      if (ticked.includes("offers")) expect(row?.offersSource).toBe("settings");
-      else expect(row?.offersSource).toBeNull();
+      if (ticked.includes("offers"))
+        expect(row).toMatchObject({ offers: 7, offersSource: "prompt" });
+      else expect(row?.offersSource).toBe("settings");
       // Asked stays the first time they answered.
       expect(row?.asked).toBe(3);
     }
@@ -345,6 +389,16 @@ const button = (href: string, label = "Read more") => ({
   content: [{ type: "text", text: label }],
 });
 
+/** The workflow's batch loop from batch `from` on: pick, then deliver
+ * exactly what was picked. */
+async function sendRest(id: string, startedAt: number, from = 0) {
+  for (let n = from; ; n++) {
+    const people = await pickBatch(authEnv(), id, startedAt);
+    if (people.length === 0) return;
+    await deliverPicked(authEnv(), id, n, people, startedAt);
+  }
+}
+
 /** What NewsletterSendWorkflow does once its wait is over, step by step:
  * the worker tests stub the binding, so this is the workflow here. */
 async function drive(id: string) {
@@ -352,7 +406,7 @@ async function drive(id: string) {
   const startedAt = await beginSend(authEnv(), id);
   if (startedAt === null) return;
   try {
-    while ((await sendNextBatch(authEnv(), id, startedAt)) > 0);
+    await sendRest(id, startedAt);
   } catch (error) {
     await finishSend(authEnv(), id, "failed");
     throw error;
@@ -365,6 +419,20 @@ const sendRow = (id: string) =>
   env.DB.prepare("select status, sent, cursor from newsletter_sends where id = ?")
     .bind(id)
     .first<{ status: string; sent: number; cursor: string }>();
+
+/** `n` people on news (`<prefix>000` on), a send to them stored through the
+ * route, and the workflow's start step: what a batch test begins from.
+ * Returns when the send began. */
+async function begunSend(cookie: string, sendId: string, n: number, prefix = "p") {
+  await env.DB.batch(
+    Array.from({ length: n }, (_, i) => seedUser(`${prefix}${String(i).padStart(3, "0")}`, 5)),
+  );
+  const res = await json(cookie, "POST", "/api/admin/newsletter/send", { ...issue, sendId });
+  expect(res.status).toBe(200);
+  const startedAt = await beginSend(authEnv(), sendId);
+  if (startedAt === null) throw new Error(`send ${sendId} did not begin`);
+  return startedAt;
+}
 
 /** Send now through the route, then the workflow's steps. */
 async function sendNow(cookie: string, body: { sendId: string; [field: string]: JsonValue }) {
@@ -442,8 +510,8 @@ describe("sending a newsletter", () => {
 
     const sent = mail.batches.flatMap((b) => b.emails);
     expect(sent.map((e) => e.to[0]).sort()).toEqual(["yes-1@example.com", "yes-2@example.com"]);
-    // The send id and the batch's first recipient: the same on a retry.
-    expect(mail.batches[0].key).toBe("send-0001-yes-1");
+    // The send id and the batch number: the same on a retry.
+    expect(mail.batches[0].key).toBe("send-0001-batch-0");
     for (const email of sent) {
       expect(email.from).toMatch(/<[^>]+>$/);
       expect(email.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
@@ -649,25 +717,19 @@ describe("sending a newsletter", () => {
     let failed = false;
     const mail = captureBatches((call) => (call === 1 && !failed ? ((failed = true), 500) : 200));
     const cookie = await adminCookie();
-    await env.DB.batch(
-      Array.from({ length: 150 }, (_, i) => seedUser(`p${String(i).padStart(3, "0")}`, 5)),
-    );
-    const res = await json(cookie, "POST", "/api/admin/newsletter/send", {
-      ...issue,
-      sendId: "send-resume",
-    });
-    expect(res.status).toBe(200);
     // The workflow's steps, the second batch failing once and retried.
-    const startedAt = (await beginSend(authEnv(), "send-resume"))!;
-    expect(await sendNextBatch(authEnv(), "send-resume", startedAt)).toBe(100);
-    await expect(sendNextBatch(authEnv(), "send-resume", startedAt)).rejects.toThrow();
+    const startedAt = await begunSend(cookie, "send-resume", 150);
+    const first = await pickBatch(authEnv(), "send-resume", startedAt);
+    expect(await deliverPicked(authEnv(), "send-resume", 0, first, startedAt)).toBe(100);
+    const second = await pickBatch(authEnv(), "send-resume", startedAt);
+    await expect(deliverPicked(authEnv(), "send-resume", 1, second, startedAt)).rejects.toThrow();
     expect(await sendRow("send-resume")).toMatchObject({
       status: "sending",
       sent: 100,
       cursor: "p099",
     });
-    expect(await sendNextBatch(authEnv(), "send-resume", startedAt)).toBe(50);
-    expect(await sendNextBatch(authEnv(), "send-resume", startedAt)).toBe(0);
+    expect(await deliverPicked(authEnv(), "send-resume", 1, second, startedAt)).toBe(50);
+    expect(await pickBatch(authEnv(), "send-resume", startedAt)).toEqual([]);
     await finishSend(authEnv(), "send-resume", "sent");
     expectEachOnce(mail, 150);
 
@@ -676,6 +738,165 @@ describe("sending a newsletter", () => {
     expect(await jsonBody(again)).toMatchObject({ status: "sent" });
     expect(mail.batches.flatMap((b) => b.emails)).toHaveLength(150);
     expect(await sendRow("send-resume")).toMatchObject({ status: "sent", sent: 150 });
+    mail.restore();
+  });
+
+  it("sends nobody twice when a delivered batch is retried", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    const startedAt = await begunSend(cookie, "send-twice", 150);
+    const picked = await pickBatch(authEnv(), "send-twice", startedAt);
+    expect(await deliverPicked(authEnv(), "send-twice", 0, picked, startedAt)).toBe(100);
+    // The step reached the provider and moved the cursor, then failed to
+    // report: Workflows runs it again with the same frozen list.
+    await deliverPicked(authEnv(), "send-twice", 0, picked, startedAt);
+    expect(mail.calls()).toBe(2);
+    expect(mail.batches.map((b) => b.key)).toEqual(["send-twice-batch-0"]);
+    expect(await sendRow("send-twice")).toMatchObject({ sent: 100, cursor: "p099" });
+    await sendRest("send-twice", startedAt, 1);
+    await finishSend(authEnv(), "send-twice", "sent");
+    expectEachOnce(mail, 150);
+    expect(await sendRow("send-twice")).toMatchObject({ status: "sent", sent: 150 });
+    mail.restore();
+  });
+
+  it("gives a newcomer inside a batch already picked nothing, and one after it the issue once", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    const startedAt = await begunSend(cookie, "send-new", 150);
+    const picked = await pickBatch(authEnv(), "send-new", startedAt);
+    // Two people opt in after the pick: one sorts inside the first batch,
+    // one after it.
+    await env.DB.batch([seedUser("p050x", 5), seedUser("p120x", 5)]);
+    expect(await deliverPicked(authEnv(), "send-new", 0, picked, startedAt)).toBe(100);
+    // A retry of that batch, after they joined, still sends the frozen list.
+    await deliverPicked(authEnv(), "send-new", 0, picked, startedAt);
+    await sendRest("send-new", startedAt, 1);
+    await finishSend(authEnv(), "send-new", "sent");
+    const everyone = expectEachOnce(mail, 151);
+    expect(everyone).not.toContain("p050x@example.com");
+    expect(everyone).toContain("p120x@example.com");
+    mail.restore();
+  });
+
+  it("drops somebody who unsubscribes between the pick and the delivery, under the same key", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    const startedAt = await begunSend(cookie, "send-drop", 3, "s");
+    const picked = await pickBatch(authEnv(), "send-drop", startedAt);
+    expect(picked.map((p) => p.id)).toEqual(["s000", "s001", "s002"]);
+    await env.DB.prepare("update user set news_opt_in_at = null where id = 's001'").run();
+    expect(await deliverPicked(authEnv(), "send-drop", 0, picked, startedAt)).toBe(2);
+    expect(mail.batches).toHaveLength(1);
+    expect(mail.batches[0]?.key).toBe("send-drop-batch-0");
+    expect(addressesOf(mail)).toEqual(["s000@example.com", "s002@example.com"]);
+    // The cursor still moves past the whole frozen batch.
+    expect(await sendRow("send-drop")).toMatchObject({ sent: 2, cursor: "s002" });
+    mail.restore();
+  });
+
+  it("refuses the same send id with another subject, body or time", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("yes-1", 5)]);
+    const at = Date.now() + 60 * 60 * 1000;
+    const first = { ...issue, sendId: "send-edit", scheduledFor: at };
+    expect((await json(cookie, "POST", "/api/admin/newsletter/send", first)).status).toBe(200);
+    for (const edited of [
+      { ...first, subject: "Another subject" },
+      { ...first, doc: doc(para("Edited body.")) },
+      { ...first, scheduledFor: at + 60_000 },
+    ]) {
+      const res = await json(cookie, "POST", "/api/admin/newsletter/send", edited);
+      expect(res.status).toBe(409);
+      expect((await jsonBody<{ message: string }>(res)).message).toBe(
+        "This send already went with different content; start a new one",
+      );
+    }
+    // The same content again is still a plain retry.
+    expect((await json(cookie, "POST", "/api/admin/newsletter/send", first)).status).toBe(200);
+    expect(mail.batches).toHaveLength(0);
+    mail.restore();
+  });
+
+  it("previews the issue as the admin would get it, and sends nothing", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    const res = await json(cookie, "POST", "/api/admin/newsletter/preview", {
+      ...issue,
+      doc: doc(para("Hello <there>"), button("https://rdyrct.com/x")),
+    });
+    expect(res.status).toBe(200);
+    const { html } = await jsonBody<{ html: string }>(res);
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain("What is new");
+    expect(html).toContain("Hello &lt;there&gt;");
+    expect(html).toContain("Sent to admin@example.com.");
+    expect(html).toMatch(/href="http:\/\/localhost\/unsubscribe\?t=/);
+    expect(mail.calls()).toBe(0);
+    // A bad document is the same 400 as on a send, and nobody else may look.
+    expect(
+      (await json(cookie, "POST", "/api/admin/newsletter/preview", { ...issue, doc: doc() }))
+        .status,
+    ).toBe(400);
+    const outsider = await freeOwnerCookie();
+    expect((await json(outsider, "POST", "/api/admin/newsletter/preview", issue)).status).toBe(404);
+    mail.restore();
+  });
+
+  it("hands back a past send's issue and audience for Duplicate", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("yes-1", 5)]);
+    await sendNow(cookie, { ...issue, sendId: "send-copy", audience: { plan: "free" } });
+    const res = await json(cookie, "GET", "/api/admin/newsletter/sends/send-copy");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({
+      list: "news",
+      audience: { stage: "any", plan: "free" },
+      subject: issue.subject,
+      doc: issue.doc,
+    });
+    expect((await json(cookie, "GET", "/api/admin/newsletter/sends/nope")).status).toBe(404);
+    const outsider = await freeOwnerCookie();
+    expect((await json(outsider, "GET", "/api/admin/newsletter/sends/send-copy")).status).toBe(404);
+    mail.restore();
+  });
+
+  it("refuses sends and tests while POSTAL_ADDRESS is unset, and prints it when set", async () => {
+    const mail = captureBatches();
+    const cookie = await adminCookie();
+    await env.DB.batch([seedUser("yes-1", 5)]);
+    const unset = overrideEnv({ ...authEnv(), POSTAL_ADDRESS: undefined });
+    const call = (path: string, body?: JsonValue) =>
+      fetchWorker(
+        new Request(`http://localhost/api/admin/newsletter${path}`, {
+          method: body === undefined ? "GET" : "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        }),
+        unset,
+      );
+    for (const res of [
+      await call("/test", issue),
+      await call("/send", { ...issue, sendId: "send-addr" }),
+    ]) {
+      expect(res.status).toBe(409);
+      expect((await jsonBody<{ message: string }>(res)).message).toContain("POSTAL_ADDRESS");
+    }
+    expect(await jsonBody(await call(""))).toMatchObject({
+      configured: false,
+      postalAddress: false,
+    });
+    expect(await sendRow("send-addr")).toBeNull();
+    expect(mail.batches).toHaveLength(0);
+
+    await sendNow(cookie, { ...issue, sendId: "send-addr" });
+    const [email] = mail.batches.flatMap((b) => b.emails);
+    const address = authEnv().POSTAL_ADDRESS ?? "";
+    expect(address).not.toBe("");
+    expect(email?.html).toContain(address);
+    expect(email?.text).toContain(address);
     mail.restore();
   });
 

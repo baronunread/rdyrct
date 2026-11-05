@@ -82,6 +82,10 @@ export interface EmailContent {
    * footer of both parts. Needs the footer, so it is ignored with footer
    * false. */
   unsubscribeUrl?: string;
+  /** The sender's postal address (env.POSTAL_ADDRESS), shown under the
+   * unsubscribe link in both parts. Marketing mail must carry one
+   * (CAN-SPAM), so it only shows with `unsubscribeUrl`. */
+  postalAddress?: string;
   /** A welcome-style layout: brand band, eyebrow, big centred heading, and a
    * sample (a long link and its short form) in a pill. For the one email that
    * should feel like a greeting; every other email keeps the plain layout. */
@@ -108,18 +112,50 @@ function noAutolink(text: string): string {
   return text.replace(/[.:]/g, (mark) => `${mark}\u200b`);
 }
 
+/** A button's size: padding around the label, and the label's type. */
+interface ButtonSize {
+  padY: number;
+  padX: number;
+  fontSize: number;
+  weight: number;
+}
+
+const BUTTON = { padY: 12, padX: 22, fontSize: 15, weight: 600 } satisfies ButtonSize;
+const HERO_BUTTON = { padY: 14, padX: 28, fontSize: 16, weight: 700 } satisfies ButtonSize;
+
+/**
+ * Outlook for Windows ignores padding on a link, so the coloured cell around
+ * it would be a button whose edges do nothing. It gets a VML shape instead:
+ * the whole shape is the link. Its width is a guess from the label's length
+ * (VML cannot size to its text), generous so the label never wraps.
+ */
+function outlookButton(cta: { label: string; url: string }, size: ButtonSize): SafeHtml {
+  const height = Math.round(size.fontSize * 1.5) + 2 * size.padY;
+  const width = Math.ceil(cta.label.length * size.fontSize * 0.62) + 2 * size.padX;
+  return emailHtml`<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${safeUrl(cta.url)}" style="height:${height}px;v-text-anchor:middle;width:${width}px" arcsize="18%" stroke="f" fillcolor="${LIGHT.accent}"><w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:${size.fontSize}px;font-weight:${size.weight}">${cta.label}</center></v:roundrect><![endif]-->`;
+}
+
 /**
  * A button that survives clients without CSS support: a bordered table cell
- * wrapping the anchor, rather than a styled <a> alone.
+ * wrapping the anchor, rather than a styled <a> alone. Outlook gets the VML
+ * shape above in its place.
  */
-function ctaBlock(cta: { label: string; url: string }): SafeHtml {
-  return emailHtml`<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0">
+function buttonTable(
+  cta: { label: string; url: string },
+  size: ButtonSize,
+  centred: boolean,
+): SafeHtml {
+  return emailHtml`${outlookButton(cta, size)}<!--[if !mso]><!--><table role="presentation" cellpadding="0" cellspacing="0" border="0"${centred ? emailHtml` align="center"` : null} style="margin:${centred ? "24px auto" : "24px 0"}">
         <tr>
           <td class="cta" align="center" bgcolor="${LIGHT.accent}" style="border-radius:8px;background:${LIGHT.accent}">
-            <a class="cta-link" href="${safeUrl(cta.url)}" style="display:inline-block;padding:12px 22px;font-family:${FONT};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">${cta.label}</a>
+            <a class="cta-link" href="${safeUrl(cta.url)}" style="display:inline-block;padding:${size.padY}px ${size.padX}px;font-family:${FONT};font-size:${size.fontSize}px;font-weight:${size.weight};color:#ffffff;text-decoration:none">${cta.label}</a>
           </td>
         </tr>
-      </table>`;
+      </table><!--<![endif]-->`;
+}
+
+function ctaBlock(cta: { label: string; url: string }): SafeHtml {
+  return buttonTable(cta, BUTTON, false);
 }
 
 const PARAGRAPH_STYLE = `margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:1.6;color:${LIGHT.text}`;
@@ -259,13 +295,7 @@ function heroRows(
 
 /** The button, centred for the hero layout. */
 function centredCta(cta: { label: string; url: string }): SafeHtml {
-  return emailHtml`<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:24px auto">
-        <tr>
-          <td class="cta" align="center" bgcolor="${LIGHT.accent}" style="border-radius:8px;background:${LIGHT.accent}">
-            <a class="cta-link" href="${safeUrl(cta.url)}" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:16px;font-weight:700;color:#ffffff;text-decoration:none">${cta.label}</a>
-          </td>
-        </tr>
-      </table>`;
+  return buttonTable(cta, HERO_BUTTON, true);
 }
 
 /** Renders the HTML and plain-text parts of one email from the same content.
@@ -311,6 +341,7 @@ ${preheaderBlock(content.preheader)}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="body" style="background:${LIGHT.bg}">
   <tr>
     <td align="center" style="padding:28px 16px">
+      <!--[if mso]><table role="presentation" width="520" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="card" style="max-width:520px;background:${LIGHT.surface};border:1px solid ${LIGHT.border};border-radius:12px">
         ${content.hero ? heroRows(content, content.hero, appUrl) : plainRows(content, paragraphs, appUrl)}
         ${
@@ -318,12 +349,14 @@ ${preheaderBlock(content.preheader)}
             ? null
             : emailHtml`<tr>
           <td style="padding:24px 26px 26px">
-            <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
+            <hr class="rule" style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
             <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${content.footerLine ?? NOT_YOU}${content.unsubscribeUrl ? emailHtml` <a class="muted" href="${safeUrl(content.unsubscribeUrl)}" style="color:${LIGHT.muted};text-decoration:underline">Unsubscribe</a>.` : null}</p>
+            ${content.unsubscribeUrl && content.postalAddress ? emailHtml`<p class="muted" style="margin:6px 0 0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">${content.postalAddress}</p>` : null}
           </td>
         </tr>`
         }
       </table>
+      <!--[if mso]></td></tr></table><![endif]-->
     </td>
   </tr>
 </table>
@@ -366,6 +399,7 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
       `Sent to ${to}.`,
       content.footerLine ?? NOT_YOU,
       ...(content.unsubscribeUrl ? [`Unsubscribe: ${safeUrl(content.unsubscribeUrl)}`] : []),
+      ...(content.unsubscribeUrl && content.postalAddress ? [content.postalAddress] : []),
       appUrl,
     );
   }

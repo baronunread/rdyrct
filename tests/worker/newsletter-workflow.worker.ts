@@ -99,7 +99,7 @@ describe("the newsletter send workflow", () => {
     expect((await post(cookie, "/sends/send-later/cancel")).status).toBe(409);
   });
 
-  it("sends at its time, every batch of 100 its own step", async () => {
+  it("sends at its time, every batch of 100 picked and delivered in steps of its own", async () => {
     const mail = captureBatches();
     const cookie = await adminCookie();
     await seedReaders(150);
@@ -114,9 +114,12 @@ describe("the newsletter send workflow", () => {
     ).toBe(200);
 
     await instance.waitForStatus("complete");
+    const picked = await instance.waitForStepResult({ name: "pick-0" });
+    expect(Array.isArray(picked) && picked.length).toBe(100);
     expect(await instance.waitForStepResult({ name: "batch-0" })).toBe(100);
     expect(await instance.waitForStepResult({ name: "batch-1" })).toBe(50);
-    expect(await instance.waitForStepResult({ name: "batch-2" })).toBe(0);
+    // The third pick finds nobody, so there is no third delivery.
+    expect(await instance.waitForStepResult({ name: "pick-2" })).toEqual([]);
     expect(await row("send-batches")).toMatchObject({ status: "sent", sent: 150 });
     const reached = mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));
     expect(reached).toHaveLength(150);

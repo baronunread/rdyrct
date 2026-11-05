@@ -2,8 +2,9 @@
  * Newsletter composer (platform admin). One issue at a time, to one list
  * (product news or offers) narrowed by stage and plan (worker/marketing.ts
  * decides who): a subject and a body written in the email editor. A test
- * goes to the admin alone, at once; a send goes now or at a scheduled time,
- * through a Cloudflare Workflow (worker/newsletter-send.ts). The page is the
+ * goes to the admin alone, at once; Preview shows it here first; a send goes
+ * now or at a scheduled time, through a Cloudflare Workflow
+ * (worker/newsletter-send.ts). Duplicate loads a past send back in. The page is the
  * composer first; who has answered sits in two quiet lines under the
  * history.
  */
@@ -29,6 +30,7 @@ import { SectionHeading, StateLabel, fullNumber, type StateTone } from "./admin-
 import { NewsletterEditor } from "./newsletter-editor";
 import { AudienceField, audienceTail, filterLabels } from "./newsletter-audience";
 import { SchedulePicker, whenWords } from "./newsletter-schedule";
+import { PreviewDialog } from "./newsletter-preview";
 import { shortDate } from "../../lib/dates";
 import {
   EVERYONE,
@@ -38,6 +40,8 @@ import {
   type MarketingList,
   type NewsletterAudienceCount,
   type NewsletterAnswers,
+  type NewsletterDraft,
+  type NewsletterPreview,
   type NewsletterSendRow,
   type NewsletterSendState,
   type NewsletterSendStatus,
@@ -99,12 +103,17 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
   const toast = useToast();
   const [subject, setSubjectValue] = useState("");
   const [problems, setProblems] = useState<Problems>({});
-  const [busy, setBusy] = useState<"test" | "send" | "schedule" | null>(null);
+  const [busy, setBusy] = useState<"test" | "preview" | "send" | "schedule" | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const editorRef = useRef<Editor | null>(null);
   // One per composed issue, and the id of the send's workflow: sending the
   // same id twice (a double click, a retry) starts nothing new. A ref:
   // nothing shows it. Made on the first send and cleared after a success.
   const sendId = useRef<string | null>(null);
+  // What the last try sent. A try with anything else (subject, body,
+  // audience, time) gets a new id: the server answers an old id with the
+  // first try's state, so a retry after an edit would never send the edit.
+  const lastTry = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
 
   const setSubject = (value: string) => {
@@ -127,11 +136,15 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
     else if (found.body) editorRef.current?.commands.focus();
     return Object.keys(found).length === 0;
   };
-  /** Runs one send; true when it went. A failure is a toast. */
-  const run = async (kind: "test" | "send" | "schedule", send: () => Promise<string>) => {
+  /** Runs one request; true when it went. A failure is a toast. */
+  const run = async (
+    kind: "test" | "preview" | "send" | "schedule",
+    send: () => Promise<string | null>,
+  ) => {
     setBusy(kind);
     try {
-      toast(await send());
+      const said = await send();
+      if (said) toast(said);
       return true;
     } catch (error) {
       toast(errorMessage(error), "error");
@@ -148,43 +161,64 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
       return "Test sent to you";
     });
   };
+  const showPreview = async () => {
+    if (!check()) return;
+    await run("preview", async () => {
+      const { html } = await api<NewsletterPreview>("/admin/newsletter/preview", {
+        method: "POST",
+        body: payload(),
+      });
+      setPreview(html);
+      return null;
+    });
+  };
   /** Send now (no time) or Schedule. */
   const send = (scheduledFor?: number) =>
     run(scheduledFor ? "schedule" : "send", async () => {
+      const issue = { ...payload(), audience, ...(scheduledFor && { scheduledFor }) };
+      const tried = JSON.stringify(issue);
+      if (tried !== lastTry.current) sendId.current = null;
+      lastTry.current = tried;
       const state = await api<NewsletterSendState>("/admin/newsletter/send", {
         method: "POST",
-        body: {
-          ...payload(),
-          audience,
-          sendId: (sendId.current ??= crypto.randomUUID()),
-          ...(scheduledFor && { scheduledFor }),
-        },
+        body: { ...issue, sendId: (sendId.current ??= crypto.randomUUID()) },
       });
       await qc.invalidateQueries({ queryKey: ["admin", "newsletter"] });
       setSubjectValue("");
       editorRef.current?.commands.clearContent();
       sendId.current = null;
+      lastTry.current = null;
       return state.scheduledFor ? `Scheduled for ${whenWords(state.scheduledFor)}` : "Sending";
     });
 
-  /** A send to another list, or other filters, is another send: the next
-   * one gets a new id. */
-  const audienceChanged = () => {
+  /** Duplicate: a past send's subject and body, as a new send. */
+  const load = (draft: NewsletterDraft) => {
+    setSubjectValue(draft.subject);
+    editorRef.current?.commands.setContent(draft.doc);
+    setProblems({});
     sendId.current = null;
+    lastTry.current = null;
+    formRef.current?.querySelector<HTMLElement>('[name="subject"]')?.focus();
   };
+  /** Whether anything has been written yet. */
+  const isEmpty = () => !subject.trim() && !(editorRef.current?.getText() ?? "").trim();
 
   return {
     subject,
     problems,
     busy,
+    preview,
     editorRef,
     formRef,
     setSubject,
     bodyChanged,
     check,
     sendTest,
+    showPreview,
+    closePreview: () => setPreview(null),
     send,
-    audienceChanged,
+    load,
+    isEmpty,
   };
 }
 
@@ -244,8 +278,22 @@ function sendLine(send: NewsletterSendRow): string {
   }
 }
 
+/** A send that is over (sent, failed or cancelled) can be sent again as a
+ * copy. */
+const isOver = (status: NewsletterSendStatus) =>
+  status === "sent" || status === "failed" || status === "cancelled";
+
 /** Scheduled sends first, soonest first, then the rest, newest first. */
-function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
+function SendHistory({
+  sends,
+  onDuplicate,
+  duplicating,
+}: {
+  sends: NewsletterSendRow[];
+  onDuplicate: (send: NewsletterSendRow) => void;
+  /** The send whose copy is loading. */
+  duplicating: string | null;
+}) {
   const qc = useQueryClient();
   const toast = useToast();
   const cancel = useMutation({
@@ -300,6 +348,18 @@ function SendHistory({ sends }: { sends: NewsletterSendRow[] }) {
                   </BusyContent>
                 </Button>
               )}
+              {isOver(send.status) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="max-sm:ml-auto"
+                  disabled={duplicating !== null}
+                  aria-label={`Duplicate ${send.subject}`}
+                  onClick={() => onDuplicate(send)}
+                >
+                  <BusyContent busy={duplicating === send.id}>Duplicate</BusyContent>
+                </Button>
+              )}
             </li>
           ))}
         </ol>
@@ -346,6 +406,67 @@ function IssueFields({ composer }: { composer: ReturnType<typeof useComposer> })
   );
 }
 
+/** Duplicate in the history: fetches a send's issue and hands it to
+ * `load`, or holds it for a yes when something is already written. */
+function useDuplicate(load: (draft: NewsletterDraft) => void, isEmpty: () => boolean) {
+  const toast = useToast();
+  // The send being fetched, and a fetched copy waiting to replace the draft.
+  const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState<NewsletterDraft | null>(null);
+  const apply = (draft: NewsletterDraft) => {
+    load(draft);
+    setReplacing(null);
+    toast("Copied into the composer");
+  };
+  const duplicate = async (row: NewsletterSendRow) => {
+    setDuplicating(row.id);
+    try {
+      const draft = await api<NewsletterDraft>(`/admin/newsletter/sends/${row.id}`);
+      if (isEmpty()) apply(draft);
+      else setReplacing(draft);
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    } finally {
+      setDuplicating(null);
+    }
+  };
+  return {
+    duplicating,
+    replacing,
+    duplicate,
+    confirm: () => replacing && apply(replacing),
+    cancel: () => setReplacing(null),
+  };
+}
+
+/** Asks before a copy replaces what is already written. */
+function ReplaceDraftDialog({ copy }: { copy: ReturnType<typeof useDuplicate> }) {
+  return (
+    <ConfirmDialog
+      title="Replace the draft"
+      open={copy.replacing !== null}
+      onClose={copy.cancel}
+      onConfirm={copy.confirm}
+      confirmLabel="Replace"
+    >
+      <p>
+        This puts “{copy.replacing?.subject}” in place of the subject and message you have written.
+      </p>
+    </ConfirmDialog>
+  );
+}
+
+/** Why sending is off, naming what to set. */
+function SendingOff({ status }: { status: NewsletterStatus }) {
+  return (
+    <p className="text-sm text-muted">
+      {status.postalAddress
+        ? "Sending is off. Set NEWSLETTER_FROM and the email provider key first."
+        : "Sending is off. Set POSTAL_ADDRESS first: every newsletter must show a postal address."}
+    </p>
+  );
+}
+
 export function AdminNewsletterPage() {
   const status = useQuery(newsletterQuery).data;
   const [list, setList] = useState<MarketingList>("news");
@@ -353,29 +474,28 @@ export function AdminNewsletterPage() {
   const audience = useQuery(audienceQuery(list, filter));
   const count = audience.data?.count;
   const composer = useComposer(list, filter);
-  const { busy, check, sendTest, send, audienceChanged, formRef } = composer;
+  const { busy, check, sendTest, showPreview, send, formRef } = composer;
   const [confirming, setConfirming] = useState(false);
   const pickList = (next: MarketingList) => {
     if (next === list || busy !== null) return;
     setList(next);
-    audienceChanged();
   };
   const pickFilter = (next: AudienceFilter) => {
     if (busy !== null) return;
     setFilter(next);
-    audienceChanged();
   };
+  const copy = useDuplicate((draft) => {
+    setList(draft.list);
+    setFilter(draft.audience);
+    composer.load(draft);
+  }, composer.isEmpty);
   const locked = !status?.configured || busy !== null;
   const reach = count ?? 0;
 
   return (
     <div className="flex max-w-2xl flex-col gap-8">
       <SectionHeading>Newsletter</SectionHeading>
-      {status?.configured === false && (
-        <p className="text-sm text-muted">
-          Sending is off. Set NEWSLETTER_FROM and the email provider key first.
-        </p>
-      )}
+      {status?.configured === false && <SendingOff status={status} />}
       <form
         ref={formRef}
         noValidate
@@ -399,14 +519,14 @@ export function AdminNewsletterPage() {
         />
         <IssueFields composer={composer} />
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="ghost"
-            className="max-sm:w-full sm:-ml-2.5"
-            disabled={locked}
-            onClick={() => void sendTest()}
-          >
-            <BusyContent busy={busy === "test"}>Send test to me</BusyContent>
-          </Button>
+          <div className="flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:-ml-2.5">
+            <Button variant="ghost" disabled={busy !== null} onClick={() => void showPreview()}>
+              <BusyContent busy={busy === "preview"}>Preview</BusyContent>
+            </Button>
+            <Button variant="ghost" disabled={locked} onClick={() => void sendTest()}>
+              <BusyContent busy={busy === "test"}>Send test to me</BusyContent>
+            </Button>
+          </div>
           <div className="ml-auto flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1">
             <SchedulePicker
               disabled={locked}
@@ -435,7 +555,19 @@ export function AdminNewsletterPage() {
         </p>
       </ConfirmDialog>
 
-      <SendHistory sends={status?.sends ?? []} />
+      <PreviewDialog
+        html={composer.preview}
+        subject={composer.subject}
+        onClose={composer.closePreview}
+      />
+
+      <ReplaceDraftDialog copy={copy} />
+
+      <SendHistory
+        sends={status?.sends ?? []}
+        onDuplicate={(row) => void copy.duplicate(row)}
+        duplicating={copy.duplicating}
+      />
       {status && <Answers status={status} />}
     </div>
   );

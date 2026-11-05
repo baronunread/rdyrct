@@ -341,3 +341,27 @@ export async function optedInRecipients(
     .orderBy(asc(schema.user.id))
     .limit(limit);
 }
+
+/** Which of `ids` a send to `list`, narrowed by `filter`, still reaches:
+ * the check a frozen batch runs again just before it goes, so somebody who
+ * unsubscribed since it was picked is left out. */
+export async function stillReachable(
+  db: DB,
+  list: MarketingList,
+  ids: string[],
+  { filter = EVERYONE, now }: { filter?: AudienceFilter; now?: number },
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    // One bound JSON array rather than one parameter per id: D1 takes at
+    // most 100 parameters a query, and a batch is 100 people.
+    .where(
+      and(
+        reachable(list, filter, now),
+        sql`${schema.user.id} in (select value from json_each(${JSON.stringify(ids)}))`,
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
+}

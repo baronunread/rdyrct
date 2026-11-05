@@ -408,7 +408,11 @@ export const links = sqliteTable(
     // weekly rescan can find the links it has not seen lately.
     webRiskCheckedAt: integer("web_risk_checked_at"),
   },
-  (t) => [index("idx_links_org").on(t.orgId)],
+  (t) => [
+    index("idx_links_org").on(t.orgId),
+    // The newsletter stage filters (marketing.ts madeALink), migration 0053.
+    index("idx_links_created_by").on(t.createdBy),
+  ],
 );
 
 /**

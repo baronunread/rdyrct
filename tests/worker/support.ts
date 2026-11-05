@@ -706,9 +706,13 @@ export interface Posted {
 }
 
 /** Stands in for the provider's batch endpoint. `status` answers each call
- * by its index (from 0), so a test can fail one batch and not the others. */
+ * by its index (from 0), so a test can fail one batch and not the others.
+ * Like Resend, a key it has already delivered sends nothing again: the same
+ * body gets the first answer back, another body a 409. `calls` counts every
+ * request, repeats included. */
 export function captureBatches(status: (call: number) => number = () => 200) {
   const batches: { key: string | null; emails: Posted[] }[] = [];
+  const delivered = new Map<string, string>();
   let calls = 0;
   const original = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -720,12 +724,22 @@ export function captureBatches(status: (call: number) => number = () => 200) {
     const emails = JSON.parse(String(init?.body ?? "[]")) as Posted[];
     const answer = status(calls);
     calls += 1;
-    if (answer === 409) {
+    const key = headers.get("idempotency-key");
+    const body = String(init?.body ?? "");
+    const seen = key === null ? undefined : delivered.get(key);
+    if (answer === 409 || (seen !== undefined && seen !== body)) {
       return Response.json({ name: "invalid_idempotent_request" }, { status: 409 });
     }
     if (answer !== 200) return new Response("down", { status: answer });
-    batches.push({ key: headers.get("idempotency-key"), emails });
-    return Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) });
+    const ok = Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) });
+    if (seen !== undefined) return ok;
+    if (key !== null) delivered.set(key, body);
+    batches.push({ key, emails });
+    return ok;
   };
-  return { batches, restore: () => (globalThis.fetch = original) };
+  return {
+    batches,
+    calls: () => calls,
+    restore: () => (globalThis.fetch = original),
+  };
 }

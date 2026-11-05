@@ -213,6 +213,26 @@ describe("renderEmail unsubscribe slot", () => {
     const { html } = renderEmail({ ...base, unsubscribeUrl: "javascript:alert(1)" }, APP_URL, TO);
     expect(html.html).not.toContain("javascript:");
   });
+
+  test("prints the postal address under the link, in both parts", () => {
+    const postalAddress = "rdyrct, 1 Example <Street>, Rome";
+    const { html, text } = renderEmail(
+      { ...base, unsubscribeUrl: link, postalAddress },
+      APP_URL,
+      TO,
+    );
+    expect(html.html).toContain("rdyrct, 1 Example &lt;Street&gt;, Rome");
+    expect(html.html.indexOf("Example &lt;Street")).toBeGreaterThan(
+      html.html.indexOf("Unsubscribe</a>"),
+    );
+    expect(text).toContain(`Unsubscribe: ${link}\n${postalAddress}`);
+  });
+
+  test("leaves the postal address out of mail with no unsubscribe link", () => {
+    const { html, text } = renderEmail({ ...base, postalAddress: "1 Example Street" }, APP_URL, TO);
+    expect(html.html).not.toContain("1 Example Street");
+    expect(text).not.toContain("1 Example Street");
+  });
 });
 
 describe("renderEmail blocks slot", () => {
@@ -308,5 +328,49 @@ describe("renderEmail blocks slot", () => {
       "Big <script>alert(1)</script> Small one Hi bold it un docs (https://rdyrct.com/docs) and bad - one - two 3. third",
     );
     expect(blocksPreview(blocks, 20)).toBe("Big <script>alert(1…");
+  });
+});
+
+describe("renderEmail in Outlook", () => {
+  test("holds the card to 520px in a ghost table only Outlook reads", () => {
+    const { html } = renderEmail(base, APP_URL, TO);
+    expect(html.html).toContain(
+      `<!--[if mso]><table role="presentation" width="520" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->`,
+    );
+    expect(html.html).toContain("<!--[if mso]></td></tr></table><![endif]-->");
+    const opens = html.html.indexOf("<!--[if mso]><table");
+    const card = html.html.indexOf(`class="card"`);
+    const closes = html.html.indexOf("<!--[if mso]></td></tr></table>");
+    expect(opens).toBeLessThan(card);
+    expect(card).toBeLessThan(closes);
+  });
+
+  test("gives Outlook a VML button that is a link edge to edge, and hides the table one", () => {
+    const url = "https://rdyrct.com/x";
+    for (const hero of [
+      undefined,
+      { sample: { long: "https://a.example/long", short: "r.dy/a" } },
+    ]) {
+      const { html } = renderEmail(
+        { ...base, hero, cta: { label: "Open <it>", url } },
+        APP_URL,
+        TO,
+      );
+      expect(html.html).toMatch(
+        /<!--\[if mso\]><v:roundrect [^>]*href="https:\/\/rdyrct.com\/x"[^>]*>.*Open &lt;it&gt;<\/center><\/v:roundrect><!\[endif\]-->/,
+      );
+      expect(html.html).toMatch(
+        /<!--\[if !mso\]><!--><table[^]*class="cta-link"[^]*<!--<!\[endif\]-->/,
+      );
+    }
+  });
+
+  test("puts no VML in a JavaScript link", () => {
+    const { html } = renderEmail(
+      { ...base, cta: { label: "Go", url: "javascript:alert(1)" } },
+      APP_URL,
+      TO,
+    );
+    expect(html.html).not.toContain("javascript:");
   });
 });

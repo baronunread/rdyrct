@@ -15,7 +15,7 @@
  */
 import { createError } from "evlog";
 import { emailConfigured } from "./email";
-import { type EmailBlock, blocksPreview, renderEmail } from "./email-layout";
+import { type EmailBlock, type EmailBody, blocksPreview, renderEmail } from "./email-layout";
 import type { Env } from "./env";
 import { unsubscribeUrl } from "./marketing";
 import type { MarketingList } from "@/shared/types";
@@ -45,9 +45,10 @@ interface OutgoingEmail {
   headers: Record<string, string>;
 }
 
-/** Whether this instance may send newsletters: a provider and a sender. */
+/** Whether this instance may send newsletters: a provider, a sender and a
+ * postal address for the footer. */
 export function newsletterConfigured(env: Env): boolean {
-  return emailConfigured(env) && Boolean(env.NEWSLETTER_FROM);
+  return emailConfigured(env) && Boolean(env.NEWSLETTER_FROM) && Boolean(env.POSTAL_ADDRESS);
 }
 
 /** Why the reader gets it, in the footer: the list, by name. */
@@ -56,13 +57,13 @@ const FOOTER_LINE = {
   offers: "You get this because you opted in to offers from rdyrct.",
 } satisfies Record<MarketingList, string>;
 
-/** One person's copy: their own link in the footer and in the headers. */
-async function outgoing(
+/** One person's copy of the issue, both parts, with their own unsubscribe
+ * link: what a send posts, and what the composer's Preview shows. */
+export async function renderIssue(
   env: Env,
-  from: string,
   issue: Issue,
   to: Recipient,
-): Promise<OutgoingEmail> {
+): Promise<{ body: EmailBody; link: string }> {
   const link = await unsubscribeUrl(env, to.id, issue.list);
   const body = renderEmail(
     {
@@ -72,10 +73,22 @@ async function outgoing(
       blocks: issue.blocks,
       footerLine: FOOTER_LINE[issue.list],
       unsubscribeUrl: link,
+      postalAddress: env.POSTAL_ADDRESS,
     },
     env.APP_URL,
     to.email,
   );
+  return { body, link };
+}
+
+/** One person's copy: their own link in the footer and in the headers. */
+async function outgoing(
+  env: Env,
+  from: string,
+  issue: Issue,
+  to: Recipient,
+): Promise<OutgoingEmail> {
+  const { body, link } = await renderIssue(env, issue, to);
   return {
     from,
     to: [to.email],
@@ -126,6 +139,14 @@ async function postBatch(
 
 /** The sender, or a structured 409 when this instance cannot send. */
 export function newsletterSender(env: Env): string {
+  if (!env.POSTAL_ADDRESS) {
+    throw createError({
+      message: "Set POSTAL_ADDRESS before sending: every newsletter must show a postal address",
+      status: 409,
+      why: "POSTAL_ADDRESS is not set, and marketing mail must carry one (CAN-SPAM)",
+      fix: "Set POSTAL_ADDRESS in wrangler.jsonc to a street address or PO box",
+    });
+  }
   const from = env.NEWSLETTER_FROM;
   if (!from || !newsletterConfigured(env)) {
     throw createError({

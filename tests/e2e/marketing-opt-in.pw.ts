@@ -238,6 +238,19 @@ test.describe("marketing email opt-in", () => {
     await expect(editor.locator("strong")).toHaveText("big");
     await expect(editor.locator('a[href="https://rdyrct.com/docs"]')).toHaveText("docs");
 
+    // Preview: the email as the admin would get it, in both themes.
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    const preview = page.getByRole("dialog", { name: "Preview" });
+    const frame = preview.frameLocator("iframe");
+    await expect(frame.getByRole("heading", { name: subject })).toBeVisible();
+    await expect(frame.locator("strong")).toHaveText("big");
+    await expect(frame.getByRole("link", { name: "Unsubscribe" })).toBeVisible();
+    await preview.getByRole("button", { name: "Dark" }).click();
+    // The email's own dark theme: its page turns the dark background.
+    await expect(frame.locator("body")).toHaveCSS("background-color", "rgb(23, 21, 31)");
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+
     await page.getByRole("button", { name: "Send now" }).click();
     const confirm = page.getByRole("dialog", { name: "Send newsletter" });
     await expect(
@@ -254,6 +267,19 @@ test.describe("marketing email opt-in", () => {
     await expect(sendRow).toContainText(/Offers · New · Free · /);
     await expect(sendRow.getByText("Sent", { exact: true })).toBeVisible({ timeout: 30_000 });
 
+    // Duplicate: the sent issue back in the emptied composer, audience and all.
+    await expect(page.getByLabel("Subject")).toHaveValue("");
+    await sendRow.getByRole("button", { name: `Duplicate ${subject}` }).click();
+    await expect(page.getByLabel("Subject")).toHaveValue(subject);
+    await expect(editor.locator("h2")).toHaveText("Half off");
+    await expect(page.getByText("Offers · Free accounts with no link yet")).toBeVisible();
+    // With a draft written, Duplicate asks before it replaces it.
+    await page.getByLabel("Subject").fill("Something else");
+    await sendRow.getByRole("button", { name: `Duplicate ${subject}` }).click();
+    const replace = page.getByRole("dialog", { name: "Replace the draft" });
+    await replace.getByRole("button", { name: "Replace" }).click();
+    await expect(page.getByLabel("Subject")).toHaveValue(subject);
+
     const footer = "You get this because you opted in to offers from rdyrct.";
     const link = await unsubscribeLinkIn(page, offersReader, footer);
     await unsubscribeLinkIn(page, bothReader, footer);
@@ -266,9 +292,7 @@ test.describe("marketing email opt-in", () => {
     await page.context().clearCookies();
     const bothLink = await unsubscribeLinkIn(page, bothReader, footer);
     await page.goto(bothLink);
-    await expect(
-      page.getByRole("heading", { name: "Which emails do you want from rdyrct?" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stop rdyrct emails" })).toBeVisible();
     const newsBox = page.getByRole("checkbox", { name: /Product news/ });
     const offersBox = page.getByRole("checkbox", { name: /Offers/ });
     await expect(newsBox).toBeChecked();
@@ -280,10 +304,14 @@ test.describe("marketing email opt-in", () => {
     const kept = await consentOf(page, bothReader);
     expect(kept.offers).toBeNull();
     expect(kept.news).not.toBeNull();
-    // Back to the form: it shows what they chose.
-    await page.getByRole("link", { name: "Change which emails you get" }).click();
+    // Back to the form: offers is off, with no box to turn it back on here.
+    await page.getByRole("link", { name: "Stop more emails" }).click();
     await expect(newsBox).toBeChecked();
-    await expect(offersBox).not.toBeChecked();
+    await expect(offersBox).toHaveCount(0);
+    await expect(
+      page.getByText("To get it, turn it on in Settings after signing in."),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
 
     // The offers reader's link, Unsubscribe from all: off both lists.
     await page.goto(link);

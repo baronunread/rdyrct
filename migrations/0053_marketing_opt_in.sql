@@ -22,3 +22,7 @@ ALTER TABLE user ADD COLUMN news_opt_in_source TEXT CHECK (news_opt_in_source IN
 ALTER TABLE user ADD COLUMN offers_opt_in_at INTEGER;
 ALTER TABLE user ADD COLUMN offers_opt_in_source TEXT CHECK (offers_opt_in_source IN ('onboarding','prompt','settings'));
 ALTER TABLE user ADD COLUMN marketing_asked_at INTEGER;
+-- The newsletter's stage filters ask, per account, whether it has made a
+-- link (exists ... links.created_by = user.id, src/worker/marketing.ts).
+-- Without this index each of those reads scans every link.
+CREATE INDEX IF NOT EXISTS idx_links_created_by ON links(created_by);

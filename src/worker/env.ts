@@ -49,6 +49,11 @@ export interface Env {
   // reputation of the sign-in mail's MAIL_FROM. Unset, a newsletter send is
   // refused (newsletter.ts).
   NEWSLETTER_FROM?: string;
+  // var, e.g. "rdyrct, 1 Example Street, 00100 Rome, Italy". The sender's
+  // postal address, printed in the footer of every newsletter: the US
+  // CAN-SPAM Act requires one in marketing mail, and EU practice expects it.
+  // Unset, a newsletter send (and a test) is refused (newsletter.ts).
+  POSTAL_ADDRESS?: string;
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
 
