@@ -10,8 +10,26 @@ import { MarketingLink } from "./marketing-link";
 /** How long "Copied" stays after the last click. */
 const COPIED_MS = 2000;
 
+/** Width of the stub that holds the code; the notches sit on its edge. */
+const STUB_WIDTH = "9.5rem";
+
+/** A paper coupon's outline, cut with masks rather than drawn: a half-circle
+ * bite at each end of the perforation and a smaller one in each short side,
+ * so whatever sits behind the ticket shows through the holes. */
+const NOTCH = "transparent 9.5px, #000 10px";
+const END = "transparent 6.5px, #000 7px";
+const COUPON_CUTOUTS = {
+  maskImage: [
+    `radial-gradient(circle at calc(100% - ${STUB_WIDTH}) 0, ${NOTCH})`,
+    `radial-gradient(circle at calc(100% - ${STUB_WIDTH}) 100%, ${NOTCH})`,
+    `radial-gradient(circle at 0 50%, ${END})`,
+    `radial-gradient(circle at 100% 50%, ${END})`,
+  ].join(", "),
+  maskComposite: "intersect",
+} as const;
+
 /** The coupon: what it is worth on the left, the code and its Copy on the
- * right, split by a dashed rule. */
+ * stub at the right, past a dotted tear line. */
 function Ticket({
   code,
   copyRef,
@@ -45,14 +63,24 @@ function Ticket({
   };
 
   return (
-    <div className="flex items-stretch rounded-xl border border-dashed border-accent/50 bg-accent/[0.07]">
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-4 pr-3 pl-4">
-        <span className="text-2xl leading-tight font-bold text-text tabular-nums">20% off</span>
-        <span className="text-xs text-muted">first 3 months of Hobby or Pro</span>
+    <div
+      className="relative flex items-stretch rounded-xl bg-accent text-bg"
+      style={COUPON_CUTOUTS}
+    >
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-5 pr-4 pl-6">
+        <span className="text-[11px] font-semibold tracking-[0.18em] uppercase opacity-70">
+          Coupon
+        </span>
+        <span className="text-3xl leading-tight font-bold tabular-nums">20% off</span>
+        <span className="text-xs opacity-75">first 3 months of Hobby or Pro</span>
       </div>
-      <div aria-hidden className="my-3 border-l border-dashed border-accent/50" />
-      <div className="flex shrink-0 flex-col items-center justify-center gap-1.5 py-3 pr-3 pl-4">
-        <span className="font-mono text-base font-bold tracking-widest text-accent select-all">
+      {/* The perforation: a dotted tear line between the two notches. */}
+      <div aria-hidden className="my-3 w-0 border-l-2 border-dotted border-bg/35" />
+      <div
+        className="flex shrink-0 flex-col items-center justify-center gap-2 py-4 pr-6 pl-4"
+        style={{ width: STUB_WIDTH }}
+      >
+        <span className="rounded-md border border-dashed border-bg/40 px-2 py-1 font-mono text-base font-bold tracking-widest select-all">
           {code}
         </span>
         <Button ref={copyRef} size="sm" variant="outline" onClick={copyCode}>
