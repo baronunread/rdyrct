@@ -127,8 +127,8 @@ describe("POST /api/exit-offer", () => {
     const off = offerEnv({ EXIT_OFFER_CODE: undefined });
     expect((await requestCode({ email: "visitor@example.com" }, off)).status).toBe(404);
     const config = await fetchWorker(new Request("http://localhost/api/config"), off);
-    expect(await config.json()).toMatchObject({ exitOffer: false });
+    expect(await config.json()).toMatchObject({ exitOfferCode: null });
     const on = await fetchWorker(new Request("http://localhost/api/config"), offerEnv());
-    expect(await on.json()).toMatchObject({ exitOffer: true });
+    expect(await on.json()).toMatchObject({ exitOfferCode: "STAY20" });
   });
 });

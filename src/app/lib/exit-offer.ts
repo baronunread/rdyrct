@@ -1,12 +1,12 @@
 /**
  * The exit offer on rdyrct.com's marketing pages: when a visitor on a desktop
  * moves the pointer out through the top of the window, a card offers to
- * email a code for 20% off the first three months of Hobby or Pro.
+ * shows a code for 20% off the first three months of Hobby or Pro.
  *
  * The rules for showing it are one pure function, `exitOfferEligible`, so a
  * unit test can state each of them. The rest of the file is what this
  * browser remembers: when it last showed the card, and whether the visitor
- * said no or asked for the email.
+ * has answered it (no thanks, or took the code).
  */
 import * as v from "valibot";
 
@@ -52,7 +52,8 @@ const NEVER_ON = [
 const memorySchema = v.object({
   /** When it was last shown (epoch ms). */
   shownAt: v.number(),
-  /** The visitor said "No thanks" or asked for the email: never again. */
+  /** The visitor answered: "No thanks", "See plans", copied the code or had
+   * it emailed. Never again. */
   final: v.boolean(),
 });
 export type ExitOfferMemory = v.InferOutput<typeof memorySchema>;
@@ -64,7 +65,7 @@ export interface ExitOfferContext {
   finePointer: boolean;
   viewportWidth: number;
   signedIn: boolean;
-  /** The deployment runs the offer (`AppConfig.exitOffer`). */
+  /** The deployment runs the offer (`AppConfig.exitOfferCode`). */
   enabled: boolean;
   /** How long this page load has been open. */
   msOnSite: number;
@@ -124,8 +125,8 @@ export function rememberExitOfferShown(now: number = Date.now()) {
   remember({ shownAt: now, final: readExitOfferMemory()?.final ?? false });
 }
 
-/** "No thanks", or the email is on its way: never show it again in this
- * browser. */
+/** The visitor answered the card (no thanks, or took the code): never show
+ * it again in this browser. */
 export function rememberExitOfferFinal(now: number = Date.now()) {
   const memory = readExitOfferMemory();
   if (memory?.final) return;

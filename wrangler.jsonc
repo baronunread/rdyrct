@@ -103,7 +103,8 @@
     // paste the ids here.
     "POLAR_PRO_YEARLY_PRODUCT_ID": "69d9d016-8c57-4a0d-a9dd-acc492149462",
     "POLAR_HOBBY_YEARLY_PRODUCT_ID": "f96a3dde-4741-4f7c-a998-29e9adab1c81",
-    // The code the leaving popup emails. Make it in the Polar dashboard
+    // The code the leaving popup shows and emails (public: /api/config serves
+    // it). Make it in the Polar dashboard
     // first (20% off, repeating for 3 months, Hobby and Pro, with a code),
     // then set the code here. Unset, the popup never shows.
     // "EXIT_OFFER_CODE": "STAY20",

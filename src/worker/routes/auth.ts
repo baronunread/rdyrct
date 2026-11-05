@@ -159,6 +159,6 @@ userRoutes.get("/config", (c) => {
     // Only when the check is on: a lone site key would render a widget
     // whose token nobody checks.
     turnstileSiteKey: servedSiteKey(c.env),
-    exitOffer: exitOfferCode(c.env) !== null,
+    exitOfferCode: exitOfferCode(c.env),
   } satisfies AppConfig);
 });

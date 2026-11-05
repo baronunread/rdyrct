@@ -26,7 +26,7 @@ const signedIn = () => readAuthHint() || document.documentElement.dataset.auth =
  * exit offer's card once (lib/exit-offer.ts has the rules). Mounted only by
  * the marketing pages' layout (marketing-routes.tsx), which a self-hosted
  * build never bundles, so a fork has no card to show; and only when the
- * deployment runs the offer (`AppConfig.exitOffer`).
+ * deployment runs the offer (`AppConfig.exitOfferCode`).
  */
 export function ExitOffer() {
   // Armed once the visitor could be shown the card at all: a mouse, signed
@@ -34,7 +34,8 @@ export function ExitOffer() {
   // runs and fetch the card's chunk, so a phone or a signed-in visitor costs
   // nothing.
   const [armed, setArmed] = useState(false);
-  const enabled = useQuery({ ...configQuery, enabled: armed }).data?.exitOffer ?? false;
+  const code = useQuery({ ...configQuery, enabled: armed }).data?.exitOfferCode ?? null;
+  const enabled = code !== null;
   const [open, setOpen] = useState(false);
   // Mounted from the first show on, so the dialog can play its exit.
   const [mounted, setMounted] = useState(false);
@@ -72,23 +73,29 @@ export function ExitOffer() {
     return () => document.removeEventListener("mouseout", onLeave);
   }, [enabled]);
 
-  if (!mounted) return null;
+  if (!mounted || code === null) return null;
+  /** The visitor took the offer or turned it down: never again here. */
+  const answer = (event: string, props: { how?: string } = {}) => {
+    rememberExitOfferFinal();
+    posthog.capture(event, { path: location.pathname, ...props });
+  };
   return (
     <Suspense fallback={null}>
       <ExitOfferCard
         open={open}
-        onSent={() => {
-          // The card stays open on "Check your inbox"; this browser is done
-          // with the offer either way.
-          rememberExitOfferFinal();
-          posthog.capture("exit_offer_email_sent", { path: location.pathname });
-        }}
-        onDecline={() => {
-          rememberExitOfferFinal();
-          posthog.capture("exit_offer_dismissed", { path: location.pathname, how: "no_thanks" });
+        code={code}
+        // The card stays open on "Copied", so the visitor can still read it.
+        onCopied={() => answer("exit_offer_code_copied")}
+        onAccepted={() => {
+          answer("exit_offer_accepted");
           setOpen(false);
         }}
-        onDone={() => setOpen(false)}
+        // The card stays open on "Sent to …".
+        onSent={() => answer("exit_offer_email_sent")}
+        onDecline={() => {
+          answer("exit_offer_dismissed", { how: "no_thanks" });
+          setOpen(false);
+        }}
         onDismiss={() => {
           posthog.capture("exit_offer_dismissed", { path: location.pathname, how: "closed" });
           setOpen(false);

@@ -93,7 +93,7 @@ describe.runIf(!RDYRCT_SITE)("a self-hosted build", () => {
     );
     expect(res.status).toBe(404);
     const config = await fetchWorker(new Request("http://localhost/api/config"), withCode);
-    expect(await config.json()).toMatchObject({ exitOffer: false });
+    expect(await config.json()).toMatchObject({ exitOfferCode: null });
   });
 
   it("describes no page as rdyrct.com's: every tab carries the copy's own name", async () => {
