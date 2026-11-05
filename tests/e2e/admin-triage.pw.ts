@@ -217,6 +217,28 @@ test("the plan column is the plan, plus a badge only when billing has news", asy
   await expect(adminRow.getByText(/cancels|past due|comped/)).toHaveCount(0);
 });
 
+test("another platform admin's row offers neither ban nor delete", async ({ page, browser }) => {
+  const admin = `admin-self-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, admin, password);
+  await makePlatformAdmin(page, admin);
+
+  // A second platform admin, in its own context so the signed-in admin stays.
+  const otherAdmin = `admin-other-${Date.now()}@gmail.com`;
+  const other = await (await browser.newContext()).newPage();
+  await signUpAndVerify(other, otherAdmin, password);
+  await makePlatformAdmin(page, otherAdmin);
+
+  await page.goto("/admin/users");
+  const row = page.getByRole("row").filter({ hasText: otherAdmin });
+  await row.getByRole("button", { name: /^Actions for / }).click();
+
+  // The server refuses both on an admin; the menu must not offer them.
+  await expect(page.getByRole("menuitem", { name: "Delete user" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Ban user" })).toHaveCount(0);
+  // The role change is how an admin loses the role.
+  await expect(page.getByRole("menuitem", { name: "Remove platform admin" })).toBeVisible();
+});
+
 test("deleting a user deletes the organizations they own", async ({ page, browser }) => {
   const victimEmail = `victim-${Date.now()}@gmail.com`;
   const destination = `https://victim-${Date.now()}.example/page`;
