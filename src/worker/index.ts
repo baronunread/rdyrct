@@ -10,7 +10,6 @@ import { trimTrailingSlash } from "hono/trailing-slash";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
-import { exitOfferRoutes } from "./routes/exit-offer";
 import { getAuth } from "./better-auth";
 import { withBackground } from "./background";
 import { userRoutes } from "./routes/auth";
@@ -372,10 +371,6 @@ app.on(
 // than by a session. Only rdyrct.com has that landing page, so only
 // rdyrct.com takes links from strangers.
 if (RDYRCT_SITE) app.route("/api/shorten", shortenRoutes);
-
-// The leaving popup's "email me the code" (routes/exit-offer.ts): the
-// popup lives on rdyrct.com's marketing pages, so only that build answers.
-if (RDYRCT_SITE) app.route("/api/exit-offer", exitOfferRoutes);
 
 // Abuse reports from anyone, gated the same way (Turnstile plus a rate limit).
 app.route("/api/reports", reportRoutes);

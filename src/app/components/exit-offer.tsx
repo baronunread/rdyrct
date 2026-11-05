@@ -90,8 +90,6 @@ export function ExitOffer() {
           answer("exit_offer_accepted");
           setOpen(false);
         }}
-        // The card stays open on "Sent to …".
-        onSent={() => answer("exit_offer_email_sent")}
         onDecline={() => {
           answer("exit_offer_dismissed", { how: "no_thanks" });
           setOpen(false);

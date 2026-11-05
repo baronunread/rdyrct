@@ -99,7 +99,7 @@ describe("how often", () => {
     expect(show({ memory: { shownAt: NOW - EXIT_OFFER_COOLDOWN_MS, final: false } })).toBe(true);
   });
 
-  test("never again once answered: No thanks, See plans, Copy or the email", () => {
+  test("never again once answered: No thanks, See plans or Copy", () => {
     expect(show({ memory: { shownAt: NOW - 2 * EXIT_OFFER_COOLDOWN_MS, final: true } })).toBe(
       false,
     );

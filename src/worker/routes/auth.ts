@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { exitOfferCode } from "./exit-offer";
 import { planNow } from "../plan";
 import { emailConfigured } from "../email";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
-import type { AppEnv } from "../env";
+import type { AppEnv, Env } from "../env";
+import { RDYRCT_SITE } from "@/shared/site";
 import { sharedLinkHost } from "../util";
 import { servedSiteKey } from "../turnstile";
 import { requireUser } from "../guards";
@@ -145,6 +145,13 @@ userRoutes.put("/user/marketing", requireUser, async (c) => {
   });
   return c.json(state);
 });
+
+/** The leaving popup’s discount code (components/exit-offer.tsx shows it),
+ * or null when this deployment makes no offer: a self-hosted build, or
+ * EXIT_OFFER_CODE unset. */
+function exitOfferCode(env: Env): string | null {
+  return (RDYRCT_SITE && env.EXIT_OFFER_CODE?.trim()) || null;
+}
 
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup
 // instructions for custom domains, and linkHost for shared-domain links).

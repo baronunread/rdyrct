@@ -83,15 +83,6 @@ describe.runIf(!RDYRCT_SITE)("a self-hosted build", () => {
 
   it("has no leaving popup, even with EXIT_OFFER_CODE set", async () => {
     const withCode = overrideEnv({ EXIT_OFFER_CODE: "STAY20" });
-    const res = await fetchWorker(
-      new Request("http://localhost/api/exit-offer", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "visitor@example.com" }),
-      }),
-      withCode,
-    );
-    expect(res.status).toBe(404);
     const config = await fetchWorker(new Request("http://localhost/api/config"), withCode);
     expect(await config.json()).toMatchObject({ exitOfferCode: null });
   });

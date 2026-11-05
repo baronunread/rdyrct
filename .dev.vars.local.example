@@ -31,7 +31,7 @@ POLAR_HOBBY_PRODUCT_ID=replace_me
 POLAR_PRO_YEARLY_PRODUCT_ID=replace_me
 POLAR_HOBBY_YEARLY_PRODUCT_ID=replace_me
 POLAR_SERVER=sandbox
-# The Polar discount code the leaving popup emails (rdyrct.com builds only).
+# The Polar discount code the leaving popup shows (rdyrct.com builds only).
 # Make it in the sandbox dashboard first. Unset, the popup never shows.
 # EXIT_OFFER_CODE=STAY20
 

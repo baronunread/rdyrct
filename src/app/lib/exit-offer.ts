@@ -1,7 +1,7 @@
 /**
  * The exit offer on rdyrct.com's marketing pages: when a visitor on a desktop
- * moves the pointer out through the top of the window, a card offers to
- * shows a code for 20% off the first three months of Hobby or Pro.
+ * moves the pointer out through the top of the window, a card shows a
+ * code for 20% off the first three months of Hobby or Pro.
  *
  * The rules for showing it are one pure function, `exitOfferEligible`, so a
  * unit test can state each of them. The rest of the file is what this
@@ -52,8 +52,8 @@ const NEVER_ON = [
 const memorySchema = v.object({
   /** When it was last shown (epoch ms). */
   shownAt: v.number(),
-  /** The visitor answered: "No thanks", "See plans", copied the code or had
-   * it emailed. Never again. */
+  /** The visitor answered: "No thanks", "See plans", or copied the code.
+   * Never again. */
   final: v.boolean(),
 });
 export type ExitOfferMemory = v.InferOutput<typeof memorySchema>;

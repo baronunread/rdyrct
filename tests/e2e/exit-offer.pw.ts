@@ -1,16 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
-import { latestMailTextTo, signUpAndVerify } from "./resend";
+import { signUpAndVerify } from "./resend";
 
 /**
  * The exit offer (lib/exit-offer.ts): a signed-out desktop visitor who has
  * been on a marketing page ten seconds and moves the pointer out through the
  * top gets a card showing the Polar discount code (EXIT_OFFER_CODE, set for
  * this run in wrangler.jsonc's playwright env, served by /api/config), with
- * Copy, "See plans", and a way to have the code emailed. A phone and a
- * signed-in visitor never see the card.
+ * Copy, "See plans" and "No thanks". It never asks for an email address. A
+ * phone and a signed-in visitor never see the card.
  *
  * The page clock is installed so the ten seconds pass at once, then resumed
- * so Turnstile and the request run in real time.
+ * so the card runs in real time.
  */
 
 const CODE = "PLAYWRIGHT20";
@@ -105,33 +105,11 @@ test("See plans opens the pricing page", async ({ page }) => {
   await expectNoCardAfterReload(page);
 });
 
-test("the code can also go by email", async ({ page }) => {
+test("the card asks for no email address", async ({ page }) => {
   await openCard(page);
-
-  // Nothing typed: the field is marked, nothing is sent.
-  const field = card(page).getByRole("textbox", { name: /^Or get it by email/ });
-  await card(page).getByRole("button", { name: "Email me the code" }).click();
-  await expect(field).toHaveAttribute("aria-invalid", "true");
-  await expect(card(page)).toContainText("Required");
-  await expect(field).toBeFocused();
-
-  const email = `exit-offer-${Date.now()}@gmail.com`;
-  await field.fill(email);
-  await expect(field).not.toHaveAttribute("aria-invalid", "true");
-  await card(page).getByRole("button", { name: "Email me the code" }).click();
-  await expect(card(page)).toContainText(`Sent to ${email}.`, { timeout: 30_000 });
-  await expect(field).toHaveCount(0);
-
-  await expect
-    .poll(async () => (await latestMailTextTo(page, email)) ?? "", { timeout: 15_000 })
-    .toContain(CODE);
-  const text = (await latestMailTextTo(page, email)) ?? "";
-  expect(text).toContain("Use this code at checkout for 20% off your first 3 months");
-  expect(text).toMatch(/\/pricing/);
-
-  // Asked for: the card never comes back in this browser.
-  await card(page).getByRole("button", { name: "Close" }).click();
-  await expectNoCardAfterReload(page);
+  await expect(card(page).getByRole("textbox")).toHaveCount(0);
+  await expect(card(page)).not.toContainText(/email/i);
+  await expect(card(page).getByRole("button", { name: "No thanks" })).toBeVisible();
 });
 
 test("No thanks puts it away for good", async ({ page }) => {

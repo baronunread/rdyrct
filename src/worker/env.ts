@@ -74,7 +74,7 @@ export interface Env {
   POLAR_PRO_YEARLY_PRODUCT_ID?: string; // var, yearly (10% off)
   POLAR_HOBBY_YEARLY_PRODUCT_ID?: string; // var, yearly (10% off)
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
-  // var, rdyrct.com only: the Polar discount code the leaving popup emails
+  // var, rdyrct.com only: the Polar discount code the leaving popup shows
   // (made by hand in Polar's dashboard). Unset, the popup never shows.
   EXIT_OFFER_CODE?: string;
   /* the checkout/portal client, injected by tests; unset everywhere else,
