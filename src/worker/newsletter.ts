@@ -47,10 +47,9 @@ interface OutgoingEmail {
   headers: Record<string, string>;
 }
 
-/** Whether this instance may send newsletters: a provider, a sender and a
- * postal address for the footer. */
+/** Whether this instance may send newsletters: a provider and a sender. */
 export function newsletterConfigured(env: Env): boolean {
-  return emailConfigured(env) && Boolean(env.NEWSLETTER_FROM) && Boolean(env.POSTAL_ADDRESS);
+  return emailConfigured(env) && Boolean(env.NEWSLETTER_FROM);
 }
 
 /** Why the reader gets it, in the footer: the list, by name. */
@@ -143,14 +142,6 @@ async function postBatch(
 
 /** The sender, or a structured 409 when this instance cannot send. */
 export function newsletterSender(env: Env): string {
-  if (!env.POSTAL_ADDRESS) {
-    throw createError({
-      message: "Set POSTAL_ADDRESS before sending: every newsletter must show a postal address",
-      status: 409,
-      why: "POSTAL_ADDRESS is not set, and marketing mail must carry one (CAN-SPAM)",
-      fix: "Set POSTAL_ADDRESS in wrangler.jsonc to a street address or PO box",
-    });
-  }
   const from = env.NEWSLETTER_FROM;
   if (!from || !newsletterConfigured(env)) {
     throw createError({

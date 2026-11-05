@@ -457,12 +457,10 @@ function ReplaceDraftDialog({ copy }: { copy: ReturnType<typeof useDuplicate> })
 }
 
 /** Why sending is off, naming what to set. */
-function SendingOff({ status }: { status: NewsletterStatus }) {
+function SendingOff() {
   return (
     <p className="text-sm text-muted">
-      {status.postalAddress
-        ? "Sending is off. Set NEWSLETTER_FROM and the email provider key first."
-        : "Sending is off. Set POSTAL_ADDRESS first: every newsletter must show a postal address."}
+      Sending is off. Set NEWSLETTER_FROM and the email provider key first.
     </p>
   );
 }
@@ -495,7 +493,7 @@ export function AdminNewsletterPage() {
   return (
     <div className="flex max-w-2xl flex-col gap-8">
       <SectionHeading>Newsletter</SectionHeading>
-      {status?.configured === false && <SendingOff status={status} />}
+      {status?.configured === false && <SendingOff />}
       <form
         ref={formRef}
         noValidate

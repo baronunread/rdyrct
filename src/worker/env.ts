@@ -52,10 +52,10 @@ export interface Env {
   // var, optional: where replies to a newsletter go. The sending subdomain
   // has no inbox, so without it a reply bounces.
   NEWSLETTER_REPLY_TO?: string;
-  // var, e.g. "rdyrct, 1 Example Street, 00100 Rome, Italy". The sender's
-  // postal address, printed in the footer of every newsletter: the US
-  // CAN-SPAM Act requires one in marketing mail, and EU practice expects it.
-  // Unset, a newsletter send (and a test) is refused (newsletter.ts).
+  // var, optional, e.g. "rdyrct, 1 Example Street, 00100 Rome, Italy". When
+  // set, every newsletter footer prints it under the unsubscribe link (the US
+  // CAN-SPAM Act asks for one when mailing US recipients). Unset, the footer
+  // has no address and sending works the same.
   POSTAL_ADDRESS?: string;
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator

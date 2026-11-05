@@ -866,38 +866,32 @@ describe("sending a newsletter", () => {
     mail.restore();
   });
 
-  it("refuses sends and tests while POSTAL_ADDRESS is unset, and prints it when set", async () => {
+  it("sends without POSTAL_ADDRESS, and prints it when set", async () => {
     const mail = captureBatches();
     const cookie = await adminCookie();
     await env.DB.batch([seedUser("yes-1", 5)]);
     const unset = overrideEnv({ ...authEnv(), POSTAL_ADDRESS: undefined });
-    const call = (path: string, body?: JsonValue) =>
-      fetchWorker(
-        new Request(`http://localhost/api/admin/newsletter${path}`, {
-          method: body === undefined ? "GET" : "POST",
-          headers: { cookie, "content-type": "application/json" },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        }),
-        unset,
-      );
-    for (const res of [
-      await call("/test", issue),
-      await call("/send", { ...issue, sendId: "send-addr" }),
-    ]) {
-      expect(res.status).toBe(409);
-      expect((await jsonBody<{ message: string }>(res)).message).toContain("POSTAL_ADDRESS");
-    }
-    expect(await jsonBody(await call(""))).toMatchObject({
-      configured: false,
-      postalAddress: false,
-    });
-    expect(await sendRow("send-addr")).toBeNull();
-    expect(mail.batches).toHaveLength(0);
-
-    await sendNow(cookie, { ...issue, sendId: "send-addr" });
-    const [email] = mail.batches.flatMap((b) => b.emails);
+    const status = await fetchWorker(
+      new Request("http://localhost/api/admin/newsletter", { headers: { cookie } }),
+      unset,
+    );
+    expect(await jsonBody(status)).toMatchObject({ configured: true });
+    const test = await fetchWorker(
+      new Request("http://localhost/api/admin/newsletter/test", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(issue),
+      }),
+      unset,
+    );
+    expect(test.status).toBe(200);
+    const [plain] = mail.batches.flatMap((b) => b.emails);
     const address = authEnv().POSTAL_ADDRESS ?? "";
     expect(address).not.toBe("");
+    expect(plain?.html).not.toContain(address);
+
+    await sendNow(cookie, { ...issue, sendId: "send-addr" });
+    const email = mail.batches.flatMap((b) => b.emails).at(-1);
     expect(email?.html).toContain(address);
     expect(email?.text).toContain(address);
     mail.restore();

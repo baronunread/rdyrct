@@ -359,7 +359,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `src/worker/newsletter.ts`: the only file that knows the provider
   (Resend's batch endpoint, plain `fetch`, `RESEND_BASE_URL`; no list is kept
   there). It sends from `NEWSLETTER_FROM`, a subdomain sender, and refuses
-  when that or `POSTAL_ADDRESS` (printed in every footer) is unset. Every
+  when that is unset. `POSTAL_ADDRESS`, if set, goes in every footer. Every
   email has its own unsubscribe link in the footer
   and the RFC 8058 one-click headers, and its footer names the list. The
   link is `/unsubscribe?t=`, a Worker page (`unsubscribe.ts`, in self-hosted
@@ -477,8 +477,8 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` (optional; unset switches the
 check off), `NEWSLETTER_FROM` (a var on its own sending subdomain; unset refuses
 newsletter sends), `NEWSLETTER_REPLY_TO` (a var, optional: a real inbox for
-replies, since the sending subdomain has none), `POSTAL_ADDRESS` (a var, the postal address every
-newsletter footer carries for CAN-SPAM; unset refuses newsletter sends), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
+replies, since the sending subdomain has none), `POSTAL_ADDRESS` (a var, optional: a postal address
+for every newsletter footer; unset, the footer has none), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
 Web Risk).
 
 ## Layout

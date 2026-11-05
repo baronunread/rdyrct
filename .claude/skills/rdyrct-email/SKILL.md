@@ -87,10 +87,10 @@ How it is sent:
   `newsletter.ts` is the only file that knows the provider. Switching provider
   means rewriting its `postBatch` and `emailConfigured()` in `email.ts`.
 - The sender is `NEWSLETTER_FROM`, on a subdomain of its own, so a marketing
-  complaint cannot reach the reputation of sign-in mail. Every newsletter
-  footer carries `POSTAL_ADDRESS` under the unsubscribe link, in both parts
-  (CAN-SPAM). Either unset, a send or a test is refused with a 409 that
-  names it.
+  complaint cannot reach the reputation of sign-in mail. Unset, a send or a
+  test is refused with a 409 that names it. `POSTAL_ADDRESS` is optional:
+  when set, every newsletter footer prints it under the unsubscribe link, in
+  both parts.
 - Every email is rendered per person with `renderEmail()` and
   `unsubscribeUrl`: the link shows in the footer of both parts, and the
   `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`

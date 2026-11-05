@@ -377,11 +377,9 @@ export interface NewsletterStatus {
   answers: Record<MarketingList, NewsletterAnswers>;
   /** Newest first, at most NEWSLETTER_HISTORY of them. */
   sends: NewsletterSendRow[];
-  /** NEWSLETTER_FROM, the provider and POSTAL_ADDRESS are all set. Without
-   * them a send is refused. */
+  /** NEWSLETTER_FROM and the provider are set. Without them a send is
+   * refused. */
   configured: boolean;
-  /** POSTAL_ADDRESS is set, so the page can name what is missing. */
-  postalAddress: boolean;
 }
 
 /** An account's answer about one list, as one word. */

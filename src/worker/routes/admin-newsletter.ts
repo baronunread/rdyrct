@@ -137,7 +137,6 @@ adminNewsletterRoutes.get("/", async (c) => {
     answers,
     sends,
     configured: newsletterConfigured(c.env),
-    postalAddress: Boolean(c.env.POSTAL_ADDRESS),
   };
   return c.json(status);
 });
