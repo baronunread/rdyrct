@@ -119,10 +119,14 @@ async function recipientKey(request: Request, secret: string): Promise<string | 
     return null;
   }
   const { email } = parseOptionalBody(recipientBodySchema, parsed);
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) return null;
-  return keyedDigest(secret, normalized);
+  return email.trim() ? recipientDigest(secret, email) : null;
 }
+
+/** One address as a keyed digest: the same for "A@x.com" and " a@x.com".
+ * The recipient budget keys on it, and so does the exit offer's 30-day
+ * memory (routes/exit-offer.ts), so neither stores the address. */
+export const recipientDigest = (secret: string, email: string) =>
+  keyedDigest(secret, email.trim().toLowerCase());
 
 export function publicAuthGroup(path: string): "auth" | "email" | null {
   if (EMAIL_AUTH_PATHS.has(path)) return "email";

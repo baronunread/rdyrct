@@ -19,7 +19,7 @@ import { configQuery, useConfig } from "./hooks";
 import { currentTheme } from "./theme";
 import { retryOnTurnstileFailure } from "./turnstile-retry";
 
-export type TurnstileScope = "signup" | "password-reset" | "anon-link" | "report";
+export type TurnstileScope = "signup" | "password-reset" | "anon-link" | "report" | "exit-offer";
 
 /** Runs a Turnstile-guarded request, re-solving once if the token is refused. */
 export type TurnstileGuard = <T>(

@@ -242,6 +242,7 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     ...checkoutReturn(c.env.APP_URL, from, plan, interval),
     customer_email: user.email,
     metadata: { userId: user.id },
+    allow_discount_codes: true,
   });
   log.audit({
     action: "billing.checkout",

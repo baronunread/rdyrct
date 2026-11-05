@@ -527,6 +527,9 @@ export interface AppConfig {
   googleEnabled: boolean;
   /** Turnstile site key, public by design. Absent: no check on this instance. */
   turnstileSiteKey?: string;
+  /** Whether the leaving popup runs (EXIT_OFFER_CODE is set on rdyrct.com).
+   * Off, the marketing pages never show it. */
+  exitOffer: boolean;
 }
 
 /** The org's fresh link-quota count, plus when it was read. The timestamp

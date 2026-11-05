@@ -1,0 +1,130 @@
+import { expect, test, type Page } from "@playwright/test";
+import { latestMailTextTo, signUpAndVerify } from "./resend";
+
+/**
+ * The exit offer (lib/exit-offer.ts): a signed-out desktop visitor who has
+ * been on a marketing page ten seconds and moves the pointer out through the
+ * top gets a card asking for an email address, and the email carries the
+ * Polar discount code (EXIT_OFFER_CODE, set for this run in wrangler.jsonc's
+ * playwright env). A phone and a signed-in visitor never see the card.
+ *
+ * The page clock is installed so the ten seconds pass at once, then resumed
+ * so Turnstile and the request run in real time.
+ */
+
+const CODE = "PLAYWRIGHT20";
+
+const card = (page: Page) => page.getByRole("dialog", { name: /Before you go/ });
+
+/** A desktop window on `path`, with a clock the test can move. */
+async function openOnDesktop(page: Page, path: string) {
+  await page.clock.install();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(path);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+}
+
+/** The pointer goes up and out past the top edge. The browser then reports a
+ * mouseout with no element to go to; sent by hand, because the pointer
+ * cannot leave a headless viewport. */
+async function pointerOutOfTop(page: Page) {
+  await page.mouse.move(640, 200);
+  await page.mouse.move(640, 5, { steps: 4 });
+  await page.evaluate(() =>
+    document.documentElement.dispatchEvent(
+      new MouseEvent("mouseout", { bubbles: true, clientX: 640, clientY: -1, relatedTarget: null }),
+    ),
+  );
+}
+
+/** Ten seconds on the page, then out through the top of the window. */
+async function leaveThroughTop(page: Page) {
+  await page.clock.fastForward(11_000);
+  await pointerOutOfTop(page);
+}
+
+/** Leaves the page as above and checks no card came up. */
+async function expectNoCard(page: Page) {
+  await leaveThroughTop(page);
+  await expect(card(page)).toHaveCount(0);
+}
+
+test("a leaving visitor gets the discount code by email", async ({ page }) => {
+  await openOnDesktop(page, "/");
+
+  // Not in the first ten seconds.
+  await pointerOutOfTop(page);
+  await expect(card(page)).toHaveCount(0);
+
+  await leaveThroughTop(page);
+  await expect(card(page)).toBeVisible();
+  await page.clock.resume();
+  await expect(card(page)).toContainText("20% off your first 3 months of Hobby or Pro");
+  await expect(card(page).getByRole("checkbox")).toHaveCount(0);
+
+  // Nothing typed: the field is marked, nothing is sent.
+  const field = card(page).getByRole("textbox", { name: /^Email/ });
+  await card(page).getByRole("button", { name: "Email me the code" }).click();
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(card(page)).toContainText("Required");
+  await expect(field).toBeFocused();
+
+  const email = `exit-offer-${Date.now()}@gmail.com`;
+  await field.fill(email);
+  await expect(field).not.toHaveAttribute("aria-invalid", "true");
+  await card(page).getByRole("button", { name: "Email me the code" }).click();
+  const sent = page.getByRole("dialog", { name: "Check your inbox" });
+  await expect(sent).toBeVisible({ timeout: 30_000 });
+  await expect(sent).toContainText(email);
+
+  await expect
+    .poll(async () => (await latestMailTextTo(page, email)) ?? "", { timeout: 15_000 })
+    .toContain(CODE);
+  const text = (await latestMailTextTo(page, email)) ?? "";
+  expect(text).toContain("Use this code at checkout for 20% off your first 3 months");
+  expect(text).toMatch(/\/pricing/);
+
+  // Asked for: the card never comes back in this browser.
+  await sent.getByRole("button", { name: "Done" }).click();
+  await page.clock.install();
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expectNoCard(page);
+});
+
+test("No thanks puts it away for good", async ({ page }) => {
+  await openOnDesktop(page, "/pricing");
+  await leaveThroughTop(page);
+  await card(page).getByRole("button", { name: "No thanks" }).click();
+  // Not the card's fade: it runs on the page clock this test holds still.
+  // What the answer leaves behind is the part that matters.
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("rdyrct:exit-offer:v1")))
+    .toContain('"final":true');
+
+  // Even past the 30 days a dismissal would wait.
+  await page.evaluate(() => {
+    const raw = localStorage.getItem("rdyrct:exit-offer:v1") ?? "{}";
+    const memory: { shownAt: number; final: boolean } = JSON.parse(raw);
+    localStorage.setItem("rdyrct:exit-offer:v1", JSON.stringify({ ...memory, shownAt: 0 }));
+  });
+  await page.reload();
+  await expectNoCard(page);
+});
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("never shows", async ({ page }) => {
+    await page.clock.install();
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expectNoCard(page);
+  });
+});
+
+test("never shows to a signed-in visitor", async ({ page }) => {
+  await signUpAndVerify(page, `exit-offer-in-${Date.now()}@gmail.com`, "test-password-123");
+  await openOnDesktop(page, "/");
+  await expectNoCard(page);
+});

@@ -12,7 +12,7 @@ import { logFailure } from "./log-failure";
 
 /** Binds the widget to the form it was rendered for: siteverify echoes the
  * `action` back, so a token earned on one form cannot open another. */
-export type TurnstileScope = "signup" | "password-reset" | "anon-link" | "report";
+export type TurnstileScope = "signup" | "password-reset" | "anon-link" | "report" | "exit-offer";
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 

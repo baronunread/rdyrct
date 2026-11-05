@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { exitOfferCode } from "./exit-offer";
 import { planNow } from "../plan";
 import { emailConfigured } from "../email";
 import { and, eq } from "drizzle-orm";
@@ -158,5 +159,6 @@ userRoutes.get("/config", (c) => {
     // Only when the check is on: a lone site key would render a widget
     // whose token nobody checks.
     turnstileSiteKey: servedSiteKey(c.env),
+    exitOffer: exitOfferCode(c.env) !== null,
   } satisfies AppConfig);
 });
