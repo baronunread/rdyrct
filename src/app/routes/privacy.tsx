@@ -53,7 +53,9 @@ export function PrivacyPage() {
           browser&apos;s memory: accepting sends them, with the time they happened; rejecting or
           leaving the page discards them. We also use Sentry to receive technical error reports from
           the app. These reports include technical diagnostic data such as the error, browser, and
-          page path. We remove page query strings before sending them.
+          page path. We remove page query strings before sending them. If you choose to get product
+          news or offers by email, we record which lists you joined, when, and where you said so
+          (while setting up your account, in the app, or in Settings).
         </p>
       </section>
 
@@ -74,7 +76,9 @@ export function PrivacyPage() {
           When you sign up, reset a password, shorten a link from the home page, build a UTM link,
           or report a link, Cloudflare Turnstile reads signals from your browser and connection to
           check that a person, not a script, sent the form. We use it for our legitimate interest in
-          keeping automated sign-ups and abuse off the service.
+          keeping automated sign-ups and abuse off the service. We send product news and offers only
+          to people who asked for them (consent). Every such email has a link that unsubscribes you
+          at once, and Settings lets you turn each list on or off at any time.
         </p>
       </section>
 
@@ -98,14 +102,15 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Sub-processors</h2>
         <p className="text-muted">
           We rely on a small number of sub-processors to run the service: Cloudflare (hosting, the
-          D1 database, KV storage, and the Turnstile check on forms), Resend (transactional email),
-          Polar (billing, acting as merchant of record), PostHog, EU region (product usage
-          analytics), Sentry (technical error monitoring), and Google (Web Risk). Google receives
-          the destination address of a link when the link is created or edited, when we check it
-          again each week, and when its traffic jumps, and checks it against Google&apos;s list of
-          unsafe sites. It receives nothing about you or the people who click the link. Some may
-          process data outside the EU/EEA; where they do, transfers are covered by the appropriate
-          safeguards, such as the EU Standard Contractual Clauses.
+          D1 database, KV storage, and the Turnstile check on forms), Resend (account email, and
+          product news or offers if you asked for them), Polar (billing, acting as merchant of
+          record), PostHog, EU region (product usage analytics), Sentry (technical error
+          monitoring), and Google (Web Risk). Google receives the destination address of a link when
+          the link is created or edited, when we check it again each week, and when its traffic
+          jumps, and checks it against Google&apos;s list of unsafe sites. It receives nothing about
+          you or the people who click the link. Some may process data outside the EU/EEA; where they
+          do, transfers are covered by the appropriate safeguards, such as the EU Standard
+          Contractual Clauses.
         </p>
       </section>
 
@@ -114,9 +119,10 @@ export function PrivacyPage() {
         <p className="text-muted">
           We retain account and organization data for as long as your account is active. Click
           analytics are kept only as long as needed to provide reporting, after which they are
-          deleted or aggregated. Deleting your account (Settings → Delete account) removes your
-          personal data within a reasonable period; billing records may be retained where required
-          by law.
+          deleted or aggregated. The record of your email choices is kept while your account exists,
+          so we can show when you agreed or declined. Deleting your account (Settings → Delete
+          account) removes your personal data within a reasonable period; billing records may be
+          retained where required by law.
         </p>
       </section>
 
