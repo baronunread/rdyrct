@@ -200,6 +200,8 @@ describe("POST /api/billing/checkout", () => {
         success_url: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
         customer_email: "admin@example.com",
         metadata: { userId: "admin-1" },
+        // A customer can type a discount code, such as the leaving popup's.
+        allow_discount_codes: true,
       }),
     );
   });

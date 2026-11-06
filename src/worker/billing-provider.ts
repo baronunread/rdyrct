@@ -19,6 +19,9 @@ export interface BillingProvider {
       return_url?: string;
       customer_email: string;
       metadata: { userId: string };
+      /** Lets the customer type a discount code at checkout, such as the
+       * leaving popup's (EXIT_OFFER_CODE). Polar's default, set on purpose. */
+      allow_discount_codes: boolean;
     }): Promise<{ url: string }>;
     /** Used by the checkout-confirm fallback (POST /checkout/:id/confirm):
      * asks Polar directly whether a checkout succeeded, for when its webhook

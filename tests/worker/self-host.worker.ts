@@ -4,7 +4,7 @@ import { RDYRCT_SITE } from "../../src/shared/site";
 import { applySecurityHeaders } from "../../src/worker/security-headers";
 import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
 import { notFoundPage } from "../../src/worker/not-found-page";
-import { applyTestMigrations, fetchWorker } from "./support";
+import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
 
 /**
  * A self-hosted build: the Worker a fork deploys, which serves the app and
@@ -79,6 +79,12 @@ describe.runIf(!RDYRCT_SITE)("a self-hosted build", () => {
     );
 
     expect(res.status).toBe(404);
+  });
+
+  it("has no leaving popup, even with EXIT_OFFER_CODE set", async () => {
+    const withCode = overrideEnv({ EXIT_OFFER_CODE: "STAY20" });
+    const config = await fetchWorker(new Request("http://localhost/api/config"), withCode);
+    expect(await config.json()).toMatchObject({ exitOfferCode: null });
   });
 
   it("describes no page as rdyrct.com's: every tab carries the copy's own name", async () => {

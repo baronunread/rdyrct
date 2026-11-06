@@ -3,6 +3,7 @@ import { lazyPage } from "./lib/chunk-guard";
 import { LandingHeader } from "./components/landing-header";
 import { readAuthHint } from "./lib/user-cache";
 import { rootRoute } from "./root-route";
+import { ExitOffer } from "./components/exit-offer";
 
 /**
  * The marketing pages that carry the landing header, and the header itself
@@ -27,7 +28,13 @@ import { rootRoute } from "./root-route";
  * on screen: see components/marketing-link.tsx and lib/marketing-scroll.ts.
  */
 function PublicPages() {
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      {/* rdyrct.com only, like every page under it (see ExitOffer). */}
+      <ExitOffer />
+    </>
+  );
 }
 
 /**
