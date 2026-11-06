@@ -44,6 +44,7 @@ describe("the SPA fallback", () => {
     "/admin/orgs",
     "/admin/users",
     "/admin/audit",
+    "/admin/newsletter",
   ])("serves %s", async (path) => {
     const res = await get(path);
 

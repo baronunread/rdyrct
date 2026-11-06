@@ -1,5 +1,6 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL } from "../ui/footer";
+import { BUSINESS } from "@/shared/business";
 import { CookieSettingsButton } from "../ui/consent-banner";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
@@ -18,15 +19,16 @@ export function PrivacyPage() {
     <LegalPageLayout
       authed={authed}
       title="Privacy policy"
-      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 26 October 2026."
+      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 6 November 2026."
     >
       <WebMcpMarketingTools />
 
       <section>
         <h2 className="mb-2 font-bold">Data controller</h2>
         <p className="text-muted">
-          The data controller for rdyrct is <span className="text-text">Andrea Bruno</span>. For any
-          privacy request or question, contact{" "}
+          The data controller for rdyrct is <span className="text-text">{BUSINESS.name}</span>,{" "}
+          {BUSINESS.address}, P.IVA {BUSINESS.vatNumber}. For any privacy request or question,
+          contact{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
             {SUPPORT_EMAIL}
           </a>
@@ -38,22 +40,36 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Data we collect</h2>
         <p className="text-muted">
           We collect your account email address and name, and the organizations, links, domains, and
-          settings you create. For click analytics on your links we store only an approximate
-          country, the referrer host, device type, and a timestamp for each click: we explicitly do{" "}
-          <span className="text-text">not</span> store the IP address of the people who click your
-          links, their precise location, or any data that would allow cross-site tracking. If you
-          report a link, we store the address you report, your reason and note, and the email you
-          choose to give. We do not store your IP address. Separately, if you accept analytics in
-          the cookie banner, we use PostHog to understand how the product itself is used: which
-          features you use and app events such as signing in or creating a link, tied to your
-          account email and name. We turn off autocapture and session recording, so PostHog never
-          records what you type or a replay of your screen. Nothing is sent to PostHog, and no
+          settings you create. If you sign in with Google, Google tells us your email address and
+          name. If you upload a profile picture or a logo for your QR codes, we store the image. If
+          you connect an AI assistant or create an API key, we store which app or key it is and when
+          it was last used. A file you import from another link shortener is read in your browser,
+          and only the links in it reach us. For click analytics on your links we store only an
+          approximate country, the referrer host, device type, and a timestamp for each click: we
+          explicitly do <span className="text-text">not</span> store the IP address of the people
+          who click your links, their precise location, or any data that would allow cross-site
+          tracking. If you report a link, we store the address you report, your reason and note, and
+          the email you choose to give. We do not store your IP address. Separately, if you accept
+          analytics in the cookie banner, we use PostHog to understand how the product itself is
+          used: which features you use and app events such as signing in or creating a link, tied to
+          your account email and name. We turn off autocapture and session recording, so PostHog
+          never records what you type or a replay of your screen. Nothing is sent to PostHog, and no
           PostHog cookie is set, unless you accept. Until you answer the banner, a few steps you
           take on the current page (such as viewing it or clicking a button) are held in your
           browser&apos;s memory: accepting sends them, with the time they happened; rejecting or
           leaving the page discards them. We also use Sentry to receive technical error reports from
           the app. These reports include technical diagnostic data such as the error, browser, and
-          page path. We remove page query strings before sending them.
+          page path. We remove page query strings before sending them. If you choose to get product
+          news or offers by email, we record which lists you joined, when, and where you said so
+          (while setting up your account, in the app, or in Settings).
+        </p>
+        <p className="mt-2 text-muted">
+          On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page,
+          the site you came from, your browser, device type, and country. It sets no cookie and
+          keeps no IP address, so it cannot tell that two visits came from the same person. The
+          footer of our public pages shows two badges, from Fazier and PeerPush, that your browser
+          loads from their sites. Like any image from another site, that request tells them your IP
+          address and browser.
         </p>
       </section>
 
@@ -64,8 +80,10 @@ export function PrivacyPage() {
           up for (performance of a contract), send transactional email such as verification codes
           and team invites (contract), and produce click analytics for your own links (our
           legitimate interest in offering a useful product). The session cookie is strictly
-          necessary and requires no consent. Product usage analytics through PostHog runs only on
-          your consent, given or withdrawn at any time through the cookie banner. Reopen it with{" "}
+          necessary and requires no consent. We count page visits with our own cookieless counter
+          for our legitimate interest in knowing which pages people read. Product usage analytics
+          through PostHog runs only on your consent, given or withdrawn at any time through the
+          cookie banner. Reopen it with{" "}
           <CookieSettingsButton className="text-accent hover:underline" />, here or at the foot of
           any public page. We ask again after six months. We process technical error reports through
           Sentry for our legitimate interest in keeping the service secure and reliable. Sentry does
@@ -74,7 +92,9 @@ export function PrivacyPage() {
           When you sign up, reset a password, shorten a link from the home page, build a UTM link,
           or report a link, Cloudflare Turnstile reads signals from your browser and connection to
           check that a person, not a script, sent the form. We use it for our legitimate interest in
-          keeping automated sign-ups and abuse off the service.
+          keeping automated sign-ups and abuse off the service. We send product news and offers only
+          to people who asked for them (consent). Every such email has a link that unsubscribes you
+          at once, and Settings lets you turn each list on or off at any time.
         </p>
       </section>
 
@@ -89,8 +109,12 @@ export function PrivacyPage() {
           rdyrct sets a strictly-necessary session cookie to keep you signed in. If you accept
           analytics in the cookie banner, PostHog also sets a cookie to recognize you across visits;
           if you reject or ignore the banner, that cookie is never set. Your answer to the banner is
-          kept in your browser&apos;s local storage for six months. We do not use advertising
-          cookies of any kind.
+          kept in your browser&apos;s local storage for six months. Local storage also keeps a few
+          things on your own device so the site works as you left it: your theme, the organization
+          you last opened, your account details so a reload draws the app at once (cleared when you
+          sign out), how far you got in setting up, and, if the home page showed you a discount,
+          that it did, so it does not show again for 30 days. None of these are sent to anyone. We
+          do not use advertising cookies of any kind.
         </p>
       </section>
 
@@ -98,14 +122,15 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Sub-processors</h2>
         <p className="text-muted">
           We rely on a small number of sub-processors to run the service: Cloudflare (hosting, the
-          D1 database, KV storage, and the Turnstile check on forms), Resend (transactional email),
-          Polar (billing, acting as merchant of record), PostHog, EU region (product usage
-          analytics), Sentry (technical error monitoring), and Google (Web Risk). Google receives
-          the destination address of a link when the link is created or edited, when we check it
-          again each week, and when its traffic jumps, and checks it against Google&apos;s list of
-          unsafe sites. It receives nothing about you or the people who click the link. Some may
-          process data outside the EU/EEA; where they do, transfers are covered by the appropriate
-          safeguards, such as the EU Standard Contractual Clauses.
+          D1 database, KV storage, R2 storage for uploaded images, and the Turnstile check on
+          forms), Resend (account email, and product news or offers if you asked for them), Polar
+          (billing, acting as merchant of record), PostHog, EU region (product usage analytics),
+          Sentry (technical error monitoring), and Google (sign-in with Google, if you use it, and
+          Web Risk). Google receives the destination address of a link when the link is created or
+          edited, when we check it again each week, and when its traffic jumps, and checks it
+          against Google&apos;s list of unsafe sites. It receives nothing about you or the people
+          who click the link. Some may process data outside the EU/EEA; where they do, transfers are
+          covered by the appropriate safeguards, such as the EU Standard Contractual Clauses.
         </p>
       </section>
 
@@ -113,10 +138,10 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Data retention</h2>
         <p className="text-muted">
           We retain account and organization data for as long as your account is active. Click
-          analytics are kept only as long as needed to provide reporting, after which they are
-          deleted or aggregated. Deleting your account (Settings → Delete account) removes your
-          personal data within a reasonable period; billing records may be retained where required
-          by law.
+          analytics are kept for 400 days, then deleted. The record of your email choices is kept
+          while your account exists, so we can show when you agreed or declined. Deleting your
+          account (Settings → Delete account) removes your personal data within a reasonable period;
+          billing records may be retained where required by law.
         </p>
       </section>
 

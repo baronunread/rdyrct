@@ -86,6 +86,15 @@
     "MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
     // The founder's welcome email is sent from this address. Forks leave it unset.
     "WELCOME_FROM": "Andrea at rdyrct <andrea@mail.rdyrct.com>",
+    // Newsletters go out from this address, on a subdomain of their own so a
+    // marketing complaint cannot hurt sign-in mail. Verify the domain in
+    // Resend first. Unset (forks), a newsletter send is refused.
+    "NEWSLETTER_FROM": "Andrea at rdyrct <andrea@news.rdyrct.com>",
+    // news.rdyrct.com receives no mail: replies go to the inbox Email Routing serves.
+    "NEWSLETTER_REPLY_TO": "andrea@mail.rdyrct.com",
+    // The postal address in every newsletter's footer (CAN-SPAM asks for one
+    // when mailing US recipients). The same one the site shows (shared/business.ts).
+    "POSTAL_ADDRESS": "Andrea Bruno, Viale Gabriele D'Annunzio 23, 34138 Trieste (TS), Italy",
     // "production" or "sandbox" — the SDK maps this to the API base URL.
     "POLAR_SERVER": "production",
     "POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",
@@ -176,6 +185,11 @@
       "binding": "LINK_IMPORT",
       "name": "rdyrct-link-import",
       "class_name": "LinkImportWorkflow",
+    },
+    {
+      "binding": "NEWSLETTER_SEND",
+      "name": "rdyrct-newsletter-send",
+      "class_name": "NewsletterSendWorkflow",
     },
   ],
   // Cloudflare Workers Rate Limiting counters. Namespace IDs are unique within
@@ -312,6 +326,9 @@
         "SHARED_LINK_HOST": "rdyr.cc",
         "MAIL_FROM": "rdyrct <no-reply@localhost>",
         "WELCOME_FROM": "Andrea at rdyrct <andrea@localhost>",
+        "NEWSLETTER_FROM": "Andrea at rdyrct <news@localhost>",
+        "NEWSLETTER_REPLY_TO": "andrea@localhost",
+        "POSTAL_ADDRESS": "rdyrct, 1 Example Street, 00100 Rome, Italy",
         "POLAR_SERVER": "sandbox",
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
         "POLAR_HOBBY_PRODUCT_ID": "playwright_hobby_product",
@@ -405,6 +422,11 @@
           "binding": "LINK_IMPORT",
           "name": "rdyrct-playwright-link-import",
           "class_name": "LinkImportWorkflow",
+        },
+        {
+          "binding": "NEWSLETTER_SEND",
+          "name": "rdyrct-playwright-newsletter-send",
+          "class_name": "NewsletterSendWorkflow",
         },
       ],
       "ratelimits": [

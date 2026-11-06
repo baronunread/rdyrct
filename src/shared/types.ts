@@ -243,6 +243,170 @@ export interface User {
   comped: boolean;
   /** Same-origin serving URL for the user's avatar, or null (blobatar). */
   image: string | null;
+  /** Marketing consent, per list. Never read off the cached user: see marketing.ts. */
+  marketing: MarketingState;
+  /** This instance can send newsletters (newsletterConfigured). Without it
+   * nobody is asked: no dialog, no setup step, no Settings switches. */
+  marketingOffered: boolean;
+}
+
+/** Where a marketing answer was given. */
+export const MARKETING_SOURCES = ["onboarding", "prompt", "settings"] as const;
+export type MarketingSource = (typeof MARKETING_SOURCES)[number];
+
+/** The two marketing lists, each its own consent: product news (new features
+ * and tips) and offers (deals on paid plans). */
+export const MARKETING_LISTS = ["news", "offers"] as const;
+export type MarketingList = (typeof MARKETING_LISTS)[number];
+
+/** What each list is called on screen. */
+export const MARKETING_LIST_LABELS = {
+  news: "Product news",
+  offers: "Offers",
+} satisfies Record<MarketingList, string>;
+
+export interface MarketingState {
+  /** Opted in to product news right now. */
+  news: boolean;
+  /** Opted in to offers right now. */
+  offers: boolean;
+  /** Answered anywhere, about either list, even by dismissing the dialog.
+   * False means the one-time dialog still owes them the question. */
+  asked: boolean;
+}
+
+/** One answer, from one place. A list left out stays as it is, so Settings
+ * can change one list; onboarding and the dialog send both. */
+export interface MarketingAnswer {
+  source: MarketingSource;
+  news?: boolean;
+  offers?: boolean;
+}
+
+/** Where an account is with the product, for narrowing a newsletter send.
+ * What each one means is decided in worker/marketing.ts. */
+export const AUDIENCE_STAGES = ["any", "new", "active", "slipping"] as const;
+export type AudienceStage = (typeof AUDIENCE_STAGES)[number];
+
+/** Days without a visit after which an account that made a link is
+ * slipping away rather than active. */
+export const ACTIVE_WITHIN_DAYS = 30;
+
+/** Which plans a send reaches. Paid is Hobby or Pro, comps included. */
+export const AUDIENCE_PLANS = ["any", "free", "paid"] as const;
+export type AudiencePlan = (typeof AUDIENCE_PLANS)[number];
+
+/** What narrows a send beyond its list. Every filter holds at once (AND),
+ * and "any" leaves that one out. A new filter is a new field here with an
+ * "any" default, plus its clause in marketing.ts's `audienceWhere`. */
+export interface AudienceFilter {
+  stage: AudienceStage;
+  plan: AudiencePlan;
+}
+
+/** Nobody left out: what a send with no filters, and an older send, used. */
+export const EVERYONE: AudienceFilter = { stage: "any", plan: "any" };
+
+/** How every account has answered one list, for the admin newsletter screen. */
+export interface NewsletterAnswers {
+  /** Opted in now, by where the yes came from. Counts every account, so the
+   * total can be above `optedIn` (unverified or banned accounts get no send). */
+  yes: Record<MarketingSource, number>;
+  /** Answered no, dismissed the dialog, or unsubscribed later. */
+  no: number;
+  /** Never asked: the dialog still owes them the question. */
+  unasked: number;
+}
+
+/** Where a send stands: waiting for its time, going out, done, cancelled
+ * before it went, or stopped by a batch that failed every retry. */
+export type NewsletterSendStatus = "scheduled" | "sending" | "sent" | "cancelled" | "failed";
+
+/** One newsletter, sent or waiting, for the send history. Tests are not kept. */
+export interface NewsletterSendRow {
+  id: string;
+  /** The list it goes to. */
+  list: MarketingList;
+  /** Who in the list it was narrowed to. */
+  audience: AudienceFilter;
+  subject: string;
+  /** Email of the admin who sent it; null once that account is gone. */
+  sentBy: string | null;
+  /** When the admin pressed Send now or Schedule, ms epoch. */
+  createdAt: number;
+  /** When it goes, ms epoch; null for Send now. */
+  scheduledFor: number | null;
+  status: NewsletterSendStatus;
+  /** Emails the provider accepted so far. */
+  sent: number;
+  /** When it ended (sent, cancelled or failed), ms epoch. */
+  finishedAt: number | null;
+}
+
+/** The newsletter body as the admin editor writes it (a TipTap JSON
+ * document): only the nodes and marks the email layout renders.
+ * worker/newsletter-doc.ts parses a document against this allow-list. */
+export type DocMark =
+  | { type: "bold" | "italic" | "underline" }
+  | { type: "link"; attrs: { href: string } };
+export type DocInline = { type: "text"; text: string; marks?: DocMark[] } | { type: "hardBreak" };
+export type DocListItem = { type: "listItem"; content: DocBlock[] };
+export type DocBlock =
+  | { type: "paragraph"; content?: DocInline[] }
+  | { type: "heading"; attrs: { level: 2 | 3 }; content?: DocInline[] }
+  | { type: "horizontalRule" }
+  | { type: "button"; attrs: { href: string }; content?: DocInline[] }
+  | { type: "bulletList"; content: DocListItem[] }
+  | { type: "orderedList"; attrs?: { start?: number | null }; content: DocListItem[] };
+export type NewsletterDoc = { type: "doc"; content: DocBlock[] };
+
+/** A past send loaded back into the composer by Duplicate. */
+export interface NewsletterDraft {
+  list: MarketingList;
+  audience: AudienceFilter;
+  subject: string;
+  doc: NewsletterDoc;
+}
+
+/** The composer's Preview: the issue as the admin would get it. */
+export interface NewsletterPreview {
+  html: string;
+}
+
+/** What the admin newsletter screen reads. */
+export interface NewsletterStatus {
+  /** Per list: verified, not banned, opted in. Who a send to it reaches. */
+  optedIn: Record<MarketingList, number>;
+  answers: Record<MarketingList, NewsletterAnswers>;
+  /** Newest first, at most NEWSLETTER_HISTORY of them. */
+  sends: NewsletterSendRow[];
+  /** NEWSLETTER_FROM and the provider are set. Without them a send is
+   * refused. */
+  configured: boolean;
+}
+
+/** An account's answer about one list, as one word. */
+export type ConsentAnswer = "on" | "off" | "unasked";
+
+/** How many people a send to one list, narrowed by a filter, reaches now. */
+export interface NewsletterAudienceCount {
+  count: number;
+  /** What was counted, echoed back: the page words the number from these,
+   * so a count still loading never shows under the next filter's wording. */
+  list: MarketingList;
+  filter: AudienceFilter;
+}
+
+/** What a test send answers. */
+export interface NewsletterTestResult {
+  sent: number;
+}
+
+/** What Send now and Schedule answer: the send, as it now stands. */
+export interface NewsletterSendState {
+  id: string;
+  status: NewsletterSendStatus;
+  scheduledFor: number | null;
 }
 
 export interface QrOverrides {
@@ -838,6 +1002,9 @@ export interface AdminUserRow {
   emailVerified: boolean;
   /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
+  /** Each list: opted in now, answered no, or never asked. */
+  news: ConsentAnswer;
+  offers: ConsentAnswer;
   /** Effective plan: what this user may do. A comp counts here (#81). */
   plan: StoredPlan;
   /** What Polar says, separately from what the user may do. `null` means no

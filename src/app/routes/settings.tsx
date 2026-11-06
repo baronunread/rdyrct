@@ -6,13 +6,21 @@ import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
 import { linkedAccountsQuery, otherSessionsQuery } from "../lib/account-security";
-import type { User, UserOrg } from "@/shared/types";
+import {
+  MARKETING_LIST_LABELS,
+  MARKETING_LISTS,
+  type MarketingList,
+  type User,
+  type UserOrg,
+} from "@/shared/types";
 import { AvatarInput } from "../components/avatar-input";
 import { uploadUserAvatar, deleteUserAvatar } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
 import { Segmented } from "../ui/segmented";
+import { Switch } from "../ui/switch";
+import { useSetMarketing } from "../lib/marketing";
 import { SigningInGroup } from "../components/signing-in-group";
 import { PageHeader } from "../ui/misc";
 import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
@@ -199,6 +207,53 @@ function AccountGroup({ user }: { user: User | undefined }) {
   );
 }
 
+const LIST_ROWS = {
+  news: {
+    hint: "New features and tips, now and then.",
+    on: "Product news is on",
+    off: "Product news is off",
+  },
+  offers: { hint: "Deals on paid plans.", on: "Offers are on", off: "Offers are off" },
+} satisfies Record<MarketingList, { hint: string; on: string; off: string }>;
+
+/** One list's switch. Its own request, so toggling both rows at once shows
+ * each one's pending answer. */
+function ListRow({ list, user }: { list: MarketingList; user: User | undefined }) {
+  const toast = useToast();
+  const set = useSetMarketing();
+  const row = LIST_ROWS[list];
+  const label = MARKETING_LIST_LABELS[list];
+  const optedIn = set.isPending ? Boolean(set.variables?.[list]) : Boolean(user?.marketing[list]);
+  const change = (on: boolean) =>
+    set.mutate(
+      { source: "settings", [list]: on },
+      {
+        onSuccess: () => toast(on ? row.on : row.off),
+        onError: (error) => toast(errorMessage(error), "error"),
+      },
+    );
+  return (
+    <SettingsRow label={label} hint={row.hint}>
+      {/* Off and unanswerable until /user answers: an account that failed
+          to load is not one that said no. */}
+      <Switch label={label} checked={optedIn} onCheckedChange={change} disabled={!user} />
+    </SettingsRow>
+  );
+}
+
+/** Marketing email, one switch per list: the same consent the sign-up boxes
+ * and the one-time dialog record, changeable any time. Waits for the server's
+ * answer before it shows a state, since the cached user is a page load old. */
+function EmailGroup({ user }: { user: User | undefined }) {
+  return (
+    <SettingsGroup title="Updates">
+      {MARKETING_LISTS.map((list) => (
+        <ListRow key={list} list={list} user={user} />
+      ))}
+    </SettingsGroup>
+  );
+}
+
 /** The delete-account confirm dialog and its request. */
 function useDeleteAccountFlow() {
   const toast = useToast();
@@ -315,6 +370,7 @@ export function SettingsPage() {
       <div className="flex max-w-[760px] flex-col gap-8">
         <AccountGroup user={currentUser.data?.user} />
         <SigningInGroup />
+        {currentUser.data?.user.marketingOffered && <EmailGroup user={currentUser.data.user} />}
         <DeleteAccountGroup
           disabled={accountDeleteDisabled}
           owned={ownedOrgs}

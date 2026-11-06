@@ -11,7 +11,7 @@ import { captureAlert } from "./sentry";
  * It is a service message about the account the person just made, so it
  * carries no promotion and needs no unsubscribe link or consent. Keep it that
  * way: an upgrade pitch or a second email in a sequence is marketing, which
- * goes through Resend Broadcasts to people who opted in (rdyrct-email skill).
+ * goes through the newsletter to people who opted in (rdyrct-email skill).
  *
  * "Once" is a claim on `welcome_sent_at`: the UPDATE only matches while the
  * column is null, so of two racing calls (a retried hook, a re-verification)

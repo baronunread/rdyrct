@@ -112,6 +112,15 @@ export async function skipSetup(page: Page) {
   await page.getByRole("button", { name: "Skip" }).click();
   await page.getByRole("button", { name: "Not now" }).click();
   await page.getByRole("button", { name: "Not now" }).click();
+  // An account not yet asked about email gets one more step; one that
+  // answered before (a Google sign-in to an existing address) goes straight in.
+  const emailStep = page.getByRole("heading", { name: "What should we email you about?" });
+  const app = page.getByRole("heading", { name: "Dashboard", level: 1 });
+  await expect(emailStep.or(app)).toBeVisible({ timeout: 30_000 });
+  if (await emailStep.isVisible()) {
+    await expect(page.getByRole("img", { name: "Step 5 of 5" })).toBeVisible();
+    await page.getByRole("button", { name: "Skip" }).click();
+  }
 }
 
 /**
@@ -164,4 +173,16 @@ export async function signUpThroughForm(page: Page, email: string, password: str
       .or(page.getByRole("heading", { name: "Dashboard", level: 1 }))
       .first(),
   ).toBeVisible({ timeout: 30_000 });
+}
+
+/** The text of the newest email the emulator holds for `email`, or null.
+ * For a spec that reads a link out of a message (an unsubscribe link). */
+export async function latestMailTextTo(page: Page, email: string): Promise<string | null> {
+  const response = await page.request.get("http://localhost:4000/emails", {
+    headers: { authorization: "Bearer test_token_admin" },
+  });
+  if (!response.ok()) return null;
+  const mine = inboxList(await response.json()).filter((item) => addressedTo(item, email));
+  const newest = mine.at(-1);
+  return newest && isRecord(newest) ? String(newest.text ?? "") : null;
 }

@@ -11,6 +11,15 @@ import {
   syncDomainMsg,
 } from "./storage";
 import { finishImport, importNextChunk, stopImport } from "./routes/link-import";
+import {
+  MAX_BATCHES,
+  beginSend,
+  deliverPicked,
+  finishSend,
+  pickBatch,
+  sendTime,
+} from "./newsletter-send";
+import { createError } from "evlog";
 import { cfDeleteHostname, ensureHostname, probeDelaySeconds, probeDomain } from "./routes/domains";
 
 interface OrgDeleteParams {
@@ -127,5 +136,63 @@ export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: stri
       throw err;
     }
     await step.do("finish", () => finishImport(this.env, importId));
+  }
+}
+
+/** A provider hiccup is retried for about ten minutes before the send fails. */
+const BATCH_RETRIES = {
+  retries: { limit: 6, delay: "10 seconds", backoff: "exponential" },
+} as const;
+
+/**
+ * One newsletter send (newsletter-send.ts), keyed by its send id. It waits
+ * until the scheduled time, if there is one, then goes batch by batch until
+ * nobody is left, so a Worker restart or a provider error retries one batch,
+ * not the whole send. Each batch is two steps: `pick-n` freezes who gets it
+ * (Workflows keeps the result, so a retry never reads again) and `batch-n`
+ * delivers to that list under one provider key. The steps run in this order:
+ *
+ *   load -> wait (scheduled only) -> start
+ *     -> pick-0, batch-0, pick-1, batch-1, ... -> finish
+ *
+ * Steps per instance are capped (MAX_BATCHES in newsletter-send.ts); a send
+ * that would pass the cap is refused before it starts, and fails here if its
+ * audience grew past it while it waited.
+ *
+ * Cancelling a scheduled send marks its row and terminates the instance;
+ * `start` also finds the row cancelled if the instance outlives that.
+ */
+export class NewsletterSendWorkflow extends WorkflowEntrypoint<Env, { sendId: string }> {
+  async run(event: Readonly<WorkflowEvent<{ sendId: string }>>, step: WorkflowStep): Promise<void> {
+    const { sendId } = event.payload;
+    const at = await step.do("load", () => sendTime(this.env, sendId));
+    if (at === null) return;
+    // A time already past returns at once.
+    if (at > 0) await step.sleepUntil("wait", at);
+    const startedAt = await step.do("start", () => beginSend(this.env, sendId));
+    if (startedAt === null) return;
+    try {
+      for (let batch = 0; ; batch++) {
+        const people = await step.do(`pick-${batch}`, () => pickBatch(this.env, sendId, startedAt));
+        if (people.length === 0) break;
+        if (batch >= MAX_BATCHES) {
+          throw createError({
+            message: "The send reached the Workflows step limit",
+            status: 500,
+            why: `More than ${MAX_BATCHES} batches; the audience grew after the send was accepted`,
+            fix: "Narrow the filters and send the rest as a new send",
+          });
+        }
+        await step.do(`batch-${batch}`, BATCH_RETRIES, () =>
+          deliverPicked(this.env, sendId, batch, people, startedAt),
+        );
+      }
+    } catch (err) {
+      // A batch that failed every retry: the send ends as failed, with what
+      // went counted, rather than show as sending for good.
+      await step.do("give up", () => finishSend(this.env, sendId, "failed"));
+      throw err;
+    }
+    await step.do("finish", () => finishSend(this.env, sendId, "sent"));
   }
 }

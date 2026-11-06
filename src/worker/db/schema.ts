@@ -9,7 +9,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
-import { REPORT_REASONS } from "../../shared/types";
+import { REPORT_REASONS, type AudienceFilter } from "../../shared/types";
+import type { NewsletterDoc } from "../newsletter-doc";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
 // Shapes follow the BetterAuth core schema (bunx @better-auth/cli generate),
@@ -77,6 +78,15 @@ export const user = sqliteTable("user", {
   polarEventAt: integer("polar_event_at", { mode: "timestamp_ms" }),
   // When the welcome email was claimed for sending. Null means not yet.
   welcomeSentAt: integer("welcome_sent_at", { mode: "timestamp_ms" }),
+  // Marketing consent (migration 0053), two lists, proof included. Null
+  // opt-in means not opted in; the default for everyone. `asked` is set by
+  // any answer about either list, so the one-time dialog never asks twice.
+  // Written only by worker/marketing.ts.
+  newsOptInAt: integer("news_opt_in_at", { mode: "timestamp_ms" }),
+  newsOptInSource: text("news_opt_in_source", { enum: ["onboarding", "prompt", "settings"] }),
+  offersOptInAt: integer("offers_opt_in_at", { mode: "timestamp_ms" }),
+  offersOptInSource: text("offers_opt_in_source", { enum: ["onboarding", "prompt", "settings"] }),
+  marketingAskedAt: integer("marketing_asked_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -398,7 +408,11 @@ export const links = sqliteTable(
     // weekly rescan can find the links it has not seen lately.
     webRiskCheckedAt: integer("web_risk_checked_at"),
   },
-  (t) => [index("idx_links_org").on(t.orgId)],
+  (t) => [
+    index("idx_links_org").on(t.orgId),
+    // The newsletter stage filters (marketing.ts madeALink), migration 0053.
+    index("idx_links_created_by").on(t.createdBy),
+  ],
 );
 
 /**
@@ -983,3 +997,33 @@ export const oauthClientAssertion = sqliteTable("oauth_client_assertion", {
   id: text("id").primaryKey(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+/** One newsletter send: the issue, who it goes to, when, and how far it got
+ * (migration 0054). The id is the composer's send id and the id of the
+ * NewsletterSendWorkflow instance sending it. Written by newsletter-send.ts. */
+export const newsletterSends = sqliteTable(
+  "newsletter_sends",
+  {
+    id: text("id").primaryKey(),
+    // Who it goes to: everyone opted in to this list.
+    list: text("list", { enum: ["news", "offers"] }).notNull(),
+    // Who in the list: the filters it was sent with, read by every batch.
+    // Only newsletter-send.ts writes it, from a parsed AudienceFilter.
+    audience: text("audience", { mode: "json" }).$type<AudienceFilter>().notNull(),
+    subject: text("subject").notNull(),
+    // The editor's document, parsed by newsletter-doc.ts before it is stored.
+    doc: text("doc", { mode: "json" }).$type<NewsletterDoc>().notNull(),
+    sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    // Null for Send now.
+    scheduledFor: integer("scheduled_for", { mode: "timestamp_ms" }),
+    status: text("status", {
+      enum: ["scheduled", "sending", "sent", "cancelled", "failed"],
+    }).notNull(),
+    sent: integer("sent").notNull().default(0),
+    // The last recipient id a batch reached; the next batch starts after it.
+    cursor: text("cursor").notNull().default(""),
+    finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("idx_newsletter_sends_created_at").on(t.createdAt)],
+);

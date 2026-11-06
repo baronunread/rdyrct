@@ -223,7 +223,7 @@ constantly and each one otherwise re-derives the same conventions out of
 
 **rdyrct-email** (`.claude/skills/rdyrct-email`, symlinked from
 `.agents/skills`) is how mail gets built and previewed on `renderEmail()`,
-and why a Broadcast only ever goes to people who opted in.
+and why a newsletter only ever goes to people who opted in to its list.
 
 **ship-issue** (`.claude/skills/ship-issue`, symlinked from `.agents/skills`)
 is how work gets landed: evaluate the issue before branching, mutation-test
@@ -277,7 +277,8 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   renameable in Settings, so nobody meets a dead app behind a form asking
   for a company name. A new org's owner goes through a **setup flow**
   on a screen of its own (`/welcome`, `components/setup-flow.tsx`): its
-  name, its first link, a domain of its own, its team, each with a way
+  name, its first link, a domain of its own, its team, whether to hear from
+  us by email (only for an account not yet asked), each with a way
   past it, beside an organization card that fills in as they answer. The
   sign-in card (email code, Google, or Polar's return) becomes that card,
   and at the end it becomes the org switcher as the app builds around it
@@ -330,6 +331,60 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   one left ownerless would have no plan, no billing and nobody who could
   delete it. Settings names each org in the confirmation first. Orgs the
   account only belongs to are untouched.
+- **Marketing email is two lists, each needing its own consent, and consent
+  lives in D1.** Product news (new features and tips) and Offers (deals on
+  paid plans). Each list has its own time and source
+  (`news_opt_in_at`/`news_opt_in_source`,
+  `offers_opt_in_at`/`offers_opt_in_source`), and one `marketing_asked_at`
+  covers both (migration 0053). They are the source of truth, never a
+  provider's list, and everyone starts opted in to neither: no pre-ticked
+  box, and a verified address is not consent. Only `src/worker/marketing.ts`
+  reads or writes them. The sign-up form asks nothing. Three ways to answer:
+  the last step of the `/welcome` setup flow, two switches, both off
+  (`EmailStep` in `setup-flow.tsx`; Skip is a no to both), a one-time
+  dialog with the same two switches for accounts not yet asked
+  (`MarketingPrompt` in the shell, never in `/welcome`; Save with both off,
+  "No thanks" and closing it are all a no to both), and a Settings switch
+  per list. Any answer sets `marketing_asked_at`. An onboarding or dialog
+  answer applies only
+  to an account that has not answered, so a stale one cannot overwrite a
+  decision; Settings always applies, to the list it names.
+  `PUT /api/user/marketing` (`{ source, news?, offers? }`) is the one write,
+  audited.
+  Dev test accounts (`/__dev/test-account`) and seeded accounts are already
+  asked, so the dialog does not open over other specs; the `unasked` scenario
+  and `asked: false` give one that has not.
+  Sending is the app's own job: each issue goes to one list, one email per
+  user opted in to that list, verified and unbanned, in
+  `src/worker/newsletter.ts`: the only file that knows the provider
+  (Resend's batch endpoint, plain `fetch`, `RESEND_BASE_URL`; no list is kept
+  there). It sends from `NEWSLETTER_FROM`, a subdomain sender, and refuses
+  when that is unset. `POSTAL_ADDRESS`, if set, goes in every footer. Every
+  email has its own unsubscribe link in the footer
+  and the RFC 8058 one-click headers, and its footer names the list. The
+  link is `/unsubscribe?t=`, a Worker page (`unsubscribe.ts`, in self-hosted
+  builds too, reserved from slugs) over an HMAC of the list and the user id
+  keyed from `BETTER_AUTH_SECRET` under its own label, so rotating that
+  secret also breaks links already mailed. GET shows a button and changes
+  nothing; POST (the button, or a mail client's one-click) takes the reader
+  off that list only, and a second, smaller button (`scope=all`) off both.
+  Platform admins send from Platform > Newsletter (`/api/admin/newsletter`:
+  the audience as one line with its list and filters behind Edit, a test to
+  themselves, Send now or Schedule, the sends with Cancel on the scheduled
+  ones, and the answers per list). Send now and Schedule store the issue
+  (subject and editor JSON) on a `newsletter_sends` row and start a
+  `NewsletterSendWorkflow` (binding `NEWSLETTER_SEND`) whose instance id
+  is the send id (`src/worker/newsletter-send.ts`). It sleeps until
+  `scheduled_for`, then sends each batch of 100 people, read fresh from D1
+  with the row's list and filters, as its own step, saving `sent` and
+  `cursor` after each; so whoever unsubscribes mid-send is left out, and
+  there is no batch limit. Each batch's idempotency key is the send id and
+  its first recipient, so a retried step never sends anybody the issue
+  twice. `status` is scheduled, sending, sent, cancelled or failed; Cancel
+  marks the row and terminates the instance. The audit log has the schedule,
+  the cancel and the completion. Worker tests drive the steps one by one
+  (`marketing.worker.ts`) and the real workflow through the test pool's
+  introspection (`newsletter-workflow.worker.ts`).
 - **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
   client in `src/app/lib/turnstile.ts`) guards signup and password reset
   (an `x-turnstile-token` header, verified against `siteverify` in
@@ -420,8 +475,23 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
 `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` (optional; unset switches the
-check off), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
+check off), `NEWSLETTER_FROM` (a var on its own sending subdomain; unset refuses
+newsletter sends), `NEWSLETTER_REPLY_TO` (a var, optional: a real inbox for
+replies, since the sending subdomain has none), `POSTAL_ADDRESS` (a var, optional: a postal address
+for every newsletter footer; unset, the footer has none), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
 Web Risk).
+
+**Adding a var to `wrangler.jsonc`** touches more than the worker:
+
+1. Declare it in `src/worker/env.ts`.
+2. If its value is rdyrct.com's own (an address, an account, a sender), add
+   it to `RDYRCT_ONLY_VARS` in `scripts/setup.ts`, so a fork's copy drops it.
+   Then run `bun test tests/setup.test.ts`.
+3. Decide what a fork without it does, and check that with
+   `bun run e2e:self-host`. A feature that needs it should be hidden there,
+   not half-shown.
+4. A worker test that reads the value compares against `env`, never the
+   literal.
 
 ## Layout
 

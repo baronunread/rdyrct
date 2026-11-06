@@ -14,6 +14,10 @@ import { orgPlanOf } from "@/shared/types";
 import { effectiveLimits, tierOf } from "@/shared/limits";
 import { loadLimitOverrides } from "../limit-overrides";
 import { parseOver } from "../reconcile";
+import { consentColumns, marketingStateOf, setMarketing } from "../marketing";
+import { newsletterConfigured } from "../newsletter";
+import { marketingBodySchema, parseBody } from "../schemas";
+import type { JsonValue } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
@@ -23,6 +27,7 @@ userRoutes.use("*", jsonBodyLimit());
 async function currentUserFor(
   db: AppEnv["Variables"]["db"],
   user: NonNullable<AppEnv["Variables"]["user"]>,
+  marketingOffered: boolean,
 ): Promise<CurrentUser> {
   // Each org's effective plan is its OWNER's plan, so join through the org's
   // owner membership to that user's subscription (self-joins on members/user).
@@ -67,6 +72,7 @@ async function currentUserFor(
       .select({
         customerId: schema.user.polarCustomerId,
         compPlan: schema.user.compPlan,
+        ...consentColumns,
       })
       .from(schema.user)
       .where(eq(schema.user.id, user.id)),
@@ -106,6 +112,10 @@ async function currentUserFor(
       limits: effectiveLimits(planNow(orgPlanOf(user.plan)), overrides.get(user.id)),
       hasBillingAccount: Boolean(billingRows[0]?.customerId),
       comped: Boolean(billingRows[0]?.compPlan),
+      marketing: marketingStateOf(
+        billingRows[0] ?? { newsOptInAt: null, offersOptInAt: null, marketingAskedAt: null },
+      ),
+      marketingOffered,
     },
     orgs,
   };
@@ -114,7 +124,25 @@ async function currentUserFor(
 userRoutes.get("/user", requireUser, async (c) => {
   const log = c.get("log");
   log.set({ userId: c.var.user!.id });
-  return c.json(await currentUserFor(c.var.db, c.var.user!));
+  return c.json(await currentUserFor(c.var.db, c.var.user!, newsletterConfigured(c.env)));
+});
+
+// Marketing consent, both lists: the sign-up form's choice, the one-time
+// dialog and the Settings toggles all land here (marketing.ts has the rules).
+// Consent is personal data, so every change is audited, never with the address.
+userRoutes.put("/user/marketing", requireUser, async (c) => {
+  const log = c.get("log");
+  const user = c.var.user!;
+  const body = parseBody(marketingBodySchema, await c.req.json<JsonValue>().catch(() => null));
+  const { state, applied } = await setMarketing(c.var.db, user.id, body);
+  log.set({ marketing: { source: body.source, news: body.news, offers: body.offers, applied } });
+  log.audit({
+    action: "marketing.consent",
+    actor: { type: "user", id: user.id },
+    target: { type: "user", id: user.id },
+    outcome: applied ? "success" : "denied",
+  });
+  return c.json(state);
 });
 
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup

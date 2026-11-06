@@ -1,5 +1,6 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL, GITHUB_URL } from "../ui/footer";
+import { BUSINESS } from "@/shared/business";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { useSeo } from "../lib/seo";
@@ -19,7 +20,7 @@ export function TermsPage() {
     <LegalPageLayout
       authed={authed}
       title="Terms of service"
-      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026."
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 6 November 2026."
     >
       <WebMcpMarketingTools />
 
@@ -43,7 +44,7 @@ export function TermsPage() {
           We may pause links we have reason to think break this rule. A pause is not a verdict: we
           tell the owner why, and restore the links if we were wrong. We may also block a
           destination host from being linked, and when we ban an account we suspend the
-          organizations it owns.
+          organizations it owns and delete them 90 days later, unless we lift the ban first.
         </p>
       </section>
 
@@ -98,6 +99,13 @@ export function TermsPage() {
           {exactCount(PLAN_LIMITS.pro.trackedClicks)} on Pro). Past that, the rest of that month's
           clicks are not recorded for analytics; the links themselves keep working.
         </p>
+        <p className="mt-2 text-muted">
+          Every plan includes one organization. Higher limits are available by arrangement with us.
+          If you move to a smaller plan, we delete nothing: what no longer fits becomes read-only,
+          and custom domains over the limit keep working for 30 days. Discount codes apply at
+          checkout, on the terms shown with the code. Refunds and your right to withdraw from a
+          purchase are handled by Polar under its buyer terms.
+        </p>
       </section>
 
       <section>
@@ -137,6 +145,7 @@ export function TermsPage() {
       <section>
         <h2 className="mb-2 font-bold">Contact</h2>
         <p className="text-muted">
+          rdyrct is run by {BUSINESS.name}, {BUSINESS.address}, P.IVA {BUSINESS.vatNumber}.
           Questions about these terms can be sent to{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
             {SUPPORT_EMAIL}

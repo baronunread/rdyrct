@@ -46,18 +46,30 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { Segmented } from "../ui/segmented";
 import { DnsRecords } from "./dns-records";
+import { ListRow } from "./marketing-prompt";
+import { useSetMarketing, type ListChoice } from "../lib/marketing";
 import { OrgCard } from "./org-card";
 
 /**
  * A new organization's setup, on a screen of its own between the sign-in
- * card and the app: its name, its first link, a domain of its own, its team.
- * One question a screen, each with a way past it. The organization card on
+ * card and the app: its name, its first link, a domain of its own, its team,
+ * and whether to hear from us by email. One question a screen, each with a way past it. The organization card on
  * the right is what the sign-in card became, and it fills in as the answers
  * come; when the flow is done it becomes the org switcher as the app builds
  * around it (onDone, in routes/welcome.tsx).
  */
 
-const ORDER: FlowStep[] = ["name", "link", "domain", "team"];
+const ORDER: FlowStep[] = ["name", "link", "domain", "team", "email"];
+
+/** The steps this account gets: the email question only for one that has
+ * not answered it (the one-time dialog, or another tab, may have). Read once,
+ * so answering it does not pull the step out from under the screen. */
+function useSteps(): FlowStep[] {
+  const user = useCurrentUser().data?.user;
+  const skip = Boolean(user?.marketing.asked) || user?.marketingOffered === false;
+  const [steps] = useState(() => (skip ? ORDER.filter((s) => s !== "email") : ORDER));
+  return steps;
+}
 
 /** Where a checkout the domain step opened stands, back from Polar: waiting
  * on the webhook, past the wait, or paid. Null when there was none. */
@@ -84,7 +96,8 @@ export function SetupFlow({
   payment: Payment;
   onDone: () => void;
 }) {
-  const { step, leaving, next } = useStepper(org.id, start, onDone);
+  const steps = useSteps();
+  const { step, leaving, next } = useStepper(org.id, steps, start, onDone);
   // The name as typed; the org's own until somebody types.
   const [edited, setName] = useState<string | null>(null);
   const name = edited ?? org.name;
@@ -121,9 +134,11 @@ export function SetupFlow({
         org={org}
         invited={invited}
         onInvited={(sent) => setInvited((was) => [...was, ...sent])}
+        doneLabel={step === steps.at(-1) ? "Open rdyrct" : "Continue"}
         onNext={next}
       />
     ),
+    email: () => <EmailStep onNext={next} />,
   } satisfies Record<FlowStep, () => ReactNode>;
 
   return (
@@ -132,7 +147,7 @@ export function SetupFlow({
         <span data-setup-logo className="text-[15px]">
           <Logo />
         </span>
-        <Pips at={ORDER.indexOf(step)} />
+        <Pips steps={steps} at={steps.indexOf(step)} />
       </header>
       <main className="mx-auto grid w-full max-w-[880px] flex-1 grid-cols-[minmax(0,1fr)] items-center gap-10 py-10 md:grid-cols-[minmax(0,1fr)_300px]">
         <section
@@ -163,13 +178,17 @@ export function SetupFlow({
  * quieter than the next comes in, before the next arrives; the last one
  * ends the flow. The step is kept per browser (lib/setup.ts), so a trip to
  * checkout comes back to it. */
-function useStepper(orgId: string, start: FlowStep, onDone: () => void) {
-  const [step, setStep] = useState<FlowStep>(start);
+function useStepper(orgId: string, order: FlowStep[], start: FlowStep, onDone: () => void) {
+  // A step this account no longer gets (the email question, answered since)
+  // resumes on the last one it does.
+  const [step, setStep] = useState<FlowStep>(() =>
+    order.includes(start) ? start : (order.at(-1) ?? start),
+  );
   const [leaving, setLeaving] = useState(false);
   useEffect(() => setupAt(orgId, step), [orgId, step]);
   const next = () => {
     if (leaving) return;
-    const after = ORDER[ORDER.indexOf(step) + 1];
+    const after = order[order.indexOf(step) + 1];
     if (!after) return onDone();
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setStep(after);
     setLeaving(true);
@@ -226,14 +245,14 @@ function exampleHost(email: string, userName: string, name: string): string {
 
 const compact = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-function Pips({ at }: { at: number }) {
+function Pips({ steps, at }: { steps: FlowStep[]; at: number }) {
   return (
     <span
       className="absolute left-1/2 flex -translate-x-1/2 gap-1.5"
       role="img"
-      aria-label={`Step ${at + 1} of ${ORDER.length}`}
+      aria-label={`Step ${at + 1} of ${steps.length}`}
     >
-      {ORDER.map((s, i) => (
+      {steps.map((s, i) => (
         <span
           key={s}
           className={cn(
@@ -812,11 +831,15 @@ function TeamStep({
   org,
   invited,
   onInvited,
+  doneLabel,
   onNext,
 }: {
   org: UserOrg;
   invited: string[];
   onInvited: (emails: string[]) => void;
+  /** The primary's label once somebody is invited: "Open rdyrct" when
+   * the flow ends here (the email question was answered before). */
+  doneLabel: string;
   onNext: () => void;
 }) {
   const qc = useQueryClient();
@@ -912,7 +935,7 @@ function TeamStep({
       </p>
       <Actions>
         <Button variant="primary" onClick={onNext}>
-          {invited.length || copied ? "Open rdyrct" : "Continue"}
+          {invited.length || copied ? doneLabel : "Continue"}
         </Button>
         {!invited.length && !copied && <SkipButton onClick={onNext} label="Not now" />}
       </Actions>
@@ -976,6 +999,63 @@ function InviteLinkButton({
         </span>
       </BusyContent>
     </Button>
+  );
+}
+
+/**
+ * The last question: product news and offers, a switch each, off unless
+ * the account already said yes somewhere (the leaving popup's offers tick).
+ * The same two lists as the one-time dialog (components/marketing-prompt.tsx),
+ * which an account that answers here never sees. Skip keeps any yes already
+ * given and answers no for the rest.
+ */
+function EmailStep({ onNext }: { onNext: () => void }) {
+  const toast = useToast();
+  const set = useSetMarketing();
+  const marketing = useCurrentUser().data?.user.marketing;
+  const already: ListChoice = {
+    news: Boolean(marketing?.news),
+    offers: Boolean(marketing?.offers),
+  };
+  const [choice, setChoice] = useState<ListChoice>(already);
+  const [pressed, setPressed] = useState<"continue" | "skip" | null>(null);
+  const answer = (kind: "continue" | "skip") => {
+    if (set.isPending) return;
+    setPressed(kind);
+    const lists = kind === "continue" ? choice : already;
+    set.mutate(
+      { source: "onboarding", ...lists },
+      { onSuccess: onNext, onError: (err) => toast(reasonFrom(err, "Could not save it"), "error") },
+    );
+  };
+  return (
+    <div className="flex flex-col">
+      <StepHead title="What should we email you about?">
+        Pick any or none. You can change this in Settings.
+      </StepHead>
+      <div className="mt-6 overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
+        <ListRow
+          label="Product news"
+          hint="New features and tips"
+          checked={choice.news}
+          onChange={(news) => setChoice((c) => ({ ...c, news }))}
+        />
+        <ListRow
+          label="Offers"
+          hint="Deals on paid plans"
+          checked={choice.offers}
+          onChange={(offers) => setChoice((c) => ({ ...c, offers }))}
+        />
+      </div>
+      <Actions>
+        <Button variant="primary" disabled={set.isPending} onClick={() => answer("continue")}>
+          <BusyContent busy={set.isPending && pressed === "continue"}>Continue</BusyContent>
+        </Button>
+        <Button variant="ghost" disabled={set.isPending} onClick={() => answer("skip")}>
+          <BusyContent busy={set.isPending && pressed === "skip"}>Skip</BusyContent>
+        </Button>
+      </Actions>
+    </div>
   );
 }
 

@@ -46,6 +46,7 @@
     "@lobehub/icons-static-svg": "1.102.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@polar-sh/sdk": "^1.0.2",
+    "@react-email/editor": "^1.7.19",
     "@sentry/cloudflare": "^11.10.0",
     "@sentry/react": "^11.10.0",
     "@tabler/icons-react": "^3.50.0",
@@ -53,6 +54,8 @@
     "@tanstack/react-charts": "1.1.0",
     "@tanstack/react-query": "^5.105.0",
     "@tanstack/react-router": "^1.170.46",
+    "@tiptap/extension-placeholder": "^3.32.2",
+    "@tiptap/react": "^3.32.2",
     "better-auth": "1.7.14",
     "blobatar": "^2.7.0",
     "browser-image-compression": "^2.0.2",
@@ -142,6 +145,9 @@
       },
       "WELCOME_FROM": {
         "description": "rdyrct.com's. Your copy drops it."
+      },
+      "NEWSLETTER_FROM": {
+        "description": "rdyrct.com's. Your copy drops it, and so sends no newsletter."
       },
       "POLAR_SERVER": {
         "description": "Billing, which is off on your copy unless you set up [Polar](https://polar.sh). Your copy drops rdyrct.com's values."

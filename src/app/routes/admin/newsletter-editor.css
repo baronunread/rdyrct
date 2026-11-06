@@ -1,0 +1,116 @@
+/* The newsletter editor, in rdyrct's tokens. Loaded only by the admin
+   newsletter page, after the editor's own default theme, so these win.
+   The menus are portalled to <body>, hence :root. Every value is a token,
+   so both themes follow [data-theme] with nothing repeated here. */
+:root {
+  --re-bg: var(--surface);
+  --re-bg-active: var(--surface-2);
+  --re-border: var(--border);
+  --re-text: var(--text);
+  --re-text-muted: var(--muted);
+  --re-hover: var(--surface-2);
+  --re-active: color-mix(in oklab, var(--accent) 14%, transparent);
+  --re-pressed: color-mix(in oklab, var(--accent) 18%, transparent);
+  --re-separator: var(--border);
+  --re-radius: 0.75rem;
+  --re-danger: var(--danger);
+  --re-danger-hover: color-mix(in oklab, var(--danger) 12%, transparent);
+}
+
+/* The body, sized and spaced like the email it becomes (email-layout.ts):
+   15px text, an 18px and a 16px heading, bullets and numbers, the accent
+   button. Tailwind's reset strips all of these, so each is set here. */
+.newsletter-editor .tiptap {
+  min-height: 16rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.newsletter-editor .tiptap > * + * {
+  margin-top: 0.75rem;
+}
+
+.newsletter-editor .tiptap h2,
+.newsletter-editor .tiptap h3 {
+  font-weight: 700;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.newsletter-editor .tiptap h2 {
+  font-size: 1.125rem;
+}
+
+.newsletter-editor .tiptap h3 {
+  font-size: 1rem;
+}
+
+.newsletter-editor .tiptap ul,
+.newsletter-editor .tiptap ol {
+  padding-left: 1.375rem;
+}
+
+.newsletter-editor .tiptap ul {
+  list-style: disc;
+}
+
+.newsletter-editor .tiptap ol {
+  list-style: decimal;
+}
+
+.newsletter-editor .tiptap li + li {
+  margin-top: 0.25rem;
+}
+
+/* The editor's node views write the email's own inline colours (a blue
+   link, a pale rule), which would ignore the theme: !important beats them. */
+.newsletter-editor .tiptap a:not(.node-button) {
+  color: var(--accent) !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.newsletter-editor .tiptap hr {
+  border: 0;
+  border-top: 1px solid var(--border) !important;
+  margin: 1.25rem 0;
+}
+
+.newsletter-editor .tiptap hr.ProseMirror-selectednode {
+  border-top-color: var(--accent) !important;
+}
+
+.newsletter-editor .tiptap .node-button {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: text;
+}
+
+/* A new button with its label cleared still says what it is for. */
+.newsletter-editor .tiptap .is-empty > .node-button::before {
+  content: "Button label";
+  opacity: 0.7;
+}
+
+/* The slash menu's group names, in sentence case like every label here
+   (rdyrct-design: no all-caps tracked eyebrows). */
+[data-re-slash-command-category] {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.newsletter-editor .tiptap p.is-empty::before,
+.newsletter-editor .tiptap .node-heading.is-empty [data-placeholder]::before {
+  opacity: 1;
+  color: var(--placeholder);
+}

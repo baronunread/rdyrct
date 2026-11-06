@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { NOTICE_FOOTER, renderEmail } from "../src/worker/email-layout";
+import {
+  type EmailBlock,
+  NOTICE_FOOTER,
+  blocksPreview,
+  renderEmail,
+} from "../src/worker/email-layout";
 
 const APP_URL = "https://rdyrct.example";
 const TO = "person@example.com";
@@ -185,5 +190,187 @@ describe("renderEmail (#73)", () => {
     expect(html.html).not.toContain("<a ");
     expect(html.html).not.toContain("undefined");
     expect(html.html).not.toContain("null");
+  });
+});
+
+describe("renderEmail unsubscribe slot", () => {
+  const link = "https://rdyrct.example/unsubscribe?t=abc.def";
+
+  test("puts the reader's unsubscribe link in the footer of both parts", () => {
+    const { html, text } = renderEmail({ ...base, unsubscribeUrl: link }, APP_URL, TO);
+    expect(html.html).toContain(`href="${link}"`);
+    expect(html.html).toContain("Unsubscribe</a>");
+    expect(text).toContain(`Unsubscribe: ${link}`);
+  });
+
+  test("adds nothing to mail that has no such link", () => {
+    const { html, text } = renderEmail(base, APP_URL, TO);
+    expect(html.html).not.toContain("Unsubscribe");
+    expect(text).not.toContain("Unsubscribe");
+  });
+
+  test("refuses a link that is not http(s)", () => {
+    const { html } = renderEmail({ ...base, unsubscribeUrl: "javascript:alert(1)" }, APP_URL, TO);
+    expect(html.html).not.toContain("javascript:");
+  });
+
+  test("prints the postal address under the link, in both parts", () => {
+    const postalAddress = "rdyrct, 1 Example <Street>, Rome";
+    const { html, text } = renderEmail(
+      { ...base, unsubscribeUrl: link, postalAddress },
+      APP_URL,
+      TO,
+    );
+    expect(html.html).toContain("rdyrct, 1 Example &lt;Street&gt;, Rome");
+    expect(html.html.indexOf("Example &lt;Street")).toBeGreaterThan(
+      html.html.indexOf("Unsubscribe</a>"),
+    );
+    expect(text).toContain(`Unsubscribe: ${link}\n${postalAddress}`);
+  });
+
+  test("leaves the postal address out of mail with no unsubscribe link", () => {
+    const { html, text } = renderEmail({ ...base, postalAddress: "1 Example Street" }, APP_URL, TO);
+    expect(html.html).not.toContain("1 Example Street");
+    expect(text).not.toContain("1 Example Street");
+  });
+});
+
+describe("renderEmail blocks slot", () => {
+  const blocks: EmailBlock[] = [
+    { kind: "heading", level: 2, content: [{ text: "Big <script>alert(1)</script>" }] },
+    { kind: "heading", level: 3, content: [{ text: "Small one" }] },
+    {
+      kind: "paragraph",
+      content: [
+        { text: "Hi " },
+        { text: "bold", bold: true },
+        { text: " " },
+        { text: "it", italic: true },
+        { text: " " },
+        { text: "un", underline: true },
+        { lineBreak: true },
+        { text: "docs", href: "https://rdyrct.com/docs" },
+        { text: " and " },
+        { text: "bad", href: "javascript:alert(1)" },
+      ],
+    },
+    {
+      kind: "list",
+      ordered: false,
+      items: [
+        [{ kind: "paragraph", content: [{ text: "one" }] }],
+        [{ kind: "paragraph", content: [{ text: "two" }] }],
+      ],
+    },
+    {
+      kind: "list",
+      ordered: true,
+      start: 3,
+      items: [[{ kind: "paragraph", content: [{ text: "third" }] }]],
+    },
+    { kind: "divider" },
+    { kind: "button", label: "Open it", url: "https://rdyrct.com/x" },
+    { kind: "button", label: "Evil", url: "javascript:alert(1)" },
+  ];
+  const { html, text } = renderEmail({ ...base, paragraphs: [], blocks }, APP_URL, TO);
+
+  test("renders each block with escaping", () => {
+    expect(html.html).toContain("<h2");
+    expect(html.html).toContain("Big &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html.html).not.toContain("<script>");
+    expect(html.html).toContain("<h3");
+    expect(html.html).toContain("<strong>bold</strong>");
+    expect(html.html).toContain("<em>it</em>");
+    expect(html.html).toContain("<u>un</u>");
+    expect(html.html).toContain("<br>");
+    expect(html.html).toMatch(/<a class="link" href="https:\/\/rdyrct.com\/docs"[^>]*>docs<\/a>/);
+    expect(html.html).toMatch(/<ul class="text"[^>]*><li[^>]*><span>one<\/span><\/li>/);
+    expect(html.html).toContain('<ol class="text" start="3"');
+    expect(html.html).toContain('<hr class="rule"');
+    expect(html.html).toMatch(/class="cta-link" href="https:\/\/rdyrct.com\/x"[^>]*>Open it</);
+  });
+
+  test("drops a javascript: link and button, keeping the link's text", () => {
+    expect(html.html).not.toContain("javascript:");
+    expect(html.html).toContain(" and bad");
+    expect(html.html).not.toContain("Evil");
+    expect(text).not.toContain("javascript:");
+    expect(text).not.toContain("Evil");
+  });
+
+  test("writes the same document into the text part", () => {
+    const body = text.slice(text.indexOf("Big"), text.indexOf("\n--"));
+    expect(body).toBe(
+      [
+        "Big <script>alert(1)</script>",
+        "",
+        "Small one",
+        "",
+        "Hi bold it un",
+        "docs (https://rdyrct.com/docs) and bad",
+        "",
+        "- one",
+        "- two",
+        "",
+        "3. third",
+        "",
+        "* * *",
+        "",
+        "Open it: https://rdyrct.com/x",
+        "",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("previews the first text for the preheader, without buttons", () => {
+    expect(blocksPreview(blocks)).toBe(
+      "Big <script>alert(1)</script> Small one Hi bold it un docs (https://rdyrct.com/docs) and bad - one - two 3. third",
+    );
+    expect(blocksPreview(blocks, 20)).toBe("Big <script>alert(1…");
+  });
+});
+
+describe("renderEmail in Outlook", () => {
+  test("holds the card to 520px in a ghost table only Outlook reads", () => {
+    const { html } = renderEmail(base, APP_URL, TO);
+    expect(html.html).toContain(
+      `<!--[if mso]><table role="presentation" width="520" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->`,
+    );
+    expect(html.html).toContain("<!--[if mso]></td></tr></table><![endif]-->");
+    const opens = html.html.indexOf("<!--[if mso]><table");
+    const card = html.html.indexOf(`class="card"`);
+    const closes = html.html.indexOf("<!--[if mso]></td></tr></table>");
+    expect(opens).toBeLessThan(card);
+    expect(card).toBeLessThan(closes);
+  });
+
+  test("gives Outlook a VML button that is a link edge to edge, and hides the table one", () => {
+    const url = "https://rdyrct.com/x";
+    for (const hero of [
+      undefined,
+      { sample: { long: "https://a.example/long", short: "r.dy/a" } },
+    ]) {
+      const { html } = renderEmail(
+        { ...base, hero, cta: { label: "Open <it>", url } },
+        APP_URL,
+        TO,
+      );
+      expect(html.html).toMatch(
+        /<!--\[if mso\]><v:roundrect [^>]*href="https:\/\/rdyrct.com\/x"[^>]*>.*Open &lt;it&gt;<\/center><\/v:roundrect><!\[endif\]-->/,
+      );
+      expect(html.html).toMatch(
+        /<!--\[if !mso\]><!--><table[^]*class="cta-link"[^]*<!--<!\[endif\]-->/,
+      );
+    }
+  });
+
+  test("puts no VML in a JavaScript link", () => {
+    const { html } = renderEmail(
+      { ...base, cta: { label: "Go", url: "javascript:alert(1)" } },
+      APP_URL,
+      TO,
+    );
+    expect(html.html).not.toContain("javascript:");
   });
 });

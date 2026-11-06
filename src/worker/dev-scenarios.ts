@@ -127,6 +127,12 @@ const SCENARIOS = {
         AND c.month = strftime('%Y-%m', 'now') AND c.clicks >= ${PLAN_LIMITS.free.trackedClicks}
       ORDER BY c.clicks DESC LIMIT 1`,
   },
+  unasked: {
+    title: "Not asked about email",
+    about: "An existing account the one-time product news and offers dialog has not asked yet.",
+    start: "/dashboard",
+    sql: ownerOf("u.email = 'unasked.account@seed.test'"),
+  },
   admin: {
     title: "Platform admin",
     about: "Sees the Platform section.",
@@ -232,6 +238,10 @@ location.replace(${inScript(target)});
 const testAccountSchema = v.object({
   email: v.pipe(v.string(), v.email()),
   password: v.pipe(v.string(), v.minLength(8)),
+  // Test accounts are already asked about marketing email, so the one-time
+  // dialog does not open over every spec. A spec about that dialog sends
+  // `asked: false` to get an account that has not answered.
+  asked: v.optional(v.boolean(), true),
 });
 
 /**
@@ -250,7 +260,7 @@ const testAccountSchema = v.object({
  * can reach a dev server on the network could claim it after a database reset.
  */
 async function createTestAccount(c: Context<AppEnv>): Promise<Response> {
-  const { email, password } = parseBody(testAccountSchema, await c.req.json());
+  const { email, password, asked } = parseBody(testAccountSchema, await c.req.json());
   if (email.toLowerCase() === c.env.SUPERADMIN_EMAIL.toLowerCase())
     return c.text("The platform admin address cannot be made here.", 403);
   const auth = getAuth(c.env);
@@ -272,6 +282,11 @@ async function createTestAccount(c: Context<AppEnv>): Promise<Response> {
     accountId: user.id,
     password: await ctx.password.hash(password),
   });
+
+  if (asked)
+    await c.env.DB.prepare("UPDATE user SET marketing_asked_at = ? WHERE id = ?")
+      .bind(Date.now(), user.id)
+      .run();
 
   const signIn = await auth.api.signInEmail({ body: { email, password }, asResponse: true });
   const res = c.json({ id: user.id }, signIn.ok ? 201 : 502);

@@ -154,6 +154,7 @@ export const testEnv: Env = {
   ORG_DELETE: stubWorkflow(),
   DOMAIN_ACTIVATE: stubWorkflow(),
   LINK_IMPORT: stubWorkflow(),
+  NEWSLETTER_SEND: stubWorkflow(),
 };
 
 export function overrideEnv(overrides: Partial<Env>): Env {
@@ -692,4 +693,54 @@ export async function seedFillerLinks(
   // SAFETY: rows is never empty here, so writes has at least the one entry
   // drizzle batch() insists on in its first slot.
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
+}
+
+/** One email as deliverBatch() posts it to the provider. */
+export interface Posted {
+  from: string;
+  to: string[];
+  reply_to?: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers: Record<string, string>;
+}
+
+/** Stands in for the provider's batch endpoint. `status` answers each call
+ * by its index (from 0), so a test can fail one batch and not the others.
+ * Like Resend, a key it has already delivered sends nothing again: the same
+ * body gets the first answer back, another body a 409. `calls` counts every
+ * request, repeats included. */
+export function captureBatches(status: (call: number) => number = () => 200) {
+  const batches: { key: string | null; emails: Posted[] }[] = [];
+  const delivered = new Map<string, string>();
+  let calls = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!url.endsWith("/emails/batch")) return original(input, init);
+    const headers = new Headers(init?.headers);
+    // SAFETY: the only sender of this request is deliverBatch(), which posts
+    // an array of exactly these fields.
+    const emails = JSON.parse(String(init?.body ?? "[]")) as Posted[];
+    const answer = status(calls);
+    calls += 1;
+    const key = headers.get("idempotency-key");
+    const body = String(init?.body ?? "");
+    const seen = key === null ? undefined : delivered.get(key);
+    if (answer === 409 || (seen !== undefined && seen !== body)) {
+      return Response.json({ name: "invalid_idempotent_request" }, { status: 409 });
+    }
+    if (answer !== 200) return new Response("down", { status: answer });
+    const ok = Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) });
+    if (seen !== undefined) return ok;
+    if (key !== null) delivered.set(key, body);
+    batches.push({ key, emails });
+    return ok;
+  };
+  return {
+    batches,
+    calls: () => calls,
+    restore: () => (globalThis.fetch = original),
+  };
 }

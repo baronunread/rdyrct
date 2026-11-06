@@ -18,6 +18,8 @@ export interface Env {
   /* custom-domain activation as a durable background workflow */
   DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
   LINK_IMPORT: Workflow<{ importId: string }>;
+  /* one newsletter send, keyed by its send id (newsletter-send.ts) */
+  NEWSLETTER_SEND: Workflow<{ sendId: string }>;
   /* click ingestion: redirects buffer here instead of writing D1 directly
      (#225), one instance, flushed to D1 on a ~10 s alarm */
   CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;
@@ -42,6 +44,19 @@ export interface Env {
   // founder's welcome email. Unset, no welcome is sent: its text is written in
   // one person's voice, which a self-hosted instance has no right to borrow.
   WELCOME_FROM?: string;
+  // var, e.g. "Andrea at rdyrct <news@news.rdyrct.com>". The sender of every
+  // newsletter, on its own subdomain so a marketing complaint cannot reach the
+  // reputation of the sign-in mail's MAIL_FROM. Unset, a newsletter send is
+  // refused (newsletter.ts).
+  NEWSLETTER_FROM?: string;
+  // var, optional: where replies to a newsletter go. The sending subdomain
+  // has no inbox, so without it a reply bounces.
+  NEWSLETTER_REPLY_TO?: string;
+  // var, optional, e.g. "rdyrct, 1 Example Street, 00100 Rome, Italy". When
+  // set, every newsletter footer prints it under the unsubscribe link (the US
+  // CAN-SPAM Act asks for one when mailing US recipients). Unset, the footer
+  // has no address and sending works the same.
+  POSTAL_ADDRESS?: string;
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
 

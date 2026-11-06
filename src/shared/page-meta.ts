@@ -426,33 +426,35 @@ TinyURL shortens a link for free, with no account. Its branded domains and analy
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 26 October 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 6 November 2026.
 
 ## Data controller
 
-Andrea Bruno is the data controller for rdyrct. For a privacy request or question, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).
+Andrea Bruno (Viale Gabriele D'Annunzio 23, 34138 Trieste (TS), Italy; P.IVA 01457780326) is the data controller for rdyrct. For a privacy request or question, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).
 
 ## Data we collect
 
-We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking. If you report a link, we store the address you report, your reason and note, and the email you choose to give.
+We collect your account email address and name, plus the organizations, links, domains, and settings you create. If you sign in with Google, Google tells us your email address and name. We store a profile picture or QR logo you upload, and which AI assistants or API keys you connected and when they were last used. A file you import from another link shortener is read in your browser; only its links reach us. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking. If you report a link, we store the address you report, your reason and note, and the email you choose to give.
 
-If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
+If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed. If you choose to get product news or offers by email, we record which lists you joined, when, and where you said so.
+
+On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page, the site you came from, your browser, device type, and country. It sets no cookie and keeps no IP address. The footer of our public pages shows badges from Fazier and PeerPush that your browser loads from their sites, which tells them your IP address and browser.
 
 ## Why we process it
 
-We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service. When you sign up, reset a password, shorten a link from the home page, build a UTM link, or report a link, Cloudflare Turnstile reads signals from your browser and connection to check that a person, not a script, sent the form, to keep automated sign-ups and abuse off the service.
+We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. We count page visits with our own cookieless counter to know which pages people read. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service. When you sign up, reset a password, shorten a link from the home page, build a UTM link, or report a link, Cloudflare Turnstile reads signals from your browser and connection to check that a person, not a script, sent the form, to keep automated sign-ups and abuse off the service. We send product news and offers only to people who asked for them; every such email has a link that unsubscribes you at once, and Settings turns each list on or off.
 
 ## Cookies
 
-rdyrct sets a necessary session cookie. If you accept analytics, PostHog also sets a cookie. We do not use advertising cookies.
+rdyrct sets a necessary session cookie. If you accept analytics, PostHog also sets a cookie. Local storage keeps your banner answer, your theme, the organization you last opened, your account details for a fast reload (cleared on sign-out), your setup progress, and whether the home page already showed you a discount; none of it is sent anywhere. We do not use advertising cookies.
 
 ## Sub-processors
 
-We use Cloudflare for hosting, storage, and the Turnstile check on forms, Resend for transactional email, Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google Web Risk to check links. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
+We use Cloudflare for hosting, storage, and the Turnstile check on forms, Resend for account email (and product news or offers if you asked for them), Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google for sign-in with Google and Web Risk link checks. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
 
 ## Retention and rights
 
-We retain account and organization data while your account is active. You can access, correct, export, or erase your data, object to or restrict processing, withdraw consent, or delete your account in Settings. If you are in the EU, you may complain to the Italian data protection authority.
+We retain account and organization data while your account is active, and click analytics for 400 days. You can access, correct, export, or erase your data, object to or restrict processing, withdraw consent, or delete your account in Settings. If you are in the EU, you may complain to the Italian data protection authority.
 
 For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
   },
@@ -462,11 +464,11 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 6 November 2026.
 
 ## Acceptance and acceptable use
 
-Use rdyrct only if you agree to these terms. Do not create links that are illegal, malicious, used for phishing, malware distribution, spam, or other abuse, or that imitate another brand to collect payments or credentials. We may pause or disable a link or account that breaks this rule, block a destination host, and suspend the organizations of a banned account. A pause is not a verdict: we tell the owner why and restore the links if we were wrong.
+Use rdyrct only if you agree to these terms. Do not create links that are illegal, malicious, used for phishing, malware distribution, spam, or other abuse, or that imitate another brand to collect payments or credentials. We may pause or disable a link or account that breaks this rule, block a destination host, and suspend the organizations of a banned account, deleting them 90 days later unless we lift the ban. A pause is not a verdict: we tell the owner why and restore the links if we were wrong.
 
 ## Reporting abuse and appeals
 
@@ -481,6 +483,8 @@ You must keep your account secure and are responsible for activity under organiz
 Polar is rdyrct's merchant of record for paid plans. Subscriptions renew until you cancel them, and you can manage them in Billing. rdyrct is MIT licensed and can be self-hosted from the [public repository](https://github.com/baronunread/rdyrct). Hosted-service terms do not apply to a self-hosted installation.
 
 Links keep redirecting however many clicks they get. Each plan records a set number of clicks a month for each organization (5,000 on Free, 50,000 on Hobby, 500,000 on Pro). Past that, the rest of that month's clicks are not recorded for analytics; the links themselves keep working.
+
+Every plan includes one organization; higher limits are available by arrangement. Moving to a smaller plan deletes nothing: what no longer fits becomes read-only, and custom domains over the limit keep working for 30 days. Discount codes apply at checkout, on the terms shown with the code. Polar handles refunds and your right to withdraw under its buyer terms.
 
 ## Service, termination, and law
 
