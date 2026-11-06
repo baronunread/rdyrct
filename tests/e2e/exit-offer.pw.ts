@@ -44,12 +44,23 @@ async function leaveThroughTop(page: Page) {
   await pointerOutOfTop(page);
 }
 
+/** Ten seconds on, then out through the top until the card is up. The
+ * listener goes on only once /api/config answers, which the ten seconds set
+ * off on a page that had not asked for it yet (/pricing), so a leave sent
+ * before then is lost: leave again until it lands. */
+async function leaveUntilCard(page: Page) {
+  await page.clock.fastForward(11_000);
+  await expect(async () => {
+    await pointerOutOfTop(page);
+    await expect(card(page)).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+}
+
 /** On `path`, ten seconds on, out through the top: the card is up, and
  * the clock runs in real time again for what the test does with it. */
 async function openCard(page: Page, path = "/") {
   await openOnDesktop(page, path);
-  await leaveThroughTop(page);
-  await expect(card(page)).toBeVisible();
+  await leaveUntilCard(page);
   await page.clock.resume();
 }
 
@@ -83,8 +94,7 @@ test("a leaving visitor sees the code and can copy it", async ({ page, context }
   await pointerOutOfTop(page);
   await expect(card(page)).toHaveCount(0);
 
-  await leaveThroughTop(page);
-  await expect(card(page)).toBeVisible();
+  await leaveUntilCard(page);
   await page.clock.resume();
   await expect(card(page)).toContainText("first 3 months of Hobby or Pro");
   await expect(card(page)).toContainText(CODE);
@@ -127,7 +137,7 @@ test("the card asks for no email address", async ({ page }) => {
 
 test("No thanks puts it away for good", async ({ page }) => {
   await openOnDesktop(page, "/pricing");
-  await leaveThroughTop(page);
+  await leaveUntilCard(page);
   await card(page).getByRole("button", { name: "No thanks" }).click();
   await expectAnswered(page);
 

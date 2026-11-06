@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 import { configQuery } from "../lib/hooks";
 import { readAuthHint } from "../lib/user-cache";
 import posthog from "../lib/posthog";
@@ -36,9 +37,16 @@ export function ExitOffer() {
   const [armed, setArmed] = useState(false);
   const code = useQuery({ ...configQuery, enabled: armed }).data?.exitOfferCode ?? null;
   const enabled = code !== null;
-  const [open, setOpen] = useState(false);
+  // The page the card opened on. It closes when the visitor moves on (a link,
+  // or Back), since the layout keeps this mounted across marketing pages,
+  // some of which never show it (NEVER_ON in lib/exit-offer.ts).
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const open = openOn === pathname;
   // Mounted from the first show on, so the dialog can play its exit.
   const [mounted, setMounted] = useState(false);
+  // Once a page load: the stored memory says so too, but storage can be off.
+  const shown = useRef(false);
 
   useEffect(() => {
     const arm = window.setTimeout(() => {
@@ -51,7 +59,7 @@ export function ExitOffer() {
     if (!enabled) return;
     void loadCard();
     const onLeave = (event: MouseEvent) => {
-      if (!leftTowardTabs(event, window.innerWidth)) return;
+      if (shown.current || !leftTowardTabs(event, window.innerWidth)) return;
       const eligible = exitOfferEligible({
         pathname: location.pathname,
         search: location.search,
@@ -64,10 +72,11 @@ export function ExitOffer() {
         now: Date.now(),
       });
       if (!eligible) return;
+      shown.current = true;
       rememberExitOfferShown();
       posthog.capture("exit_offer_shown", { path: location.pathname });
       setMounted(true);
-      setOpen(true);
+      setOpenOn(location.pathname);
     };
     document.addEventListener("mouseout", onLeave);
     return () => document.removeEventListener("mouseout", onLeave);
@@ -88,15 +97,15 @@ export function ExitOffer() {
         onCopied={() => answer("exit_offer_code_copied")}
         onAccepted={() => {
           answer("exit_offer_accepted");
-          setOpen(false);
+          setOpenOn(null);
         }}
         onDecline={() => {
           answer("exit_offer_dismissed", { how: "no_thanks" });
-          setOpen(false);
+          setOpenOn(null);
         }}
         onDismiss={() => {
           posthog.capture("exit_offer_dismissed", { path: location.pathname, how: "closed" });
-          setOpen(false);
+          setOpenOn(null);
         }}
       />
     </Suspense>
