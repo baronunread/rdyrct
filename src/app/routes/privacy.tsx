@@ -63,6 +63,14 @@ export function PrivacyPage() {
           news or offers by email, we record which lists you joined, when, and where you said so
           (while setting up your account, in the app, or in Settings).
         </p>
+        <p className="mt-2 text-muted">
+          On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page,
+          the site you came from, your browser, device type, and country. It sets no cookie and
+          keeps no IP address, so it cannot tell that two visits came from the same person. The
+          footer of our public pages shows two badges, from Fazier and PeerPush, that your browser
+          loads from their sites. Like any image from another site, that request tells them your IP
+          address and browser.
+        </p>
       </section>
 
       <section>
@@ -72,8 +80,10 @@ export function PrivacyPage() {
           up for (performance of a contract), send transactional email such as verification codes
           and team invites (contract), and produce click analytics for your own links (our
           legitimate interest in offering a useful product). The session cookie is strictly
-          necessary and requires no consent. Product usage analytics through PostHog runs only on
-          your consent, given or withdrawn at any time through the cookie banner. Reopen it with{" "}
+          necessary and requires no consent. We count page visits with our own cookieless counter
+          for our legitimate interest in knowing which pages people read. Product usage analytics
+          through PostHog runs only on your consent, given or withdrawn at any time through the
+          cookie banner. Reopen it with{" "}
           <CookieSettingsButton className="text-accent hover:underline" />, here or at the foot of
           any public page. We ask again after six months. We process technical error reports through
           Sentry for our legitimate interest in keeping the service secure and reliable. Sentry does
@@ -128,11 +138,10 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Data retention</h2>
         <p className="text-muted">
           We retain account and organization data for as long as your account is active. Click
-          analytics are kept only as long as needed to provide reporting, after which they are
-          deleted or aggregated. The record of your email choices is kept while your account exists,
-          so we can show when you agreed or declined. Deleting your account (Settings → Delete
-          account) removes your personal data within a reasonable period; billing records may be
-          retained where required by law.
+          analytics are kept for 400 days, then deleted. The record of your email choices is kept
+          while your account exists, so we can show when you agreed or declined. Deleting your
+          account (Settings → Delete account) removes your personal data within a reasonable period;
+          billing records may be retained where required by law.
         </p>
       </section>
 

@@ -44,7 +44,7 @@ export function TermsPage() {
           We may pause links we have reason to think break this rule. A pause is not a verdict: we
           tell the owner why, and restore the links if we were wrong. We may also block a
           destination host from being linked, and when we ban an account we suspend the
-          organizations it owns.
+          organizations it owns and delete them 90 days later, unless we lift the ban first.
         </p>
       </section>
 
