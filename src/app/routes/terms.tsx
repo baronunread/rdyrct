@@ -20,7 +20,7 @@ export function TermsPage() {
     <LegalPageLayout
       authed={authed}
       title="Terms of service"
-      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 5 November 2026."
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 6 November 2026."
     >
       <WebMcpMarketingTools />
 
@@ -98,6 +98,13 @@ export function TermsPage() {
           Free, {exactCount(PLAN_LIMITS.hobby.trackedClicks)} on Hobby,{" "}
           {exactCount(PLAN_LIMITS.pro.trackedClicks)} on Pro). Past that, the rest of that month's
           clicks are not recorded for analytics; the links themselves keep working.
+        </p>
+        <p className="mt-2 text-muted">
+          Every plan includes one organization. Higher limits are available by arrangement with us.
+          If you move to a smaller plan, we delete nothing: what no longer fits becomes read-only,
+          and custom domains over the limit keep working for 30 days. Discount codes apply at
+          checkout, on the terms shown with the code. Refunds and your right to withdraw from a
+          purchase are handled by Polar under its buyer terms.
         </p>
       </section>
 
