@@ -108,9 +108,13 @@ export function useInviteFlow(close: () => void): (email: string) => void {
         method: "POST",
         body: { role: "member", emails: [email] },
       }),
-    onSuccess: ({ failed }, email) => {
+    onSuccess: ({ failed, reused }, email) => {
       void qc.invalidateQueries({ queryKey: ["invites", org?.id] });
-      if (failed.length)
+      if (reused.length)
+        toast(`${email} already has an invite`, "info", {
+          detail: "Send it again from Members.",
+        });
+      else if (failed.length)
         toast(`Couldn't email ${email}`, "error", {
           detail: "The invite is saved. Send it again from Members.",
         });

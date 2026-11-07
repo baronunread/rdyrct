@@ -929,31 +929,70 @@ export async function republishLink(
   linkId: string,
   { recheck = false } = {},
 ): Promise<number> {
+  const synced = await republishLinks(env, db, [linkId], { recheck, inlineLimit: Infinity });
+  return synced.get(linkId) ?? 0;
+}
+
+/**
+ * `republishLink` for many links at once (#14): one address query, then
+ * sends of at most a hundred, the way republishOrgLinks does it, instead of
+ * a query, KV writes and a queue send per link. Returns how many addresses
+ * each link synced.
+ *
+ * Up to `inlineLimit` keys are written in the request; a bigger batch goes
+ * to the queue, since a write per key would spend the subrequest budget.
+ */
+export async function republishLinks(
+  env: Env,
+  db: DB,
+  linkIds: string[],
+  { recheck = false, inlineLimit = INLINE_KV_SYNC_LIMIT } = {},
+): Promise<Map<string, number>> {
   const addresses = await db
-    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+    .select({
+      linkId: schema.linkAddresses.linkId,
+      slug: schema.linkAddresses.slug,
+      hostname: schema.domains.hostname,
+    })
     .from(schema.linkAddresses)
     .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
-    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
-  if (addresses.length === 0) return 0;
+    .where(
+      and(
+        // One bound parameter however many ids: D1 allows 100 a query.
+        sql`${schema.linkAddresses.linkId} in (select value from json_each(${JSON.stringify(linkIds)}))`,
+        isNull(schema.linkAddresses.retiredAt),
+      ),
+    );
+  const synced = new Map<string, number>();
+  for (const a of addresses) synced.set(a.linkId, (synced.get(a.linkId) ?? 0) + 1);
+  if (addresses.length === 0) return synced;
   const messages = addresses.map((a) => syncLinkMsg(a.slug, a.hostname));
-  await enqueueStorage(env, messages, Infinity);
-  if (recheck)
-    try {
-      await env.STORAGE_QUEUE.sendBatch(
-        messages.map((body) => ({ body })),
-        { delaySeconds: RECHECK_DELAY_SECONDS },
-      );
-    } catch (error) {
-      // The write that matters already happened in the request.
+  const batches: StorageMessage[][] = [];
+  for (let i = 0; i < messages.length; i += REPUBLISH_BATCH)
+    batches.push(messages.slice(i, i + REPUBLISH_BATCH));
+  const inline = messages.length <= inlineLimit ? Infinity : 0;
+  await Promise.all(batches.map((batch) => enqueueStorage(env, batch, inline)));
+  if (recheck) {
+    const sends = await Promise.allSettled(
+      batches.map((batch) =>
+        env.STORAGE_QUEUE.sendBatch(
+          batch.map((body) => ({ body })),
+          { delaySeconds: RECHECK_DELAY_SECONDS },
+        ),
+      ),
+    );
+    const failed = sends.find((s) => s.status === "rejected");
+    // The write that matters already happened in the request.
+    if (failed?.status === "rejected")
       captureAlert([
         {
           event: "storage_recheck_send_failed",
           count: messages.length,
-          error: error instanceof Error ? error.message.slice(0, 200) : "",
+          error: failed.reason instanceof Error ? failed.reason.message.slice(0, 200) : "",
         },
       ]);
-    }
-  return addresses.length;
+  }
+  return synced;
 }
 
 /** How long after a suspension or restore the queue rewrites its keys. Past

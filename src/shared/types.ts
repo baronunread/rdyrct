@@ -490,6 +490,9 @@ export interface InviteDTO {
 export interface InvitesCreated {
   invites: InviteDTO[];
   failed: string[];
+  /** Addresses that already had an open invite, refreshed but not mailed
+   * again because the request did not ask for a resend. */
+  reused: string[];
 }
 
 export interface DomainDTO {

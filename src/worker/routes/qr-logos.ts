@@ -60,6 +60,34 @@ function validateQrLogoBody(type: string, body: ArrayBuffer): string {
   return ext;
 }
 
+/** Logos uploaded but not yet saved anywhere, on top of one per link: the
+ * orphan sweep removes those after a day. */
+const QR_LOGO_UNSAVED_HEADROOM = 100;
+
+/**
+ * The most logo objects one org may keep in R2 (#18): one for every link it
+ * may have, one for its own default, and a day of uploads nobody saved. Each
+ * upload is a new object, so without it a member looping uploads wrote
+ * objects without end until the daily sweep.
+ */
+export function qrLogoCap(limits: { links: number }): number {
+  return limits.links + 1 + QR_LOGO_UNSAVED_HEADROOM;
+}
+
+/** Whether the org already keeps `cap` objects under its prefix. Stops
+ * listing once it has seen that many, so a small org costs one list call. */
+async function qrLogoCapReached(bucket: R2Bucket, orgId: string, cap: number): Promise<boolean> {
+  let seen = 0;
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await bucket.list({ prefix: `${orgId}/`, cursor, limit: 1000 });
+    seen += page.objects.length;
+    if (seen >= cap) return true;
+    if (!page.truncated) return false;
+    cursor = page.cursor;
+  }
+}
+
 /** Store an upload, then close the window between the route middleware's
  * state read and R2. If teardown won that race, remove the new object before
  * reporting the refusal. */
@@ -89,8 +117,15 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   const body = await c.req.arrayBuffer();
   const ext = validateQrLogoBody(type, body);
 
-  const file = `${uid()}.${ext}`;
   const orgId = c.req.param("orgId")!;
+  // Concurrent uploads can each see room for one more, so the cap can be
+  // passed by the few that RL_QR_UPLOAD lets through at once, and no further.
+  if (await qrLogoCapReached(c.env.MEDIA, orgId, qrLogoCap(limits)))
+    throw new HTTPException(429, {
+      message: "This organization has too many logos stored. Try again tomorrow",
+    });
+
+  const file = `${uid()}.${ext}`;
   const key = `${orgId}/${file}`;
   const stored = await putQrLogoIfOrgWritable(c.var.db, c.env.MEDIA, orgId, key, body, type);
   if (!stored) throw new HTTPException(409, { message: "Organization is being deleted" });

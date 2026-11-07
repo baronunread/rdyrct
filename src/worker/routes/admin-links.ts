@@ -23,7 +23,13 @@ import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql, type SQL } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
-import { enqueueStorage, republishLink, republishOrgLinks, syncLinkMsg } from "../storage";
+import {
+  enqueueStorage,
+  republishLink,
+  republishLinks,
+  republishOrgLinks,
+  syncLinkMsg,
+} from "../storage";
 import {
   WARN_REASON,
   adoptWarning,
@@ -33,7 +39,7 @@ import {
 } from "../link-warning";
 import { linkClicksTotal } from "../rollups";
 import { activeAddressesOf } from "./links";
-import { recordAdminAction } from "../audit";
+import { recordAdminAction, recordAdminActions } from "../audit";
 import { blockable, blockHostOf } from "../../shared/abuse-rules";
 import { scoreDestinationWithWebRisk, webRiskAnswered } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
@@ -531,8 +537,10 @@ adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
 /**
  * Restore several links at once, for the aftermath of a sweep that suspended
  * a whole org's worth. Restore only: suspending needs a reason per decision.
- * Each link goes through setSuspended so it is republished and audited the
- * same as a single restore.
+ * Each link is republished and audited the same as a single restore, but in
+ * a fixed number of statements for the whole batch (#14): the single-link
+ * path per id was thousands of D1 statements and subrequests at MAX_ROWS,
+ * and died partway with some links restored and the rest not.
  */
 adminLinkRoutes.post("/restore", async (c) => {
   const log = c.get("log");
@@ -549,8 +557,47 @@ adminLinkRoutes.post("/restore", async (c) => {
     c.var.db,
     sql`${schema.orgs.id} in (select org_id from links where id in (select value from json_each(${JSON.stringify(ids)})))`,
   );
-  await Promise.all(ids.map((id) => setSuspended(c, id, false, null)));
-  return c.json({ count: ids.length });
+  const db = c.var.db;
+  const picked = sql`${schema.links.id} in (select value from json_each(${JSON.stringify(ids)}))`;
+  const links = await db
+    .select({
+      id: schema.links.id,
+      slug: schema.links.slug,
+      orgId: schema.links.orgId,
+      destination: schema.links.destination,
+    })
+    .from(schema.links)
+    .where(picked);
+  // Every id or none: a missing one restores nothing, like a banned owner.
+  if (links.length < new Set(ids).size) throw new HTTPException(404, { message: "Link not found" });
+
+  await db
+    .update(schema.links)
+    .set(suspensionPatch(false, c.var.user!.id, null))
+    .where(picked);
+  await Promise.all(
+    [...new Set(links.map((link) => link.orgId))].map((orgId) => clearOrgAfterRestore(db, orgId)),
+  );
+  // Small batches are written to KV in this request (#101); bigger ones go
+  // to the queue in sends of a hundred.
+  const synced = await republishLinks(c.env, db, ids, { recheck: true });
+  await recordAdminActions(
+    c.env,
+    links.map((link) => ({
+      actorUserId: c.var.user!.id,
+      action: "link.unsuspend",
+      targetType: "link",
+      targetId: link.id,
+      detail: {
+        slug: link.slug,
+        orgId: link.orgId,
+        destination: link.destination,
+        reason: null,
+        addresses: synced.get(link.id) ?? 0,
+      },
+    })),
+  );
+  return c.json({ count: links.length });
 });
 
 /**

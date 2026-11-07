@@ -94,7 +94,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
     mutationFn: (params: EmailInvites) =>
       api<InvitesCreated>(`/orgs/${orgId}/invites`, {
         method: "POST",
-        body: { role: params.role, emails: params.emails },
+        body: { role: params.role, emails: params.emails, resend: params.resend },
       }),
     onSuccess: (_data, variables) => {
       posthog.capture("member_invited", {
