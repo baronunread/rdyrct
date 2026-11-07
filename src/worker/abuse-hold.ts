@@ -36,14 +36,18 @@ const HOSTS_PER_QUERY = 90;
  */
 export async function blockedAmong(db: DB, hosts: string[]): Promise<Set<string>> {
   const candidates = [...new Set(hosts.flatMap(hostAndParents))];
-  const listed = new Set<string>();
-  for (let i = 0; i < candidates.length; i += HOSTS_PER_QUERY) {
-    const rows = await db
-      .select({ host: schema.blockedHosts.host })
-      .from(schema.blockedHosts)
-      .where(inArray(schema.blockedHosts.host, candidates.slice(i, i + HOSTS_PER_QUERY)));
-    for (const row of rows) listed.add(row.host);
-  }
+  const chunks: string[][] = [];
+  for (let i = 0; i < candidates.length; i += HOSTS_PER_QUERY)
+    chunks.push(candidates.slice(i, i + HOSTS_PER_QUERY));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      db
+        .select({ host: schema.blockedHosts.host })
+        .from(schema.blockedHosts)
+        .where(inArray(schema.blockedHosts.host, chunk)),
+    ),
+  );
+  const listed = new Set(results.flat().map((row) => row.host));
   return new Set(hosts.filter((host) => hostAndParents(host).some((h) => listed.has(h))));
 }
 

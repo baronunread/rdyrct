@@ -98,6 +98,9 @@ export async function sweepStaleReportWarnings(env: Env): Promise<number> {
     )
     .limit(500);
   let lifted = 0;
+  // One link at a time on purpose: each clear writes D1 and KV, and up to 500
+  // at once would put that many subrequests in flight in one cron run.
+  // react-doctor-disable-next-line react-doctor/async-await-in-loop
   for (const { id } of stale) if (await clearLinkWarning(env, db, id, WARN_REASON.report)) lifted++;
   return lifted;
 }
