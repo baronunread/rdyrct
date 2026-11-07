@@ -101,6 +101,18 @@ export async function publicClientKey(request: Request, secret: string): Promise
   return keyedDigest(secret, address);
 }
 
+/** The click limiter's visitor key: Cloudflare's own connecting address only,
+ * never x-forwarded-for, which a caller writes. Undefined without one, so the
+ * click falls back to the org's shared bucket rather than a bucket the caller
+ * can mint per request. */
+export async function clickVisitorKey(
+  request: Request,
+  secret: string,
+): Promise<string | undefined> {
+  const address = request.headers.get("cf-connecting-ip");
+  return address ? keyedDigest(secret, address) : undefined;
+}
+
 /**
  * The address an email-sending auth route would deliver to, hashed, or null
  * when the request names none.
@@ -259,12 +271,20 @@ export async function enforceSignedApiRateLimit(c: Context<AppEnv>, next: Next) 
   return next();
 }
 
+/**
+ * Whether to record one click. `visitor` (a `publicClientKey` digest, never
+ * the address) splits the bucket per visitor: one bucket for the whole org let
+ * one flooder spend it and drop every other visitor's clicks for the window.
+ * Without it the key is the subject alone (an anonymous link's own total).
+ */
 export async function clickAnalyticsAllowed(
   env: Env,
-  orgId: string,
+  subject: string,
   method = "GET",
+  visitor?: string,
 ): Promise<boolean> {
-  return rateLimitAllows(env.RL_CLICK_RECORDING, `click:org:${orgId}`, {
+  const key = visitor ? `click:org:${subject}:${visitor}` : `click:org:${subject}`;
+  return rateLimitAllows(env.RL_CLICK_RECORDING, key, {
     group: "click",
     method,
     failClosed: true,
