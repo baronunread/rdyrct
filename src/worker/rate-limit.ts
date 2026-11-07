@@ -259,12 +259,20 @@ export async function enforceSignedApiRateLimit(c: Context<AppEnv>, next: Next) 
   return next();
 }
 
+/**
+ * Whether to record one click. `visitor` (a `publicClientKey` digest, never
+ * the address) splits the bucket per visitor: one bucket for the whole org let
+ * one flooder spend it and drop every other visitor's clicks for the window.
+ * Without it the key is the subject alone (an anonymous link's own total).
+ */
 export async function clickAnalyticsAllowed(
   env: Env,
-  orgId: string,
+  subject: string,
   method = "GET",
+  visitor?: string,
 ): Promise<boolean> {
-  return rateLimitAllows(env.RL_CLICK_RECORDING, `click:org:${orgId}`, {
+  const key = visitor ? `click:org:${subject}:${visitor}` : `click:org:${subject}`;
+  return rateLimitAllows(env.RL_CLICK_RECORDING, key, {
     group: "click",
     method,
     failClosed: true,

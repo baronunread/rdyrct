@@ -183,7 +183,10 @@ describe("redirect hot path", () => {
         url: "https://example.com/viral",
       }),
     );
-    await env.RL_CLICK_RECORDING.limit({ key: "click:org:org-limited" });
+    // The test config allows one recorded click per visitor a minute: the
+    // first visit spends it.
+    await fetchWorker(new Request("http://localhost/viral", { redirect: "manual" }));
+    await resetClicks();
 
     const response = await fetchWorker(
       new Request("http://localhost/viral", { redirect: "manual" }),
@@ -192,6 +195,50 @@ describe("redirect hot path", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/viral");
     expect(await bufferedClicks()).toEqual([]);
+  });
+
+  it("keys the click limiter to the visitor, so one flooder never drops another visitor's clicks", async () => {
+    await env.LINKS.put(
+      "slug:summer",
+      JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+    // Three recorded clicks per key per window, like a spent production bucket.
+    const keys: string[] = [];
+    const counts = new Map<string, number>();
+    const threePerKey: RateLimit = {
+      limit: async (options) => {
+        const key = String(options?.key);
+        keys.push(key);
+        const used = (counts.get(key) ?? 0) + 1;
+        counts.set(key, used);
+        return { success: used <= 3 };
+      },
+    };
+    const limitedEnv = overrideEnv({ RL_CLICK_RECORDING: threePerKey });
+    const visit = async (ip: string) => {
+      const res = await fetchWorker(
+        new Request("http://localhost/summer", {
+          headers: { "cf-connecting-ip": ip },
+          redirect: "manual",
+        }),
+        limitedEnv,
+      );
+      // The redirect ships whatever the limiter says.
+      expect(res.status).toBe(302);
+    };
+
+    for (let i = 0; i < 5; i++) await visit("203.0.113.1");
+    for (let i = 0; i < 2; i++) await visit("198.51.100.2");
+
+    // A's overflow is dropped; both of B's clicks are recorded.
+    expect(await bufferedClicks()).toHaveLength(5);
+    expect(new Set(keys).size).toBe(2);
+    // The key holds a digest, never the address.
+    for (const key of keys) {
+      expect(key).toMatch(/^click:org:org-1:[0-9a-f]{64}$/);
+      expect(key).not.toContain("203.0.113.1");
+      expect(key).not.toContain("198.51.100.2");
+    }
   });
 
   it("still redirects when the hand-off to the click buffer fails", async () => {

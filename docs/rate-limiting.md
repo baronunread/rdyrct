@@ -116,7 +116,7 @@ proves nothing about the feature.
 | `RL_QR_UPLOAD`       | 20/min  | User              | QR logo uploads to R2         |
 | `RL_DOMAIN_SETUP`    | 30/min  | User              | Custom hostname calls         |
 | `RL_BILLING`         | 10/min  | User              | Polar checkout and reads      |
-| `RL_CLICK_RECORDING` | 600/min | Organization      | Click ingestion               |
+| `RL_CLICK_RECORDING` | 600/min | Org, visitor (IP) | Click ingestion               |
 
 These are set for the person having trouble, not for the bot: someone who
 mistypes a password, retries a signup or pastes six links in a row must never
