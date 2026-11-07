@@ -15,6 +15,7 @@ export type RateLimitGroup =
   | "qr_upload"
   | "domain"
   | "checkout"
+  | "billing_read"
   | "click"
   | "anon_link"
   | "unsubscribe";
@@ -181,6 +182,9 @@ export function signedApiGroup(
   method: string,
 ): Exclude<RateLimitGroup, "auth" | "email" | "click" | "anon_link" | "unsubscribe"> | null {
   if (/^\/api\/billing\/(?:checkout(?:\/[^/]+\/confirm)?|portal)$/.test(path)) return "checkout";
+  // GETs, but each one mints a Polar customer session and makes up to nine
+  // more Polar calls, all on the one organization token Polar rate-limits.
+  if (/^\/api\/billing\/(?:details|invoices\/[^/]+)$/.test(path)) return "billing_read";
   if (method === "POST" && /^\/api\/orgs\/[^/]+\/qr-logo\/?$/.test(path)) return "qr_upload";
   if (/^\/api\/orgs\/[^/]+\/domains(?:\/|$)/.test(path)) return "domain";
   if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE")
@@ -215,7 +219,10 @@ export async function enforceSignedApiRateLimit(c: Context<AppEnv>, next: Next) 
   let key = `${group}:${actor}`;
 
   switch (group) {
+    // Same binding, separate counters (the key starts with the group), so
+    // downloading invoices never uses up the budget for checking out.
     case "checkout":
+    case "billing_read":
       binding = c.env.RL_BILLING;
       break;
     case "domain":

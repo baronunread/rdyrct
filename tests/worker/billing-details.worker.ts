@@ -76,12 +76,28 @@ const polar: BillingProvider = {
   },
 };
 
+/**
+ * RL_BILLING as a counter this file controls: Cloudflare's simple limiter,
+ * per key, ten a minute (wrangler.jsonc), emptied before each test so the
+ * tests above the limit test cannot spend its budget.
+ */
+const BILLING_LIMIT = 10;
+const billingHits = new Map<string, number>();
+const billingLimiter: RateLimit = {
+  async limit({ key }) {
+    const hits = (billingHits.get(key) ?? 0) + 1;
+    billingHits.set(key, hits);
+    return { success: hits <= BILLING_LIMIT };
+  },
+};
+
 /** The token every portal call must carry: the session of the user's own customer. */
 const mine = { accessToken: "tok_cus_mine" };
 
 beforeEach(async () => {
   await applyTestMigrations();
   sessionsCreate.mockClear();
+  billingHits.clear();
   for (const mock of [
     customersGet,
     listPaymentMethods,
@@ -106,7 +122,7 @@ async function call(path: string, cookie: string): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost/api/billing${path}`, { headers: { cookie } }),
-    { ...billingEnv(), BILLING: polar },
+    { ...billingEnv(), BILLING: polar, RL_BILLING: billingLimiter },
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -306,5 +322,36 @@ describe("GET /api/billing/invoices/:orderId", () => {
     ordersInvoice.mockRejectedValue(new Error("network down"));
 
     expect((await call("/invoices/ord_1", await customerCookie())).status).toBe(502);
+  });
+});
+
+describe("billing reads are rate limited per user", () => {
+  it("answers 429 to GET /details past the limit, without asking Polar", async () => {
+    const cookie = await customerCookie();
+    for (let i = 0; i < BILLING_LIMIT; i++)
+      expect((await call("/details", cookie)).status).toBe(200);
+    sessionsCreate.mockClear();
+
+    const res = await call("/details", cookie);
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+    expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("answers 429 to GET /invoices/:orderId past the limit, without asking Polar", async () => {
+    ordersGet.mockResolvedValue(order());
+    ordersInvoice.mockResolvedValue({ url: "https://polar.example/invoice.pdf" });
+    const cookie = await customerCookie();
+    for (let i = 0; i < BILLING_LIMIT; i++)
+      expect((await call("/invoices/ord_1", cookie)).status).toBe(302);
+    sessionsCreate.mockClear();
+    ordersGet.mockClear();
+
+    const res = await call("/invoices/ord_1", cookie);
+
+    expect(res.status).toBe(429);
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    expect(ordersGet).not.toHaveBeenCalled();
   });
 });

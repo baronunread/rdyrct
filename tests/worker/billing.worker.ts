@@ -52,9 +52,11 @@ const customerSessionsCreate = vi.fn(async () => ({
   token: "polar_cst_test",
 }));
 const subscriptionsRevoke = vi.fn(async (id: string) => ({ id }));
-const subscriptionsList = vi.fn<() => Promise<{ items: { id: string }[] }>>(async () => ({
-  items: [],
-}));
+const subscriptionsList = vi.fn<() => Promise<{ items: { id: string; product_id: string }[] }>>(
+  async () => ({
+    items: [],
+  }),
+);
 const billingProvider: BillingProvider = {
   checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
@@ -362,6 +364,14 @@ function confirmRedeliveryPayload(
 }
 
 describe("POST /api/billing/checkout/:id/confirm", () => {
+  // The checkout's subscription, live: what Polar lists for cus_1 right
+  // after a pro checkout succeeds. The replay tests below take it away.
+  beforeEach(() => {
+    subscriptionsList.mockResolvedValue({
+      items: [{ id: "sub_1", product_id: POLAR_PRO_PRODUCT_ID }],
+    });
+  });
+
   it("requires sign-in", async () => {
     expect((await confirmCheckout("", "checkout_1")).status).toBe(401);
   });
@@ -379,6 +389,61 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     // back): see the route's own comment for why, and the redelivery tests
     // below for what replaces it once a webhook does arrive.
     expect(user?.polarSubscriptionId).toBe("pending:checkout_1");
+  });
+
+  it("does not grant the plan when the checkout's customer has no live subscription", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    subscriptionsList.mockResolvedValue({ items: [] });
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({ plan: "free" });
+    expect(subscriptionsList).toHaveBeenCalledWith(
+      expect.objectContaining({ customer_id: "cus_1", active: true }),
+    );
+    expect((await getUser("free-1"))?.plan).toBe("free");
+  });
+
+  it("does not grant a plan the live subscription is not for", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    subscriptionsList.mockResolvedValue({
+      items: [{ id: "sub_2", product_id: POLAR_HOBBY_PRODUCT_ID }],
+    });
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(await jsonBody(res)).toEqual({ plan: "free" });
+  });
+
+  it("replaying an old succeeded checkout after the subscription was revoked does not restore the plan", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+    expect((await getUser("free-1"))?.plan).toBe("pro");
+
+    // The subscription ends. Polar sends the revocation, a moment after the
+    // confirm's own "now", and stops listing it as active.
+    await postWebhook({
+      type: "subscription.revoked",
+      data: {
+        id: "pending:checkout_1",
+        metadata: { userId: "free-1" },
+        modified_at: new Date(Date.now() + 1000).toISOString(),
+      },
+    });
+    expect((await getUser("free-1"))?.plan).toBe("free");
+    subscriptionsList.mockResolvedValue({ items: [] });
+    // Days pass: the revocation is now well before any request's "now".
+    await db()
+      .update(schema.user)
+      .set({ polarEventAt: new Date(Date.now() - 86_400_000) })
+      .where(eq(schema.user.id, "free-1"));
+
+    // The same checkout id, POSTed again: still "succeeded" at Polar forever.
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({ plan: "free" });
+    expect((await getUser("free-1"))?.plan).toBe("free");
   });
 
   it("leaves the plan alone when the checkout hasn't succeeded yet", async () => {
@@ -555,6 +620,75 @@ describe("POST /api/webhooks/polar", () => {
       { "webhook-id": "x", "webhook-timestamp": "0", "webhook-signature": "v1,bogus" },
     );
     expect(res.status).toBe(403);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  /** A correctly signed subscription.active for user-1, padded past the
+   * body cap: it would upgrade the user if the handler read and verified it. */
+  function oversizedSignedEvent() {
+    const payload = JSON.stringify({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        customer_id: "cus_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1", padding: "a".repeat(2 * 1024 * 1024) },
+      },
+    });
+    return { payload, headers: signPayload(payload) };
+  }
+
+  async function postRaw(body: BodyInit, headers: Record<string, string>) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/webhooks/polar", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body,
+      }),
+      polarEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  it("refuses a body over the cap before verifying it", async () => {
+    await seedUser();
+    const { payload, headers } = oversizedSignedEvent();
+    const res = await postRaw(payload, headers);
+    expect(res.status).toBe(413);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("refuses a body over the cap that declares no length", async () => {
+    await seedUser();
+    const { payload, headers } = oversizedSignedEvent();
+    const bytes = new TextEncoder().encode(payload);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let at = 0; at < bytes.length; at += 64 * 1024)
+          controller.enqueue(bytes.slice(at, at + 64 * 1024));
+        controller.close();
+      },
+    });
+    const res = await postRaw(stream, headers);
+    expect(res.status).toBe(413);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("refuses a body longer than the length it declares, past the cap", async () => {
+    await seedUser();
+    const { payload, headers } = oversizedSignedEvent();
+    const bytes = new TextEncoder().encode(payload);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+    const res = await postRaw(stream, { ...headers, "content-length": "100" });
+    expect(res.status).toBe(413);
     expect((await getUser()).plan).toBe("free");
   });
 
@@ -1094,7 +1228,9 @@ describe("deleting a paying account ends its Polar subscription (#337)", () => {
       polarCustomerId: "cus_1",
       polarSubscriptionId: "pending:checkout_1",
     });
-    subscriptionsList.mockResolvedValueOnce({ items: [{ id: "sub_real" }] });
+    subscriptionsList.mockResolvedValueOnce({
+      items: [{ id: "sub_real", product_id: POLAR_PRO_PRODUCT_ID }],
+    });
     await deleteAccountAndOwnedOrgs(polarEnv(), "user-1");
     expect(subscriptionsList).toHaveBeenCalledWith({
       customer_id: "cus_1",
