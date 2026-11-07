@@ -35,8 +35,10 @@ import {
   isWebRiskHit,
   scoreAndRecord,
   webRiskThreats,
+  webRiskDay,
   webRiskVerdict,
   type RiskVerdict,
+  type SpendLookup,
 } from "./risk";
 import { captureAlert } from "./sentry";
 import { republishLink } from "./storage";
@@ -124,6 +126,42 @@ async function spendWebRiskLookup(db: DB, orgId: string): Promise<boolean> {
     )
     .returning({ id: schema.orgs.id });
   return spent.length > 0;
+}
+
+/**
+ * Web Risk lookups one anonymous caller (the landing page's shortener) may
+ * spend in a UTC day. It has no org to count against, and without this one
+ * caller with fresh URLs could spend the whole site-wide day
+ * (WEB_RISK_LOOKUPS_PER_DAY) and leave every org's links unchecked until
+ * midnight. 20 covers somebody trying the form many times over; past it the
+ * link is still made, only not asked about, as when Google does not answer.
+ * A cached answer costs nothing, so a known-listed site is still refused.
+ */
+export const WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY = 20;
+
+/**
+ * Count one Web Risk lookup against an anonymous caller's day, or return
+ * false when it is spent. `client` is publicClientKey's HMAC, never the
+ * address. One statement, so two requests racing cannot both take the last.
+ */
+export function spendAnonWebRiskLookup(d1: D1Database, client: string): SpendLookup {
+  return async () => {
+    const row = await d1
+      .prepare(
+        `insert into web_risk_anon_usage (client, day, lookups) values (?1, ?2, 1)
+         on conflict (client, day) do update set lookups = lookups + 1 where lookups < ?3
+         returning lookups`,
+      )
+      .bind(client, webRiskDay(), WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY)
+      .first();
+    return row !== null;
+  };
+}
+
+/** Daily: drop every anonymous caller's count from before today, so no
+ * caller's key outlives the day it counted. */
+export async function forgetOldAnonWebRiskUsage(d1: D1Database): Promise<void> {
+  await d1.prepare("delete from web_risk_anon_usage where day < ?").bind(webRiskDay()).run();
 }
 
 /** How soon the rescan asks again about a link whose lookup or hold failed. */
