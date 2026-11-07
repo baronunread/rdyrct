@@ -241,6 +241,33 @@ describe("redirect hot path", () => {
     }
   });
 
+  it("never lets x-forwarded-for mint a new click-limiter bucket", async () => {
+    await env.LINKS.put(
+      "slug:summer",
+      JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+    const keys: string[] = [];
+    const recordKeys: RateLimit = {
+      limit: async (options) => {
+        keys.push(String(options?.key));
+        return { success: true };
+      },
+    };
+    const limitedEnv = overrideEnv({ RL_CLICK_RECORDING: recordKeys });
+    for (const forwarded of ["203.0.113.1", "203.0.113.2", "203.0.113.3"]) {
+      const res = await fetchWorker(
+        new Request("http://localhost/summer", {
+          headers: { "x-forwarded-for": forwarded },
+          redirect: "manual",
+        }),
+        limitedEnv,
+      );
+      expect(res.status).toBe(302);
+    }
+    // No trusted address: every click shares the org's bucket.
+    expect(keys).toEqual(["click:org:org-1", "click:org:org-1", "click:org:org-1"]);
+  });
+
   it("still redirects when the hand-off to the click buffer fails", async () => {
     await env.LINKS.put(
       "slug:summer",

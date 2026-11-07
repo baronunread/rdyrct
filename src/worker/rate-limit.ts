@@ -101,6 +101,18 @@ export async function publicClientKey(request: Request, secret: string): Promise
   return keyedDigest(secret, address);
 }
 
+/** The click limiter's visitor key: Cloudflare's own connecting address only,
+ * never x-forwarded-for, which a caller writes. Undefined without one, so the
+ * click falls back to the org's shared bucket rather than a bucket the caller
+ * can mint per request. */
+export async function clickVisitorKey(
+  request: Request,
+  secret: string,
+): Promise<string | undefined> {
+  const address = request.headers.get("cf-connecting-ip");
+  return address ? keyedDigest(secret, address) : undefined;
+}
+
 /**
  * The address an email-sending auth route would deliver to, hashed, or null
  * when the request names none.

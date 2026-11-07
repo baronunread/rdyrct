@@ -9,7 +9,7 @@ import { rollupStatements, type ClickPayload } from "./rollups";
 import { usageStatement, withinClickCaps } from "./click-caps";
 import { overflowStatement } from "./click-overflow";
 import { deviceFromUA, normalizeReferrer } from "./util";
-import { clickAnalyticsAllowed, publicClientKey } from "./rate-limit";
+import { clickAnalyticsAllowed, clickVisitorKey } from "./rate-limit";
 import { captureAlert } from "./sentry";
 import { logFailure } from "./log-failure";
 
@@ -67,7 +67,7 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
   try {
     // Per visitor, so a flood spends only its own budget. The digest lives in
     // the limiter's counter and nowhere else: a click never stores an IP.
-    const visitor = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
+    const visitor = await clickVisitorKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
     if (!(await clickAnalyticsAllowed(c.env, hit.orgId, c.req.method, visitor))) return;
     const message: ClickMessage = {
       dedupeId: crypto.randomUUID(),
