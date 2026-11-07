@@ -33,6 +33,7 @@ Prefer a terminal? `bun run setup` does the same from a clone: see [Deploy to Cl
 - **Magic-link invites**: single-use, valid for 7 days, sent by email.
 - **Privacy-friendly analytics**: clicks per day, top links, countries, referrers, devices. No IP addresses are ever stored.
 - **Per-user Free/Hobby/Pro billing** through [Polar](https://polar.sh), which acts as Merchant of Record and handles tax/VAT.
+- **Newsletters with consent kept in your database**: two lists (product news, offers), each opted into on its own, sent from the app through Resend, with a one-click unsubscribe in every email.
 - **Secret-pinned superadmin console**: the account matching `SUPERADMIN_EMAIL` gets a cloud-console panel for usage, org drill-down, and plan management. It 404s for everyone else.
 
 ---
@@ -191,6 +192,8 @@ Everything else is optional. Each piece says what it adds:
 | `WEB_RISK_API_KEY`                           | Google Web Risk as a second destination check. A listed destination puts its link on hold.                                                                                                                 |
 | `SENTRY_DSN`                                 | Error reports to your Sentry project.                                                                                                                                                                      |
 | `SITE_NAME`                                  | The name every tab shows, such as "Acme links". Without it, tabs show your copy's host.                                                                                                                    |
+| `NEWSLETTER_FROM`, `NEWSLETTER_REPLY_TO`     | Newsletters from the admin console, sent from their own subdomain (verify it in Resend) so a complaint cannot hurt sign-in mail. Without `NEWSLETTER_FROM`, a send is refused.                             |
+| `POSTAL_ADDRESS`                             | A postal address in every newsletter footer, which US law asks for. Without it, the footer has none.                                                                                                       |
 
 **With no email provider and no Google sign-in, accounts are not verified and passwords cannot be reset.** That is fine for a private instance and not recommended for a public one. The admin console says so while it is true.
 
@@ -202,7 +205,7 @@ bunx wrangler secret bulk prod.secrets.env && rm prod.secrets.env
 
 ### Move to your own domain
 
-Started on `workers.dev`, from the button or from setup? Clone your copy, run `bun run setup` and give it the domain (it has to be on your Cloudflare account), then commit `wrangler.jsonc` and push. Setup attaches the domain and keeps your data, your secrets and the session key. By hand instead: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc`, remove the vars that are rdyrct.com's (`MAIL_FROM`, `WELCOME_FROM`, `POLAR_*`, `CF_ZONE_ID`, `SENTRY_DSN`) and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
+Started on `workers.dev`, from the button or from setup? Clone your copy, run `bun run setup` and give it the domain (it has to be on your Cloudflare account), then commit `wrangler.jsonc` and push. Setup attaches the domain and keeps your data, your secrets and the session key. By hand instead: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc`, remove the vars that are rdyrct.com's (`MAIL_FROM`, `WELCOME_FROM`, `NEWSLETTER_FROM`, `NEWSLETTER_REPLY_TO`, `POSTAL_ADDRESS`, `POLAR_*`, `EXIT_OFFER_CODE`, `CF_ZONE_ID`, `SENTRY_DSN`) and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
 
 ### Email (optional)
 
@@ -212,7 +215,7 @@ Set `RESEND_API_KEY` and `MAIL_FROM` (a sender at a domain you verified in [Rese
 
 Skip this section to run with no caps and no billing. To sell plans, set `POLAR_SERVER=sandbox` (or `production` when live), `POLAR_PRO_PRODUCT_ID` and `POLAR_HOBBY_PRODUCT_ID` (recurring products you create in Polar), and the secrets `POLAR_ACCESS_TOKEN` and `POLAR_WEBHOOK_SECRET`.
 
-**Polar setup:** create an Organization Access Token with scopes `checkouts:write` and `customer_sessions:write`. Add a webhook endpoint at `https://rdyrct.com/api/webhooks/polar` and subscribe to all five events the Worker handles. Miss one and billing state drifts:
+**Polar setup:** create an Organization Access Token with scopes `checkouts:write`, `customer_sessions:write` and `subscriptions:write` (deleting or banning an account revokes its subscription, and confirming a checkout reads the customer's live subscriptions). Add a webhook endpoint at `https://rdyrct.com/api/webhooks/polar` and subscribe to all five events the Worker handles. Miss one and billing state drifts:
 
 | Event                     | What it does                                                                    |
 | ------------------------- | ------------------------------------------------------------------------------- |
@@ -242,24 +245,29 @@ before changing link, domain, logo, or organization delete flows.
 
 ## Configuration
 
-| Name                     | Kind           | Purpose                                                                             |
-| ------------------------ | -------------- | ----------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`     | secret         | Signs sessions and tokens                                                           |
-| `SUPERADMIN_EMAIL`       | secret         | The account that becomes the platform admin                                         |
-| `RESEND_API_KEY`         | secret         | Resend API key for transactional email                                              |
-| `POLAR_ACCESS_TOKEN`     | secret         | Polar API access token (scopes: `checkouts:write`, `customer_sessions:write`)       |
-| `POLAR_WEBHOOK_SECRET`   | secret         | Verifies Polar webhook signatures; endpoint `https://rdyrct.com/api/webhooks/polar` |
-| `CF_API_TOKEN`           | secret         | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains)       |
-| `APP_URL`                | var            | Full public URL of the app, e.g. `https://rdyrct.com`                               |
-| `APP_HOST`               | var            | Public host, e.g. `rdyrct.com`                                                      |
-| `SHARED_LINK_HOST`       | secret (opt.)  | Second shared-domain host for new links, e.g. `rdyr.cc`; set after it resolves      |
-| `MAIL_FROM`              | var            | From address for outgoing email                                                     |
-| `RESEND_BASE_URL`        | var (dev only) | Points at the local Resend emulator                                                 |
-| `POLAR_SERVER`           | var            | `sandbox` or `production`                                                           |
-| `POLAR_PRO_PRODUCT_ID`   | var            | Polar product id for the Pro plan                                                   |
-| `POLAR_HOBBY_PRODUCT_ID` | var            | Polar product id for the Hobby plan                                                 |
-| `CF_ZONE_ID`             | var            | Zone id used for Custom Hostnames                                                   |
-| `CF_DEV_ENV`             | var (dev only) | `simulated` fakes the Custom Hostnames API on a timer, `instant` without one        |
+| Name                        | Kind           | Purpose                                                                               |
+| --------------------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`        | secret         | Signs sessions and tokens                                                             |
+| `SUPERADMIN_EMAIL`          | secret         | The account that becomes the platform admin                                           |
+| `RESEND_API_KEY`            | secret         | Resend API key for transactional email                                                |
+| `POLAR_ACCESS_TOKEN`        | secret         | Polar API token (`checkouts:write`, `customer_sessions:write`, `subscriptions:write`) |
+| `POLAR_WEBHOOK_SECRET`      | secret         | Verifies Polar webhook signatures; endpoint `https://rdyrct.com/api/webhooks/polar`   |
+| `CF_API_TOKEN`              | secret         | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains)         |
+| `APP_URL`                   | var            | Full public URL of the app, e.g. `https://rdyrct.com`                                 |
+| `APP_HOST`                  | var            | Public host, e.g. `rdyrct.com`                                                        |
+| `SHARED_LINK_HOST`          | secret (opt.)  | Second shared-domain host for new links, e.g. `rdyr.cc`; set after it resolves        |
+| `MAIL_FROM`                 | var            | From address for outgoing email                                                       |
+| `RESEND_BASE_URL`           | var (dev only) | Points at the local Resend emulator                                                   |
+| `POLAR_SERVER`              | var            | `sandbox` or `production`                                                             |
+| `POLAR_PRO_PRODUCT_ID`      | var            | Polar product id for the Pro plan                                                     |
+| `POLAR_HOBBY_PRODUCT_ID`    | var            | Polar product id for the Hobby plan                                                   |
+| `POLAR_*_YEARLY_PRODUCT_ID` | var            | Polar product ids for the yearly Pro and Hobby plans                                  |
+| `CF_ZONE_ID`                | var            | Zone id used for Custom Hostnames                                                     |
+| `NEWSLETTER_FROM`           | var (opt.)     | Newsletter sender, on its own subdomain; unset refuses newsletter sends               |
+| `NEWSLETTER_REPLY_TO`       | var (opt.)     | Where replies to a newsletter go                                                      |
+| `POSTAL_ADDRESS`            | var (opt.)     | Postal address in every newsletter footer                                             |
+| `EXIT_OFFER_CODE`           | var (opt.)     | rdyrct.com only: Polar discount code the leaving popup shows; unset hides it          |
+| `CF_DEV_ENV`                | var (dev only) | `simulated` fakes the Custom Hostnames API on a timer, `instant` without one          |
 
 Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.local.example`).
 
