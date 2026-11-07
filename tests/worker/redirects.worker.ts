@@ -145,6 +145,35 @@ describe("redirect hot path", () => {
     expect(response.headers.get("location")).toBe("https://example.com/pricing");
   });
 
+  it("never reads a custom domain's link through a colon path on the app or shared host", async () => {
+    // Shared keys are `slug:<slug>` and custom-domain keys are
+    // `slug:<host>:<slug>`, so a shared-host slug holding a colon would land
+    // in another tenant's namespace. No real slug holds one (SLUG_RE).
+    await putCustomDomainAndSlug();
+
+    for (const host of [undefined, sharedHost]) {
+      const response = await fetchWorker(
+        new Request("http://localhost/go.example.com:pricing", {
+          headers: host ? { host } : {},
+          redirect: "manual",
+        }),
+      );
+      expect(response.status, `status on ${host ?? "the app host"}`).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+    }
+    expect(await bufferedClicks()).toEqual([]);
+
+    // The tenant's own address still answers.
+    const own = await fetchWorker(
+      new Request("http://localhost/pricing", {
+        headers: { host: "go.example.com" },
+        redirect: "manual",
+      }),
+    );
+    expect(own.status).toBe(302);
+    expect(own.headers.get("location")).toBe("https://example.com/pricing");
+  });
+
   it("still redirects and skips the click enqueue when analytics is limited", async () => {
     await env.LINKS.put(
       "slug:viral",

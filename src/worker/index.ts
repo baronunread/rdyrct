@@ -237,12 +237,17 @@ function isLive(hit: KVSlugValue): boolean {
  * A D1 error is a miss, not a 500: the redirect path worked on KV alone
  * before this fallback, and a D1 outage must not turn every unknown slug
  * into a server error. The error is logged on the request's event.
+ *
+ * A colon stops before KV. Shared keys are `slug:<slug>` and custom-domain
+ * keys `slug:<host>:<slug>`, so /go.acme.com:promo on the shared host would
+ * read another tenant's link. No slug holds a colon (SLUG_RE).
  */
 async function resolveLink(
   c: Context<AppEnv>,
   slug: string,
   hostname: string | null,
 ): Promise<KVSlugValue | null> {
+  if (slug.includes(":")) return null;
   const hit = await resolveSlug(c.env, slug, hostname);
   if (hit || !SLUG_RE.test(slug)) return hit;
   try {
