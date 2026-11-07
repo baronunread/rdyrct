@@ -49,19 +49,21 @@ export function PrivacyPage() {
           explicitly do <span className="text-text">not</span> store the IP address of the people
           who click your links, their precise location, or any data that would allow cross-site
           tracking. If you report a link, we store the address you report, your reason and note, and
-          the email you choose to give. We do not store your IP address. Separately, if you accept
-          analytics in the cookie banner, we use PostHog to understand how the product itself is
-          used: which features you use and app events such as signing in or creating a link, tied to
-          your account email and name. We turn off autocapture and session recording, so PostHog
-          never records what you type or a replay of your screen. Nothing is sent to PostHog, and no
-          PostHog cookie is set, unless you accept. Until you answer the banner, a few steps you
-          take on the current page (such as viewing it or clicking a button) are held in your
-          browser&apos;s memory: accepting sends them, with the time they happened; rejecting or
-          leaving the page discards them. We also use Sentry to receive technical error reports from
-          the app. These reports include technical diagnostic data such as the error, browser, and
-          page path. We remove page query strings before sending them. If you choose to get product
-          news or offers by email, we record which lists you joined, when, and where you said so
-          (while setting up your account, in the app, or in Settings).
+          the email you choose to give. We do not store your IP address. To tell one reporter from
+          another we keep a code made from your connection and that link, which cannot be turned
+          back into your IP address. Separately, if you accept analytics in the cookie banner, we
+          use PostHog to understand how the product itself is used: which features you use and app
+          events such as signing in or creating a link, tied to your account email and name. We turn
+          off autocapture and session recording, so PostHog never records what you type or a replay
+          of your screen. Nothing is sent to PostHog, and no PostHog cookie is set, unless you
+          accept. Until you answer the banner, a few steps you take on the current page (such as
+          viewing it or clicking a button) are held in your browser&apos;s memory: accepting sends
+          them, with the time they happened; rejecting or leaving the page discards them. We also
+          use Sentry to receive technical error reports from the app. These reports include
+          technical diagnostic data such as the error, browser, and page path. We remove page query
+          strings before sending them. If you choose to get product news or offers by email, we
+          record which lists you joined, when, and where you said so (while setting up your account,
+          in the app, or in Settings).
         </p>
         <p className="mt-2 text-muted">
           On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page,

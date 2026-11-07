@@ -7,6 +7,11 @@ import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, desiredLink, syncLinkMsg } from "../../src/worker/storage";
 import { WARN_REASON, warnOrgLinks } from "../../src/worker/link-warning";
 import {
+  REPORT_WARNING_TTL_MS,
+  REPORTERS_TO_WARN,
+  sweepStaleReportWarnings,
+} from "../../src/worker/routes/reports";
+import {
   adminCookie,
   applyTestMigrations,
   freeOwnerCookie,
@@ -171,14 +176,31 @@ describe("what a visitor sees", () => {
 });
 
 describe("reports put a warning on the link", () => {
-  const report = () =>
+  // Each call comes from a new address unless told otherwise: the warning
+  // counts distinct reporters, not reports.
+  let reporters = 0;
+  const report = (ip = `198.51.100.${++reporters}`) =>
     fetchWorker(
       new Request("http://localhost/api/reports", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "cf-connecting-ip": ip },
         body: JSON.stringify({ link: sampleLink.slug, reason: "phishing" }),
       }),
     );
+  const dismissAll = async (cookie: string) => {
+    const ids = (await env.DB.prepare("select id from link_reports").all<{ id: string }>()).results;
+    for (const { id } of ids)
+      await fetchWorker(
+        new Request(`http://localhost/api/admin/links/reports/${id}/dismiss`, {
+          method: "POST",
+          headers: { cookie },
+        }),
+      );
+  };
+  /** Enough distinct reporters to cross the warning threshold. */
+  const reportEnough = async () => {
+    for (let i = 0; i < REPORTERS_TO_WARN; i++) await report();
+  };
 
   const warnRow = () =>
     env.DB.prepare("select warned_at, warn_reason from links where id = ?")
@@ -196,12 +218,44 @@ describe("reports put a warning on the link", () => {
       ),
     ]);
 
-  it("warns a free org's link at once", async () => {
+  it("does not warn a free org's link on one reporter, and does on enough of them", async () => {
     await seedLink();
     await ownedBy("free");
-    await report();
+    await syncKv();
+    expect((await report("203.0.113.9")).status).toBe(201);
+    // The same reporter again is still one reporter.
+    expect((await report("203.0.113.9")).status).toBe(201);
+    expect((await warnRow())?.warned_at).toBeNull();
+    expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).not.toHaveProperty("warn");
+    expect((await get(`http://${env.SHARED_LINK_HOST}/${sampleLink.slug}`)).status).toBe(302);
+    const stored = await env.DB.prepare("select count(*) as n from link_reports").first<{
+      n: number;
+    }>();
+    expect(stored?.n).toBe(2);
+
+    await reportEnough();
     expect((await warnRow())?.warn_reason).toBe("Open report");
     expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).toMatchObject({ warn: true });
+  });
+
+  it("lifts a report's warning on the daily sweep once it is old enough", async () => {
+    await seedLink();
+    await reportEnough();
+    expect((await warnRow())?.warned_at).not.toBeNull();
+
+    // Not yet: a fresh warning stays.
+    await sweepStaleReportWarnings(testEnv);
+    expect((await warnRow())?.warned_at).not.toBeNull();
+
+    await setLink(`warned_at = ${Date.now() - REPORT_WARNING_TTL_MS - 1}`);
+    await sweepStaleReportWarnings(testEnv);
+    expect((await warnRow())?.warned_at).toBeNull();
+    expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).not.toHaveProperty("warn");
+
+    // An admin's own warning is never the sweep's to lift.
+    await setLink(`warned_at = 1, warn_reason = 'Set by an admin'`);
+    await sweepStaleReportWarnings(testEnv);
+    expect((await warnRow())?.warn_reason).toBe("Set by an admin");
   });
 
   it("only queues a report on a paid org's link, which stays as it is", async () => {
@@ -225,22 +279,13 @@ describe("reports put a warning on the link", () => {
     }
   });
 
-  it("warns on the first report, and the last dismissal lifts it", async () => {
+  it("warns at the threshold, and the last dismissal lifts it", async () => {
     await seedLink();
-    await report();
+    await reportEnough();
     expect((await warnRow())?.warn_reason).toBe("Open report");
     expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).toMatchObject({ warn: true });
 
-    const cookie = await adminCookie();
-    const { id } =
-      (await env.DB.prepare("select id from link_reports").first<{ id: string }>()) ?? {};
-    const dismissed = await fetchWorker(
-      new Request(`http://localhost/api/admin/links/reports/${id}/dismiss`, {
-        method: "POST",
-        headers: { cookie },
-      }),
-    );
-    expect(dismissed.status).toBe(200);
+    await dismissAll(await adminCookie());
     expect((await warnRow())?.warned_at).toBeNull();
     expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).not.toHaveProperty("warn");
   });
@@ -273,24 +318,17 @@ describe("reports put a warning on the link", () => {
 
   it("leaves an admin's warning when the last report is dismissed", async () => {
     await seedLink();
-    await report();
+    await reportEnough();
     await setLink("warn_reason = 'Set by an admin'");
     const cookie = await adminCookie();
-    const { id } =
-      (await env.DB.prepare("select id from link_reports").first<{ id: string }>()) ?? {};
-    await fetchWorker(
-      new Request(`http://localhost/api/admin/links/reports/${id}/dismiss`, {
-        method: "POST",
-        headers: { cookie },
-      }),
-    );
+    await dismissAll(cookie);
     expect((await warnRow())?.warn_reason).toBe("Set by an admin");
   });
 
   it("makes a report's warning the admin's when they warn it too", async () => {
     // Warn, then dismiss: a common triage order, and the warning must stay.
     await seedLink();
-    await report();
+    await reportEnough();
     const cookie = await adminCookie();
     await fetchWorker(
       new Request(`http://localhost/api/admin/links/${sampleLink.id}/warning`, {
@@ -299,14 +337,7 @@ describe("reports put a warning on the link", () => {
         body: JSON.stringify({ warned: true }),
       }),
     );
-    const { id } =
-      (await env.DB.prepare("select id from link_reports").first<{ id: string }>()) ?? {};
-    await fetchWorker(
-      new Request(`http://localhost/api/admin/links/reports/${id}/dismiss`, {
-        method: "POST",
-        headers: { cookie },
-      }),
-    );
+    await dismissAll(cookie);
     expect((await warnRow())?.warn_reason).toBe("Set by an admin");
     expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).toMatchObject({ warn: true });
   });
@@ -314,7 +345,7 @@ describe("reports put a warning on the link", () => {
   it("does not warn a held link: it already serves nothing", async () => {
     await seedLink();
     await setLink(`suspended_at = ${Date.now()}`);
-    await report();
+    await reportEnough();
     expect((await warnRow())?.warned_at).toBeNull();
   });
 });

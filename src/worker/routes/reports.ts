@@ -9,8 +9,10 @@
  *
  * A report never suspends anything by itself. Anyone can file one, so a
  * single report could be used to take down a stranger's link. On a free
- * org's link it puts the warning page in front instead (#344): the link
- * keeps working, one click later, until an admin dismisses the report. On a
+ * org's link, REPORTERS_TO_WARN different reporters with open reports put
+ * the warning page in front instead (#344): one stranger alone cannot. The
+ * link keeps working, one click later, until an admin dismisses the reports
+ * or the daily sweep finds the warning older than REPORT_WARNING_TTL_MS. On a
  * paid org's link it only goes into the admin queue and the link stays as it
  * is: a paying customer went through billing, and one anonymous report must
  * not put an interstitial in front of their link (decided on #390). With no
@@ -21,7 +23,7 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, countDistinct, eq, gt, isNull, lt } from "drizzle-orm";
 import { TURNSTILE_FAILED_CODE, REPORT_REASONS, type JsonValue } from "@/shared/types";
 import * as schema from "../db/schema";
 import { drizzle } from "drizzle-orm/d1";
@@ -29,15 +31,64 @@ import type { AppEnv, DB, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
 import { spendToken } from "../turnstile";
 import { optionalText, parseBody } from "../schemas";
-import { publicClientKey, rateLimitAllows } from "../rate-limit";
+import { keyedDigest, publicClientKey, rateLimitAllows } from "../rate-limit";
 import { captureAlert } from "../sentry";
 import { notifyAdmin } from "../abuse";
-import { WARN_REASON, warnLink } from "../link-warning";
+import { clearLinkWarning, WARN_REASON, warnLink } from "../link-warning";
 import { orgPlan } from "../plan";
 import { uid } from "../util";
 
 /** Open reports on one link before its org is flagged for review. */
 export const REPORTS_TO_FLAG = 3;
+
+/** Different reporters with open reports on a free org's link before it
+ * gets the warning page. Two: one stranger cannot do it alone, and a real
+ * scam, which is reported once and then clicked a thousand times, still gets
+ * its warning from the second person it fools. */
+export const REPORTERS_TO_WARN = 2;
+
+/** How long a warning set by reports lasts before the daily sweep lifts it,
+ * and how far back the reporters that set it are counted. An admin who wants
+ * it to stay makes it their own (adoptWarning). */
+export const REPORT_WARNING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Warn a free org's link once enough different reporters have recent open
+ * reports on it. */
+async function warnIfReportedEnough(env: Env, db: DB, linkId: string) {
+  const [{ reporters }] = await db
+    .select({ reporters: countDistinct(schema.linkReports.reporterKey) })
+    .from(schema.linkReports)
+    .where(
+      and(
+        eq(schema.linkReports.linkId, linkId),
+        eq(schema.linkReports.status, "open"),
+        gt(schema.linkReports.createdAt, Date.now() - REPORT_WARNING_TTL_MS),
+      ),
+    );
+  if (reporters < REPORTERS_TO_WARN) return false;
+  await warnLink(env, db, linkId, WARN_REASON.report);
+  return true;
+}
+
+/** Daily: lift warnings that reports set more than REPORT_WARNING_TTL_MS ago,
+ * so a warning nobody acted on does not stay for good. The reports stay open
+ * for the admin; an admin's own warning is never touched. */
+export async function sweepStaleReportWarnings(env: Env): Promise<number> {
+  const db = drizzle(env.DB, { schema });
+  const stale = await db
+    .select({ id: schema.links.id })
+    .from(schema.links)
+    .where(
+      and(
+        eq(schema.links.warnReason, WARN_REASON.report),
+        lt(schema.links.warnedAt, Date.now() - REPORT_WARNING_TTL_MS),
+      ),
+    )
+    .limit(500);
+  let lifted = 0;
+  for (const { id } of stale) if (await clearLinkWarning(env, db, id, WARN_REASON.report)) lifted++;
+  return lifted;
+}
 
 const reportBodySchema = v.object({
   link: v.pipe(v.string(), v.trim(), v.minLength(1, "Paste the short link"), v.maxLength(300)),
@@ -147,13 +198,17 @@ reportRoutes.post("/", async (c) => {
     note: body.note.trim(),
     contact: body.contact.trim(),
     createdAt: Date.now(),
+    // Per link, so the value cannot follow a reporter from one link to the next.
+    reporterKey: link
+      ? await keyedDigest(c.env.BETTER_AUTH_SECRET, `report:${link.linkId}:${key}`)
+      : null,
   });
 
   if (link) {
     // The plan is the owner's, as everywhere (plan.ts's orgPlan).
     const { plan } = await orgPlan(db, link.orgId);
-    log.set({ report: { plan, warned: plan === "free" } });
-    if (plan === "free") await warnLink(c.env, db, link.linkId, WARN_REASON.report);
+    const warned = plan === "free" && (await warnIfReportedEnough(c.env, db, link.linkId));
+    log.set({ report: { plan, warned } });
     await flagOrgIfReported(c.env, db, link);
   }
 

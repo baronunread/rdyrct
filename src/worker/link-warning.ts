@@ -4,7 +4,8 @@
  * warning for links that are only suspicious, and a hold for links where a
  * visit does harm.
  *
- * Set automatically by an open report on the link and by the abuse sweep for
+ * Set automatically by open reports from enough different reporters
+ * (routes/reports.ts, which also lifts it after a week) and by the abuse sweep for
  * a new free org with unusual traffic, and by an admin in one click. The
  * state lives on the link row and reaches the redirect path through the KV
  * value (storage.ts's desiredLink), so every write here ends in a republish.
