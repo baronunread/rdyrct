@@ -42,29 +42,46 @@ export type AdminAction =
   | "user.limits"
   | "anon_link.delete";
 
-export async function recordAdminAction(
-  env: Env,
-  entry: {
-    actorUserId: string;
-    action: AdminAction;
-    targetType: "link" | "org" | "user" | "anon_link" | "report" | "host";
-    targetId: string;
-    /** Anything needed to read this entry once its target is gone. */
-    detail?: Record<string, JsonValue>;
-  },
-): Promise<void> {
+export interface AdminActionEntry {
+  actorUserId: string;
+  action: AdminAction;
+  targetType: "link" | "org" | "user" | "anon_link" | "report" | "host";
+  targetId: string;
+  /** Anything needed to read this entry once its target is gone. */
+  detail?: Record<string, JsonValue>;
+}
+
+export async function recordAdminAction(env: Env, entry: AdminActionEntry): Promise<void> {
+  await recordAdminActions(env, [entry]);
+}
+
+/** Seven columns a row against D1's 100 bound parameters a statement. */
+const AUDIT_ROWS_PER_INSERT = 14;
+
+/**
+ * Several entries in one D1 round trip, for a bulk action (#14): one insert
+ * per entry was a subrequest per link. Best-effort like the single write.
+ */
+export async function recordAdminActions(env: Env, entries: AdminActionEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const db = drizzle(env.DB, { schema });
+  const now = Date.now();
+  const rows = entries.map((entry) => ({
+    id: uid(),
+    actorUserId: entry.actorUserId,
+    action: entry.action,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    detail: entry.detail ? JSON.stringify(entry.detail) : null,
+    createdAt: now,
+  }));
+  const inserts = [];
+  for (let i = 0; i < rows.length; i += AUDIT_ROWS_PER_INSERT)
+    inserts.push(db.insert(schema.adminActions).values(rows.slice(i, i + AUDIT_ROWS_PER_INSERT)));
+  const [first, ...rest] = inserts;
   try {
-    await drizzle(env.DB, { schema })
-      .insert(schema.adminActions)
-      .values({
-        id: uid(),
-        actorUserId: entry.actorUserId,
-        action: entry.action,
-        targetType: entry.targetType,
-        targetId: entry.targetId,
-        detail: entry.detail ? JSON.stringify(entry.detail) : null,
-        createdAt: Date.now(),
-      });
+    // entries is not empty, so neither is inserts: `first` is always there.
+    if (first) await db.batch([first, ...rest]);
   } catch (error) {
     // The mutation still stands. An admin stopping a phishing link at 2am
     // must not be refused because a log insert failed, and that is the whole
@@ -74,8 +91,8 @@ export async function recordAdminAction(
     // discovered months later by whoever is answering for the decision, so
     // the failure is alerted rather than left in a log nobody reads, and it
     // carries enough to write the entry back by hand.
-    captureAlert([
-      {
+    captureAlert(
+      entries.map((entry) => ({
         level: "error",
         event: "admin_audit_write_failed",
         action: entry.action,
@@ -84,7 +101,7 @@ export async function recordAdminAction(
         target_id: entry.targetId,
         detail: entry.detail ?? null,
         error: String(error),
-      },
-    ]);
+      })),
+    );
   }
 }
