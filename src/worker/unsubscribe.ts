@@ -27,14 +27,19 @@
  * decides which box comes first.
  */
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { AppEnv, DB } from "./env";
 import { escapeHtml } from "./email-html";
+import { publicClientKey, rateLimitAllows } from "./rate-limit";
 import {
   UNSUBSCRIBE_PATH,
+  consentColumns,
   marketingState,
+  marketingStateOf,
   setMarketing,
   unsubscribeUser,
   verifyUnsubscribeToken,
@@ -88,7 +93,7 @@ a{color:var(--text);text-underline-offset:3px}
 p.change{display:flex;align-items:center;min-height:44px;margin:4px 0 0}
 `;
 
-function page(status: 200 | 400, title: string, body: string): Response {
+function page(status: 200 | 400 | 413 | 429, title: string, body: string): Response {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${escapeHtml(title)}</title><style>${STYLE}</style></head><body data-page="unsubscribe"><main><p class="brand">rdyrct</p>${body}</main></body></html>`;
   return new Response(html, {
     status,
@@ -107,6 +112,50 @@ const invalid = () =>
     "Link not valid",
     `<h1>This link is not valid</h1><p>Copy the whole link from the email, or turn these emails off in Settings after you sign in.</p>`,
   );
+
+/**
+ * Per caller, before the token is checked: the page is public, with no
+ * session and no Turnstile, so this is what bounds how often one address can
+ * make us verify a token, read D1 or write it. The auth namespace's 30 a
+ * minute, under a key of its own so it never spends anybody's sign-in tries.
+ * Not per token: a mail provider's one-click requests for many readers come
+ * from one address, and generous enough that those never meet it. A request
+ * with no token at all is answered first, since it costs nothing.
+ */
+unsubscribeRoutes.use("*", async (c, next) => {
+  if (!c.req.query("t")) return next();
+  const client = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
+  const allowed = await rateLimitAllows(c.env.RL_AUTH_PUBLIC, `unsubscribe:${client}`, {
+    group: "unsubscribe",
+    method: c.req.method,
+  });
+  if (allowed) return next();
+  c.get("log")?.set({ unsubscribe: { rateLimited: true } });
+  const res = page(
+    429,
+    "Try again shortly",
+    `<h1>Too many tries</h1><p>Wait a minute, then open the link from the email again.</p>`,
+  );
+  res.headers.set("retry-after", "60");
+  return res;
+});
+
+/** The form is three short fields and one-click is one: anything bigger is
+ * not either of them, and is refused before it is read. */
+const UNSUBSCRIBE_BODY_LIMIT = 4 * 1024;
+
+unsubscribeRoutes.use(
+  "*",
+  bodyLimit({
+    maxSize: UNSUBSCRIBE_BODY_LIMIT,
+    onError: () =>
+      page(
+        413,
+        "Not saved",
+        `<h1>That did not save</h1><p>Open the link from the email again.</p>`,
+      ),
+  }),
+);
 
 /** What each list sends, under its name. */
 const LIST_HINTS = {
@@ -199,25 +248,31 @@ function wantedOf(
   return { kind: "off", from: list };
 }
 
-/** Applies the answer; `found` is false for an account that is gone, and
- * `state` is where the reader stands after it. */
+/** Applies the answer; `found` is false for an account that is gone,
+ * `changed` is false when the answer was already so (a repeat writes
+ * nothing), and `state` is where the reader stands after it. */
 async function applyWanted(
   db: DB,
   userId: string,
   wanted: Wanted,
-): Promise<{ found: boolean; state: MarketingState }> {
+): Promise<{ found: boolean; changed: boolean; state: MarketingState }> {
+  const [row] = await db.select(consentColumns).from(schema.user).where(eq(schema.user.id, userId));
+  if (!row)
+    return { found: false, changed: false, state: { news: false, offers: false, asked: false } };
+  const before = marketingStateOf(row);
   if (wanted.kind === "off") {
-    const found = await unsubscribeUser(db, userId, wanted.from);
-    return { found, state: await marketingState(db, userId) };
+    const changed = await unsubscribeUser(db, userId, wanted.from);
+    return { found: true, changed, state: changed ? await marketingState(db, userId) : before };
   }
   // Only a list that is on and was unticked is written: one left on keeps
   // the time and source of its opt-in, and one that is off stays off
   // whatever the form says.
-  const before = await marketingState(db, userId);
   const stop = (list: MarketingList) => (before[list] && !wanted.keep[list] ? false : undefined);
   const answer = { source: "settings" as const, news: stop("news"), offers: stop("offers") };
+  if (before.asked && answer.news === undefined && answer.offers === undefined)
+    return { found: true, changed: false, state: before };
   const { applied, state } = await setMarketing(db, userId, answer);
-  return { found: applied, state };
+  return { found: applied, changed: applied, state };
 }
 
 // The form and a mail client's one-click request: 200 either way.
@@ -240,15 +295,19 @@ unsubscribeRoutes.post("/", async (c) => {
   }
   const wanted = wantedOf(parsed.output, named.list, c.req.query("scope"));
   const db = drizzle(c.env.DB, { schema });
-  const { found, state } = await applyWanted(db, named.userId, wanted);
-  log?.set({ unsubscribe: { valid: true, list: named.list, wanted, found } });
-  log?.audit({
-    // The page only turns lists off, from the form or from one click.
-    action: "marketing.unsubscribe",
-    actor: { type: "user", id: named.userId },
-    target: { type: "user", id: named.userId },
-    outcome: found ? "success" : "failure",
-  });
+  const { found, changed, state } = await applyWanted(db, named.userId, wanted);
+  log?.set({ unsubscribe: { valid: true, list: named.list, wanted, found, changed } });
+  // Only a change is audited: the link is public and never expires, so a
+  // repeat (a mail client retrying, or somebody sending it on a loop) must
+  // cost no write and leave no entry.
+  if (changed)
+    log?.audit({
+      // The page only turns lists off, from the form or from one click.
+      action: "marketing.unsubscribe",
+      actor: { type: "user", id: named.userId },
+      target: { type: "user", id: named.userId },
+      outcome: "success",
+    });
   const stillGets = state.news || state.offers;
   const heading = wanted.kind === "save" && stillGets ? "Saved" : "You are unsubscribed";
   const next = stillGets
