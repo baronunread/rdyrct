@@ -175,10 +175,25 @@ const CLAIM_TOKEN_HEADER = "x-claim-token";
  * Keyed by the claim token rather than the slug, so nobody can read the
  * count of a link they did not make. An unknown or expired token is a 404,
  * the same answer either way.
+ *
+ * Every token costs a D1 read, a made-up one included, so each caller is
+ * limited before the read: the same namespace as making a link, under its
+ * own `clicks:` key so polling never spends that budget. The landing page
+ * asks every 15 seconds (useAnonClicks), four a minute, well under it; a
+ * request with no token is answered before the limiter, since it costs
+ * nothing.
  */
 shortenRoutes.get("/clicks", async (c) => {
   const token = c.req.header(CLAIM_TOKEN_HEADER);
   if (!token) throw new HTTPException(404, { message: "No such link" });
+  const key = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
+  if (
+    !(await rateLimitAllows(c.env.RL_ANON_LINK, `clicks:${key}`, {
+      group: "anon_link",
+      method: "GET",
+    }))
+  )
+    throw new HTTPException(429, { message: "Too many requests. Try again shortly." });
   const db = drizzle(c.env.DB, { schema });
   const [row] = await db
     .select({ clicks: schema.anonLinks.clicks, expiresAt: schema.anonLinks.expiresAt })

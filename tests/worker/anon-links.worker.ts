@@ -7,6 +7,7 @@ import {
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
+  overrideEnv,
   recordingLimit,
 } from "./support";
 import { drizzle } from "drizzle-orm/d1";
@@ -403,5 +404,59 @@ describe("the click total", () => {
     const expired = await seedAnon({ expiresAt: Date.now() - HOUR });
     expect((await clicksFor("tok-nobody")).status).toBe(404);
     expect((await clicksFor(expired.claimToken)).status).toBe(404);
+  });
+
+  it("throttles one caller before reading D1, and asks nothing of a request with no token (security #11)", async () => {
+    const anon = await seedAnon();
+    const keys: string[] = [];
+    let left = 1;
+    let reads = 0;
+    // Every statement the route sends to D1, counted.
+    const real = env.DB;
+    const DB: D1Database = {
+      prepare: (query) => {
+        reads++;
+        return real.prepare(query);
+      },
+      batch: (statements) => {
+        reads++;
+        return real.batch(statements);
+      },
+      exec: (query) => real.exec(query),
+      dump: () => real.dump(),
+      withSession: (constraint) => real.withSession(constraint),
+    };
+    const testEnv = overrideEnv({
+      DB,
+      BETTER_AUTH_SECRET: authEnv().BETTER_AUTH_SECRET,
+      RL_ANON_LINK: {
+        limit: async ({ key }) => {
+          keys.push(key);
+          return { success: left-- > 0 };
+        },
+      },
+    });
+    const ask = (headers: HeadersInit = {}) =>
+      fetchWorker(new Request("http://localhost/api/shorten/clicks", { headers }), testEnv);
+
+    // No token: the same 404, with no limiter call and no read.
+    const none = await ask();
+    expect(none.status).toBe(404);
+    expect(keys).toHaveLength(0);
+    expect(reads).toBe(0);
+
+    // Within the limit, the maker still gets the count.
+    const first = await ask({ "x-claim-token": anon.claimToken });
+    expect(first.status).toBe(200);
+    expect(await jsonBody<{ clicks: number }>(first)).toEqual({ clicks: 0 });
+    const readsBefore = reads;
+
+    // Past it: a 429, and D1 is never asked.
+    expect((await ask({ "x-claim-token": anon.claimToken })).status).toBe(429);
+    expect((await ask({ "x-claim-token": "tok-nobody" })).status).toBe(429);
+    expect(reads).toBe(readsBefore);
+    // Its own key, so polling never spends the budget for making links.
+    expect(keys).toHaveLength(3);
+    for (const key of keys) expect(key).toMatch(/^clicks:[0-9a-f]{64}$/);
   });
 });
