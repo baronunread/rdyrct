@@ -347,6 +347,118 @@ describe("the unsubscribe page", () => {
     expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
   });
 
+  /** Counts every UPDATE on `user` from here on. */
+  async function countUserUpdates() {
+    await env.DB.prepare("create table user_updates (n integer)").run();
+    await env.DB.prepare(
+      "create trigger count_user_updates after update on user begin insert into user_updates values (1); end",
+    ).run();
+    return async () =>
+      Number(
+        (await env.DB.prepare("select count(*) as n from user_updates").first<{ n: number }>())
+          ?.n ?? 0,
+      );
+  }
+
+  it("writes nothing when the answer changes nothing (security #2, #4)", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    await env.DB.prepare("update user set marketing_asked_at = 3 where id = 'reader-1'").run();
+    const updates = await countUserUpdates();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "offers");
+
+    // The first one-click is a change: written once.
+    expect((await visit(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
+    expect(await updates()).toBe(1);
+    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: null, asked: 3 });
+
+    // Repeats, the form saving what is already so, and "all" for a list that
+    // is already off: still 200, and none of them writes.
+    for (let i = 0; i < 5; i++) {
+      const res = await visit(token, "POST", "List-Unsubscribe=One-Click");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("You get product news only.");
+    }
+    expect((await visit(token, "POST", form("save", "news"))).status).toBe(200);
+    expect(await updates()).toBe(1);
+
+    // A real change still lands.
+    expect((await visit(token, "POST", form("all"))).status).toBe(200);
+    expect(await updates()).toBe(2);
+    expect(await consentRow("reader-1")).toMatchObject({ news: null, offers: null, asked: 3 });
+    expect((await visit(token, "POST", form("all"))).status).toBe(200);
+    expect(await updates()).toBe(2);
+  });
+
+  it("still records a first answer from somebody never asked, once", async () => {
+    // Off both lists already, but never asked: the click is their answer.
+    await seedUser("reader-1", null).run();
+    const updates = await countUserUpdates();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    expect((await visit(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
+    expect((await consentRow("reader-1"))?.asked).not.toBeNull();
+    expect((await visit(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
+    expect(await updates()).toBe(1);
+  });
+
+  it("throttles one link before checking its token, never another reader's (security #2)", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    await seedUser("reader-2", 5, "", 7).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    const other = await signUnsubscribeToken(authEnv(), "reader-2", "news");
+    const keys: string[] = [];
+    // Two requests per key, like a spent production counter.
+    const used = new Map<string, number>();
+    const testEnv = overrideEnv({
+      BETTER_AUTH_SECRET: authEnv().BETTER_AUTH_SECRET,
+      RL_AUTH_PUBLIC: {
+        limit: async ({ key }) => {
+          keys.push(key);
+          const n = (used.get(key) ?? 0) + 1;
+          used.set(key, n);
+          return { success: n <= 2 };
+        },
+      },
+    });
+    const send = (t: string, method: string, body?: string) =>
+      fetchWorker(
+        new Request(`http://localhost/unsubscribe?t=${encodeURIComponent(t)}`, {
+          method,
+          ...(body && {
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body,
+          }),
+        }),
+        testEnv,
+      );
+    expect((await send("AA.AA", "GET")).status).toBe(400);
+    expect((await send("AA.AA", "GET")).status).toBe(400);
+    // Past the limit: a 429 page for that link.
+    const limited = await send("AA.AA", "GET");
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    // A real link spent past its limit changes nothing...
+    expect((await send(token, "GET")).status).toBe(200);
+    expect((await send(token, "GET")).status).toBe(200);
+    expect((await send(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(429);
+    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
+    // ...and never stops another reader's one-click from the same address.
+    expect((await send(other, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
+    expect(await consentRow("reader-2")).toMatchObject({ news: null, offers: 7 });
+    expect(keys).toHaveLength(7);
+    for (const key of keys) expect(key).toMatch(/^unsubscribe:[0-9a-f]{64}$/);
+    // A missing token never reaches the limiter: nothing to check.
+    expect((await send("", "GET")).status).toBe(400);
+    expect(keys).toHaveLength(7);
+  });
+
+  it("refuses an oversized body without writing (security #2)", async () => {
+    await seedUser("reader-1", 5, "", 7).run();
+    const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    const res = await visit(token, "POST", `action=all&pad=${"x".repeat(64 * 1024)}`);
+    expect(res.status).toBe(413);
+    expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
+  });
+
   it("refuses an invalid token and leaves the account alone", async () => {
     await seedUser("reader-1", 5, "", 7).run();
     const forged = `${btoa("news:reader-1").replace(/=+$/, "")}.AAAA`;

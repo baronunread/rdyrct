@@ -21,7 +21,7 @@
  * BETTER_AUTH_SECRET also breaks the links in mail already sent, so rotate it
  * only when you have to.
  */
-import { and, asc, eq, gt, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -178,7 +178,10 @@ export async function setMarketing(
 }
 
 /** The unsubscribe link: off one list, or off both ("all"), and counted as
- * answered. Idempotent. */
+ * answered. Idempotent, and a repeat writes nothing: the row is only updated
+ * while a list it names is still on or the account was never asked, since
+ * the link is public and anyone holding it can send it again. True when it
+ * changed something; false for a repeat or an account that is gone. */
 export async function unsubscribeUser(
   db: DB,
   userId: string,
@@ -191,7 +194,16 @@ export async function unsubscribeUser(
       ...(from !== "news" && { offersOptInAt: null }),
       marketingAskedAt: sql`coalesce(${schema.user.marketingAskedAt}, ${Date.now()})`,
     })
-    .where(eq(schema.user.id, userId))
+    .where(
+      and(
+        eq(schema.user.id, userId),
+        or(
+          isNull(schema.user.marketingAskedAt),
+          from === "offers" ? undefined : isNotNull(schema.user.newsOptInAt),
+          from === "news" ? undefined : isNotNull(schema.user.offersOptInAt),
+        ),
+      ),
+    )
     .returning({ id: schema.user.id });
   return changed.length > 0;
 }

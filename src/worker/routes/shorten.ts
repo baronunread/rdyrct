@@ -36,7 +36,7 @@ import {
 } from "../abuse-hold";
 import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
-import { askWebRisk, scoreAndRecord } from "../risk";
+import { askWebRisk, scoreAndRecord, type SpendLookup } from "../risk";
 import { checkLinkDestination } from "../destination-check";
 import { enqueueStorage, syncLinkMsg } from "../storage";
 import { orgLinkWarning } from "../link-warning";
@@ -45,7 +45,7 @@ import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
-import { WEB_RISK_NOTICE } from "../destination-check";
+import { spendAnonWebRiskLookup, WEB_RISK_NOTICE } from "../destination-check";
 
 /** How long an unclaimed link keeps working. */
 const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -108,7 +108,10 @@ shortenRoutes.post("/", async (c) => {
   // anonymous link, and nobody can report one, so a hit found after the key
   // is live would change nothing. Up to three seconds, and a cached answer
   // costs nothing; no key, or no answer, and the link is made as before.
-  const webRisk = await askWebRisk(c.env, destination);
+  // Each uncached URL also spends one of this caller's lookups for the day,
+  // so one caller cannot spend the site-wide day every org relies on.
+  const spendLookup = spendAnonWebRiskLookup(c.env.DB, key);
+  const webRisk = await askWebRisk(c.env, destination, spendLookup);
   log.set({ webRisk: { outcome: webRisk.outcome } });
   if (webRisk.outcome === "hit")
     throw new HTTPException(422, {
@@ -152,7 +155,7 @@ shortenRoutes.post("/", async (c) => {
     null,
   );
 
-  c.executionCtx.waitUntil(scoreAnonLink(c.env, row.id, destination));
+  c.executionCtx.waitUntil(scoreAnonLink(c.env, row.id, destination, spendLookup));
 
   return c.json(
     {
@@ -175,10 +178,25 @@ const CLAIM_TOKEN_HEADER = "x-claim-token";
  * Keyed by the claim token rather than the slug, so nobody can read the
  * count of a link they did not make. An unknown or expired token is a 404,
  * the same answer either way.
+ *
+ * Every token costs a D1 read, a made-up one included, so each caller is
+ * limited before the read: the same namespace as making a link, under its
+ * own `clicks:` key so polling never spends that budget. The landing page
+ * asks every 15 seconds (useAnonClicks), four a minute, well under it; a
+ * request with no token is answered before the limiter, since it costs
+ * nothing.
  */
 shortenRoutes.get("/clicks", async (c) => {
   const token = c.req.header(CLAIM_TOKEN_HEADER);
   if (!token) throw new HTTPException(404, { message: "No such link" });
+  const key = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
+  if (
+    !(await rateLimitAllows(c.env.RL_ANON_LINK, `clicks:${key}`, {
+      group: "anon_link",
+      method: "GET",
+    }))
+  )
+    throw new HTTPException(429, { message: "Too many requests. Try again shortly." });
   const db = drizzle(c.env.DB, { schema });
   const [row] = await db
     .select({ clicks: schema.anonLinks.clicks, expiresAt: schema.anonLinks.expiresAt })
@@ -197,8 +215,15 @@ shortenRoutes.get("/clicks", async (c) => {
  * and every failure rule are the same, which is why the score itself comes
  * from the same function.
  */
-async function scoreAnonLink(env: Env, id: string, destination: string): Promise<void> {
-  await scoreAndRecord(env, id, destination, "anon_links");
+async function scoreAnonLink(
+  env: Env,
+  id: string,
+  destination: string,
+  spendLookup: SpendLookup,
+): Promise<void> {
+  // The caller's budget again: the answer above is usually cached, but one
+  // that was over budget or failed must not be asked here at the site's cost.
+  await scoreAndRecord(env, id, destination, "anon_links", spendLookup);
 }
 
 /** A random slug that is not already taken, in either table. */

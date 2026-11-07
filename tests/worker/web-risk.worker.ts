@@ -8,6 +8,8 @@ import {
   WEB_RISK_ADVISORY,
   SPIKE_RECHECKS_PER_RUN,
   sweepAbuse,
+  forgetOldAnonWebRiskUsage,
+  WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY,
   WEB_RISK_LOOKUPS_PER_ORG_PER_DAY,
   WEB_RISK_RESCAN_BATCH,
 } from "../../src/worker/destination-check";
@@ -478,6 +480,68 @@ describe("an anonymous link (#341 review)", () => {
   it("is still made when Google is down", async () => {
     stubGoogle({ down: true });
     expect((await shorten("https://example.com/fine")).status).toBe(201);
+  });
+
+  it("spends at most its caller's daily share of the site-wide lookups (security #7)", async () => {
+    const lookups = stubGoogle();
+    // Open, so the per-minute limit does not decide it: this is the day's.
+    const testEnv = { ...withKey(), RL_ANON_LINK: { limit: async () => ({ success: true }) } };
+    const from = (ip: string, destination: string) =>
+      fetchWorker(
+        new Request("http://localhost/api/shorten", {
+          method: "POST",
+          headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+          body: JSON.stringify({ destination }),
+        }),
+        testEnv,
+      );
+    const globalSpent = async () =>
+      Number(
+        (await env.DB.prepare("select lookups from web_risk_usage").first<{ lookups: number }>())
+          ?.lookups ?? 0,
+      );
+
+    // A listed site first, so its answer is cached.
+    expect((await from("203.0.113.1", LISTED)).status).toBe(422);
+    for (let i = 1; i < WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY; i++)
+      expect((await from("203.0.113.1", `https://example.com/p/${i}`)).status).toBe(201);
+    expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY);
+    expect(await globalSpent()).toBe(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY);
+
+    // Past its share: the link is still made, Google is not asked, and the
+    // site-wide count does not move, background scoring included.
+    expect((await from("203.0.113.1", "https://example.com/over")).status).toBe(201);
+    expect((await from("203.0.113.1", "https://kit.example/new")).status).toBe(201);
+    expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY);
+    expect(await globalSpent()).toBe(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY);
+
+    // A cached answer costs nothing, so a listed site is still refused.
+    expect((await from("203.0.113.1", LISTED)).status).toBe(422);
+
+    // Another caller has its own share, and so does tomorrow.
+    expect((await from("198.51.100.7", "https://example.com/other")).status).toBe(201);
+    expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY + 1);
+    await env.DB.prepare("update web_risk_anon_usage set day = day - 1").run();
+    expect((await from("203.0.113.1", "https://example.com/tomorrow")).status).toBe(201);
+    expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY + 2);
+
+    // And the daily sweep drops yesterday's counts.
+    await forgetOldAnonWebRiskUsage(env.DB);
+    const left = await env.DB.prepare("select count(*) as n from web_risk_anon_usage").first<{
+      n: number;
+    }>();
+    expect(left?.n).toBe(1);
+  });
+
+  it("leaves a signed-in free org's budget as it was", async () => {
+    const lookups = stubGoogle();
+    const cookie = await freeOwnerCookie();
+    await createLink(cookie, "https://example.com/org-link");
+    expect(lookups).toEqual(["https://example.com/org-link"]);
+    const anon = await env.DB.prepare("select count(*) as n from web_risk_anon_usage").first<{
+      n: number;
+    }>();
+    expect(anon?.n).toBe(0);
   });
 });
 

@@ -32,7 +32,7 @@ import { unsubscribeRoutes } from "./unsubscribe";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { revalidateOnRedirect } from "./risk";
-import { rescanFreeLinks, sweepAbuse } from "./destination-check";
+import { forgetOldAnonWebRiskUsage, rescanFreeLinks, sweepAbuse } from "./destination-check";
 import { sweepClickUsageEmails } from "./click-caps";
 import { sweepOldOverflow } from "./click-overflow";
 import { reportRoutes } from "./routes/reports";
@@ -817,6 +817,10 @@ async function runScheduled(controller: ScheduledController, env: Env): Promise<
   // Daily: drop anonymous links nobody claimed inside their 24 hours, and
   // the KV keys they were resolving through (Direction A of #96).
   await sweepExpiredAnonLinks(env);
+
+  // Daily: forget yesterday's per-caller Web Risk counts for the
+  // anonymous shortener, so no caller's key outlives its day.
+  await forgetOldAnonWebRiskUsage(env.DB);
 
   // Daily: drop MCP clients that registered themselves and never got a
   // user's consent, which open registration would otherwise pile up.
