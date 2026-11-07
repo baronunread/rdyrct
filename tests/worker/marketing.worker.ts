@@ -400,16 +400,22 @@ describe("the unsubscribe page", () => {
     expect(await updates()).toBe(1);
   });
 
-  it("throttles one caller before checking the token (security #2)", async () => {
+  it("throttles one link before checking its token, never another reader's (security #2)", async () => {
     await seedUser("reader-1", 5, "", 7).run();
+    await seedUser("reader-2", 5, "", 7).run();
     const token = await signUnsubscribeToken(authEnv(), "reader-1", "news");
+    const other = await signUnsubscribeToken(authEnv(), "reader-2", "news");
     const keys: string[] = [];
-    let left = 2;
+    // Two requests per key, like a spent production counter.
+    const used = new Map<string, number>();
     const testEnv = overrideEnv({
+      BETTER_AUTH_SECRET: authEnv().BETTER_AUTH_SECRET,
       RL_AUTH_PUBLIC: {
         limit: async ({ key }) => {
           keys.push(key);
-          return { success: left-- > 0 };
+          const n = (used.get(key) ?? 0) + 1;
+          used.set(key, n);
+          return { success: n <= 2 };
         },
       },
     });
@@ -426,18 +432,23 @@ describe("the unsubscribe page", () => {
       );
     expect((await send("AA.AA", "GET")).status).toBe(400);
     expect((await send("AA.AA", "GET")).status).toBe(400);
-    // Past the limit: a 429 page, for a forged token and a real one alike,
-    // and the real one changes nothing.
+    // Past the limit: a 429 page for that link.
     const limited = await send("AA.AA", "GET");
     expect(limited.status).toBe(429);
     expect(limited.headers.get("retry-after")).toBe("60");
+    // A real link spent past its limit changes nothing...
+    expect((await send(token, "GET")).status).toBe(200);
+    expect((await send(token, "GET")).status).toBe(200);
     expect((await send(token, "POST", "List-Unsubscribe=One-Click")).status).toBe(429);
     expect(await consentRow("reader-1")).toMatchObject({ news: 5, offers: 7 });
-    expect(keys).toHaveLength(4);
+    // ...and never stops another reader's one-click from the same address.
+    expect((await send(other, "POST", "List-Unsubscribe=One-Click")).status).toBe(200);
+    expect(await consentRow("reader-2")).toMatchObject({ news: null, offers: 7 });
+    expect(keys).toHaveLength(7);
     for (const key of keys) expect(key).toMatch(/^unsubscribe:[0-9a-f]{64}$/);
     // A missing token never reaches the limiter: nothing to check.
     expect((await send("", "GET")).status).toBe(400);
-    expect(keys).toHaveLength(4);
+    expect(keys).toHaveLength(7);
   });
 
   it("refuses an oversized body without writing (security #2)", async () => {

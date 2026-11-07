@@ -34,7 +34,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { AppEnv, DB } from "./env";
 import { escapeHtml } from "./email-html";
-import { publicClientKey, rateLimitAllows } from "./rate-limit";
+import { rateLimitAllows } from "./rate-limit";
 import {
   UNSUBSCRIBE_PATH,
   consentColumns,
@@ -114,18 +114,24 @@ const invalid = () =>
   );
 
 /**
- * Per caller, before the token is checked: the page is public, with no
- * session and no Turnstile, so this is what bounds how often one address can
- * make us verify a token, read D1 or write it. The auth namespace's 30 a
- * minute, under a key of its own so it never spends anybody's sign-in tries.
- * Not per token: a mail provider's one-click requests for many readers come
- * from one address, and generous enough that those never meet it. A request
- * with no token at all is answered first, since it costs nothing.
+ * Per token, before the token is checked: the page is public, with no
+ * session and no Turnstile, so this is what bounds how often one link can
+ * make us verify it, read D1 or write it. The auth namespace's 30 a minute,
+ * under a key of its own so it never spends anybody's sign-in tries.
+ * Not per caller: a mail provider sends many readers' one-click requests
+ * from a few addresses, and a 429 there would lose a real unsubscribe. A
+ * forged token gets past this only as far as the HMAC check, which reads
+ * nothing. A request with no token at all is answered first, since it costs
+ * nothing.
  */
 unsubscribeRoutes.use("*", async (c, next) => {
-  if (!c.req.query("t")) return next();
-  const client = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
-  const allowed = await rateLimitAllows(c.env.RL_AUTH_PUBLIC, `unsubscribe:${client}`, {
+  const token = c.req.query("t");
+  if (!token) return next();
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)),
+  );
+  const link = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const allowed = await rateLimitAllows(c.env.RL_AUTH_PUBLIC, `unsubscribe:${link}`, {
     group: "unsubscribe",
     method: c.req.method,
   });
