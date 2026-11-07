@@ -849,21 +849,18 @@ function TeamStep({
   const [role, setRole] = useState<InvitableRole>("member");
   const [error, setError] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
-  // Set once a send fails: Send then retries those same invites.
-  const [retrying, setRetrying] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ["invites", org.id] });
   const invite = useMutation({
-    mutationFn: (addresses: string[]) =>
+    mutationFn: ({ addresses, resend }: { addresses: string[]; resend: boolean }) =>
       api<InvitesCreated>(`/orgs/${org.id}/invites`, {
         method: "POST",
-        body: { role, emails: addresses, resend: retrying },
+        body: { role, emails: addresses, resend },
       }),
-    onSuccess: ({ failed }, addresses) => {
+    onSuccess: ({ failed }, { addresses }) => {
       void refresh();
       const missed = new Set(failed);
       onInvited(addresses.filter((a) => !missed.has(a)));
       setEmails(failed);
-      setRetrying(failed.length > 0);
       if (failed.length) {
         setError("Couldn't email these. Try again");
         chips.current?.focus();
@@ -883,7 +880,8 @@ function TeamStep({
     const reason = emailsProblem(all);
     setError(reason);
     if (reason) chips.current?.focus();
-    else invite.mutate(all);
+    // After a failed send the field holds those invites: Send retries them.
+    else invite.mutate({ addresses: all, resend: Boolean(invite.data?.failed.length) });
   };
   const count = emails.length + splitEmails(draft).length;
   return (

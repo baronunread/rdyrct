@@ -86,7 +86,7 @@ export function InvitePeopleDialog({
   const [role, setRole] = useState<InvitableRole>("member");
   const [error, setError] = useState<string | undefined>();
   // Set once a send fails: Send then retries those same invites.
-  const [retrying, setRetrying] = useState(false);
+  const retrying = useRef(false);
   // No limit to explain on a self-hosted instance.
   const limited = org.plan !== "unlimited";
   const all = [...emails, ...splitEmails(draft)];
@@ -99,7 +99,7 @@ export function InvitePeopleDialog({
       setEmails([]);
       setDraft("");
       setError(undefined);
-      setRetrying(false);
+      retrying.current = false;
     }
   };
 
@@ -117,7 +117,7 @@ export function InvitePeopleDialog({
     sendEmailInvites.mutate(
       // An address that already has an invite was typed on purpose: send it
       // again. So is a retry after a failed send.
-      { emails: all, role, resend: retrying || needed < all.length },
+      { emails: all, role, resend: retrying.current || needed < all.length },
       {
         onSuccess: ({ failed, reused }) => {
           const sent = all.length - failed.length - reused.length;
@@ -126,7 +126,7 @@ export function InvitePeopleDialog({
           // Their invites exist; sending again reuses them. Keep only these
           // addresses in the field, marked, so Send retries just them.
           setEmails(failed);
-          setRetrying(true);
+          retrying.current = true;
           setError(
             failed.length > 1
               ? "Couldn't email these. Try again"
