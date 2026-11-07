@@ -699,9 +699,44 @@ async function applyPolarEvent(env: Env, db: Db, event: PolarEvent): Promise<voi
   else if (subjectId) await reconcileUser(env, db, subjectId);
 }
 
+/** The largest webhook body read. Polar's events are a few KB; anything near
+ * this is not one of theirs, and is refused before it is buffered or hashed. */
+const WEBHOOK_BODY_LIMIT = 1024 * 1024;
+
+/**
+ * The request body as text, or null once it passes `limit` bytes. Counts
+ * what actually arrives rather than trusting Content-Length, which may be
+ * missing or wrong; a declared length over the limit is refused unread.
+ */
+async function readCapped(req: Request, limit: number): Promise<string | null> {
+  if (Number(req.headers.get("content-length") ?? 0) > limit) return null;
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   if (!env.POLAR_WEBHOOK_SECRET) return Response.json({ message: "Not found" }, { status: 404 });
-  const body = await req.text();
+  const body = await readCapped(req, WEBHOOK_BODY_LIMIT);
+  if (body === null) return Response.json({ message: "Request body too large" }, { status: 413 });
   const headers = Object.fromEntries(req.headers.entries());
   const secret = env.POLAR_WEBHOOK_SECRET;
   if (!verifiesWith(btoa(secret), body, headers) && !verifiesWith(secret, body, headers)) {

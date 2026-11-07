@@ -623,6 +623,75 @@ describe("POST /api/webhooks/polar", () => {
     expect((await getUser()).plan).toBe("free");
   });
 
+  /** A correctly signed subscription.active for user-1, padded past the
+   * body cap: it would upgrade the user if the handler read and verified it. */
+  function oversizedSignedEvent() {
+    const payload = JSON.stringify({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        customer_id: "cus_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1", padding: "a".repeat(2 * 1024 * 1024) },
+      },
+    });
+    return { payload, headers: signPayload(payload) };
+  }
+
+  async function postRaw(body: BodyInit, headers: Record<string, string>) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/webhooks/polar", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body,
+      }),
+      polarEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  it("refuses a body over the cap before verifying it", async () => {
+    await seedUser();
+    const { payload, headers } = oversizedSignedEvent();
+    const res = await postRaw(payload, headers);
+    expect(res.status).toBe(413);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("refuses a body over the cap that declares no length", async () => {
+    await seedUser();
+    const { payload, headers } = oversizedSignedEvent();
+    const bytes = new TextEncoder().encode(payload);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let at = 0; at < bytes.length; at += 64 * 1024)
+          controller.enqueue(bytes.slice(at, at + 64 * 1024));
+        controller.close();
+      },
+    });
+    const res = await postRaw(stream, headers);
+    expect(res.status).toBe(413);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("refuses a body longer than the length it declares, past the cap", async () => {
+    await seedUser();
+    const { payload, headers } = oversizedSignedEvent();
+    const bytes = new TextEncoder().encode(payload);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+    const res = await postRaw(stream, { ...headers, "content-length": "100" });
+    expect(res.status).toBe(413);
+    expect((await getUser()).plan).toBe("free");
+  });
+
   it("subscription.active upgrades the user to the mapped plan", async () => {
     await seedUser();
     const res = await postWebhook({
