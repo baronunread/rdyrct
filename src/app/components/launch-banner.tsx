@@ -19,7 +19,15 @@ export function LaunchBanner() {
   return (
     <div
       data-launch-banner
-      className="-mx-6 flex flex-wrap items-center justify-center gap-x-2 border-b border-border bg-surface-2 px-6 py-2 text-sm text-muted"
+      className="flex flex-wrap items-center justify-center gap-x-2 py-2 text-sm text-muted"
+      // Edge to edge, though it sits in the page column: a border image
+      // painted 100vmax past each side, fill and a bottom hairline. Unlike
+      // 100vw it adds no scrollable width, so no sideways scroll where the
+      // scrollbar takes room (Windows).
+      style={{
+        borderImage:
+          "linear-gradient(to top, var(--border) 1px, var(--surface-2) 1px) fill 0 // 0 100vmax",
+      }}
     >
       <span>rdyrct is open source.</span>
       <a
