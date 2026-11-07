@@ -175,6 +175,19 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
   return null;
 }
 
+/**
+ * Spends one unit of an address's email budget (#50), for mail the app sends
+ * outside /api/auth/* (#15). The same counter and key the auth routes use, so
+ * an inbox gets at most RL_EMAIL_RECIPIENT a minute from all of them together.
+ */
+export async function recipientEmailAllowed(env: Env, address: string): Promise<boolean> {
+  const recipient = await keyedDigest(env.BETTER_AUTH_SECRET, address.trim().toLowerCase());
+  return rateLimitAllows(env.RL_EMAIL_RECIPIENT, `email-recipient:${recipient}`, {
+    group: "email",
+    method: "POST",
+  });
+}
+
 export function signedApiGroup(
   path: string,
   method: string,

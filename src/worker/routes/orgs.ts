@@ -16,7 +16,9 @@ import {
   keepOrgActive,
   setMemberRoleWithinLimit,
 } from "../plan";
+import { createError } from "evlog";
 import { emailConfigured, sendEmail } from "../email";
+import { recipientEmailAllowed } from "../rate-limit";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage, memberAvatarUrl } from "../storage";
 import { serveAvatar } from "./avatars";
@@ -691,6 +693,9 @@ const inviteDTO = (invite: NewInvite): InviteDTO => ({
 /**
  * Mails each invite on its own: one bounce must not hide which others went
  * out. Returns the addresses that failed, and the first error for the log.
+ *
+ * Each send spends the recipient's email budget first (#15); an address over
+ * it counts as failed, so the dialog offers it again later.
  */
 async function mailInvites(
   env: Env,
@@ -698,8 +703,15 @@ async function mailInvites(
   invites: (NewInvite & { email: string })[],
 ): Promise<{ failed: string[]; error?: Error }> {
   const sends = await Promise.allSettled(
-    invites.map((invite) =>
-      sendEmail(
+    invites.map(async (invite) => {
+      if (!(await recipientEmailAllowed(env, invite.email)))
+        throw createError({
+          message: "Invite email over the recipient's budget",
+          status: 429,
+          why: "This address has had too many emails in the last minute",
+          fix: "Send the invite again in a minute",
+        });
+      return sendEmail(
         env,
         invite.email,
         `You're invited to ${orgName} on rdyrct`,
@@ -714,8 +726,8 @@ async function mailInvites(
           env.APP_URL,
           invite.email,
         ),
-      ),
-    ),
+      );
+    }),
   );
   const failed = invites.flatMap((invite, i) =>
     sends[i]!.status === "rejected" ? [invite.email] : [],
@@ -733,7 +745,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   } catch {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
-  const { role, emails: asked } = parseBody(inviteBodySchema, rawBody);
+  const { role, emails: asked, resend } = parseBody(inviteBodySchema, rawBody);
   const orgId = c.req.param("orgId");
   const db = c.var.db;
   const emails = inviteEmails(asked);
@@ -756,7 +768,10 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   if (emails.length === 0) {
     const invite = { ...base, token: uid(24), email: null };
     await db.insert(schema.invites).values(invite);
-    return c.json({ invites: [inviteDTO(invite)], failed: [] } satisfies InvitesCreated, 201);
+    return c.json(
+      { invites: [inviteDTO(invite)], failed: [], reused: [] } satisfies InvitesCreated,
+      201,
+    );
   }
 
   const created = emails.map((email) => ({
@@ -782,15 +797,19 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
   // The rows stay whatever the mail does, so the dialog can offer the failed
-  // addresses again and the retry lands on the same invites.
-  const { failed, error } = await mailInvites(c.env, org?.name ?? "rdyrct", created);
+  // addresses again and the retry lands on the same invites. An address that
+  // already had an invite is mailed again only when the caller asks (#15):
+  // otherwise repeating one request would mail the same inbox every time.
+  const toMail = resend ? created : inserts;
+  const reused = resend ? [] : created.flatMap((i) => (openToken.has(i.email) ? [i.email] : []));
+  const { failed, error } = await mailInvites(c.env, org?.name ?? "rdyrct", toMail);
   if (error) {
     const log = c.get("log");
     // Counts only: the addresses are personal data.
-    log?.set({ invites: { failed: failed.length, sent: created.length - failed.length } });
+    log?.set({ invites: { failed: failed.length, sent: toMail.length - failed.length } });
     log?.error(error);
   }
-  return c.json({ invites: created.map(inviteDTO), failed } satisfies InvitesCreated, 201);
+  return c.json({ invites: created.map(inviteDTO), failed, reused } satisfies InvitesCreated, 201);
 });
 
 orgRoutes.delete("/:orgId/invites/:token", requireOrgRole("admin"), async (c) => {

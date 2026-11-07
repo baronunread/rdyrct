@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { queryRows } from "./db";
 import { guestAccount, ownerWithInviteLink } from "./orgs";
-import { signUpAndVerify } from "./resend";
+import { signUpAndVerify, subjectsSentTo } from "./resend";
 
 /**
  * An accepted invite leaves no row behind (#103).
@@ -117,4 +117,52 @@ test("signing in from an invite lands back on the invite", async ({ page, browse
   expect(rows[0].n).toBe(2);
 
   await context.close();
+});
+
+/**
+ * Asking again for an address that already has an invite mails it again only
+ * when the caller says so (#15). The dialog says so: typing a pending address
+ * and pressing Send is a resend. A bare repeat of the request is not.
+ */
+test("the dialog resends a pending invite; a repeated request does not", async ({ page }) => {
+  const owner = `resend-owner-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, owner, "test-password-123");
+  const invitee = `resend-invitee-${Date.now()}@gmail.com`;
+  const invitesFor = async () =>
+    (await subjectsSentTo(page, invitee)).filter((s) => s.startsWith("You're invited")).length;
+
+  const sendFromDialog = async () => {
+    await page.goto("/members");
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Invite people" });
+    await dialog.getByLabel("Emails").fill(invitee);
+    await dialog.getByRole("button", { name: "Send invite" }).click();
+    await expect(dialog).toBeHidden();
+  };
+
+  await sendFromDialog();
+  await expect.poll(invitesFor).toBe(1);
+
+  const [{ org_id: orgId }] = await queryRows<{ org_id: string }>(
+    page,
+    "select org_id from invites where email = ?",
+    [invitee],
+  );
+  const repeat = await page.request.post(`/api/orgs/${orgId}/invites`, {
+    data: { role: "member", emails: [invitee] },
+  });
+  expect(repeat.status()).toBe(201);
+  expect((await repeat.json()).reused).toEqual([invitee]);
+  // The route mails before it answers, so nothing more is on its way.
+  expect(await invitesFor()).toBe(1);
+
+  await sendFromDialog();
+  await expect.poll(invitesFor).toBe(2);
+  // Still one invite: the resend reuses it.
+  const rows = await queryRows<{ n: number }>(
+    page,
+    "select count(*) as n from invites where email = ?",
+    [invitee],
+  );
+  expect(rows[0].n).toBe(1);
 });

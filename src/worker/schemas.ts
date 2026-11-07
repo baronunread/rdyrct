@@ -93,4 +93,7 @@ const MAX_INVITE_EMAILS = 50;
 export const inviteBodySchema = v.object({
   role: v.optional(v.picklist(INVITABLE_ROLES), "member"),
   emails: v.optional(v.pipe(v.array(v.string()), v.maxLength(MAX_INVITE_EMAILS)), []),
+  /** Mail addresses that already hold an open invite too. Without it only
+   * new invites are mailed, so a repeated request cannot fill an inbox. */
+  resend: v.optional(v.boolean(), false),
 });

@@ -24,7 +24,9 @@ const ROLE_HINT = {
   admin: "Admins manage links, domains and members.",
 } satisfies Record<InvitableRole, string>;
 
-export type EmailInvites = { emails: string[]; role: InvitableRole };
+/** `resend` mails addresses that already hold an open invite too; without
+ * it the server mails only the new ones. */
+export type EmailInvites = { emails: string[]; role: InvitableRole; resend: boolean };
 
 /** "Send invite", or "Send 3 invites" once there is more than one. */
 function sendLabel(count: number): string {
@@ -83,6 +85,8 @@ export function InvitePeopleDialog({
   const [draft, setDraft] = useState("");
   const [role, setRole] = useState<InvitableRole>("member");
   const [error, setError] = useState<string | undefined>();
+  // Set once a send fails: Send then retries those same invites.
+  const [retrying, setRetrying] = useState(false);
   // No limit to explain on a self-hosted instance.
   const limited = org.plan !== "unlimited";
   const all = [...emails, ...splitEmails(draft)];
@@ -95,6 +99,7 @@ export function InvitePeopleDialog({
       setEmails([]);
       setDraft("");
       setError(undefined);
+      setRetrying(false);
     }
   };
 
@@ -110,15 +115,18 @@ export function InvitePeopleDialog({
       return;
     }
     sendEmailInvites.mutate(
-      { emails: all, role },
+      // An address that already has an invite was typed on purpose: send it
+      // again. So is a retry after a failed send.
+      { emails: all, role, resend: retrying || needed < all.length },
       {
-        onSuccess: ({ failed }) => {
-          const sent = all.length - failed.length;
+        onSuccess: ({ failed, reused }) => {
+          const sent = all.length - failed.length - reused.length;
           if (sent > 0) toast(sent > 1 ? `${sent} invites sent` : "Invite sent");
           if (failed.length === 0) return close(false);
           // Their invites exist; sending again reuses them. Keep only these
           // addresses in the field, marked, so Send retries just them.
           setEmails(failed);
+          setRetrying(true);
           setError(
             failed.length > 1
               ? "Couldn't email these. Try again"
