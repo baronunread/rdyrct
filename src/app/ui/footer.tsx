@@ -256,7 +256,7 @@ export function Footer({ featured = false }: { featured?: boolean }) {
                 Report a link
               </MarketingLink>
             </li>
-            {/* Not on a phone: the header carries a GitHub link there, and
+            {/* Not on a phone: the header's GitHub icon covers it there, and
                 dropping this one leaves Company the same length as Product,
                 so the two columns end together. */}
             <li className="max-sm:hidden">

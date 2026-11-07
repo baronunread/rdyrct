@@ -41,3 +41,23 @@ test("the phone menu gives the header its fill even at the top", async ({ page }
   await page.getByRole("button", { name: "Open menu" }).click();
   await expect(header).toHaveAttribute("data-floating", "");
 });
+
+test("the header and the launch banner ask for a GitHub star, on a phone too", async ({ page }) => {
+  await page.goto("/");
+  const banner = page.locator("[data-launch-banner]");
+  await expect(banner.getByRole("link", { name: "Star it on GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/baronunread/rdyrct",
+  );
+  const star = page
+    .locator("header[data-marketing-header]")
+    .getByRole("link", { name: "Star rdyrct on GitHub" });
+  await expect(star).toBeVisible();
+  await expect(star).toContainText("Star on GitHub");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Icon only on a phone, still a link with its name.
+  await expect(star).toBeVisible();
+  await expect(star.getByText("Star on GitHub")).toBeHidden();
+  await expect(banner).toBeVisible();
+});

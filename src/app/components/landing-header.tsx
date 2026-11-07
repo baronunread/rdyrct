@@ -26,6 +26,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronDown, Github } from "../ui/icons";
+import { LaunchBanner } from "./launch-banner";
 import { GITHUB_URL } from "../ui/footer";
 import { useHydrated } from "../lib/hydrated";
 import { useSafeHover } from "../lib/safe-hover";
@@ -36,7 +37,6 @@ import { cn } from "../ui/cn";
 import { Logo } from "../ui/logo";
 import { currentNavKey, MAIN_LINKS, PRODUCT_LINKS } from "./marketing-nav";
 import { MenuButton, PhoneMenu } from "./phone-menu";
-import { Tooltip } from "@/app/ui/tooltip";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
   const hydrated = useHydrated();
@@ -50,40 +50,43 @@ export function LandingHeader({ authed }: { authed: boolean }) {
   const auth = authed ? "in" : "out";
 
   return (
-    <header
-      data-marketing-header
-      data-auth={hydrated ? auth : undefined}
-      // The open phone menu needs the pill's fill, wherever the page is.
-      data-floating={flag(scrolled || menuOpen)}
-      // flow-root: the pill's top margin stays inside the header rather
-      // than collapsing through it and moving the whole header down.
-      className="group/header sticky top-0 z-30 -mx-6 flow-root px-3 sm:px-6"
-    >
-      <MenuScrim open={menuOpen} />
-      <div ref={pillRef} data-marketing-pill data-open={flag(menuOpen)} className={PILL}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-7 self-stretch">
-            <MarketingLink to="/" onClick={closeMenu} className="rounded-full text-lg">
-              <Logo />
-            </MarketingLink>
-            <MainNav />
-          </div>
-          <div className="flex items-center gap-1.5">
-            {/* The open menu carries its own Get started, so the pill's
-                Sign up steps aside rather than say it twice. */}
-            <div className="in-data-open:max-md:hidden">
-              <AuthActions />
+    <>
+      <LaunchBanner />
+      <header
+        data-marketing-header
+        data-auth={hydrated ? auth : undefined}
+        // The open phone menu needs the pill's fill, wherever the page is.
+        data-floating={flag(scrolled || menuOpen)}
+        // flow-root: the pill's top margin stays inside the header rather
+        // than collapsing through it and moving the whole header down.
+        className="group/header sticky top-0 z-30 -mx-6 flow-root px-3 sm:px-6"
+      >
+        <MenuScrim open={menuOpen} />
+        <div ref={pillRef} data-marketing-pill data-open={flag(menuOpen)} className={PILL}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-7 self-stretch">
+              <MarketingLink to="/" onClick={closeMenu} className="rounded-full text-lg">
+                <Logo />
+              </MarketingLink>
+              <MainNav />
             </div>
-            <MenuButton
-              open={menuOpen}
-              onToggle={() => setMenuOpen((was) => !was)}
-              buttonRef={menuButtonRef}
-            />
+            <div className="flex items-center gap-1.5">
+              {/* The open menu carries its own Get started, so the pill's
+                Sign up steps aside rather than say it twice. */}
+              <div className="in-data-open:max-md:hidden">
+                <AuthActions />
+              </div>
+              <MenuButton
+                open={menuOpen}
+                onToggle={() => setMenuOpen((was) => !was)}
+                buttonRef={menuButtonRef}
+              />
+            </div>
           </div>
+          <PhoneMenu open={menuOpen} onClose={closeMenu} />
         </div>
-        <PhoneMenu open={menuOpen} onClose={closeMenu} />
-      </div>
-    </header>
+      </header>
+    </>
   );
 }
 
@@ -300,19 +303,21 @@ function AuthActions() {
   return (
     <div className="flex items-center gap-1 text-sm">
       {/* The hero never says the product is open source, and it is one of
-          the page's strongest claims. An icon with no star count: a low
-          number reads as a weekend project (see SelfHostSection). */}
-      <Tooltip content="rdyrct on GitHub">
-        <a
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="rdyrct on GitHub"
-          className="hidden size-9 place-items-center rounded-full text-muted transition-colors hover:text-text sm:grid"
-        >
-          <Github size={18} />
-        </a>
-      </Tooltip>
+          the page's strongest claims. It asks for a star but shows no
+          count: a low number reads as a weekend project (see
+          SelfHostSection). Words from lg up, where the floating pill has
+          room beside the nav; an icon below, on a phone too, since the
+          footer drops its GitHub links there. */}
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Star rdyrct on GitHub"
+        className="mr-1 inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted transition-colors hover:text-text lg:h-9 lg:w-auto lg:border lg:border-border lg:bg-surface lg:px-3.5 lg:text-text lg:hover:border-muted"
+      >
+        <Github size={18} className="lg:size-4" />
+        <span className="hidden whitespace-nowrap lg:inline">Star on GitHub</span>
+      </a>
       <span data-auth-control="in">
         <PillCta to="/dashboard">Dashboard</PillCta>
       </span>
