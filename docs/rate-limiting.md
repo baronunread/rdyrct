@@ -115,7 +115,7 @@ proves nothing about the feature.
 | `RL_WRITE_PAID`      | 300/min | User              | Writes on a paid plan         |
 | `RL_QR_UPLOAD`       | 20/min  | User              | QR logo uploads to R2         |
 | `RL_DOMAIN_SETUP`    | 30/min  | User              | Custom hostname calls         |
-| `RL_BILLING`         | 10/min  | User              | Polar checkout                |
+| `RL_BILLING`         | 10/min  | User              | Polar checkout and reads      |
 | `RL_CLICK_RECORDING` | 600/min | Organization      | Click ingestion               |
 
 These are set for the person having trouble, not for the bot: someone who
