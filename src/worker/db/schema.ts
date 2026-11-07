@@ -494,6 +494,8 @@ export const linkReports = sqliteTable("link_reports", {
   /** Tells reporters apart (migration 0055): an HMAC of the connection and
    * the link id, never the address. */
   reporterKey: text("reporter_key"),
+  /** When the admin was mailed for this report (migration 0056). */
+  notifiedAt: integer("notified_at"),
 });
 
 /** Hosts a link may not point at (migration 0039). */

@@ -1,8 +1,24 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, fetchWorker, seedLink } from "./support";
-import { parseReportedLink, REPORTS_TO_FLAG } from "../../src/worker/routes/reports";
+import {
+  applyTestMigrations,
+  authEnv,
+  captureEmails,
+  fetchWorker,
+  overrideEnv,
+  rawAddressRow,
+  rawLinkRow,
+  seedLink,
+  testDb,
+} from "./support";
+import * as schema from "../../src/worker/db/schema";
+import {
+  parseReportedLink,
+  REPORT_NOTICE_WINDOW_MS,
+  REPORTS_TO_FLAG,
+  sweepReportNotices,
+} from "../../src/worker/routes/reports";
 
 /**
  * The public report form. The browser test covers sending one (it runs Turnstile);
@@ -91,5 +107,98 @@ describe("POST /api/reports", () => {
   it("rejects an unknown reason and an empty link", async () => {
     expect((await report("sale", { reason: "boredom" })).status).toBe(400);
     expect((await report("   ")).status).toBe(400);
+  });
+});
+
+describe("the admin's report mail", () => {
+  const ADMIN = "admin@example.com";
+  const mailEnv = () => overrideEnv({ ...authEnv(), SUPERADMIN_EMAIL: ADMIN });
+  const reportFrom = (link: string, ip: string) =>
+    fetchWorker(
+      new Request("http://localhost/api/reports", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+        body: JSON.stringify({ link, reason: "spam" }),
+      }),
+      mailEnv(),
+    );
+
+  async function seedLinks(n: number) {
+    const db = testDb();
+    await db.insert(schema.orgs).values({ id: "org-1", name: "Test", createdAt: 0 });
+    for (let i = 0; i < n; i++) {
+      await db.insert(schema.links).values(
+        rawLinkRow({
+          id: `l${i}`,
+          orgId: "org-1",
+          slug: `s${i}`,
+          destination: "https://example.com",
+          createdAt: 0,
+        }),
+      );
+      await db.insert(schema.linkAddresses).values(
+        rawAddressRow({
+          id: `a${i}`,
+          linkId: `l${i}`,
+          orgId: "org-1",
+          slug: `s${i}`,
+          kind: "primary",
+          createdAt: 0,
+        }),
+      );
+    }
+  }
+
+  const toAdmin = (sent: { to: string }[]) => sent.filter((m) => m.to === ADMIN).length;
+
+  it("sends at most one per window however many links are reported, and keeps every report", async () => {
+    await seedLinks(50);
+    const mail = captureEmails();
+    try {
+      for (let i = 0; i < 50; i++)
+        expect((await reportFrom(`s${i}`, `192.0.2.${i}`)).status).toBe(201);
+      expect(toAdmin(mail.sent)).toBe(1);
+      const rows = await env.DB.prepare(
+        "select count(*) as n from link_reports where link_id is not null",
+      ).first<{ n: number }>();
+      expect(rows?.n).toBe(50);
+
+      // A made-up slug costs no mail.
+      await reportFrom("nope1234", "192.0.2.200");
+      expect(toAdmin(mail.sent)).toBe(1);
+    } finally {
+      mail.restore();
+    }
+  });
+
+  it("tells the admin about reports that came in during the quiet window, once it ends", async () => {
+    await seedLinks(3);
+    const mail = captureEmails();
+    try {
+      await reportFrom("s0", "192.0.2.1");
+      await reportFrom("s1", "192.0.2.2");
+      expect(toAdmin(mail.sent)).toBe(1);
+
+      // Still inside the window: the sweep sends nothing.
+      await sweepReportNotices(mailEnv());
+      expect(toAdmin(mail.sent)).toBe(1);
+
+      // The window passes: the report on s1 is told in one digest, once.
+      await env.DB.prepare("update link_reports set notified_at = notified_at - ?")
+        .bind(REPORT_NOTICE_WINDOW_MS + 1)
+        .run();
+      await sweepReportNotices(mailEnv());
+      await sweepReportNotices(mailEnv());
+      expect(toAdmin(mail.sent)).toBe(2);
+
+      // And a quiet link reported after the next window still mails at once.
+      await env.DB.prepare("update link_reports set notified_at = notified_at - ?")
+        .bind(REPORT_NOTICE_WINDOW_MS + 1)
+        .run();
+      await reportFrom("s2", "192.0.2.3");
+      expect(toAdmin(mail.sent)).toBe(3);
+    } finally {
+      mail.restore();
+    }
   });
 });

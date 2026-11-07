@@ -23,7 +23,19 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
-import { and, count, countDistinct, eq, gt, isNull, lt } from "drizzle-orm";
+import {
+  and,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  notExists,
+} from "drizzle-orm";
 import { TURNSTILE_FAILED_CODE, REPORT_REASONS, type JsonValue } from "@/shared/types";
 import * as schema from "../db/schema";
 import { drizzle } from "drizzle-orm/d1";
@@ -139,22 +151,102 @@ async function findReportedLink(env: Env, db: DB, raw: string) {
   return { slug: parsed.slug, link: rows[0] ?? null };
 }
 
+/** At most one report mail to the admin in this long. Anyone can file a
+ * report, so a mail per report would let anyone send the admin a thousand. */
+export const REPORT_NOTICE_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Mail the admin about `reportId` and whatever else came in since the last
+ * mail, unless a mail already went out this window. The claim is one UPDATE
+ * that only succeeds when no report carries a recent notified_at, so two
+ * reports at once cannot both send. A report that loses waits for
+ * sweepReportNotices.
+ */
+async function noticeReport(env: Env, db: DB, reportId: string, path: string) {
+  if (!env.SUPERADMIN_EMAIL) return false;
+  const now = Date.now();
+  const [{ last }] = await db
+    .select({ last: max(schema.linkReports.notifiedAt) })
+    .from(schema.linkReports);
+  const claimed = await db
+    .update(schema.linkReports)
+    .set({ notifiedAt: now })
+    .where(
+      and(
+        eq(schema.linkReports.id, reportId),
+        notExists(
+          db
+            .select({ id: schema.linkReports.id })
+            .from(schema.linkReports)
+            .where(gt(schema.linkReports.notifiedAt, now - REPORT_NOTICE_WINDOW_MS)),
+        ),
+      ),
+    )
+    .returning({ id: schema.linkReports.id });
+  if (claimed.length === 0) return false;
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(schema.linkReports)
+    .where(
+      and(
+        isNotNull(schema.linkReports.linkId),
+        eq(schema.linkReports.status, "open"),
+        gt(schema.linkReports.createdAt, last ?? 0),
+      ),
+    );
+  await notifyAdmin(
+    env,
+    n > 1 ? `${n} links were reported` : "A link was reported",
+    [
+      `New open reports since the last mail: ${n}.`,
+      "At most one of these mails goes out an hour. Admin has every report.",
+    ],
+    path,
+  );
+  return true;
+}
+
+/** Every 10 minutes: once the window has passed, mail the admin about
+ * reports that came in while it was closed, so a report never goes untold. */
+export async function sweepReportNotices(env: Env): Promise<boolean> {
+  const db = drizzle(env.DB, { schema });
+  const [{ last }] = await db
+    .select({ last: max(schema.linkReports.notifiedAt) })
+    .from(schema.linkReports);
+  const [pending] = await db
+    .select({ id: schema.linkReports.id })
+    .from(schema.linkReports)
+    .where(
+      and(
+        isNotNull(schema.linkReports.linkId),
+        eq(schema.linkReports.status, "open"),
+        isNull(schema.linkReports.notifiedAt),
+        gt(schema.linkReports.createdAt, last ?? 0),
+      ),
+    )
+    .orderBy(desc(schema.linkReports.createdAt))
+    .limit(1);
+  if (!pending) return false;
+  return noticeReport(env, db, pending.id, "/admin/links");
+}
+
 /** Flag the link's org for review once enough open reports name the link.
  * Never suspends: anyone can file a report. */
-async function flagOrgIfReported(env: Env, db: DB, link: { linkId: string; orgId: string }) {
+async function flagOrgIfReported(
+  env: Env,
+  db: DB,
+  link: { linkId: string; orgId: string },
+  reportId: string,
+) {
   const [{ n }] = await db
     .select({ n: count() })
     .from(schema.linkReports)
     .where(and(eq(schema.linkReports.linkId, link.linkId), eq(schema.linkReports.status, "open")));
   // The first report on a link is worth a mail on its own at this volume: a
-  // real scam is reported once and then clicked a thousand times.
+  // real scam is reported once and then clicked a thousand times. Bounded to
+  // one mail a window; the rest go out together after it.
   if (n === 1)
-    await notifyAdmin(
-      env,
-      "A link was reported",
-      [`Organization ${link.orgId}. Open reports on this link: 1.`],
-      `/admin/links?org=${encodeURIComponent(link.orgId)}`,
-    );
+    await noticeReport(env, db, reportId, `/admin/links?org=${encodeURIComponent(link.orgId)}`);
   if (n < REPORTS_TO_FLAG) return;
   const flagged = await db
     .update(schema.orgs)
@@ -189,8 +281,9 @@ reportRoutes.post("/", async (c) => {
 
   const db = drizzle(c.env.DB, { schema });
   const { slug, link } = await findReportedLink(c.env, db, body.link);
+  const reportId = uid();
   await db.insert(schema.linkReports).values({
-    id: uid(),
+    id: reportId,
     slug,
     linkId: link?.linkId ?? null,
     orgId: link?.orgId ?? null,
@@ -209,7 +302,7 @@ reportRoutes.post("/", async (c) => {
     const { plan } = await orgPlan(db, link.orgId);
     const warned = plan === "free" && (await warnIfReportedEnough(c.env, db, link.linkId));
     log.set({ report: { plan, warned } });
-    await flagOrgIfReported(c.env, db, link);
+    await flagOrgIfReported(c.env, db, link, reportId);
   }
 
   // The same answer for a real link and a made-up one.
