@@ -301,6 +301,11 @@ async function confirmCheckoutPlan(
   const before = await currentPlan(db, userId);
   const targetPlan = planForProduct(env, checkout.product_id ?? undefined);
   if (checkout.status !== "succeeded" || !targetPlan || before === targetPlan) return before;
+  // A checkout stays "succeeded" forever, long after its subscription ends,
+  // so on its own it proves only that the user once paid. Grant the plan only
+  // while the customer still has a live subscription to it; otherwise
+  // replaying an old checkout id would undo every revocation.
+  if (!(await paysFor(env, checkout.customer_id, targetPlan))) return before;
   await applyPolarEvent(env, db, {
     type: "subscription.active",
     data: {
@@ -316,6 +321,20 @@ async function confirmCheckoutPlan(
     },
   });
   return currentPlan(db, userId);
+}
+
+/** Whether this Polar customer has a live (active or trialing) subscription
+ * to `plan`. */
+async function paysFor(
+  env: Env,
+  customerId: string | null,
+  plan: "hobby" | "pro",
+): Promise<boolean> {
+  if (!customerId) return false;
+  const { items } = await (
+    await polarFor(env)
+  ).subscriptions.list({ customer_id: customerId, active: true, limit: 100 });
+  return items.some((sub) => planForProduct(env, sub.product_id) === plan);
 }
 
 /**

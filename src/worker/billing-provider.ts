@@ -45,12 +45,13 @@ export interface BillingProvider {
      * calls it (#337); it needs the token's `subscriptions:write` scope. */
     revoke(id: string): Promise<{ id: string }>;
     /** A customer's live subscriptions, so deletion revokes the real ones
-     * and not a stored id that may be a placeholder. */
+     * and not a stored id that may be a placeholder, and the checkout-confirm
+     * fallback grants only a plan a live subscription still pays for. */
     list(query: {
       customer_id: string;
       active: boolean;
       limit: number;
-    }): Promise<{ items: { id: string }[] }>;
+    }): Promise<{ items: { id: string; product_id: string }[] }>;
   };
   /**
    * Polar's Customer Portal API, called with a customer session's token
