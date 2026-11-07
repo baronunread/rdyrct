@@ -35,7 +35,7 @@ import { revalidateOnRedirect } from "./risk";
 import { forgetOldAnonWebRiskUsage, rescanFreeLinks, sweepAbuse } from "./destination-check";
 import { sweepClickUsageEmails } from "./click-caps";
 import { sweepOldOverflow } from "./click-overflow";
-import { reportRoutes } from "./routes/reports";
+import { reportRoutes, sweepReportNotices, sweepStaleReportWarnings } from "./routes/reports";
 import { asWideEvent, evlogMiddleware, evlogRequestContext } from "./evlog";
 import { logFailure } from "./log-failure";
 import { sweepGraceWarnings } from "./reconcile";
@@ -757,6 +757,8 @@ async function runScheduled(controller: ScheduledController, env: Env): Promise<
       () => sweepAbuse(env),
       // The 80% and 100% tracked-click emails (#387).
       async () => void (await sweepClickUsageEmails(env)),
+      // The admin's report mail for reports that came in while it was capped.
+      async () => void (await sweepReportNotices(env)),
     ]);
     return;
   }
@@ -844,6 +846,8 @@ async function runScheduled(controller: ScheduledController, env: Env): Promise<
     async () => void (await drainStorageOutbox(env)),
     () => sweepAbuse(env),
     async () => void (await rescanFreeLinks(env)),
+    // Lift warnings that reports set and nobody acted on for a week.
+    async () => void (await sweepStaleReportWarnings(env)),
     // The 80% and 100% tracked-click emails (#387).
     async () => void (await sweepClickUsageEmails(env)),
   ]);

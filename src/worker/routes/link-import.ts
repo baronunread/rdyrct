@@ -33,7 +33,7 @@ import { isValidHttpUrl, normalizeUrl, RESERVED_SLUGS, SLUG_RE, uid } from "../u
 import { resolveUtm, stripUtmParams, type UtmFields } from "@/shared/utm";
 import { blockHostOf } from "@/shared/abuse-rules";
 import { isShortenerDestination } from "../abuse";
-import { assertNotOwnShortLink } from "../abuse-hold";
+import { assertNotOwnShortLink, blockedAmong } from "../abuse-hold";
 import { newAddressRow, newLinkRow } from "./links";
 import { orgLinkWarning } from "../link-warning";
 import {
@@ -217,14 +217,10 @@ async function existingAddresses(db: DB, domainIds: string[], rows: Row[]) {
   return found;
 }
 
-async function blockedHosts(db: DB, destinations: string[]): Promise<Set<string>> {
-  const hosts = [...new Set(destinations.map(blockHostOf).filter((host) => host !== null))];
-  if (!hosts.length) return new Set();
-  const rows = await db
-    .select({ host: schema.blockedHosts.host })
-    .from(schema.blockedHosts)
-    .where(inArray(schema.blockedHosts.host, hosts));
-  return new Set(rows.map((row) => row.host));
+function blockedHosts(db: DB, destinations: string[]): Promise<Set<string>> {
+  return blockedAmong(db, [
+    ...new Set(destinations.map(blockHostOf).filter((host) => host !== null)),
+  ]);
 }
 
 linkImportRoutes.post("/check", requireOrgRole("member"), async (c) => {

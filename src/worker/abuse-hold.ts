@@ -6,7 +6,7 @@
  */
 import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { blockable, blockHostOf, holdReasonFor } from "../shared/abuse-rules";
+import { blockable, blockHostOf, holdReasonFor, hostAndParents } from "../shared/abuse-rules";
 import type { OrgPlan } from "../shared/types";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
@@ -23,11 +23,32 @@ import { RESERVED_SLUGS } from "./util";
 export async function isBlockedHost(db: DB, destination: string): Promise<boolean> {
   const host = blockHostOf(destination);
   if (!host) return false;
-  const rows = await db
-    .select({ host: schema.blockedHosts.host })
-    .from(schema.blockedHosts)
-    .where(eq(schema.blockedHosts.host, host));
-  return rows.length > 0;
+  return (await blockedAmong(db, [host])).has(host);
+}
+
+/** D1 binds at most 100 variables a statement. */
+const HOSTS_PER_QUERY = 90;
+
+/**
+ * The hosts in `hosts` (already through blockHostOf) that the blocklist
+ * covers: the host itself or any parent domain of it is on the list. The one
+ * matching rule every create, edit, claim and import path goes through.
+ */
+export async function blockedAmong(db: DB, hosts: string[]): Promise<Set<string>> {
+  const candidates = [...new Set(hosts.flatMap(hostAndParents))];
+  const chunks: string[][] = [];
+  for (let i = 0; i < candidates.length; i += HOSTS_PER_QUERY)
+    chunks.push(candidates.slice(i, i + HOSTS_PER_QUERY));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      db
+        .select({ host: schema.blockedHosts.host })
+        .from(schema.blockedHosts)
+        .where(inArray(schema.blockedHosts.host, chunk)),
+    ),
+  );
+  const listed = new Set(results.flat().map((row) => row.host));
+  return new Set(hosts.filter((host) => hostAndParents(host).some((h) => listed.has(h))));
 }
 
 export async function assertNotBlocked(db: DB, destination: string): Promise<void> {

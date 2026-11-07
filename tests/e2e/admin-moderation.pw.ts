@@ -248,8 +248,9 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   await page.getByLabel("Details (optional)").fill("asks for a card number");
   await page.getByRole("button", { name: "Send report" }).click();
   await expect(page.getByText("Thanks. We will look at it.")).toBeVisible({ timeout: 15_000 });
-  // The owner is on the free plan, so the report warns the link at once.
-  // A paid org's link would only be queued (tests/worker/link-states).
+  // One reporter alone never puts the warning page in front of a link, even
+  // on the free plan: it takes REPORTERS_TO_WARN different people
+  // (tests/worker/link-states covers the threshold and the weekly sweep).
   const warnReason = async () =>
     (
       await queryRows<{ warn_reason: string | null }>(
@@ -258,7 +259,7 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
         [slug],
       )
     )[0].warn_reason;
-  expect(await warnReason()).toBe("Open report");
+  expect(await warnReason()).toBeNull();
 
   await page.goto("/admin/links");
   // Scoped to the view switch: the owned table has a Reports column too.
@@ -275,6 +276,4 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   // the whole platform's, and admin-triage.pw.ts files reports of its own in
   // the same run.
   await expect(row).toHaveCount(0, { timeout: 10_000 });
-  // Dismissing the only report lifts the warning it set.
-  await expect.poll(warnReason).toBeNull();
 });

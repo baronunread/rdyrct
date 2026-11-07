@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blockable, blockHostOf, holdReasonFor } from "../src/shared/abuse-rules";
+import { blockable, blockHostOf, holdReasonFor, hostAndParents } from "../src/shared/abuse-rules";
 
 describe("blockable", () => {
   test("never a site everyone uses, nor a host under one", () => {
@@ -50,5 +50,19 @@ describe("blockHostOf", () => {
   });
   test("null for junk", () => {
     expect(blockHostOf("nope")).toBeNull();
+  });
+  test("drops a trailing dot, which DNS treats as the same host", () => {
+    expect(blockHostOf("https://m.evil.example./x")).toBe("m.evil.example");
+  });
+});
+
+describe("hostAndParents", () => {
+  test("the host and each parent above its top level", () => {
+    expect(hostAndParents("m.scam.example.com")).toEqual([
+      "m.scam.example.com",
+      "scam.example.com",
+      "example.com",
+    ]);
+    expect(hostAndParents("localhost")).toEqual([]);
   });
 });
