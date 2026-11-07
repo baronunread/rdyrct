@@ -9,6 +9,8 @@
 [![Bun](https://img.shields.io/badge/Bun-000000?logo=bun&logoColor=white)](https://bun.sh)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 
+Use it at [rdyrct.com](https://rdyrct.com) or self-host it for free. If it's useful to you, a ⭐ helps other people find it.
+
 </div>
 
 ---
