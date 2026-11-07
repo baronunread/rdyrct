@@ -16,7 +16,7 @@ import {
   keepOrgActive,
   setMemberRoleWithinLimit,
 } from "../plan";
-import { sendEmail } from "../email";
+import { emailConfigured, sendEmail } from "../email";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage, memberAvatarUrl } from "../storage";
 import { serveAvatar } from "./avatars";
@@ -1297,6 +1297,17 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
     throw new HTTPException(403, {
       message:
         "This invite was sent to a different email address: sign in with the invited account",
+    });
+  // ...and to an account that has proved it owns that address. Anyone can
+  // sign up as an address they do not own and sit on it unverified.
+  //
+  // A deployment with no email provider cannot verify any address, so there
+  // the token is the only proof there is: no mail went out, and the admin
+  // handed the link to that person. Requiring a check that cannot happen
+  // would lock every password account out of every email invite.
+  if (invite.email && !c.var.user!.emailVerified && emailConfigured(c.env))
+    throw new HTTPException(403, {
+      message: "Verify your email address before you accept this invite",
     });
 
   // The cap may have been reached (or the plan downgraded) since the invite
