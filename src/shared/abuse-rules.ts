@@ -141,9 +141,26 @@ export function blockable(host: string): boolean {
   return !NEVER_BLOCKED.some((site) => host === site || host.endsWith(`.${site}`));
 }
 
+/**
+ * A host and each parent domain under its top level: m.scam.example.com
+ * gives itself, scam.example.com and example.com. A blocklist entry matches
+ * a destination when it is any one of these, so blocking a site blocks its
+ * subdomains too, and notscam.example.com never matches scam.example.com.
+ */
+export function hostAndParents(host: string): string[] {
+  const labels = host.split(".");
+  return labels.slice(0, -1).map((_, i) => labels.slice(i).join("."));
+}
+
 export function blockHostOf(destination: string): string | null {
   try {
-    return new URL(destination).hostname.toLowerCase().replace(/^www\./, "") || null;
+    // A trailing dot is the same host to DNS, so it must not slip past a block.
+    return (
+      new URL(destination).hostname
+        .toLowerCase()
+        .replace(/\.+$/, "")
+        .replace(/^www\./, "") || null
+    );
   } catch {
     return null;
   }

@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
 import { claimAnonLink } from "../../src/worker/routes/shorten";
+import { isBlockedHost } from "../../src/worker/abuse-hold";
 import {
   adminCookie,
   applyTestMigrations,
@@ -15,6 +16,7 @@ import {
   freeOwnerCookie,
   jsonBody,
   overrideEnv,
+  testDb,
   testEnv,
 } from "./support";
 
@@ -136,6 +138,25 @@ describe("the blocklist", () => {
     const res = await createLink(owner, "https://scam.example/other/path");
     expect(res.status).toBe(422);
     expect((await createLink(owner, "https://fine.example/")).status).toBe(201);
+  });
+
+  it("covers every subdomain of a blocked host, and nothing beside it", async () => {
+    const owner = await freeOwnerCookie();
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, reason, created_at) values ('scam.example.com', 'x', 0)",
+    ).run();
+    const db = testDb();
+    expect(await isBlockedHost(db, "https://scam.example.com/x")).toBe(true);
+    expect(await isBlockedHost(db, "https://m.scam.example.com/x")).toBe(true);
+    expect(await isBlockedHost(db, "https://a.b.cdn.scam.example.com/x")).toBe(true);
+    expect(await isBlockedHost(db, "https://notscam.example.com/x")).toBe(false);
+    expect(await isBlockedHost(db, "https://example.com/x")).toBe(false);
+    expect(await isBlockedHost(db, "https://scam.example.com.evil.test/x")).toBe(false);
+
+    const res = await createLink(owner, "https://m.scam.example.com/x");
+    expect(res.status).toBe(422);
+    expect((await jsonBody<{ code: string }>(res)).code).toBe("blocked_destination");
+    expect((await createLink(owner, "https://example.com/x")).status).toBe(201);
   });
 
   it("can be listed and a mistaken entry removed", async () => {

@@ -219,6 +219,18 @@ describe("checking rows writes nothing and says why", () => {
     expect(await linkCount()).toBe(0);
   });
 
+  it("refuses a blocked host and its subdomains, as creating a link does", async () => {
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, reason, created_at) values ('scam.example.com', 'x', 0)",
+    ).run();
+    const result = await verdicts("check", [
+      row(2, "a1", "https://scam.example.com/x"),
+      row(3, "a2", "https://m.scam.example.com/x"),
+      row(4, "a3", "https://notscam.example.com/x"),
+    ]);
+    expect(result.map((verdict) => verdict.status)).toEqual(["failed", "failed", "ready"]);
+  });
+
   it("says how much room the plan has left", async () => {
     const res = await post("check", [row(2, "a", "https://example.com")]);
     expect(await jsonBody<{ room: number }>(res)).toMatchObject({ room: PLAN_LIMITS.hobby.links });
