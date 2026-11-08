@@ -57,10 +57,8 @@ export function Manifesto() {
   return (
     <FrameRow className="bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[14px_14px] px-6 py-16 sm:px-10 md:py-24">
       <p className="mx-auto max-w-4xl text-[1.75rem] leading-[1.15] font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-        A short link should show who sent it.{" "}
-        <span className="text-muted">
-          It should go straight to your page and keep working after you stop paying.
-        </span>
+        Short links on your own domain, with every click counted, used to need a big-company budget.{" "}
+        <span className="text-muted">For a small team they should cost a few dollars a month.</span>
       </p>
     </FrameRow>
   );
