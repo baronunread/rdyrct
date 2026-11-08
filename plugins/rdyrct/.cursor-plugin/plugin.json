@@ -1,0 +1,14 @@
+{
+  "name": "rdyrct",
+  "displayName": "rdyrct",
+  "version": "1.0.0",
+  "description": "Create, update and search rdyrct short links, read click stats and make QR codes, through rdyrct's MCP server.",
+  "author": {
+    "name": "rdyrct"
+  },
+  "homepage": "https://rdyrct.com",
+  "repository": "https://github.com/baronunread/rdyrct",
+  "license": "MIT",
+  "keywords": ["url-shortener", "short-links", "qr-code", "link-analytics", "mcp"],
+  "logo": "assets/logo.svg"
+}
