@@ -1,0 +1,17 @@
+{
+  "name": "rdyrct",
+  "owner": {
+    "name": "rdyrct"
+  },
+  "metadata": {
+    "description": "The rdyrct plugin for Cursor: short links, QR codes and click stats from the editor",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "rdyrct",
+      "source": "./plugins/rdyrct",
+      "description": "Create, update and search rdyrct short links, read click stats and make QR codes, through rdyrct's MCP server"
+    }
+  ]
+}
