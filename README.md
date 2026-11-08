@@ -207,7 +207,7 @@ bunx wrangler secret bulk prod.secrets.env && rm prod.secrets.env
 
 ### Move to your own domain
 
-Started on `workers.dev`, from the button or from setup? Clone your copy, run `bun run setup` and give it the domain (it has to be on your Cloudflare account), then commit `wrangler.jsonc` and push. Setup attaches the domain and keeps your data, your secrets and the session key. By hand instead: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc`, remove the vars that are rdyrct.com's (`MAIL_FROM`, `WELCOME_FROM`, `NEWSLETTER_FROM`, `NEWSLETTER_REPLY_TO`, `POSTAL_ADDRESS`, `POLAR_*`, `EXIT_OFFER_CODE`, `CF_ZONE_ID`, `SENTRY_DSN`) and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
+Started on `workers.dev`, from the button or from setup? Clone your copy, run `bun run setup` and give it the domain (it has to be on your Cloudflare account), then commit `wrangler.jsonc` and push. Setup attaches the domain and keeps your data, your secrets and the session key. By hand instead: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc`, remove the vars that are rdyrct.com's (`MAIL_FROM`, `WELCOME_FROM`, `NEWSLETTER_FROM`, `NEWSLETTER_REPLY_TO`, `POSTAL_ADDRESS`, `POLAR_*`, `CF_ZONE_ID`, `SENTRY_DSN`) and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
 
 ### Email (optional)
 
@@ -268,7 +268,6 @@ before changing link, domain, logo, or organization delete flows.
 | `NEWSLETTER_FROM`           | var (opt.)     | Newsletter sender, on its own subdomain; unset refuses newsletter sends               |
 | `NEWSLETTER_REPLY_TO`       | var (opt.)     | Where replies to a newsletter go                                                      |
 | `POSTAL_ADDRESS`            | var (opt.)     | Postal address in every newsletter footer                                             |
-| `EXIT_OFFER_CODE`           | var (opt.)     | rdyrct.com only: Polar discount code the leaving popup shows; unset hides it          |
 | `CF_DEV_ENV`                | var (dev only) | `simulated` fakes the Custom Hostnames API on a timer, `instant` without one          |
 
 Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.local.example`).
