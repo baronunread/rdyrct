@@ -1,5 +1,93 @@
 # Changelog
 
+## 1.2.0
+
+A new app on every screen, a setup flow that gets a new account to its first
+link, domain and team, and email that only goes to people who said yes. Banned
+accounts now end cleanly, and each plan counts a set number of clicks a month
+while its links keep redirecting.
+
+### The app
+
+- **Every screen redesigned, on desktop and phone.** The sidebar folds to an
+  icon rail, Analytics is one card with tabs, and on a phone dialogs open as
+  sheets from the bottom. A reload draws the sidebar from the first byte.
+- **A setup flow for a new account** at `/welcome`: the org's name, a first
+  link with its QR code (the card shows the first click as it lands), a
+  domain, the team, and whether to hear from us. Every step can be skipped.
+- **Domains in place.** Adding a domain shows its one CNAME record with a copy
+  button, and a failed check can be retried instead of deleted and re-added.
+- **Export an org's links as CSV.**
+- Import has one row per domain and one Import button. Links on a domain that
+  is still being checked import now and work once it is live.
+- After a deploy, a tab left open no longer goes blank when you click into a
+  page: it stays put and offers Reload. Safari users stopped seeing "Something
+  broke on this page" after every deploy.
+
+### Plans
+
+- **Each plan records a set number of clicks a month:** Free 5,000, Hobby
+  50,000, Pro 500,000. Past that, links keep redirecting; the extra clicks are
+  not counted. Analytics reads daily and hourly totals, so its charts load
+  faster.
+- **Pro covers one organization.** You can still belong to as many orgs as
+  people invite you to. Owning more than one, or any higher limit, is
+  Enterprise: an admin sets custom limits for one account, and Billing shows
+  them.
+
+### Email
+
+- **Two lists, Product news and Offers, each with its own consent.** Nobody is
+  on either until they say yes: in the setup flow, in a one-time question, or
+  in Settings. Every email has an unsubscribe link and one-click unsubscribe
+  for mail clients.
+- Admins write, test and schedule issues in Platform > Newsletter. Each send
+  reads its list fresh for every batch of 100, so whoever unsubscribes during
+  a send is left out.
+
+### Abuse
+
+- **A ban ends cleanly.** The banned account's links and domains show a page
+  saying the account was suspended, its subscription is cancelled, and its
+  orgs are deleted 90 days later. Unbanning before then puts every link back
+  as it was.
+- A held link shows a page saying it is under review instead of a 404, and
+  a suspicious one shows a warning before its destination. New links are
+  checked against Google Web Risk (when `WEB_RISK_API_KEY` is set), capped at
+  3,000 lookups a day to stay in the free tier.
+- A free org's link gets the warning only after reports from two different
+  people.
+- Admin usage figures leave out banned people and their orgs.
+
+### Security
+
+Fixes from a review before launch:
+
+- Replaying an old checkout no longer gives back a cancelled plan.
+- An email invite needs a verified address to accept, and sending the same
+  invites again does not mail everyone again.
+- A path with a colon cannot reach another tenant's link on a custom domain.
+- One visitor flooding a link no longer drops other visitors' clicks.
+- Limits on the Polar webhook's body, unsubscribe and billing reads.
+- Cloudflare Turnstile replaces Cap's proof-of-work on sign-up, password reset
+  and the report form.
+
+### When you update
+
+- Sixteen new migrations (0042 to 0057) add columns and tables. `bun run
+  deploy` applies them before the new Worker goes live.
+- Newsletters run in a new workflow. Add it to your `wrangler.jsonc` next to
+  the others, named after your copy: binding `NEWSLETTER_SEND`, class
+  `NewsletterSendWorkflow`.
+- Cap is gone: delete `CAP_SECRET` and the `RL_CAP` rate limit. To keep a bot
+  check on sign-up, set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`; with
+  neither, there is none.
+- Optional: `WEB_RISK_API_KEY` for Google Web Risk. `NEWSLETTER_FROM` (a
+  sender on its own subdomain) to send newsletters, with `NEWSLETTER_REPLY_TO`
+  and `POSTAL_ADDRESS`. Without `NEWSLETTER_FROM`, sends are refused.
+- If you merge this release's `wrangler.jsonc` into yours, delete
+  `NEWSLETTER_FROM`, `NEWSLETTER_REPLY_TO` and `POSTAL_ADDRESS`: they are rdyrct.com's.
+
 ## 1.1.0
 
 Bring your links from Bitly, Short.io, Rebrandly or Dub with their short URLs
