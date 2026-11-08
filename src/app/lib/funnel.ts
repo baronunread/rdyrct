@@ -133,6 +133,9 @@ export type CtaPlacement =
   // preview. Worth its own placement: it fires right after somebody has been
   // shown the payoff, so it measures whether the mock actually sells.
   | "analytics_preview"
+  // The landing page's QR section, which sells codes you can edit after
+  // printing, so it asks for the account those need.
+  | "qr_pillar"
   // The standalone QR generator (Direction D of #96). The page asks nothing
   // of the visitor, so these two are the only intent it can report: taking
   // the free account, or going to read what the paid ones cost.

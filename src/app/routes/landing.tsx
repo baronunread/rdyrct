@@ -876,6 +876,22 @@ function AnalyticsAsk() {
   );
 }
 
+/** The QR pillar sells codes you can edit after printing, which only a
+ *  signed-in link has; the free generator makes fixed ones, so it is not
+ *  where this button goes. */
+function QrAsk() {
+  const { authed } = useAudience();
+  return (
+    <HrefLink
+      href={authed ? "/links" : "/signup"}
+      onClick={() => trackCta("qr_pillar")}
+      className={buttonClass({ variant: "outline", className: "rounded-full px-4" })}
+    >
+      Make a QR code you can edit
+    </HrefLink>
+  );
+}
+
 /**
  * What happens when somebody stops paying, said as a sequence because it is
  * one (#29, #159). QR tools that switch printed codes off when a trial ends
@@ -1163,7 +1179,7 @@ export function LandingPage() {
             <div className="mb-16 border-x border-border/70">
               <Manifesto />
               <LinksPillar />
-              <QrPillar />
+              <QrPillar ask={<QrAsk />} />
               <AnalyticsPillar ask={<AnalyticsAsk />} />
               <TeamsAndCode />
               <FrameRow />

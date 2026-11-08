@@ -399,12 +399,12 @@ function SceneDownload({ at, step, children }: { at: number; step: number; child
   );
 }
 
-export function QrPillar() {
+export function QrPillar({ ask }: { ask: ReactNode }) {
   return (
     <Pillar
       lead="Print once. Change it later."
       rest="QR codes with your logo, pointing wherever you need this week."
-      action={<PillarLink to="/qr-code-generator">Make a QR code</PillarLink>}
+      action={ask}
       features={[
         {
           icon: RefreshCw,
@@ -612,13 +612,7 @@ const RECORD = [
   ["Device", "Mobile"],
 ] as const;
 
-function PillarLink({
-  to,
-  children,
-}: {
-  to: "/pricing" | "/qr-code-generator" | "/signup";
-  children: ReactNode;
-}) {
+function PillarLink({ to, children }: { to: "/pricing" | "/signup"; children: ReactNode }) {
   return (
     <MarketingLink
       to={to}
