@@ -20,7 +20,10 @@ export const HELD_PAGE = {
 export const DISABLED_PAGE = {
   title: "Link disabled",
   heading: "This link has been disabled.",
-  body: "Its owner broke the rules of the service that made it. It no longer leads anywhere.",
+  // Modelled on Bitly's page for a suspended account: why the link is dead,
+  // then what the visitor can do. "Our" names nobody, so it reads right on a
+  // customer's own domain too.
+  body: "The account that made this link was suspended for breaking our rules. You can close this page.",
 } as const;
 
 export const WARN_PAGE = {
