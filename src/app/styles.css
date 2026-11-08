@@ -1502,3 +1502,32 @@ html:not([data-sidebar="collapsed"]) [data-shell-width="folded"] {
 [data-shell-slot="user-name"]::after {
   content: var(--shell-user-name, "");
 }
+
+/* ---------------------------------------------------------------- */
+/* The landing page's product showcase (components/product-showcase) */
+/* ---------------------------------------------------------------- */
+
+/* One screenshot per theme; the other stays display:none, and since it is
+   loading="lazy" the browser never fetches it. */
+.showcase-dark {
+  display: none;
+}
+[data-theme="dark"] .showcase-dark {
+  display: block;
+}
+[data-theme="dark"] .showcase-light {
+  display: none;
+}
+
+/* The line under the current tab that fills while the views advance. */
+.showcase-progress {
+  transform: scaleX(0);
+  animation-name: showcase-fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes showcase-fill {
+  to {
+    transform: scaleX(1);
+  }
+}

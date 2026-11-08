@@ -32,7 +32,6 @@ import {
 } from "../lib/anon-links";
 import { clicksLabel, shortenAnonymously, useAnonClicks } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
-import { launchHeroHop } from "../lib/hero-hop";
 import { HrefLink } from "../lib/router-search";
 import {
   type BarError,
@@ -130,7 +129,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
 }
 
 /** The form's state and what pressing the button does: make the link,
- *  remember it for the claim after sign-up, and launch it across the globe. */
+ *  remember it for the claim after sign-up. */
 function useAnonShortener() {
   const toast = useToast();
   const turnstile = useTurnstile("anon-link");
@@ -157,7 +156,6 @@ function useAnonShortener() {
       // able to claim it, and the cap is enforced in one place.
       setMade(rememberAnonLink(link, destination.trim()));
       setDestination("");
-      launchHeroHop(link.url.replace(/^https?:\/\//, ""));
       trackCta("hero_shortener");
     } catch (error) {
       const mark = refusedAddress(error);
