@@ -114,7 +114,7 @@ export async function startHeroBackdrop(
     let tc = (px - u.title) / vec2f(420.0, 170.0);
     let clearTitle = smoothstep(0.55, 1.25, length(tc));
     let fade = smoothstep(1.0, 0.65, uvn.y) * smoothstep(0.0, 0.08, uvn.x) * smoothstep(1.0, 0.92, uvn.x);
-    let a = clamp(sum, 0.0, 1.0) * select(0.34, 0.36, dk) * fade * mix(0.35, 1.0, clearTitle);
+    let a = clamp(sum, 0.0, 1.0) * select(0.2, 0.18, dk) * fade * mix(0.3, 1.0, clearTitle);
     return vec4f(col * a, a);
   }`.$uses({ u, fbm });
   const pipeline = root.createRenderPipeline({ vertex: common.fullScreenTriangle, fragment });
