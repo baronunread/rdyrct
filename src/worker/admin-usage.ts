@@ -10,7 +10,7 @@
  * Windows are whole UTC days, the same days fillSeries draws, so a total is
  * always the sum of its bars.
  */
-import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, sql, type SQLWrapper } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB } from "./env";
 import { computeWindows } from "./rollups";
@@ -36,6 +36,22 @@ export const ownerPlan = sql<OrgPlan>`coalesce((
   where org_members.org_id = orgs.id and org_members.role = 'owner'
   limit 1
 ), 'free')`;
+
+/**
+ * Leaves out orgs a ban disabled (`orgs.disabled_at`): a spam campaign's
+ * clicks are not usage, and counting them made the platform figures say the
+ * product was busier than it is. Their rows stay until the purge deletes the
+ * org (purgeBannedOrgs); the anomaly checks and each org's own row still see
+ * them.
+ */
+export function fromLiveOrg(orgId: SQLWrapper) {
+  return sql`${orgId} not in (select id from orgs where disabled_at is not null)`;
+}
+
+/** People a ban has not removed: the platform figures count only them. */
+export const liveUser = eq(schema.user.banned, false);
+/** Orgs a ban has not disabled. */
+export const liveOrg = isNull(schema.orgs.disabledAt);
 
 const daily = schema.clickDaily;
 const dims = schema.clickDailyDims;
@@ -63,27 +79,34 @@ export async function usageForRange(db: DB, days: UsageRange): Promise<RangeFigu
       db
         .select({ day: daily.day, clicks: clickSum })
         .from(daily)
-        .where(gte(daily.day, since))
+        .where(and(gte(daily.day, since), fromLiveOrg(daily.orgId)))
         .groupBy(daily.day),
       db
         .select({ day: dims.day, clicks: sql<number>`sum(${dims.clicks})` })
         .from(dims)
-        .where(and(eq(dims.dim, "device"), eq(dims.value, "bot"), gte(dims.day, since)))
+        .where(
+          and(
+            eq(dims.dim, "device"),
+            eq(dims.value, "bot"),
+            gte(dims.day, since),
+            fromLiveOrg(dims.orgId),
+          ),
+        )
         .groupBy(dims.day),
       db
         .select({ day: createdDay, clicks: sql<number>`count(*)` })
         .from(schema.user)
-        .where(gte(schema.user.createdAt, new Date(sinceMs)))
+        .where(and(gte(schema.user.createdAt, new Date(sinceMs)), liveUser))
         .groupBy(createdDay),
       db
         .select({ day: createdDay, clicks: sql<number>`count(*)` })
         .from(schema.links)
-        .where(gte(schema.links.createdAt, sinceMs))
+        .where(and(gte(schema.links.createdAt, sinceMs), fromLiveOrg(schema.links.orgId)))
         .groupBy(createdDay),
       db
         .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
         .from(schema.user)
-        .where(gte(schema.user.createdAt, new Date(sinceMs)))
+        .where(and(gte(schema.user.createdAt, new Date(sinceMs)), liveUser))
         .groupBy(schema.user.plan),
       db
         .select({
@@ -94,7 +117,7 @@ export async function usageForRange(db: DB, days: UsageRange): Promise<RangeFigu
         })
         .from(daily)
         .innerJoin(schema.orgs, eq(daily.orgId, schema.orgs.id))
-        .where(gte(daily.day, since))
+        .where(and(gte(daily.day, since), fromLiveOrg(daily.orgId)))
         .groupBy(daily.orgId)
         .orderBy(desc(clickSum))
         .limit(5),
@@ -110,7 +133,7 @@ export async function usageForRange(db: DB, days: UsageRange): Promise<RangeFigu
         .innerJoin(schema.links, eq(daily.linkId, schema.links.id))
         .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
         .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
-        .where(gte(daily.day, since))
+        .where(and(gte(daily.day, since), fromLiveOrg(daily.orgId)))
         .groupBy(daily.linkId)
         .orderBy(desc(clickSum))
         .limit(5),

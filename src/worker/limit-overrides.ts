@@ -142,11 +142,13 @@ export async function saveLimitOverrides(
 }
 
 /** How many users hold custom limits, by their stored plan, for the admin
- * metrics: the paid ones among them are Enterprise. */
+ * metrics: the paid ones among them are Enterprise. Banned people are left
+ * out, as they are from the plan counts this is subtracted from. */
 export async function countLimitHoldersByPlan(db: DB): Promise<{ plan: string; n: number }[]> {
   return db.all<{ plan: string; n: number }>(
     sql`select u.plan as plan, count(*) as n from user u
        where exists (select 1 from limit_overrides o where o.user_id = u.id)
+         and u.banned = 0
        group by u.plan`,
   );
 }
