@@ -11,25 +11,40 @@ test("each detail is a card that says what it is, and its loop shows it", async 
   const links = section(page, "Branded short links.");
   await links.scrollIntoViewIfNeeded();
 
-  for (const title of ["Your own domain", "Words you choose", "Campaign tags"]) {
+  for (const title of ["Your own domain", "Words you choose"]) {
     await expect(links.getByRole("heading", { level: 3, name: title })).toBeVisible();
   }
   // The loop repeats the words, so assistive tech gets the words alone.
   const scenes = links.locator("[data-scene]");
-  await expect(scenes).toHaveCount(3);
+  await expect(scenes).toHaveCount(2);
   for (const scene of await scenes.all())
     await expect(scene).toHaveAttribute("aria-hidden", "true");
-  await expect(scenes.nth(2)).toContainText("spring-sale");
+
+  // Campaign tags are on every plan, so they sit with the analytics, not
+  // under a button about plans with a domain.
+  const analytics = section(page, "See which post paid off.");
+  const tags = analytics
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: "Campaign tags" }) });
+  await expect(tags.locator("[data-scene]")).toContainText("spring-sale");
 });
 
-test("the QR section draws a real code and leads to the generator", async ({ page }) => {
+test("the QR section asks for an account, and its free card opens the generator", async ({
+  page,
+}) => {
   await page.goto("/");
   const qr = section(page, "Print once. Change it later.");
   await qr.scrollIntoViewIfNeeded();
   // The code is the app's own QR component, loaded once the card is near.
   await expect(qr.locator("[data-scene]").first().locator("svg, canvas").first()).toBeVisible();
 
-  await page.getByRole("link", { name: "Make a QR code" }).click();
+  // The section sells codes you can edit, which need an account; the free
+  // generator makes fixed ones, so it is its own card, not the button.
+  await expect(qr.getByRole("link", { name: "Make a QR code you can edit" })).toHaveAttribute(
+    "href",
+    "/signup",
+  );
+  await qr.getByRole("link", { name: "A free generator" }).click();
   await expect(page).toHaveURL(/\/qr-code-generator$/);
 });
 

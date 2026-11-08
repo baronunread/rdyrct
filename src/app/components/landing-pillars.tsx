@@ -72,6 +72,8 @@ type Feature = {
    *  the prerendered page, reduced motion and the first frame all show. */
   steps: number;
   scene: (step: number) => ReactNode;
+  /** A page the whole card opens, through its title. */
+  to?: "/qr-code-generator";
 };
 
 /**
@@ -99,7 +101,9 @@ function Pillar({
         <div className="mt-6">{action}</div>
       </FrameRow>
       <FrameRow className="px-4 py-4 sm:px-6 sm:py-6">
-        <ul className="grid gap-4 md:grid-cols-3">
+        <ul
+          className={cn("grid gap-4", features.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2")}
+        >
           {features.map((feature) => (
             <FeatureCard key={feature.title} {...feature} />
           ))}
@@ -135,13 +139,16 @@ function useLoop(card: RefObject<HTMLElement | null>, steps: number) {
  * the title and one line. The loop is the product's own UI over sample data
  * and repeats what the words say, so it is hidden from assistive tech.
  */
-function FeatureCard({ icon: Icon, title, body, steps, scene }: Feature) {
+function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
   const card = useRef<HTMLLIElement>(null);
   const step = useLoop(card, steps);
   return (
     <li
       ref={card}
-      className="flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface-2"
+      className={cn(
+        "relative flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface-2",
+        to && "transition-colors focus-within:border-accent hover:border-accent/60",
+      )}
     >
       <div
         aria-hidden="true"
@@ -156,7 +163,16 @@ function FeatureCard({ icon: Icon, title, body, steps, scene }: Feature) {
       </div>
       <div className="flex flex-1 flex-col px-5 pt-2 pb-6 sm:px-6">
         <Icon size={18} className="text-accent" />
-        <h3 className="mt-3 font-bold text-text">{title}</h3>
+        <h3 className="mt-3 font-bold text-text">
+          {to ? (
+            // Stretched over the card, so the whole card is the link.
+            <MarketingLink to={to} className="outline-none after:absolute after:inset-0">
+              {title} <span aria-hidden="true">→</span>
+            </MarketingLink>
+          ) : (
+            title
+          )}
+        </h3>
         <p className="mt-1 text-pretty text-muted">{body}</p>
       </div>
     </li>
@@ -271,29 +287,6 @@ export function LinksPillar() {
             </div>
           ),
         },
-        {
-          icon: Target,
-          title: "Campaign tags",
-          body: "Source and campaign on every link, no UTM codes by hand.",
-          steps: 7,
-          scene: (step) => (
-            <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2 p-4">
-              {TAGS.map(([term, value], index) => (
-                <Reveal
-                  key={term}
-                  at={index + 1}
-                  step={step}
-                  className="col-span-2 grid grid-cols-subgrid"
-                >
-                  <dt className="py-1 text-muted">{term}</dt>
-                  <dd className="rounded-md border border-border/70 px-2 py-1 font-mono">
-                    {value}
-                  </dd>
-                </Reveal>
-              ))}
-            </dl>
-          ),
-        },
       ]}
     />
   );
@@ -403,7 +396,7 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
   return (
     <Pillar
       lead="Print once. Change it later."
-      rest="QR codes with your logo, pointing wherever you need this week."
+      rest="QR codes pointing wherever you need this week, with your logo on paid plans."
       action={ask}
       features={[
         {
@@ -432,7 +425,7 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
         {
           icon: ImagePlus,
           title: "Your logo and colours",
-          body: "On every code, as PNG or SVG.",
+          body: "On every code, as PNG or SVG. Paid plans.",
           // Plain, logo, two colours, then each download pressed in turn.
           steps: 7,
           scene: (step) => (
@@ -452,7 +445,8 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
         {
           icon: QrCode,
           title: "A free generator",
-          body: "Make one without an account.",
+          body: "Make one without an account. It is fixed: it cannot be edited or count scans.",
+          to: "/qr-code-generator",
           steps: 6,
           scene: (step) => (
             <div className="flex items-center gap-4 p-4">
@@ -501,7 +495,7 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
         {
           icon: ChartColumn,
           title: "Clicks over time",
-          body: "From the last 24 hours to the last year.",
+          body: "From the last 24 hours to the last year, depending on your plan.",
           steps: 6,
           scene: (step) => <TrendScene step={step} />,
         },
@@ -511,6 +505,29 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
           body: "Which post, email or poster brought people in.",
           steps: 6,
           scene: (step) => <SourcesScene step={step} />,
+        },
+        {
+          icon: Target,
+          title: "Campaign tags",
+          body: "Source and campaign on every link, ranked by clicks. No UTM codes by hand.",
+          steps: 7,
+          scene: (step) => (
+            <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2 p-4">
+              {TAGS.map(([term, value], index) => (
+                <Reveal
+                  key={term}
+                  at={index + 1}
+                  step={step}
+                  className="col-span-2 grid grid-cols-subgrid"
+                >
+                  <dt className="py-1 text-muted">{term}</dt>
+                  <dd className="rounded-md border border-border/70 px-2 py-1 font-mono">
+                    {value}
+                  </dd>
+                </Reveal>
+              ))}
+            </dl>
+          ),
         },
         {
           icon: ShieldCheck,

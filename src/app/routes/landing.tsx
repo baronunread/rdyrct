@@ -92,23 +92,27 @@ const faqs = [
   },
   {
     q: "Can I make a QR code with my logo?",
-    a: "Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster, flyer or packaging insert produced. If you just want a QR code that works and looks good, no tracking needed, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG.",
+    a: "Yes, on a paid plan: point the QR at a short link you own, change where it goes after printing, and see how many scans a poster, flyer or packaging insert produced. If you only need a code that never changes, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG. Its codes are fixed, so they cannot be edited or count scans.",
     aNode: (
       <>
-        Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster,
-        flyer or packaging insert produced. If you just want a QR code that works and looks good, no
-        tracking needed, our{" "}
+        Yes, on a paid plan: point the QR at a short link you own, change where it goes after
+        printing, and see how many scans a poster, flyer or packaging insert produced. If you only
+        need a code that never changes, our{" "}
         <MarketingLink to="/qr-code-generator" className="text-accent hover:underline">
           QR code generator
         </MarketingLink>{" "}
         is free and needs no account: pick the dot and corner style, set the colors, drop in a logo,
-        and download a PNG or an SVG.
+        and download a PNG or an SVG. Its codes are fixed, so they cannot be edited or count scans.
       </>
     ),
   },
   {
+    q: "What happens if I stop paying?",
+    a: "Nothing is deleted. Links on rdyr.cc keep working on every plan, free included. Links on your own domain keep working for 30 days, then pause until you upgrade again. The pricing page has the full timeline.",
+  },
+  {
     q: "Can I self-host instead?",
-    a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
+    a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. There are no plan limits, and support is GitHub issues rather than email.",
   },
 ];
 
@@ -426,7 +430,7 @@ function MobilePlans({
         >
           self-host it
         </a>{" "}
-        on your Cloudflare account, free, with everything Pro has.
+        on your Cloudflare account, free, with no plan limits.
       </p>
     </div>
   );
@@ -1184,7 +1188,6 @@ export function LandingPage() {
               <TeamsAndCode />
               <FrameRow />
             </div>
-            <PlanChangeSection />
             <PricingTeaser />
             <SelfHostSection />
             <FaqSection />
