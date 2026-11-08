@@ -232,7 +232,7 @@ test("the standalone pricing page has the full table and no self-host pitch", as
 
 // Most products put a screenshot in the hero because you cannot use them
 // logged out; ours works with no account, so the real shortener sits under the
-// pitch, in front of the globe, with the one primary CTA above it.
+// pitch, with the one primary CTA above it.
 test("the hero keeps its shortener and primary path usable on desktop and phone", async ({
   page,
 }) => {

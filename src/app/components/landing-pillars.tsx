@@ -56,11 +56,9 @@ function NoQr() {
 export function Manifesto() {
   return (
     <FrameRow className="bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[14px_14px] px-6 py-16 sm:px-10 md:py-24">
-      <p className="mx-auto max-w-2xl text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-        A short link should show who sent it.{" "}
-        <span className="text-muted">
-          It should go straight to your page and keep working after you stop paying.
-        </span>
+      <p className="mx-auto max-w-4xl text-[1.75rem] leading-[1.15] font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
+        Short links on your own domain, with every click counted, used to need a big-company budget.{" "}
+        <span className="text-muted">For a small team they should cost a few dollars a month.</span>
       </p>
     </FrameRow>
   );
@@ -74,6 +72,8 @@ type Feature = {
    *  the prerendered page, reduced motion and the first frame all show. */
   steps: number;
   scene: (step: number) => ReactNode;
+  /** A page the whole card opens, through its title. */
+  to?: "/qr-code-generator";
 };
 
 /**
@@ -101,7 +101,9 @@ function Pillar({
         <div className="mt-6">{action}</div>
       </FrameRow>
       <FrameRow className="px-4 py-4 sm:px-6 sm:py-6">
-        <ul className="grid gap-4 md:grid-cols-3">
+        <ul
+          className={cn("grid gap-4", features.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2")}
+        >
           {features.map((feature) => (
             <FeatureCard key={feature.title} {...feature} />
           ))}
@@ -137,13 +139,16 @@ function useLoop(card: RefObject<HTMLElement | null>, steps: number) {
  * the title and one line. The loop is the product's own UI over sample data
  * and repeats what the words say, so it is hidden from assistive tech.
  */
-function FeatureCard({ icon: Icon, title, body, steps, scene }: Feature) {
+function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
   const card = useRef<HTMLLIElement>(null);
   const step = useLoop(card, steps);
   return (
     <li
       ref={card}
-      className="flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface-2"
+      className={cn(
+        "relative flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface-2",
+        to && "transition-colors focus-within:border-accent hover:border-accent/60",
+      )}
     >
       <div
         aria-hidden="true"
@@ -158,7 +163,16 @@ function FeatureCard({ icon: Icon, title, body, steps, scene }: Feature) {
       </div>
       <div className="flex flex-1 flex-col px-5 pt-2 pb-6 sm:px-6">
         <Icon size={18} className="text-accent" />
-        <h3 className="mt-3 font-bold text-text">{title}</h3>
+        <h3 className="mt-3 font-bold text-text">
+          {to ? (
+            // Stretched over the card, so the whole card is the link.
+            <MarketingLink to={to} className="outline-none after:absolute after:inset-0">
+              {title} <span aria-hidden="true">→</span>
+            </MarketingLink>
+          ) : (
+            title
+          )}
+        </h3>
         <p className="mt-1 text-pretty text-muted">{body}</p>
       </div>
     </li>
@@ -239,10 +253,20 @@ export function LinksPillar() {
           steps: 6,
           scene: (step) => (
             <div className="flex flex-col gap-2 p-4">
-              <p className="text-xs text-muted">Short link</p>
-              <p className="font-mono">
-                <Swap at={2} step={step} from="rdyr.cc/k3Tq9" to="go.acme.com/spring" />
+              {/* Our domain's random address, then one on yours beside it: a
+                  link keeps the domain it was made on, so this is a choice
+                  at creation, not one link changing hosts. */}
+              <p className="text-xs text-muted">Short links</p>
+              <p className="relative w-fit font-mono text-muted">
+                rdyr.cc/k3Tq9
+                <span
+                  className="absolute inset-x-0 top-1/2 h-px origin-left bg-muted transition-[scale] duration-300 ease-out"
+                  style={{ scale: step >= 2 ? "1 1" : "0 1" }}
+                />
               </p>
+              <Reveal at={2} step={step} className="font-mono">
+                go.acme.com/spring
+              </Reveal>
               <Available at={3} step={step}>
                 Certificate active on go.acme.com
               </Available>
@@ -273,29 +297,6 @@ export function LinksPillar() {
             </div>
           ),
         },
-        {
-          icon: Target,
-          title: "Campaign tags",
-          body: "Source and campaign on every link, no UTM codes by hand.",
-          steps: 7,
-          scene: (step) => (
-            <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2 p-4">
-              {TAGS.map(([term, value], index) => (
-                <Reveal
-                  key={term}
-                  at={index + 1}
-                  step={step}
-                  className="col-span-2 grid grid-cols-subgrid"
-                >
-                  <dt className="py-1 text-muted">{term}</dt>
-                  <dd className="rounded-md border border-border/70 px-2 py-1 font-mono">
-                    {value}
-                  </dd>
-                </Reveal>
-              ))}
-            </dl>
-          ),
-        },
       ]}
     />
   );
@@ -323,16 +324,19 @@ function QrSlot({ children }: { children: ReactNode }) {
 }
 
 const SCENE_URL = "https://go.acme.com/spring";
+/** The poster's short link: what its code holds, whatever page it opens. */
+const POSTER_URL = "https://go.acme.com/poster";
 // A light hairline, not the theme's border: on the dark theme that is a dark
 // ring around a white code.
 const SCENE_FRAME = "size-24 rounded-lg border-black/10";
 
-/** The code a QR card shows. */
-function SceneQr({ logo }: { logo?: boolean }) {
+/** The code a QR card shows. It encodes what the card says it holds, so a
+ *  phone pointed at the page reads the same address. */
+function SceneQr({ url, logo }: { url: string; logo?: boolean }) {
   return (
     <QrSlot>
       <QRPreview
-        url={SCENE_URL}
+        url={url}
         size={96}
         sizeClass={SCENE_FRAME}
         logo={logo ? "/favicon.svg" : undefined}
@@ -401,12 +405,12 @@ function SceneDownload({ at, step, children }: { at: number; step: number; child
   );
 }
 
-export function QrPillar() {
+export function QrPillar({ ask }: { ask: ReactNode }) {
   return (
     <Pillar
       lead="Print once. Change it later."
-      rest="QR codes with your logo, pointing wherever you need this week."
-      action={<PillarLink to="/qr-code-generator">Make a QR code</PillarLink>}
+      rest="QR codes pointing wherever you need this week, with your logo on paid plans."
+      action={ask}
       features={[
         {
           icon: RefreshCw,
@@ -415,13 +419,24 @@ export function QrPillar() {
           steps: 7,
           scene: (step) => (
             <div className="flex items-center gap-4 p-4">
-              <SceneQr logo />
+              <SceneQr url={POSTER_URL} logo />
+              {/* The code's own short link stays put; only the page it opens
+                  changes, so the two are labelled apart. */}
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="font-bold">Spring poster</p>
-                <p className="text-xs text-muted">Points to</p>
-                <p className="font-mono text-xs">
-                  <Swap at={2} step={step} from="acme.com/winter" to="acme.com/sale" />
-                </p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
+                  <dt className="text-muted">Code</dt>
+                  <dd className="font-mono text-muted">go.acme.com/poster</dd>
+                  <dt className="text-muted">Opens</dt>
+                  <dd className="font-mono">
+                    <Swap
+                      at={2}
+                      step={step}
+                      from="acme.com/winter"
+                      to={<span className="text-accent">acme.com/spring</span>}
+                    />
+                  </dd>
+                </dl>
                 <Reveal at={3} step={step}>
                   <p className="mt-1 rounded-md bg-text px-2 py-1 text-xs text-bg">
                     Changed. The poster still works.
@@ -434,7 +449,7 @@ export function QrPillar() {
         {
           icon: ImagePlus,
           title: "Your logo and colours",
-          body: "On every code, as PNG or SVG.",
+          body: "On every code, as PNG or SVG. Paid plans.",
           // Plain, logo, two colours, then each download pressed in turn.
           steps: 7,
           scene: (step) => (
@@ -454,12 +469,13 @@ export function QrPillar() {
         {
           icon: QrCode,
           title: "A free generator",
-          body: "Make one without an account.",
+          body: "Make one without an account. It is fixed: it cannot be edited or count scans.",
+          to: "/qr-code-generator",
           steps: 6,
           scene: (step) => (
             <div className="flex items-center gap-4 p-4">
               <Reveal at={3} step={step} className="shrink-0">
-                <SceneQr />
+                <SceneQr url="https://acme.com/menu" />
               </Reveal>
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <p className="truncate rounded-md border border-border/70 px-2 py-1.5 font-mono text-xs">
@@ -485,11 +501,11 @@ export function QrPillar() {
 /* ---- Analytics ------------------------------------------------------ */
 
 /** Sample clicks a day for two weeks, for the trend card. */
-const DAYS = [38, 44, 41, 52, 61, 47, 55, 63, 58, 72, 80, 69, 86, 94];
+const DAYS = [38, 44, 41, 52, 61, 47, 55, 53, 50, 58, 56, 61, 57, 64];
 const SOURCES = [
   { name: "newsletter", clicks: 1612 },
   { name: "instagram", clicks: 1408 },
-  { name: "poster (QR)", clicks: 1103 },
+  { name: "poster", clicks: 1103 },
 ] as const;
 
 export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
@@ -503,7 +519,7 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
         {
           icon: ChartColumn,
           title: "Clicks over time",
-          body: "From the last 24 hours to the last year.",
+          body: "From the last 24 hours to the last year, depending on your plan.",
           steps: 6,
           scene: (step) => <TrendScene step={step} />,
         },
@@ -513,6 +529,29 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
           body: "Which post, email or poster brought people in.",
           steps: 6,
           scene: (step) => <SourcesScene step={step} />,
+        },
+        {
+          icon: Target,
+          title: "Campaign tags",
+          body: "Source and campaign on every link, ranked by clicks. No UTM codes by hand.",
+          steps: 7,
+          scene: (step) => (
+            <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2 p-4">
+              {TAGS.map(([term, value], index) => (
+                <Reveal
+                  key={term}
+                  at={index + 1}
+                  step={step}
+                  className="col-span-2 grid grid-cols-subgrid"
+                >
+                  <dt className="py-1 text-muted">{term}</dt>
+                  <dd className="rounded-md border border-border/70 px-2 py-1 font-mono">
+                    {value}
+                  </dd>
+                </Reveal>
+              ))}
+            </dl>
+          ),
         },
         {
           icon: ShieldCheck,
@@ -530,12 +569,16 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
 function TrendScene({ step }: { step: number }) {
   const top = Math.max(...DAYS);
   const total = DAYS.reduce((sum, day) => sum + day, 0);
+  // Worked out from the bars, so the figure always matches them.
+  const sum = (days: number[]) => days.reduce((all, day) => all + day, 0);
+  const change = Math.round((sum(DAYS.slice(7)) / sum(DAYS.slice(0, 7)) - 1) * 100);
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-baseline justify-between">
         <span className="text-xs text-muted">Last 14 days</span>
         <Reveal at={2} step={step} className="tnum text-xs text-accent-2">
-          +18% on the week before
+          {change >= 0 ? "+" : ""}
+          {change}% on the week before
         </Reveal>
       </div>
       <p className="tnum text-lg font-bold">{total.toLocaleString("en-US")} clicks</p>
@@ -587,7 +630,7 @@ function SourcesScene({ step }: { step: number }) {
  *  does: the IP address arrives struck through. */
 function ClickRecord({ step }: { step: number }) {
   return (
-    <dl className="grid grid-cols-[6.5rem_1fr] gap-y-2.5 p-4">
+    <dl className="grid grid-cols-[5.5rem_1fr] gap-y-2.5 p-4 sm:grid-cols-[6.5rem_1fr]">
       {RECORD.map(([term, value], index) => (
         <Reveal key={term} at={index + 1} step={step} className="col-span-2 grid grid-cols-subgrid">
           <dt className="text-muted">{term}</dt>
@@ -596,12 +639,20 @@ function ClickRecord({ step }: { step: number }) {
       ))}
       <Reveal at={4} step={step} className="col-span-2 grid grid-cols-subgrid">
         <dt className="text-muted">IP address</dt>
-        <dd className="relative w-fit text-muted">
-          never stored
-          <span
-            className="absolute inset-x-0 top-1/2 h-px origin-left bg-muted transition-[scale] duration-300 ease-out"
-            style={{ scale: step >= 5 ? "1 1" : "0 1" }}
-          />
+        {/* The visitor's address arrives and is struck out, then the note
+            says why. Striking the words "never stored" read as the
+            opposite. 203.0.113.0/24 is reserved for examples. */}
+        <dd className="flex items-baseline gap-1.5 text-muted max-sm:text-xs">
+          <span className="relative w-fit font-mono">
+            203.0.113.7
+            <span
+              className="absolute inset-x-0 top-1/2 h-px origin-left bg-muted transition-[scale] duration-300 ease-out"
+              style={{ scale: step >= 5 ? "1 1" : "0 1" }}
+            />
+          </span>
+          <Reveal at={6} step={step} className="whitespace-nowrap text-accent-2">
+            not stored
+          </Reveal>
         </dd>
       </Reveal>
     </dl>
@@ -614,13 +665,7 @@ const RECORD = [
   ["Device", "Mobile"],
 ] as const;
 
-function PillarLink({
-  to,
-  children,
-}: {
-  to: "/pricing" | "/qr-code-generator" | "/signup";
-  children: ReactNode;
-}) {
+function PillarLink({ to, children }: { to: "/pricing" | "/signup"; children: ReactNode }) {
   return (
     <MarketingLink
       to={to}

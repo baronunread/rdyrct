@@ -34,14 +34,14 @@ type Scenario = {
   sql: string;
 };
 
-const ownerOf = (where: string, order = "links DESC") => `
+const ownerOf = (where: string, order = "links DESC", skip = 0) => `
   SELECT u.email, o.id AS orgId,
     (SELECT count(*) FROM links l WHERE l.org_id = o.id) AS links
   FROM orgs o
   JOIN org_members m ON m.org_id = o.id AND m.role = 'owner'
   JOIN user u ON u.id = m.user_id
   WHERE u.email LIKE '%@seed.test' AND ${where}
-  ORDER BY ${order} LIMIT 1`;
+  ORDER BY ${order} LIMIT 1 OFFSET ${skip}`;
 
 const notDowngraded = "o.id NOT IN (SELECT org_id FROM org_entitlements) AND o.locked_at IS NULL";
 
@@ -51,6 +51,15 @@ const SCENARIOS = {
     about: "A busy Pro org: many links, members, a custom domain.",
     start: "/dashboard",
     sql: ownerOf(`u.plan = 'pro' AND ${notDowngraded}`),
+  },
+  // The second-busiest Pro org: as full as pro-owner, without the edge-case
+  // rows (RTL titles, very long slugs) the seed puts into that one. The
+  // landing page's screenshots are taken from it (scripts/showcase-shots.ts).
+  showcase: {
+    title: "Showcase",
+    about: "A tidy Pro org for screenshots: ordinary titles, its own domain.",
+    start: "/dashboard",
+    sql: ownerOf(`u.plan = 'pro' AND ${notDowngraded}`, "links DESC", 1),
   },
   "hobby-owner": {
     title: "Hobby owner",

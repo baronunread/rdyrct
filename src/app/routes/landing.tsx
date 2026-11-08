@@ -6,7 +6,15 @@ import { EnterpriseNote } from "../components/enterprise-note";
 import { SUPPORT_EMAIL } from "@/shared/support";
 import { Check, ChevronDown } from "@/app/ui/icons";
 import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion } from "motion/react";
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
@@ -42,8 +50,17 @@ import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
 import { exactCount } from "@/shared/click-usage";
 import { cn } from "../ui/cn";
+import { hasWebGpu } from "../lib/webgpu";
+import { ProductShowcase } from "../components/product-showcase";
 
-const HeroGlobe = lazy(() => import("../components/hero-globe"));
+// Decoration: if its chunk fails to load (a deploy swapped it, a flaky
+// network), the page goes on without it instead of falling to the error screen.
+const HeroBackdrop = lazy<ComponentType>(() =>
+  import("../components/hero-gpu-effects")
+    .then((module) => ({ default: module.HeroBackdrop }))
+    .catch(() => ({ default: () => null })),
+);
+
 const faqs = [
   {
     q: "Is the free plan really free?",
@@ -75,23 +92,27 @@ const faqs = [
   },
   {
     q: "Can I make a QR code with my logo?",
-    a: "Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster, flyer or packaging insert produced. If you just want a QR code that works and looks good, no tracking needed, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG.",
+    a: "Yes, on a paid plan: point the QR at a short link you own, change where it goes after printing, and see how many scans a poster, flyer or packaging insert produced. If you only need a code that never changes, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG. Its codes are fixed, so they cannot be edited or count scans.",
     aNode: (
       <>
-        Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster,
-        flyer or packaging insert produced. If you just want a QR code that works and looks good, no
-        tracking needed, our{" "}
+        Yes, on a paid plan: point the QR at a short link you own, change where it goes after
+        printing, and see how many scans a poster, flyer or packaging insert produced. If you only
+        need a code that never changes, our{" "}
         <MarketingLink to="/qr-code-generator" className="text-accent hover:underline">
           QR code generator
         </MarketingLink>{" "}
         is free and needs no account: pick the dot and corner style, set the colors, drop in a logo,
-        and download a PNG or an SVG.
+        and download a PNG or an SVG. Its codes are fixed, so they cannot be edited or count scans.
       </>
     ),
   },
   {
+    q: "What happens if I stop paying?",
+    a: "Nothing is deleted. Links on rdyr.cc keep working on every plan, free included. Links on your own domain keep working for 30 days, then pause until you upgrade again. The pricing page has the full timeline.",
+  },
+  {
     q: "Can I self-host instead?",
-    a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
+    a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. There are no plan limits, and support is GitHub issues rather than email.",
   },
 ];
 
@@ -409,7 +430,7 @@ function MobilePlans({
         >
           self-host it
         </a>{" "}
-        on your Cloudflare account, free, with everything Pro has.
+        on your Cloudflare account, free, with no plan limits.
       </p>
     </div>
   );
@@ -719,7 +740,9 @@ function SelfHostTerminal() {
 
 /**
  * The hero: one line on what you get, the words people search for under it,
- * then the working shortener, over a globe of clicks hopping between cities.
+ * then the working shortener. No picture behind it: a globe sat there until
+ * a phone test showed it blocking input for over two seconds in a third of
+ * loads, for decoration the shortener already says better.
  * "Free" stays out of the heading: it lives by the button, where it helps
  * the click instead of cheapening the pitch.
  *
@@ -729,9 +752,7 @@ function SelfHostTerminal() {
  * stage, straight under the pitch.
  *
  * Everything a crawler or a link preview reads (the heading, the copy, the
- * links) is plain prerendered HTML. The globe is decoration: it loads after
- * hydration into a box this section reserves, so it never shifts the layout
- * or competes with the heading for the first paint.
+ * links) is plain prerendered HTML.
  */
 /** One landing view per page load, once consent and the session have both
  *  answered. */
@@ -756,8 +777,15 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
       // Until the session resolves, a cached customer's browser hides the
       // anonymous pitch (styles.css) instead of flashing it.
       data-ssr={settled ? undefined : ""}
-      className="relative flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
+      // isolate: the backdrop's -z-10 stays behind this section's text but
+      // in front of the page.
+      className="relative isolate flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
     >
+      {hydrated && hasWebGpu() && (
+        <Suspense>
+          <HeroBackdrop />
+        </Suspense>
+      )}
       <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
         The link shortener that answers to you.
       </h1>
@@ -768,11 +796,7 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
 
       <HeroCta ctaTo={ctaTo} ctaLabel={ctaLabel} hidden={authed} />
 
-      {/* The card overlaps the top of the globe, so the thing you can use sits
-          in front of the picture of what it does. */}
       <HeroCard authed={authed} name={name} />
-
-      <HeroGlobeStage hydrated={hydrated} />
     </section>
   );
 }
@@ -794,23 +818,6 @@ function HeroCard({ authed, name }: { authed: boolean; name: string }) {
   );
 }
 
-/** The globe's box, reserved in the prerendered HTML so the globe can arrive
- *  after hydration without moving anything. */
-function HeroGlobeStage({ hydrated }: { hydrated: boolean }) {
-  return (
-    <div
-      aria-hidden="true"
-      className="relative -mt-38 h-90 w-full overflow-hidden border-b border-border sm:h-106 md:-mt-42 md:h-130"
-    >
-      {hydrated && (
-        <Suspense>
-          <HeroGlobe />
-        </Suspense>
-      )}
-    </div>
-  );
-}
-
 function HeroCta({
   ctaTo,
   ctaLabel,
@@ -822,8 +829,6 @@ function HeroCta({
 }) {
   if (hidden) return null;
   return (
-    // Above the globe, whose stage reaches up behind this row on short
-    // screens and would otherwise take the click.
     <div
       data-hero-personalization
       className="relative z-10 mt-8 flex flex-col items-center gap-3 sm:flex-row sm:gap-5"
@@ -871,6 +876,22 @@ function AnalyticsAsk() {
       className={buttonClass({ variant: "primary", className: "rounded-full px-4" })}
     >
       See this on your own links
+    </HrefLink>
+  );
+}
+
+/** The QR pillar sells codes you can edit after printing, which only a
+ *  signed-in link has; the free generator makes fixed ones, so it is not
+ *  where this button goes. */
+function QrAsk() {
+  const { authed } = useAudience();
+  return (
+    <HrefLink
+      href={authed ? "/links" : "/signup"}
+      onClick={() => trackCta("qr_pillar")}
+      className={buttonClass({ variant: "outline", className: "rounded-full px-4" })}
+    >
+      Make a QR code you can edit
     </HrefLink>
   );
 }
@@ -1156,17 +1177,17 @@ export function LandingPage() {
               ready={ready}
               name={name}
             />
+            <ProductShowcase />
             {/* Below the hero, everything sits in one hairline frame
                 (rdyrct-design, "Light on the marketing pages"). */}
             <div className="mb-16 border-x border-border/70">
               <Manifesto />
               <LinksPillar />
-              <QrPillar />
+              <QrPillar ask={<QrAsk />} />
               <AnalyticsPillar ask={<AnalyticsAsk />} />
               <TeamsAndCode />
               <FrameRow />
             </div>
-            <PlanChangeSection />
             <PricingTeaser />
             <SelfHostSection />
             <FaqSection />

@@ -32,7 +32,8 @@
     "doctor": "react-doctor",
     "fallow": "fallow audit --base origin/main",
     "check:observability": "evlog map --min-score 100",
-    "style": "style-doctor --scope changed --base origin/main"
+    "style": "style-doctor --scope changed --base origin/main",
+    "showcase:shots": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" bun scripts/showcase-shots.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -63,7 +64,6 @@
     "circle-flags": "^2.8.3",
     "cmdk": "^1.1.1",
     "cn": "0.5.1",
-    "cobe": "2.0.1",
     "d3-geo": "^3.1.1",
     "d3-shape": "^3.2.0",
     "drizzle-orm": "^0.45.4",
@@ -87,6 +87,7 @@
     "sugar-high": "^2.6.4",
     "svgo": "^4.1.0",
     "topojson-client": "^3.1.0",
+    "typegpu": "0.12.10",
     "valibot": "^1.5.0"
   },
   "devDependencies": {
@@ -171,6 +172,9 @@
         "description": "rdyrct.com's error reports. Your copy drops it, so nothing reaches our Sentry."
       }
     }
+  },
+  "patchedDependencies": {
+    "typegpu@0.12.10": "patches/typegpu@0.12.10.patch"
   },
   "trustedDependencies": [
     "@posthog/cli"

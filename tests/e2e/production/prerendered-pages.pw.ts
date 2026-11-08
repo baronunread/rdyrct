@@ -72,7 +72,8 @@ test("public content stays visible and correct before JavaScript runs", async ({
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
-  // The hero globe is decoration that loads after hydration: never baked in.
+  // The hero's WebGPU background mounts only after hydration, never in the
+  // prerendered HTML.
   await expect(page.locator("[data-hero] canvas")).toHaveCount(0);
   await expect(page.locator("#faq")).toHaveCSS("opacity", "1");
   await page.goto("/docs");

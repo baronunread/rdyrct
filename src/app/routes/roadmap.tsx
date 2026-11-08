@@ -36,16 +36,16 @@ type Item = { issue?: number; area: string; title: string; body?: ReactNode };
 /** Being built next, each one an open issue. */
 const NEXT: Item[] = [
   {
-    issue: 75,
-    area: "Links",
-    title: "Bulk link export",
-    body: "Take every link out in one CSV, ready for a spreadsheet or another service.",
-  },
-  {
     issue: 77,
     area: "Links",
     title: "Password-protected and targeted links",
     body: "Gate a link with a password, or send visitors to different destinations by country or device.",
+  },
+  {
+    issue: 458,
+    area: "Links",
+    title: "Deep links",
+    body: "On a phone, open the YouTube, Instagram or Amazon app instead of the website, or your own app.",
   },
   {
     issue: 133,
@@ -99,12 +99,6 @@ const LATER: Item[] = [
     body: "The last 30 days drawn over the 30 before them, so a change shows without arithmetic.",
   },
   {
-    issue: 257,
-    area: "Links",
-    title: "Clicks on links made without an account",
-    body: "Counted from the start, and shown once you sign up.",
-  },
-  {
     issue: 256,
     area: "Analytics",
     title: "Your first click, live",
@@ -119,8 +113,8 @@ const LATER: Item[] = [
   {
     issue: 326,
     area: "Tools",
-    title: "A free redirect checker and UTM builder",
-    body: "Two more tools that need no account, like the QR generator.",
+    title: "A free redirect checker",
+    body: "Another tool that needs no account, like the QR generator and the UTM builder.",
   },
 ];
 
@@ -140,6 +134,9 @@ const SHIPPED: Item[] = [
     area: "Links",
     title: "Import from Bitly, Short.io, Rebrandly or Dub, with the same short URLs",
   },
+  { area: "Links", title: "Export every link as a CSV that the import reads back" },
+  { area: "Links", title: "Clicks on links made without an account, shown once you sign up" },
+  { area: "Tools", title: "A free UTM builder, no account needed" },
   { area: "QR", title: "QR codes on every plan, with your logo and colours on paid ones" },
   { area: "Analytics", title: "Country, referrer, device and campaign, never an IP address" },
   { area: "Teams", title: "Organizations, roles, and single-use email invites" },

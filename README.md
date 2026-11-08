@@ -99,7 +99,7 @@ Then, in a second terminal, fill the database with fake organizations, links and
 bun run db:seed:local
 ```
 
-and open the **scenarios** page. It signs you in as a seeded account in each state the app has: `pro-owner`, `hobby-owner`, `free-owner`, `fresh` (a brand-new account), `member`, `viewer`, `over-plan`, `grace-ended`, `locked-org`, `click-cap` and `admin`. `/__dev/scenarios/<name>?to=/links` opens a page directly.
+and open the **scenarios** page. It signs you in as a seeded account in each state the app has: `pro-owner`, `showcase` (a tidy Pro org for screenshots), `hobby-owner`, `free-owner`, `fresh` (a brand-new account), `member`, `viewer`, `over-plan`, `grace-ended`, `locked-org`, `click-cap` and `admin`. `/__dev/scenarios/<name>?to=/links` opens a page directly.
 
 Ctrl+C stops everything. If one of the three crashes, the other two stop with it.
 

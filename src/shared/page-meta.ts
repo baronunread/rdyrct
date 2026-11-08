@@ -255,7 +255,7 @@ Several organizations, custom limits and higher caps, set up by hand. Email [sup
 
 ## Self-hosting
 
-rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your own plan. You get everything Pro has except direct email support, for the cost of your own Cloudflare bill.
+rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your own plan. There are no plan limits and no direct email support, for the cost of your own Cloudflare bill.
 
 [Read the deploy guide](https://github.com/baronunread/rdyrct)
 

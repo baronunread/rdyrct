@@ -1,0 +1,24 @@
+diff --git a/data/compiledIO.js b/data/compiledIO.js
+index 074f9ae79b17f2dc831ae837fd543f9a2e44104e..e059492639353c7f0cff92f27f443ab1638c473e 100644
+--- a/data/compiledIO.js
++++ b/data/compiledIO.js
+@@ -6,16 +6,9 @@ import { sizeOf } from "./sizeOf.js";
+ import { strideOf } from "./schemaMemoryLayout.js";
+ import { formatToWGSLType, isPackedData } from "./vertexFormatData.js";
+ import * as wgsl from "./wgslTypes.js";
+-export const EVAL_ALLOWED_IN_ENV = (() => {
+-    try {
+-        // oxlint-disable-next-line typescript-eslint/no-implied-eval typescript-eslint/no-new
+-        new Function('return true');
+-        return true;
+-    }
+-    catch {
+-        return false;
+-    }
+-})();
++// rdyrct: the CSP forbids eval, and probing for it with new Function logs a
++// violation on every page load. Take the no-eval path without asking.
++export const EVAL_ALLOWED_IN_ENV = false;
+ const compiledWriters = new WeakMap();
+ let didWarnAboutEvalFallback = false;
+ const typeToPrimitive = {

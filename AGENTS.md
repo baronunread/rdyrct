@@ -38,6 +38,7 @@ loaded, `<app URL>/__dev/scenarios` lists them. The names:
 | Name          | Signs in as                         |
 | ------------- | ----------------------------------- |
 | `pro-owner`   | a Pro owner                         |
+| `showcase`    | a tidy Pro owner, for screenshots   |
 | `hobby-owner` | a Hobby owner                       |
 | `free-owner`  | a Free owner                        |
 | `fresh`       | a brand-new account, no links       |

@@ -41,7 +41,7 @@ const PRICING = [
   ...ORG_PLANS.map(planLine),
   "Every plan covers one organization, and only its owner needs a paid plan. Enterprise (several organizations, higher limits) is set up by hand: email support@mail.rdyrct.com.",
   "Clicks are counted per organization per calendar month. Past a plan's count, links keep redirecting and only the counting stops until the next month.",
-  "rdyrct is open source and self-hosts on your own Cloudflare account with everything Pro has, minus email support.",
+  "rdyrct is open source and self-hosts on your own Cloudflare account with no plan limits and no email support.",
 ].join("\n");
 
 const OVERVIEW = [

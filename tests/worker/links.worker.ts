@@ -4,6 +4,9 @@ import { env } from "cloudflare:workers";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 import type { JsonValue } from "../../src/shared/types";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "../../src/worker/db/schema";
+import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
 
 async function postLink(cookie: string, body: JsonValue, testEnv = authEnv()): Promise<Response> {
   const ctx = createExecutionContext();
@@ -73,6 +76,35 @@ describe("PATCH /orgs/:orgId/links/:linkId", () => {
     const updated = await jsonBody<{ title: string; destination: string }>(res);
     expect(updated.title).toBe("Updated title");
     expect(updated.destination).toBe("https://example.com/original");
+  });
+
+  // What the landing page promises ("Edit after printing"): a QR code holds
+  // the short link, so changing the link's destination moves every code
+  // already printed, on the free plan too.
+  it("a new destination is where the same short link sends people next", async () => {
+    const cookie = await freeOwnerCookie();
+    const created = await postLink(cookie, { destination: "https://example.com/winter" });
+    const { id, slug } = await jsonBody<{ id: string; slug: string }>(created);
+    const follow = async () => {
+      // The edit's KV sync goes through the storage queue; apply it here.
+      await applyStorageMessage(authEnv(), drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(
+        new Request(`http://localhost/${slug}`, {
+          redirect: "manual",
+          headers: { host: "localhost" },
+        }),
+        authEnv(),
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+      return res.headers.get("location");
+    };
+    expect(await follow()).toBe("https://example.com/winter");
+
+    const res = await patchLink(cookie, id, { destination: "https://example.com/sale" });
+    expect(res.status).toBe(200);
+    expect(await follow()).toBe("https://example.com/sale");
   });
 });
 
