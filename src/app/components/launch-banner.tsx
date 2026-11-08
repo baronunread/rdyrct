@@ -1,17 +1,20 @@
 import { RDYRCT_SITE } from "@/shared/site";
 import { GITHUB_URL } from "../ui/footer";
-import { Star } from "../ui/icons";
+import { Star, X } from "../ui/icons";
 
 /**
  * One line above the marketing header for launch week: the product is open
  * source, and a star helps. Launch-day traffic is when people star, and the
  * header button alone only says where the code is.
  *
- * Temporary: take it down after 2026-11-22. No dismiss button, on purpose:
- * the pages are prerendered, so remembering a dismissal would either shift
- * the header on load or need a pre-paint script, for a line that is gone in
- * two weeks anyway. No date check either, for the same reason: a date read at
- * render would disagree with the prerendered HTML once it passes.
+ * Temporary: take it down after 2026-11-22. No date check, on purpose: a
+ * date read at render would disagree with the prerendered HTML once it
+ * passes.
+ *
+ * Closing it is remembered in localStorage. index.html's pre-paint script
+ * reads that and marks <html data-banner-closed> before the first paint,
+ * so a closed banner never shows and then shifts the header up. The same
+ * mark closes it on click; styles.css folds it shut.
  */
 export function LaunchBanner() {
   // A fork's own copy has nothing to launch, and the link is ours.
@@ -19,7 +22,6 @@ export function LaunchBanner() {
   return (
     <div
       data-launch-banner
-      className="flex flex-wrap items-center justify-center gap-x-2 py-2 text-sm text-muted"
       // Edge to edge, though it sits in the page column: a border image
       // painted 100vmax past each side, fill and a bottom hairline. Unlike
       // 100vw it adds no scrollable width, so no sideways scroll where the
@@ -29,16 +31,40 @@ export function LaunchBanner() {
           "linear-gradient(to top, var(--border) 1px, var(--surface-2) 1px) fill 0 // 0 100vmax",
       }}
     >
-      <span>rdyrct is open source.</span>
-      <a
-        href={GITHUB_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-sm font-semibold text-accent underline-offset-4 hover:underline"
-      >
-        <Star size={14} aria-hidden />
-        Star it on GitHub
-      </a>
+      <div className="min-h-0 overflow-hidden">
+        <div className="relative flex flex-wrap items-center justify-center gap-x-2 px-8 py-2 text-sm text-muted">
+          <span>rdyrct is open source.</span>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-sm font-semibold text-accent underline-offset-4 hover:underline"
+          >
+            <Star size={14} aria-hidden />
+            Star it on GitHub
+          </a>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={closeBanner}
+            className="absolute top-1/2 right-0 grid size-7 -translate-y-1/2 place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
     </div>
   );
+}
+
+function closeBanner() {
+  document.documentElement.dataset.bannerClosed = "";
+  try {
+    localStorage.setItem("launch-banner", "closed");
+  } catch {
+    // Private mode: it stays closed for this page only.
+  }
+  // The button is about to vanish; keep the keyboard on the page's first
+  // link rather than dropping it to the top of the document.
+  document.querySelector<HTMLElement>("[data-marketing-header] a")?.focus();
 }

@@ -128,6 +128,8 @@
             );
           }
           if (localStorage.getItem("sidebar") === "collapsed") root.dataset.sidebar = "collapsed";
+          // A closed launch banner stays closed, without a shift on load.
+          if (localStorage.getItem("launch-banner") === "closed") root.dataset.bannerClosed = "";
           localStorage.removeItem("rdyrct:hero-variant:v1");
           localStorage.removeItem("rdyrct:hero-variant:v2");
         } catch {}

@@ -1507,6 +1507,42 @@ html:not([data-sidebar="collapsed"]) [data-shell-width="folded"] {
 /* The landing page's product showcase (components/product-showcase) */
 /* ---------------------------------------------------------------- */
 
+/* The hero's WebGPU backdrop is as wide as the window (100vw, scrollbar
+   included), so the landing page clips sideways instead of scrolling.
+   clip, unlike hidden, makes no scroll container, so the sticky header
+   still sticks. */
+body:has([data-hero]) {
+  overflow-x: clip;
+}
+
+/* The launch banner folds shut when closed (components/launch-banner.tsx).
+   A grid row going from 1fr to 0fr animates the height without measuring
+   it. Set before the first paint on a later visit, the mark plays no
+   transition, so a closed banner is simply not there. */
+[data-launch-banner] {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 320ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 200ms ease-out,
+    visibility 0s linear 0s;
+}
+[data-banner-closed] [data-launch-banner] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 320ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 200ms ease-out,
+    visibility 0s linear 320ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-launch-banner],
+  [data-banner-closed] [data-launch-banner] {
+    transition: none;
+  }
+}
+
 /* One screenshot per theme; the other stays display:none, and since it is
    loading="lazy" the browser never fetches it. */
 .showcase-dark {

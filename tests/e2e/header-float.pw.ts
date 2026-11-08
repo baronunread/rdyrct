@@ -61,3 +61,15 @@ test("the header and the launch banner ask for a GitHub star, on a phone too", a
   await expect(star.getByText("Star on GitHub")).toBeHidden();
   await expect(banner).toBeVisible();
 });
+
+test("a closed launch banner stays closed on the next page", async ({ page }) => {
+  await page.goto("/");
+  const banner = page.locator("[data-launch-banner]");
+  await banner.getByRole("button", { name: "Close" }).click();
+  await expect(banner).toBeHidden();
+  await page.goto("/pricing");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // Folded shut by the pre-paint script, so it takes no height at all.
+  await expect(banner).toBeHidden();
+  expect(await banner.evaluate((el) => el.getBoundingClientRect().height)).toBe(0);
+});

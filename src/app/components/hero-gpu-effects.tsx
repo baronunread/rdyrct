@@ -44,7 +44,10 @@ function startBackdrop(canvas: HTMLCanvasElement) {
   return title ? startHeroBackdrop(canvas, title) : null;
 }
 
-/** The wash of colour behind the hero, reaching up under the header. */
+/** The wash of colour behind the hero, reaching up under the header and out
+ *  to both edges of the window, past the page column. 100vw counts the
+ *  scrollbar, so styles.css clips the page sideways (`[data-hero]`) rather
+ *  than let it scroll. */
 export function HeroBackdrop(): React.ReactElement | null {
   const [ref, running] = useGpuEffect(startBackdrop);
   return (
@@ -52,7 +55,7 @@ export function HeroBackdrop(): React.ReactElement | null {
       ref={ref}
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute -top-16 -left-6 -z-10 h-[calc(100%+4rem)] w-[calc(100%+3rem)] opacity-0 transition-opacity duration-1000 motion-reduce:transition-none",
+        "pointer-events-none absolute -top-16 left-1/2 -z-10 h-[calc(100%+4rem)] w-screen -translate-x-1/2 opacity-0 transition-opacity duration-1000 motion-reduce:transition-none",
         running && "opacity-100",
       )}
     />
