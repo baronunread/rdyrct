@@ -45,6 +45,7 @@ import { recordAdminAction } from "../audit";
 import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
 import {
   adminAvatarUrl,
+  fromLiveOrg,
   linksByCreator,
   orgPlanState,
   orgPlanStateColumns,
@@ -397,12 +398,18 @@ adminRoutes.get("/usage", async (c) => {
   ] = await Promise.all([
     db.select({ n: sql<number>`count(*)` }).from(schema.user),
     db.select({ n: sql<number>`count(*)` }).from(schema.orgs),
-    db.select({ n: sql<number>`count(*)` }).from(schema.links),
+    // Links and recent clicks of banned orgs are spam, not usage (fromLiveOrg).
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.links)
+      .where(fromLiveOrg(schema.links.orgId)),
+    // Every row, banned orgs included: this is the table size the storage
+    // projection reads, not a usage figure.
     db.select({ n: sql<number>`count(*)` }).from(schema.clicks),
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.clicks)
-      .where(gte(schema.clicks.ts, since7)),
+      .where(and(gte(schema.clicks.ts, since7), fromLiveOrg(schema.clicks.orgId))),
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)

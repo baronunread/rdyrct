@@ -152,6 +152,27 @@ describe("GET /api/admin/usage?days=", () => {
     expect(quarter.topLinks.map((l) => l.slug)).toEqual(["c", "b", "a"]);
   });
 
+  // A spam campaign's clicks are not usage: once a ban disables the org, the
+  // platform figures stop counting its links and clicks.
+  it("leaves out an org a ban disabled", async () => {
+    await freeOwnerCookie();
+    await seedLinks();
+    await seedClicks();
+    await env.DB.prepare("update orgs set disabled_at = ? where id = 'org-1'")
+      .bind(Date.now())
+      .run();
+    const cookie = await adminCookie();
+
+    const quarter = await admin<AdminUsage>("/admin/usage?days=90", cookie);
+    expect(sum(quarter.series)).toBe(0);
+    expect(sum(quarter.botSeries)).toBe(0);
+    expect(sum(quarter.linkSeries)).toBe(0);
+    expect(quarter.topOrgs).toEqual([]);
+    expect(quarter.topLinks).toEqual([]);
+    expect(quarter.links).toBe(0);
+    expect(quarter.clicks7d).toBe(0);
+  });
+
   it("splits the range's sign-ups by the plan each holds", async () => {
     const db = testDb();
     const at = (daysAgo: number) => new Date(Date.now() - daysAgo * DAY);
