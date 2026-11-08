@@ -154,16 +154,24 @@ describe("GET /api/admin/usage?days=", () => {
 
   // A spam campaign's clicks are not usage: once a ban disables the org, the
   // platform figures stop counting its links and clicks.
-  it("leaves out an org a ban disabled", async () => {
+  it("leaves out a banned person and the org their ban disabled", async () => {
     await freeOwnerCookie();
     await seedLinks();
     await seedClicks();
+    const cookie = await adminCookie();
+    const before = await admin<AdminUsage>("/admin/usage?days=90", cookie);
+
+    // What banUser leaves behind: the person marked, their org disabled.
+    await env.DB.prepare(
+      "update user set banned = 1 where id = (select user_id from org_members where org_id = 'org-1' and role = 'owner')",
+    ).run();
     await env.DB.prepare("update orgs set disabled_at = ? where id = 'org-1'")
       .bind(Date.now())
       .run();
-    const cookie = await adminCookie();
 
     const quarter = await admin<AdminUsage>("/admin/usage?days=90", cookie);
+    expect(quarter.users).toBe(before.users - 1);
+    expect(quarter.orgs).toBe(before.orgs - 1);
     expect(sum(quarter.series)).toBe(0);
     expect(sum(quarter.botSeries)).toBe(0);
     expect(sum(quarter.linkSeries)).toBe(0);

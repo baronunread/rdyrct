@@ -10,7 +10,7 @@
  * Windows are whole UTC days, the same days fillSeries draws, so a total is
  * always the sum of its bars.
  */
-import { and, desc, eq, gte, isNotNull, sql, type SQLWrapper } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, sql, type SQLWrapper } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB } from "./env";
 import { computeWindows } from "./rollups";
@@ -47,6 +47,11 @@ export const ownerPlan = sql<OrgPlan>`coalesce((
 export function fromLiveOrg(orgId: SQLWrapper) {
   return sql`${orgId} not in (select id from orgs where disabled_at is not null)`;
 }
+
+/** People a ban has not removed: the platform figures count only them. */
+export const liveUser = eq(schema.user.banned, false);
+/** Orgs a ban has not disabled. */
+export const liveOrg = isNull(schema.orgs.disabledAt);
 
 const daily = schema.clickDaily;
 const dims = schema.clickDailyDims;
@@ -91,7 +96,7 @@ export async function usageForRange(db: DB, days: UsageRange): Promise<RangeFigu
       db
         .select({ day: createdDay, clicks: sql<number>`count(*)` })
         .from(schema.user)
-        .where(gte(schema.user.createdAt, new Date(sinceMs)))
+        .where(and(gte(schema.user.createdAt, new Date(sinceMs)), liveUser))
         .groupBy(createdDay),
       db
         .select({ day: createdDay, clicks: sql<number>`count(*)` })
@@ -101,7 +106,7 @@ export async function usageForRange(db: DB, days: UsageRange): Promise<RangeFigu
       db
         .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
         .from(schema.user)
-        .where(gte(schema.user.createdAt, new Date(sinceMs)))
+        .where(and(gte(schema.user.createdAt, new Date(sinceMs)), liveUser))
         .groupBy(schema.user.plan),
       db
         .select({

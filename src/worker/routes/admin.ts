@@ -46,6 +46,8 @@ import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
 import {
   adminAvatarUrl,
   fromLiveOrg,
+  liveOrg,
+  liveUser,
   linksByCreator,
   orgPlanState,
   orgPlanStateColumns,
@@ -396,8 +398,16 @@ adminRoutes.get("/usage", async (c) => {
     compedUserRows,
     subscriptionRows,
   ] = await Promise.all([
-    db.select({ n: sql<number>`count(*)` }).from(schema.user),
-    db.select({ n: sql<number>`count(*)` }).from(schema.orgs),
+    // Banned people and the orgs their ban disabled are left out of every
+    // figure below: they are not users, and their links are not usage.
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.user)
+      .where(liveUser),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.orgs)
+      .where(liveOrg),
     // Links and recent clicks of banned orgs are spam, not usage (fromLiveOrg).
     db
       .select({ n: sql<number>`count(*)` })
@@ -413,20 +423,21 @@ adminRoutes.get("/usage", async (c) => {
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
-      .where(ne(schema.user.plan, "free")),
+      .where(and(ne(schema.user.plan, "free"), liveUser)),
     // everything that follows the picked range
     usageForRange(db, days),
     // plan distribution
     db
       .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
       .from(schema.user)
+      .where(liveUser)
       .groupBy(schema.user.plan),
     countLimitHoldersByPlan(db),
     // signups 7d (current)
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
-      .where(gte(schema.user.createdAt, new Date(since7))),
+      .where(and(gte(schema.user.createdAt, new Date(since7)), liveUser)),
     // signups 7d (previous period)
     db
       .select({ n: sql<number>`count(*)` })
@@ -435,13 +446,19 @@ adminRoutes.get("/usage", async (c) => {
         and(
           gte(schema.user.createdAt, new Date(since14d)),
           lt(schema.user.createdAt, new Date(since7)),
+          liveUser,
         ),
       ),
     // weekly active users (distinct sessions in 7d)
     db
       .select({ n: sql<number>`count(distinct user_id)` })
       .from(schema.session)
-      .where(gte(schema.session.updatedAt, new Date(since7))),
+      .where(
+        and(
+          gte(schema.session.updatedAt, new Date(since7)),
+          sql`${schema.session.userId} not in (select id from "user" where banned = 1)`,
+        ),
+      ),
     // user creation all-time (for cumulative)
     db
       .select({
@@ -449,6 +466,7 @@ adminRoutes.get("/usage", async (c) => {
         clicks: sql<number>`count(*)`,
       })
       .from(schema.user)
+      .where(liveUser)
       .groupBy(userDay),
     // org creation (for weekly)
     db
@@ -457,6 +475,7 @@ adminRoutes.get("/usage", async (c) => {
         clicks: sql<number>`count(*)`,
       })
       .from(schema.orgs)
+      .where(liveOrg)
       .groupBy(orgDay),
     // clicks per org in last 24h (anomaly detection)
     db
@@ -542,7 +561,8 @@ adminRoutes.get("/usage", async (c) => {
         select count(*) from domains where domains.org_id = orgs.id
       )`,
     })
-    .from(schema.orgs);
+    .from(schema.orgs)
+    .where(liveOrg);
   const capPressure = findCapPressure(
     allOrgs,
     await loadLimitOverrides(
