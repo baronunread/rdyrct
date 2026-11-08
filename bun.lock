@@ -100,6 +100,9 @@
   "trustedDependencies": [
     "@posthog/cli",
   ],
+  "patchedDependencies": {
+    "typegpu@0.12.10": "patches/typegpu@0.12.10.patch",
+  },
   "overrides": {
     "zod": "4.6.5",
   },

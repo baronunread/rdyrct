@@ -173,6 +173,9 @@
       }
     }
   },
+  "patchedDependencies": {
+    "typegpu@0.12.10": "patches/typegpu@0.12.10.patch"
+  },
   "trustedDependencies": [
     "@posthog/cli"
   ]
