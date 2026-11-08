@@ -12,7 +12,7 @@ rdyrct is a link shortener and QR code generator for organizations. This plugin 
 | The user wants to                                    | Tool                                                                                                         |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Shorten a URL                                        | `create_link` (`destination`; optional `title`, `domain` for a custom domain, `slug` on custom domains only) |
-| Point a link somewhere else, or rename it            | `update_link` (find it by `slug` or current `destination`)                                                   |
+| Point a link somewhere else, or change its title     | `update_link` (find it by `slug` or current `destination`; the slug itself stays)                            |
 | Delete a link                                        | `delete_link` (by `slug` or `destination`)                                                                   |
 | Find links, or list them with click counts           | `list_links` (`query` filters by slug, destination or title)                                                 |
 | Clicks on one link: countries, referrers, devices    | `get_link_stats` (`slug`, plus `domain` if it's on a custom domain)                                          |
