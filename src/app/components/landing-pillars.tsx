@@ -407,12 +407,23 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
           scene: (step) => (
             <div className="flex items-center gap-4 p-4">
               <SceneQr logo />
+              {/* The code's own short link stays put; only the page it opens
+                  changes, so the two are labelled apart. */}
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="font-bold">Spring poster</p>
-                <p className="text-xs text-muted">Points to</p>
-                <p className="font-mono text-xs">
-                  <Swap at={2} step={step} from="acme.com/winter" to="acme.com/sale" />
-                </p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
+                  <dt className="text-muted">Code</dt>
+                  <dd className="font-mono text-muted">rdyr.cc/k3Tq9</dd>
+                  <dt className="text-muted">Opens</dt>
+                  <dd className="font-mono">
+                    <Swap
+                      at={2}
+                      step={step}
+                      from="acme.com/winter"
+                      to={<span className="text-accent">acme.com/spring</span>}
+                    />
+                  </dd>
+                </dl>
                 <Reveal at={3} step={step}>
                   <p className="mt-1 rounded-md bg-text px-2 py-1 text-xs text-bg">
                     Changed. The poster still works.
