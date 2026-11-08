@@ -32,7 +32,9 @@ export function LaunchBanner() {
       }}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className="relative flex flex-wrap items-center justify-center gap-x-2 px-8 py-2 text-sm text-muted">
+        {/* The header pill's width and inset (landing-header.tsx), so the
+            close button lines up with the header's last button. */}
+        <div className="relative mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-2 px-8 py-2 text-sm text-muted max-sm:-mx-3 sm:px-12">
           <span>rdyrct is open source.</span>
           <a
             href={GITHUB_URL}
@@ -47,7 +49,7 @@ export function LaunchBanner() {
             type="button"
             aria-label="Close"
             onClick={closeBanner}
-            className="absolute top-1/2 right-0 grid size-7 -translate-y-1/2 place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+            className="absolute top-1/2 right-1 grid sm:right-4 size-7 -translate-y-1/2 place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
           >
             <X size={16} aria-hidden />
           </button>
