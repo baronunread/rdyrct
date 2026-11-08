@@ -480,9 +480,7 @@ check off), `NEWSLETTER_FROM` (a var on its own sending subdomain; unset refuses
 newsletter sends), `NEWSLETTER_REPLY_TO` (a var, optional: a real inbox for
 replies, since the sending subdomain has none), `POSTAL_ADDRESS` (a var, optional: a postal address
 for every newsletter footer; unset, the footer has none), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
-Web Risk), `EXIT_OFFER_CODE` (a var, rdyrct.com only: the Polar discount code
-the leaving popup shows, made by hand in the Polar dashboard; unset, the popup
-never shows).
+Web Risk).
 
 **Adding a var to `wrangler.jsonc`** touches more than the worker:
 

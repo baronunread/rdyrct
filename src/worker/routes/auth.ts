@@ -4,8 +4,7 @@ import { emailConfigured } from "../email";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
-import type { AppEnv, Env } from "../env";
-import { RDYRCT_SITE } from "@/shared/site";
+import type { AppEnv } from "../env";
 import { sharedLinkHost } from "../util";
 import { servedSiteKey } from "../turnstile";
 import { requireUser } from "../guards";
@@ -146,13 +145,6 @@ userRoutes.put("/user/marketing", requireUser, async (c) => {
   return c.json(state);
 });
 
-/** The leaving popup’s discount code (components/exit-offer.tsx shows it),
- * or null when this deployment makes no offer: a self-hosted build, or
- * EXIT_OFFER_CODE unset. */
-function exitOfferCode(env: Env): string | null {
-  return (RDYRCT_SITE && env.EXIT_OFFER_CODE?.trim()) || null;
-}
-
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup
 // instructions for custom domains, and linkHost for shared-domain links).
 userRoutes.get("/config", (c) => {
@@ -166,6 +158,5 @@ userRoutes.get("/config", (c) => {
     // Only when the check is on: a lone site key would render a widget
     // whose token nobody checks.
     turnstileSiteKey: servedSiteKey(c.env),
-    exitOfferCode: exitOfferCode(c.env),
   } satisfies AppConfig);
 });

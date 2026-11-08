@@ -1005,7 +1005,7 @@ function InviteLinkButton({
 
 /**
  * The last question: product news and offers, a switch each, off unless
- * the account already said yes somewhere (the leaving popup's offers tick).
+ * the account already said yes somewhere.
  * The same two lists as the one-time dialog (components/marketing-prompt.tsx),
  * which an account that answers here never sees. Skip keeps any yes already
  * given and answers no for the rest.

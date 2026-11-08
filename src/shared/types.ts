@@ -530,9 +530,6 @@ export interface AppConfig {
   googleEnabled: boolean;
   /** Turnstile site key, public by design. Absent: no check on this instance. */
   turnstileSiteKey?: string;
-  /** The leaving popup's discount code (EXIT_OFFER_CODE on rdyrct.com), or
-   * null when the popup does not run. Not a secret: the popup shows it. */
-  exitOfferCode: string | null;
 }
 
 /** The org's fresh link-quota count, plus when it was read. The timestamp
