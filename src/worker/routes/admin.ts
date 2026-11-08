@@ -174,8 +174,11 @@ function computePlanCounts(
   for (const r of limitHolderRows) {
     const plan = orgPlanOf(r.plan);
     if (plan !== "hobby" && plan !== "pro") continue;
-    planCounts[plan] -= r.n;
-    planCounts.enterprise += r.n;
+    // The two counts are separate reads, so a ban landing between them can
+    // leave fewer in the plan than hold limits; never move more than are there.
+    const moved = Math.min(r.n, planCounts[plan]);
+    planCounts[plan] -= moved;
+    planCounts.enterprise += moved;
   }
   return planCounts;
 }
