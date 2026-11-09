@@ -10,6 +10,7 @@ import { trimTrailingSlash } from "hono/trailing-slash";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
+import { withNoindex } from "./noindex";
 import { getAuth } from "./better-auth";
 import { withBackground } from "./background";
 import { userRoutes } from "./routes/auth";
@@ -571,6 +572,11 @@ function finalizeSpaResponse(
  * just edited.
  */
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
+  // App pages are crawlable but never indexed (noindex.ts).
+  return withNoindex(await spaResponse(c, status), new URL(c.req.url));
+}
+
+async function spaResponse(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
   // Markdown is a representation of the same public page, not another route.
   // Select it before fetching the SPA shell, which has no useful body for an

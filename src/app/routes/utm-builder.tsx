@@ -37,7 +37,8 @@ import { trackCta } from "../lib/track-cta";
 import { useAudience } from "../lib/audience";
 import { HrefLink } from "../lib/router-search";
 import { MarketingPage } from "../components/marketing-page";
-import { FrameRow, SplitHeading } from "../components/marketing-kit";
+import { FrameRow, FrameSection, FramedSections, SplitHeading } from "../components/marketing-kit";
+import { FaqList } from "../components/faq-list";
 
 type UtmKey = keyof UtmFields;
 
@@ -74,16 +75,91 @@ const FIELD_COPY = {
 
 const FIELDS = UTM_KEYS.map(([param, key]) => ({ param, key, ...FIELD_COPY[key] }));
 
-/** What each parameter is for, for the reference under the builder. */
+/** What each parameter is for, and where Google Analytics 4 shows it, for the
+ *  reference under the builder. Checked against Google's "Collect campaign
+ *  data with custom URLs" and the GA4 Data API schema. */
 const PARAMETERS = [
+  ["utm_source", "Where the visitor came from: google, newsletter, linkedin.", "Session source"],
+  ["utm_medium", "The kind of channel: email, social, cpc, banner, qr.", "Session medium"],
   [
-    "utm_source",
-    "The site, newsletter or app that sent the visitor. Required by Google Analytics.",
+    "utm_campaign",
+    "The campaign, promotion or launch, so every link in it reports together.",
+    "Session campaign",
   ],
-  ["utm_medium", "The channel: email, social, cpc, banner, qr. Required by Google Analytics."],
-  ["utm_campaign", "The campaign name, so every link in one campaign reports together."],
-  ["utm_term", "The paid keyword. Most links leave it out."],
-  ["utm_content", "Which link of several in one place was clicked. Use it for A/B tests."],
+  ["utm_term", "The paid keyword. Most links leave it out.", "Session manual term"],
+  [
+    "utm_content",
+    "Tells apart links that point to the same page, such as two buttons in one email.",
+    "Session manual ad content",
+  ],
+  [
+    "utm_id",
+    "A campaign ID, the same one you use when you upload campaign data to Google Analytics. This builder does not add it: put it in by hand if you need it.",
+    "Session campaign ID",
+  ],
+] as const;
+
+const NAMING = [
+  "Use lowercase everywhere. Google Analytics treats Email and email as two values.",
+  "Pick one separator, hyphen or underscore, and keep it. Avoid spaces: they turn into %20 or +.",
+  "One source name per platform, such as linkedin and not LinkedIn, linked-in and lnkd.",
+  "One medium name per channel. Reuse email, social and cpc so channels group together.",
+  "Name a campaign once, in the same words your team uses: spring-sale-2026.",
+  "Keep a shared sheet of the names in use, and check it before you invent a new one.",
+] as const;
+
+const MISTAKES = [
+  [
+    "Tagging links inside your own site",
+    "Google Analytics 4 keeps a visit's first source for the session, but a tagged click inside your site can take the credit for what the visitor does next, such as a sign-up or a sale. Tag links that bring people to your site, never links between your own pages.",
+  ],
+  [
+    "Mixing upper and lower case",
+    "Newsletter and newsletter, or Spring-Sale and spring-sale, split one campaign into two rows. The builder warns you when a value has a capital or a space.",
+  ],
+  [
+    "Leaving out source, medium or campaign",
+    "Google says to always use all three. A missing one shows as (not set) in your reports.",
+  ],
+  [
+    "Putting personal data in a tag",
+    "A tag travels with the link into every tool on the other end. Keep email addresses and names out.",
+  ],
+  [
+    "Tagging a link that is already tagged",
+    "Paste it in and the builder reads its tags into the fields, so you edit them instead of adding a second set.",
+  ],
+] as const;
+
+const FAQS = [
+  {
+    q: "What is a UTM builder?",
+    a: "A UTM builder adds tracking parameters to a link. You give it a web address and a source, medium and campaign, and it returns the same address with utm_source, utm_medium and utm_campaign added. Analytics tools read those parameters to say which campaign sent each visitor.",
+  },
+  {
+    q: "How do I build a UTM link for Google Analytics?",
+    a: "Paste your page address above, fill in source, medium and campaign, and copy the link. Google Analytics 4 reads the three tags with no set-up on your side. Use the link where the visitor will click it: in an email, an ad or a post.",
+  },
+  {
+    q: "Which UTM parameters should I use?",
+    a: "Always use utm_source, utm_medium and utm_campaign, as Google advises. Add utm_content when one campaign has several links to tell apart. utm_term is for paid search keywords. utm_id is for matching a campaign to data you upload to Google Analytics.",
+  },
+  {
+    q: "Are UTM parameters case sensitive?",
+    a: "Yes. Google states that parameter values are case sensitive, so utm_source=Google and utm_source=google show as two sources. Use lowercase for every value.",
+  },
+  {
+    q: "Where do I see UTM data in Google Analytics 4?",
+    a: "In the Traffic acquisition report under Reports, then Acquisition. It lists session source, medium and campaign, which come from your utm_source, utm_medium and utm_campaign.",
+  },
+  {
+    q: "Should I put UTM tags on links inside my own website?",
+    a: "No. Google Analytics 4 keeps the visit's first source for the session, but the tagged click can give your own site the credit for what happens after it, such as a sale. Use UTM tags only on links that bring people to your site from somewhere else.",
+  },
+  {
+    q: "Does this UTM builder store my links?",
+    a: "No. The link is built in your browser and nothing is sent unless you press Shorten it. A short link made here works for 24 hours; sign up to keep it.",
+  },
 ] as const;
 
 const GUIDES = [
@@ -616,50 +692,81 @@ export function UtmBuilderPage() {
     <MarketingPage
       path="/utm-builder"
       title="UTM builder"
-      intro="Tag a link so Google Analytics and other tools can tell which campaign sent each visitor. No account, and nothing leaves your browser until you shorten it."
+      intro="A UTM builder for Google Analytics: tag a link so you can see which campaign sent each visitor. No account, and nothing leaves your browser until you shorten it."
       hero={<Builder />}
     >
-      {/* The hero closes its own frame; this one starts on the same line. */}
-      <div className="-mt-px mb-16 border-x border-border/70">
-        <FrameRow className="grid gap-10 px-6 py-12 sm:px-10 md:grid-cols-2 md:py-16">
-          <section className="flex flex-col gap-4">
-            <h2 className="text-2xl font-bold tracking-tight text-balance">
-              What each parameter does
-            </h2>
-            <dl className="flex flex-col gap-3 text-sm">
-              {PARAMETERS.map(([param, meaning]) => (
-                <div key={param}>
-                  <dt className="font-mono font-bold">{param}</dt>
-                  <dd className="text-muted">{meaning}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-          <section className="flex flex-col gap-4 text-sm">
-            <h2 className="text-2xl font-bold tracking-tight text-balance">
-              Keep one spelling per value
-            </h2>
-            <p className="text-muted">
-              UTM values are case sensitive. A campaign tagged &ldquo;Spring-Sale&rdquo; in one
-              email and &ldquo;spring-sale&rdquo; in another shows up as two campaigns, and neither
-              total is right. Pick lowercase with hyphens and use it everywhere. The builder warns
-              you when a value strays from it.
+      <FramedSections>
+        <FrameSection title="What each UTM parameter is for">
+          <dl className="grid max-w-5xl gap-x-10 gap-y-5 text-sm md:grid-cols-2">
+            {PARAMETERS.map(([param, meaning, dimension]) => (
+              <div key={param} className="flex flex-col gap-1">
+                <dt className="font-mono font-bold">{param}</dt>
+                <dd className="max-w-prose text-muted">{meaning}</dd>
+                <dd className="text-muted">
+                  Google Analytics 4 dimension: <span className="text-text">{dimension}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </FrameSection>
+
+        <FrameSection title="How Google Analytics 4 reads your tags">
+          <div className="flex max-w-3xl flex-col gap-4 text-sm text-muted">
+            <p>
+              When a visitor lands on a page whose address has UTM tags, Google Analytics 4 starts a
+              session and fills its source, medium and campaign from them. Look in Reports, then
+              Acquisition, then Traffic acquisition, and group by Session source / medium or Session
+              campaign.
             </p>
-            <p className="text-muted">
-              Leave out personal data. A UTM tag travels with the link and lands in every analytics
-              tool on the other end, so an email address in one is shared with all of them.
+            <p>
+              A tag you leave out shows as (not set). The tags do not show in the page path
+              dimensions: GA4 leaves them out of Page path + query string and keeps them in Page
+              location.
             </p>
-            <ul className="flex flex-col gap-2 pt-1">
-              {GUIDES.map(([href, label]) => (
-                <li key={href}>
-                  <a href={href} className="text-accent underline underline-offset-4">
-                    {label}
-                  </a>
-                </li>
+            <p>
+              Most other analytics tools read the same tags, so a link tagged here is not tied to
+              Google Analytics.
+            </p>
+          </div>
+        </FrameSection>
+
+        <FrameSection title="Keep one spelling per value">
+          <div className="flex max-w-3xl flex-col gap-4 text-sm text-muted">
+            <p>
+              Reports group by the exact text of each value. These habits keep one campaign in one
+              row.
+            </p>
+            <ul className="flex list-disc flex-col gap-2 pl-5">
+              {NAMING.map((rule) => (
+                <li key={rule}>{rule}</li>
               ))}
             </ul>
-          </section>
-        </FrameRow>
+          </div>
+        </FrameSection>
+
+        <FrameSection title="Common UTM mistakes">
+          <dl className="grid max-w-5xl gap-x-10 gap-y-5 text-sm md:grid-cols-2">
+            {MISTAKES.map(([name, why]) => (
+              <div key={name} className="flex flex-col gap-1">
+                <dt className="font-bold">{name}</dt>
+                <dd className="max-w-prose text-muted">{why}</dd>
+              </div>
+            ))}
+          </dl>
+          <ul className="flex flex-col gap-2 pt-2 text-sm">
+            {GUIDES.map(([href, label]) => (
+              <li key={href}>
+                <a href={href} className="text-accent underline underline-offset-4">
+                  {label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </FrameSection>
+
+        <FrameSection title="UTM builder questions">
+          <FaqList faqs={FAQS} />
+        </FrameSection>
 
         <FrameRow className="flex flex-col gap-6 px-6 py-12 sm:px-10 md:flex-row md:items-end md:justify-between md:py-16">
           <SplitHeading
@@ -675,8 +782,7 @@ export function UtmBuilderPage() {
             {ctaLabel}
           </HrefLink>
         </FrameRow>
-        <FrameRow />
-      </div>
+      </FramedSections>
     </MarketingPage>
   );
 }
