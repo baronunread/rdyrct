@@ -57,6 +57,7 @@ export const RESERVED_SLUGS = new Set([
   "vcard-qr-code",
   "wifi-qr-code",
   "qr-code-monkey-alternative",
+  "flowcode-alternative",
   "tinyurl-alternative",
   "docs",
   // authenticated app tabs

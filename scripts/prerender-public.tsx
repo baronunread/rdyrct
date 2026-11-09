@@ -81,6 +81,7 @@ const ROUTE_SOURCES = new Map([
   ["/wifi-qr-code", "src/app/routes/qr-types.tsx"],
   ["/qr-code-monkey-alternative", "src/app/routes/alternatives.tsx"],
   ["/tinyurl-alternative", "src/app/routes/alternatives.tsx"],
+  ["/flowcode-alternative", "src/app/routes/alternatives.tsx"],
   ["/privacy", "src/app/routes/privacy.tsx"],
   ["/terms", "src/app/routes/terms.tsx"],
   ["/report", "src/app/routes/report.tsx"],

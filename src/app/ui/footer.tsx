@@ -293,6 +293,11 @@ export function Footer({ featured = false }: { featured?: boolean }) {
               </MarketingLink>
             </li>
             <li>
+              <MarketingLink to="/flowcode-alternative" className={linkClass}>
+                Flowcode alternative
+              </MarketingLink>
+            </li>
+            <li>
               <MarketingLink to="/qr-code-monkey-alternative" className={linkClass}>
                 QR Code Monkey alternative
               </MarketingLink>

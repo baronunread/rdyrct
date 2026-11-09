@@ -165,6 +165,11 @@ export function marketingRoutes() {
     }),
     createRoute({
       ...child,
+      path: "/flowcode-alternative",
+      component: lazyPage(alternatives, "FlowcodeAlternativePage"),
+    }),
+    createRoute({
+      ...child,
       path: "/tinyurl-alternative",
       component: lazyPage(alternatives, "TinyUrlAlternativePage"),
     }),

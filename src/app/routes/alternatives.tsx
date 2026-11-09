@@ -50,6 +50,8 @@ interface Alternative {
   path: string;
   /** Where the vendor's pricing page lives, for the footnote. */
   pricingUrl: string;
+  /** When the figures were read, if not CHECKED. */
+  checked?: string;
   /** What the tool is, in a line, and what it costs: the /compare card. */
   blurb: string;
   theirPrice: string;
@@ -358,6 +360,77 @@ const ALTERNATIVES = {
       ],
     ],
   },
+  flowcode: {
+    name: "Flowcode",
+    path: "/flowcode-alternative",
+    pricingUrl: "flowcode.com/pricing",
+    checked: "November 2026",
+    blurb: "A QR code platform for brands, with landing pages",
+    theirPrice: "Free for 2 codes, or $25 a month (annual)",
+    title: "Flowcode alternative: rdyrct vs Flowcode",
+    intro:
+      "Flowcode is a QR platform built for large brands. Here is what it costs, and when rdyrct is the simpler choice.",
+    answer: `Flowcode's free plan holds 2 codes with analytics for 500 scans, and its first paid plan, Pro Plus, is $25 a month billed annually for 50 codes. rdyrct's free plan holds ${PLAN_LIMITS.free.links} links, each with a QR code, and a custom domain starts at ${PLAN_PRICES.hobby} a month. If you need landing pages, CRM integrations or an enterprise team, Flowcode is built for that and we are not.`,
+    theirs: {
+      entry: "Not stated. First paid plan: Pro Plus, $25 a month, billed annually",
+      links: "50 codes on Pro Plus, 2 on Free, 150 or more on Growth",
+      domains: "Not stated on the pricing page",
+      history: "Not stated on the pricing page",
+      free: "2 codes, analytics for 500 scans, 1 seat",
+    },
+    theyWin: [
+      "Landing pages for each code: 2 on Free, 50 on Pro Plus, more on Growth.",
+      "CRM and CDP integrations, audience retargeting and custom tracking pixels on its higher plans.",
+      "Enterprise features: an API, a brand design studio, unlimited workspaces and a dedicated customer success team.",
+      "It is built for large brands, which helps when a procurement team has to approve the tool.",
+    ],
+    weWin: [
+      `${PLAN_LIMITS.free.links} links on the free plan, each with a QR code, against 2 codes on Flowcode's.`,
+      `A custom domain from ${PLAN_PRICES.hobby} a month, and logo and colour codes on every paid plan.`,
+      "Prices you can read: every plan is on our pricing page, with no demo to book.",
+      "Scans counted by country, device and time, never with an IP address, plus the API and MCP connector on every plan and public code you can host yourself.",
+    ],
+    plans: [
+      ["Free", "$0", "2 Flowcodes, 2 landing pages, analytics for 500 scans, 1 seat"],
+      [
+        "Pro Plus",
+        "$25 a month, billed annually",
+        "50 Flowcodes and landing pages, analytics for 6,000 scans, logo and HEX colour control",
+      ],
+      [
+        "Growth",
+        "$250, annual only",
+        "From 150 Flowcodes and landing pages, analytics for the first 10,000 scans, CRM integrations and API access",
+      ],
+      [
+        "Growth Plus",
+        "Usage based",
+        "Real-time dashboards, audience builder, CRM and CDP integrations",
+      ],
+      [
+        "Enterprise",
+        "Custom",
+        "Unlimited codes and landing pages (rate card applies), design studio, custom API integrations",
+      ],
+    ],
+    planNote:
+      "Flowcode's page does not say what happens to your codes if you stop paying, and shows no monthly price for Pro Plus. It lists 3 seats for Pro Plus in one place and 5 in another, so confirm there.",
+    faq: [
+      [
+        "Is Flowcode free?",
+        "It has a free plan with 2 codes and analytics for up to 500 scans. Its pricing page does not say what happens when you pass that number.",
+      ],
+      [
+        "What happens to my Flowcode codes if I stop paying?",
+        "Not stated on the pricing page. Ask Flowcode before you print. With rdyrct, a code points at a short link you own, and links keep redirecting on every plan.",
+      ],
+      [
+        "Which is better for a small team or a single campaign?",
+        `If you want a code, a custom domain and scan counts for a low fixed price, rdyrct from ${PLAN_PRICES.hobby} a month. If you need landing pages and CRM links, Flowcode.`,
+      ],
+    ],
+    blog: { href: "/blog/flowcode-alternatives", label: "More on Flowcode alternatives" },
+  },
 } satisfies Record<string, Alternative>;
 
 function BulletList({ items }: { items: string[] }) {
@@ -498,8 +571,8 @@ function AlternativePage({ data }: { data: Alternative }) {
             </tbody>
           </Table>
           <p className="text-xs text-muted">
-            {data.name} figures from {data.pricingUrl}, {CHECKED}. rdyrct figures from our pricing
-            page.
+            {data.name} figures from {data.pricingUrl}, {data.checked ?? CHECKED}. rdyrct figures
+            from our pricing page.
           </p>
         </FrameSection>
 
@@ -809,6 +882,9 @@ export function ShortIoAlternativePage() {
 }
 export function TinyUrlAlternativePage() {
   return <AlternativePage data={ALTERNATIVES.tinyurl} />;
+}
+export function FlowcodeAlternativePage() {
+  return <AlternativePage data={ALTERNATIVES.flowcode} />;
 }
 export function QrCodeMonkeyAlternativePage() {
   return <QrAlternativePage />;

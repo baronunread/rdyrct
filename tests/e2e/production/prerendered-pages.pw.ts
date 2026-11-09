@@ -24,6 +24,7 @@ const PRERENDERED_PAGES = [
   { path: "/vcard-qr-code", heading: "vCard QR code generator for business cards" },
   { path: "/wifi-qr-code", heading: "WiFi QR code generator" },
   { path: "/qr-code-monkey-alternative", heading: "QR Code Monkey alternative" },
+  { path: "/flowcode-alternative", heading: "Flowcode alternative: rdyrct vs Flowcode" },
   { path: "/tinyurl-alternative", heading: "TinyURL alternative: rdyrct vs TinyURL" },
 ] as const;
 
