@@ -876,7 +876,12 @@ async function seed() {
           (w, h) => [h, w * (spikeHours.has(h) ? randInt(5, 25) : 1)] as const,
         );
         const h = pickW(hourWeights);
-        const t = Math.min(now, dayStart + h * 3_600_000 + randInt(0, 3_599_999));
+        const offset = h * 3_600_000 + randInt(0, 3_599_999);
+        // Today has only run until now: fit a whole day's clicks into the
+        // hours so far, so the last point on every chart is a full day and
+        // not a dip to zero for a seed loaded early in the morning.
+        const t =
+          d === 0 ? dayStart + Math.floor((offset / day) * (now - dayStart)) : dayStart + offset;
         clickValues.push(
           `(${q(link.id)}, ${q(link.org.id)}, ${t}, ${q(pickW(orgCountries.get(link.org.id)!))}, ${q(pickW(REFERRERS))}, ${q(pickW(DEVICES))})`,
         );
