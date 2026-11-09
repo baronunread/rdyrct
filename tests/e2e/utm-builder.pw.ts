@@ -94,6 +94,112 @@ test("shortens the tagged link, and the short link carries the tags", async ({ p
   );
 });
 
+test("builds many links at once, copies them all and downloads a CSV", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/utm-builder");
+  await page.getByRole("button", { name: "Many links" }).click();
+
+  // Nothing to copy marks the address field, as the one-link Copy does.
+  const urls = page.getByLabel("Website URLs");
+  await page.getByRole("button", { name: "Copy all" }).click();
+  await expect(page.getByText("Paste a link first")).toBeVisible();
+  await expect(urls).toBeFocused();
+
+  // Leaving the mode answers the mark: coming back does not grab focus.
+  await page.getByRole("button", { name: "One link" }).click();
+  await page.getByRole("button", { name: "Many links" }).click();
+  await expect(urls).not.toBeFocused();
+  await expect(urls).not.toHaveAttribute("aria-invalid", "true");
+
+  // Text that holds no web address says so, on Download too.
+  await urls.fill("not an address");
+  await page.getByRole("button", { name: "Download CSV" }).click();
+  await expect(page.getByText("Not a web address", { exact: true })).toBeVisible();
+
+  await urls.fill("example.com/a\nnot an address\nhttps://example.com/b");
+  await page.getByPlaceholder("spring-sale", { exact: true }).fill("spring-sale");
+  const channels = page.getByRole("group", { name: "Channels" });
+  await channels.getByRole("button", { name: "LinkedIn" }).click();
+  await channels.getByRole("button", { name: "Newsletter" }).click();
+
+  // Two addresses times two channels; the bad line is named, not dropped silently.
+  const list = page.getByRole("list", { name: "Tagged links" });
+  await expect(list.getByRole("listitem")).toHaveCount(4);
+  await expect(page.getByText("Line 2 is not a web address")).toBeVisible();
+
+  await page.getByRole("button", { name: "Copy all" }).click();
+  await expect(page.getByText("Copied 4 links")).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  // Channels in the order they are listed, not the order they were picked.
+  expect(copied.split("\n")).toEqual([
+    "https://example.com/a?utm_source=newsletter&utm_medium=email&utm_campaign=spring-sale",
+    "https://example.com/a?utm_source=linkedin&utm_medium=social&utm_campaign=spring-sale",
+    "https://example.com/b?utm_source=newsletter&utm_medium=email&utm_campaign=spring-sale",
+    "https://example.com/b?utm_source=linkedin&utm_medium=social&utm_campaign=spring-sale",
+  ]);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download CSV" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^utm-links-\d{4}-\d{2}-\d{2}\.csv$/);
+  const csv = await (await download.createReadStream()).toArray();
+  const rows = Buffer.concat(csv).toString("utf8").replace(/^﻿/, "").trim().split(/\r?\n/);
+  expect(rows).toHaveLength(5);
+  expect(rows[1]).toBe(
+    "https://example.com/a,newsletter,email,spring-sale,,,https://example.com/a?utm_source=newsletter&utm_medium=email&utm_campaign=spring-sale",
+  );
+});
+
+test("saves tags as a template that survives a reload", async ({ page }) => {
+  await page.goto("/utm-builder");
+  const source = page.getByPlaceholder("newsletter");
+
+  // A template with no source would split from every link tagged with one.
+  await page.getByRole("button", { name: "Save as template" }).click();
+  await expect(page.getByText("Needed for a template")).toBeVisible();
+  await expect(source).toBeFocused();
+
+  await source.fill("newsletter");
+  await page.getByPlaceholder("email").fill("email");
+  await page.getByPlaceholder("spring-sale", { exact: true }).fill("weekly");
+  await page.getByRole("button", { name: "Save as template" }).click();
+  await expect(page.getByText("Template saved")).toBeVisible();
+
+  await page.reload();
+  const template = page.getByRole("button", { name: "newsletter / email / weekly", exact: true });
+  await expect(template).toBeVisible();
+  await template.click();
+  await expect(source).toHaveValue("newsletter");
+  await expect(page.getByPlaceholder("spring-sale", { exact: true })).toHaveValue("weekly");
+  await expect(template).toHaveAttribute("aria-pressed", "true");
+
+  // A saved template is a channel in Many links too.
+  await page.getByRole("button", { name: "Many links" }).click();
+  await expect(
+    page
+      .getByRole("group", { name: "Channels" })
+      .getByRole("button", { name: "newsletter / email" }),
+  ).toHaveCount(0); // the Newsletter preset already is that pair
+  await page.getByRole("button", { name: "One link" }).click();
+
+  await page.getByRole("button", { name: "Remove template newsletter / email / weekly" }).click();
+  await expect(template).toHaveCount(0);
+
+  // Storage that refuses the write says so, rather than "Template saved".
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("full", "QuotaExceededError");
+    };
+  });
+  await page.getByRole("button", { name: "Save as template" }).click();
+  await expect(page.getByText(/Could not save the template/)).toBeVisible();
+  await expect(page.getByText("Template saved")).toHaveCount(0);
+});
+
 test("explains the parameters and answers common questions", async ({ page }) => {
   await page.goto("/utm-builder");
   for (const name of [

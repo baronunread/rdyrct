@@ -149,6 +149,11 @@ export type CtaPlacement =
   // an account (to keep that link, or after this browser has spent its one).
   | "utm_page_shorten"
   | "utm_page_signup"
+  // Its many-links mode (copy all, the CSV) and saved templates: not sign-ups,
+  // but whether the features that set it apart from other builders get used.
+  | "utm_page_bulk_copy"
+  | "utm_page_bulk_csv"
+  | "utm_page_template"
   // The /branded-link-shortener page's one sign-up.
   | "branded_page_signup"
   // The /google-url-shortener page's one sign-up, for people leaving goo.gl.
