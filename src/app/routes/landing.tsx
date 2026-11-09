@@ -673,7 +673,7 @@ function SelfHostSection() {
     // Its own section after pricing, never a column inside it: it answers
     // "will this still be here next year", and the answer is the code.
     <Section id="self-host" className="py-16 md:py-24">
-      <div className="lit grid overflow-hidden rounded-3xl border border-border bg-surface md:grid-cols-[1fr_1.1fr]">
+      <div className="lit grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-3xl border border-border bg-surface md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="flex flex-col gap-6 p-6 sm:p-10">
           <SplitHeading lead="Run it yourself." rest="The same code, on your own account." />
           <ul className="flex flex-col gap-2 text-muted">
@@ -713,9 +713,13 @@ function SelfHostTerminal() {
         <span className="size-2.5 rounded-full bg-border" />
         <span className="size-2.5 rounded-full bg-border" />
       </div>
-      <pre className="overflow-x-auto p-5 font-mono text-sm leading-7 sm:p-6">
+      {/* On a phone the clone URL wraps under itself (hanging past the "$ ") rather than scrolling off the card. */}
+      <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-7 sm:p-6 sm:text-sm">
         {SELF_HOST_STEPS.map(([command, arg]) => (
-          <code key={command} className="block whitespace-pre">
+          <code
+            key={command}
+            className="block pl-[2ch] -indent-[2ch] whitespace-pre-wrap [overflow-wrap:anywhere] sm:whitespace-pre"
+          >
             <span className="text-muted select-none">$ </span>
             {command}
             {arg && <span className="text-accent"> {arg}</span>}

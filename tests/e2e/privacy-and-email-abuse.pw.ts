@@ -129,4 +129,6 @@ test("a throttled verification email still lands on the code screen (#50)", asyn
   // The code screen, which is where the resend button is, not back at the form.
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send a new code" })).toBeVisible();
+  // Young sending domains land in junk, so the screen says where to look.
+  await expect(page.getByText("Not there? Check your spam folder")).toBeVisible();
 });
