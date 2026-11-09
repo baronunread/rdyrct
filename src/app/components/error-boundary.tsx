@@ -1,8 +1,13 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useMemo, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
 import { captureClientException } from "../lib/sentry";
-import { dismissNewVersion, isChunkLoadError, reloadForNewVersion } from "../lib/new-version";
+import {
+  canReloadForNewVersion,
+  dismissNewVersion,
+  isChunkLoadError,
+  reloadForNewVersion,
+} from "../lib/new-version";
 
 type Props = {
   children: ReactNode;
@@ -99,19 +104,23 @@ export function RouteError({ error: thrown }: ErrorComponentProps) {
     [thrown],
   );
   const chunk = isChunkLoadError(error);
-  const [gaveUp, setGaveUp] = useState(false);
+  // Decided once per error, while drawing: the effect below spends a reload,
+  // which would otherwise flip this answer before the browser navigates.
+  const reloading = useMemo(() => chunk && canReloadForNewVersion(error.message), [chunk, error]);
   useEffect(() => {
     if (handledRouteErrors.has(error)) return;
     handledRouteErrors.add(error);
-    if (chunk) {
-      if (reloadForNewVersion(error.message)) return;
-      dismissNewVersion();
-      setGaveUp(true);
+    if (reloading) {
+      reloadForNewVersion(error.message);
+      return;
     }
+    // A chunk a reload cannot fix: the notice below says so, so the banner
+    // the failed import queued would be a second copy of it.
+    if (chunk) dismissNewVersion();
     posthog.captureException(error);
     captureClientException(error);
-  }, [error, chunk]);
-  if (chunk && !gaveUp) return null;
+  }, [error, chunk, reloading]);
+  if (reloading) return null;
   return <FullPageError chunk={chunk} />;
 }
 

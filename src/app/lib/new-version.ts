@@ -78,6 +78,17 @@ const RELOAD_COUNT_PREFIX = "rdyrct:chunk-reload-count:";
  * genuinely broken deploy still stops rather than reloading forever. */
 const MAX_AUTO_RELOADS = 2;
 
+/** Whether `reloadForNewVersion(key)` would still reload: the budget is not
+ * spent and there is sessionStorage to count with. Reads only, so a render
+ * can ask it. */
+export function canReloadForNewVersion(key: string): boolean {
+  try {
+    return Number(sessionStorage.getItem(RELOAD_COUNT_PREFIX + key) ?? "0") < MAX_AUTO_RELOADS;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A forced reload onto the current build, for when a chunk failed while
  * rendering a route the visitor just navigated to: the old UI is already
