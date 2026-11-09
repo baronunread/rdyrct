@@ -14,16 +14,21 @@
  * two mediums; and "Shorten it", which hands the tagged URL to the same
  * anonymous shortener the landing page uses. Nothing leaves the browser
  * until that button is pressed.
+ *
+ * What the builders ranking above it have and it lacked: many links at once
+ * (components/utm-bulk.tsx) and saved templates (lib/utm-templates.ts).
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Copy } from "@/app/ui/icons";
-import { EMPTY_UTM, UTM_KEYS, buildDestination, resolveUtm, stripUtmParams } from "@/shared/utm";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowRight, Copy, Plus, X } from "@/app/ui/icons";
+import { EMPTY_UTM, UTM_KEYS } from "@/shared/utm";
 import type { UtmFields } from "@/shared/utm";
 import { Button, IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { CopyButton } from "../ui/copy-button";
 import { cn } from "../ui/cn";
 import { useSlideTo } from "../ui/tab-underline";
+import { Segmented } from "../ui/segmented";
+import { OverflowTip } from "../ui/overflow-tip";
 import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -39,6 +44,17 @@ import { HrefLink } from "../lib/router-search";
 import { MarketingPage } from "../components/marketing-page";
 import { FrameRow, FrameSection, FramedSections, SplitHeading } from "../components/marketing-kit";
 import { FaqList } from "../components/faq-list";
+import { TaggedText } from "../components/utm-tagged-text";
+import { BulkInputs, BulkOutput, bulkNote, useBulkLinks } from "../components/utm-bulk";
+import { PRESETS, splitTagged, taggedUrl, tidy, webAddress } from "../lib/utm-tools";
+import {
+  removeTemplate,
+  sameTags,
+  saveTemplate,
+  templateName,
+  trimTags,
+  useUtmTemplates,
+} from "../lib/utm-templates";
 
 type UtmKey = keyof UtmFields;
 
@@ -157,8 +173,16 @@ const FAQS = [
     a: "No. Google Analytics 4 keeps the visit's first source for the session, but the tagged click can give your own site the credit for what happens after it, such as a sale. Use UTM tags only on links that bring people to your site from somewhere else.",
   },
   {
+    q: "Can I build UTM links in bulk?",
+    a: "Yes. Choose Many links, paste one address per line and pick the channels. The builder makes one tagged link for each address and channel, up to 500 at once. Copy them all, or download a CSV with each tag in its own column.",
+  },
+  {
+    q: "Is this the same as Google's Campaign URL Builder?",
+    a: "It adds the same utm_source, utm_medium, utm_campaign, utm_term and utm_content tags, so Google Analytics reads the links the same way. It also builds many links at once, saves templates, warns about capitals and spaces, and can shorten the link. It leaves out utm_id, which you can add by hand.",
+  },
+  {
     q: "Does this UTM builder store my links?",
-    a: "No. The link is built in your browser and nothing is sent unless you press Shorten it. A short link made here works for 24 hours; sign up to keep it.",
+    a: "No. The link is built in your browser and nothing is sent unless you press Shorten it. Templates you save stay in this browser. A short link made here works for 24 hours; sign up to keep it.",
   },
 ] as const;
 
@@ -168,38 +192,6 @@ const GUIDES = [
   ["/blog/utm-for-social-media", "UTM tags for social media"],
   ["/blog/click-id-vs-utm", "Click IDs and UTM tags"],
 ] as const;
-
-/** A web address as typed, with https:// added when it has no scheme, or
- *  null when it is not one. Same rule the shortener applies. */
-function webAddress(value: string): URL | null {
-  try {
-    const url = new URL(withScheme(value.trim()));
-    return url.hostname.includes(".") ? url : null;
-  } catch {
-    return null;
-  }
-}
-
-const withScheme = (value: string) => (/^https?:\/\//i.test(value) ? value : `https://${value}`);
-
-/** A pasted link that is already tagged: its address without the tags, and
- *  the fields filled from them (its own values win). Null when untagged. */
-function splitTagged(value: string, fields: UtmFields) {
-  const url = webAddress(value);
-  if (!url || !UTM_KEYS.some(([param]) => url.searchParams.has(param))) return null;
-  return { address: stripUtmParams(url.toString()), fields: resolveUtm(url.toString(), fields) };
-}
-
-/** The tagged address, or null until there is a web address to tag. */
-function taggedUrl(value: string, fields: UtmFields): string | null {
-  const url = webAddress(value);
-  if (!url) return null;
-  // resolveUtm with no address to read from just trims each field.
-  return buildDestination(stripUtmParams(url.toString()), resolveUtm("", fields));
-}
-
-/** Lowercase, with hyphens for spaces: one spelling per value. */
-const tidy = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "-");
 
 /** Why the shortener cannot be offered here, or null when it can. */
 function shortenBlocker(authed: boolean, atCap: boolean): "authed" | "cap" | null {
@@ -214,26 +206,6 @@ const ELSEWHERE = {
   // way to the next one.
   cap: { href: "/signup", label: "Sign up to shorten it" },
 } as const;
-
-/** Each parameter's colour, in the fields' order, shared by the tagged link
- *  so a value there reads as the field it came from. */
-const PARAM_TONE = {
-  utmSource: "text-mint",
-  utmMedium: "text-sky",
-  utmCampaign: "text-accent",
-  utmTerm: "text-butter",
-  utmContent: "text-pink",
-} satisfies Record<UtmKey, string>;
-
-/** Where links usually go, as the source and medium most teams use for
- *  each: one tap fills both. */
-const PRESETS = [
-  { label: "Newsletter", source: "newsletter", medium: "email" },
-  { label: "Instagram", source: "instagram", medium: "social" },
-  { label: "LinkedIn", source: "linkedin", medium: "social" },
-  { label: "Google Ads", source: "google", medium: "cpc" },
-  { label: "Print QR", source: "print", medium: "qr" },
-] as const;
 
 /**
  * The presets as a segmented control: one pill that slides to whichever
@@ -294,9 +266,14 @@ function Presets({
 function UtmFieldsGrid({
   fields,
   setField,
+  sourceError,
+  sourceRef,
 }: {
   fields: UtmFields;
   setField: (key: UtmKey, value: string) => void;
+  /** Why Source is needed, set when saving a template without one. */
+  sourceError?: string;
+  sourceRef: RefObject<HTMLInputElement | null>;
 }) {
   return (
     // Five across only where a field has room for its name and its tip.
@@ -304,8 +281,15 @@ function UtmFieldsGrid({
       {FIELDS.map(({ key, param, label, placeholder, tip, ...rest }) => (
         // The parameter name sits in the tip rather than on the label line:
         // beside a name, a tip mark and "optional" it ran into the next field.
-        <Field key={key} label={label} optional={"optional" in rest} tip={`${param}: ${tip}`}>
+        <Field
+          key={key}
+          label={label}
+          optional={"optional" in rest}
+          tip={`${param}: ${tip}`}
+          error={key === "utmSource" ? sourceError : undefined}
+        >
           <Input
+            ref={key === "utmSource" ? sourceRef : undefined}
             value={fields[key]}
             onChange={(e) => setField(key, e.target.value)}
             placeholder={placeholder}
@@ -318,55 +302,60 @@ function UtmFieldsGrid({
   );
 }
 
-/** The tagged link, each value in its field's colour, or what to do first. */
-function TaggedText({ tagged }: { tagged: string | null }) {
-  if (!tagged) return <span className="font-sans text-muted">Paste a link to start.</span>;
-  const { search, hash } = new URL(tagged);
-  const tone = (param: string) => {
-    const key = UTM_KEYS.find(([p]) => p === param)?.[1];
-    return key ? PARAM_TONE[key] : "text-text";
-  };
-  // Split on the text itself rather than re-encoding the parameters, so
-  // what shows is exactly `tagged`, character for character: the address,
-  // the query (none for a link with no tags yet), then any #fragment, which
-  // URLs put after the query.
-  const base = tagged.slice(0, tagged.length - search.length - hash.length);
-  const pairs = search ? search.slice(1).split("&") : [];
-  return (
-    <>
-      <span className="text-muted">{base}</span>
-      {pairs.map((pair, i) => (
-        <QueryPair key={pair.split("=")[0]} pair={pair} lead={i === 0 ? "?" : "&"} tone={tone} />
-      ))}
-      {hash && <span className="text-muted">{hash}</span>}
-    </>
-  );
-}
-
-/** One `name=value` of the query: the name quiet, the value in its field's
- *  colour, keyed on the value so a changed one fades in. */
-function QueryPair({
-  pair,
-  lead,
-  tone,
+/** The saved templates as buttons that fill all five fields, each with its
+ *  own remove, and the button that saves the fields as one more. Only the
+ *  save button until something is saved. */
+function Templates({
+  templates,
+  fields,
+  onApply,
+  onSave,
 }: {
-  pair: string;
-  lead: string;
-  tone: (param: string) => string;
+  templates: readonly UtmFields[];
+  fields: UtmFields;
+  onApply: (template: UtmFields) => void;
+  onSave: () => void;
 }) {
-  // Split at the first "=" only: a value may hold another.
-  const [name, value] = pair.split(/=(.*)/s);
+  const current = trimTags(fields);
   return (
-    <span>
-      <span className="text-placeholder">
-        {lead}
-        {name}
-        {value === undefined ? "" : "="}
-      </span>
-      <span key={value} className={cn(tone(name), "motion-safe:animate-value-in")}>
-        {value}
-      </span>
-    </span>
+    <div className="flex flex-wrap items-center gap-1.5">
+      {templates.length > 0 && <span className="mr-1 text-xs text-muted">Your templates</span>}
+      {templates.map((template) => {
+        const name = templateName(template);
+        const on = sameTags(template, current);
+        return (
+          // Radii nest: a 9px chip, 2px of padding, a 7px remove button.
+          <span
+            key={name}
+            className={cn(
+              "inline-flex max-w-full items-center rounded-[9px] p-0.5 transition-colors duration-150",
+              on ? "bg-surface-2 smooth-shadow-ring-xs" : "bg-bg",
+            )}
+          >
+            {/* A long template is cut at 16rem; the tooltip shows all of it. */}
+            <OverflowTip content={name}>
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() => onApply(template)}
+                className={cn(
+                  "h-[30px] max-w-64 cursor-pointer truncate rounded-[7px] pr-1 pl-2.5 text-sm max-sm:h-9",
+                  on ? "text-text" : "text-muted [@media(hover:hover)]:hover:text-text",
+                )}
+              >
+                {name}
+              </button>
+            </OverflowTip>
+            <IconButton label={`Remove template ${name}`} onClick={() => removeTemplate(template)}>
+              <X size={12} />
+            </IconButton>
+          </span>
+        );
+      })}
+      <Button variant="ghost" size="sm" onClick={onSave}>
+        <Plus size={13} /> Save as template
+      </Button>
+    </div>
   );
 }
 
@@ -536,7 +525,11 @@ function TaggedOutput({
         aria-label="Tagged link"
         className="block min-h-10 min-w-0 flex-1 py-2 font-mono text-sm leading-relaxed break-all"
       >
-        <TaggedText tagged={tagged} />
+        {tagged ? (
+          <TaggedText tagged={tagged} />
+        ) : (
+          <span className="font-sans text-muted">Paste a link to start.</span>
+        )}
       </output>
       <div className="flex shrink-0 items-center gap-1.5 max-sm:[&>a]:flex-1 max-sm:[&>button:last-child]:flex-1">
         {tagged ? (
@@ -581,6 +574,7 @@ function useUtmForm() {
       setFields((current) => ({ ...current, [key]: value })),
     pickPreset: ({ source, medium }: (typeof PRESETS)[number]) =>
       setFields((current) => ({ ...current, utmSource: source, utmMedium: medium })),
+    applyTemplate: setFields,
     tidyAll: () =>
       setFields((current) => {
         const next = { ...current };
@@ -644,31 +638,62 @@ function AddressField({
   );
 }
 
-function Builder() {
-  const form = useUtmForm();
+const MODES = [
+  { id: "one", label: "One link" },
+  { id: "many", label: "Many links" },
+] as const;
+
+type Mode = (typeof MODES)[number]["id"];
+
+/** Save as template with no source marks Source rather than saving a
+ *  template that would split from every link tagged with one. */
+function useTemplateSave(fields: UtmFields) {
+  const toast = useToast();
+  const [error, setError] = useState<string | undefined>();
+  const source = useRef<HTMLInputElement>(null);
+  return {
+    error,
+    source,
+    /** Wraps an edit so it also clears the mark: any change to the tags
+     *  answers it. */
+    clearing:
+      <A extends unknown[]>(edit: (...args: A) => void) =>
+      (...args: A) => {
+        setError(undefined);
+        edit(...args);
+      },
+    save: () => {
+      if (!fields.utmSource.trim()) {
+        setError("Needed for a template");
+        source.current?.focus();
+        return;
+      }
+      saveTemplate(fields);
+      toast("Template saved");
+      trackCta("utm_page_template");
+    },
+  };
+}
+
+/** The one-link builder's own state: the address refusal, the shortener
+ *  (primed only while this mode shows), and the short link it made. */
+function useOneLink(form: ReturnType<typeof useUtmForm>, active: boolean) {
   const refusal = useAddressRefusal(form.address);
   const [made, setMade] = useState<AnonLink | null>(null);
   const tagged = taggedUrl(form.address, form.fields);
-  const shortener = useShortener(tagged, setMade);
+  const shortener = useShortener(active ? tagged : null, setMade);
+  return { refusal, made, tagged, shortener };
+}
 
+type OneLink = ReturnType<typeof useOneLink>;
+
+/** The tagged link with Copy and Shorten, then the short link once made. */
+function OneLinkOutput({ one }: { one: OneLink }) {
+  const { refusal, made, tagged, shortener } = one;
   return (
-    // On a phone the sheet takes back most of the hero's gutter, as the QR
-    // generator's does.
-    <div
-      data-utm-builder
-      className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]"
-    >
-      <div className="flex flex-col gap-4 px-3 pt-3 pb-2 sm:px-3.5">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <AddressField value={form.address} onChange={form.changeAddress} refusal={refusal} />
-          <Presets fields={form.fields} onPick={form.pickPreset} />
-        </div>
-
-        <UtmFieldsGrid fields={form.fields} setField={form.setField} />
-      </div>
-
-      {/* The Turnstile slot sits straight above the panel holding Shorten,
-          in a column of its own so its empty box adds no gap. */}
+    <>
+      {/* The Turnstile slot sits straight above the panel holding Shorten, in
+          a column of its own so its empty box adds no gap. */}
       <div className="flex flex-col">
         <TurnstileSlot challenge={shortener.challenge} />
         <TaggedOutput tagged={tagged} onNothing={refusal.refuse}>
@@ -678,9 +703,60 @@ function Builder() {
           )}
         </TaggedOutput>
       </div>
-
       {made && <ShortLinkResult link={made} />}
+    </>
+  );
+}
 
+function Builder() {
+  const [mode, setMode] = useState<Mode>("one");
+  const form = useUtmForm();
+  const templates = useUtmTemplates();
+  const save = useTemplateSave(form.fields);
+  const bulk = useBulkLinks(form.fields, templates);
+  const one = useOneLink(form, mode === "one");
+  const many = mode === "many";
+  const note = many ? bulkNote(bulk.result) : null;
+
+  return (
+    // On a phone the sheet takes back most of the hero's gutter, as the QR
+    // generator's does.
+    <div
+      data-utm-builder
+      className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]"
+    >
+      <div className="flex flex-col gap-4 px-3 pt-3 pb-2 sm:px-3.5">
+        <Segmented label="Build" items={MODES} value={mode} onChange={setMode} />
+        {many ? (
+          <BulkInputs bulk={bulk} />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <AddressField
+              value={form.address}
+              onChange={form.changeAddress}
+              refusal={one.refusal}
+            />
+            <Presets fields={form.fields} onPick={form.pickPreset} />
+          </div>
+        )}
+
+        <UtmFieldsGrid
+          fields={form.fields}
+          setField={save.clearing(form.setField)}
+          sourceError={save.error}
+          sourceRef={save.source}
+        />
+        <Templates
+          templates={templates}
+          fields={form.fields}
+          onApply={save.clearing(form.applyTemplate)}
+          onSave={save.save}
+        />
+      </div>
+
+      {many ? <BulkOutput bulk={bulk} /> : <OneLinkOutput one={one} />}
+
+      {note && <p className="px-3 pt-1 text-xs text-butter sm:px-3.5">{note}</p>}
       <CaseNote fields={form.fields} onTidy={form.tidyAll} />
     </div>
   );
@@ -692,7 +768,7 @@ export function UtmBuilderPage() {
     <MarketingPage
       path="/utm-builder"
       title="UTM builder"
-      intro="A UTM builder for Google Analytics: tag a link so you can see which campaign sent each visitor. No account, and nothing leaves your browser until you shorten it."
+      intro="A UTM builder and campaign URL builder for Google Analytics: tag one link, or many at once, to see which campaign sent each visitor. No account, and nothing leaves your browser until you shorten it."
       hero={<Builder />}
     >
       <FramedSections>

@@ -182,12 +182,20 @@ Moving from Bitly, Rebrandly, Short.io or Dub? Import your links and keep the sa
 [See rdyrct and Rebrandly compared](/rebrandly-alternative) or [sign up free](/signup).`,
   },
   "/utm-builder": {
-    title: "UTM builder for Google Analytics - tag links, no account",
+    title: "UTM builder and generator for Google Analytics, free",
     description:
-      "Build a UTM link for Google Analytics: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy or shorten it. No sign-up.",
+      "A free UTM generator and campaign URL builder for Google Analytics: tag one link or hundreds at once, save your tags as templates, download a CSV. No sign-up.",
     markdown: `# UTM builder
 
-Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
+A UTM builder and campaign URL builder: add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
+
+## Many links at once
+
+Choose Many links, paste one address per line and pick the channels (Newsletter, LinkedIn, Google Ads and others). The builder makes one tagged link for every address and channel, up to 500 at once. Copy them all, or download a CSV with each tag in its own column.
+
+## Templates
+
+Save the tags you reuse, such as your weekly newsletter, as a template. One click fills all five fields again. Templates stay in your browser.
 
 ## The parameters
 

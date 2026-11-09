@@ -5,6 +5,7 @@ import {
   useId,
   type InputHTMLAttributes,
   type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
   type ReactNode,
 } from "react";
 import { ChevronDown, Info, X } from "@/app/ui/icons";
@@ -98,6 +99,22 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   },
 );
 Input.displayName = "Input";
+
+/** Several lines of input, such as one web address per line. The input's
+ * look, grown to the rows it is given. */
+export const Textarea = forwardRef<
+  HTMLTextAreaElement,
+  TextareaHTMLAttributes<HTMLTextAreaElement>
+>(({ className, ...props }, ref) => (
+  <textarea
+    ref={ref}
+    className={cn(inputClass, "h-auto resize-y py-2 leading-relaxed", className)}
+    {...autofillProps(props.autoComplete)}
+    {...useFieldAria()}
+    {...props}
+  />
+));
+Textarea.displayName = "Textarea";
 
 export const Select = forwardRef<
   HTMLSelectElement,
