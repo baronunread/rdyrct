@@ -84,13 +84,16 @@ function snapshot(): string | null {
   }
 }
 
-function write(templates: UtmFields[]): void {
+/** False when the browser refused the write (storage disabled or full):
+ *  templates are only ever read back from storage, so nothing was kept. */
+function write(templates: UtmFields[]): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify(templates.slice(0, MAX_UTM_TEMPLATES)));
   } catch {
-    // Private mode, or storage disabled: the template lasts as long as the tab.
+    return false;
   }
   window.dispatchEvent(new Event(CHANGED));
+  return true;
 }
 
 function subscribe(onChange: () => void): () => void {
@@ -105,9 +108,9 @@ function subscribe(onChange: () => void): () => void {
 /** Saves the tags at the front, once: saving the same tags again moves them
  *  to the front instead of adding a twin. Values are trimmed, as the link
  *  trims them. */
-export function saveTemplate(fields: UtmFields): void {
+export function saveTemplate(fields: UtmFields): boolean {
   const trimmed = trimTags(fields);
-  write([trimmed, ...read(snapshot()).filter((t) => !sameTags(t, trimmed))]);
+  return write([trimmed, ...read(snapshot()).filter((t) => !sameTags(t, trimmed))]);
 }
 
 export function removeTemplate(fields: UtmFields): void {

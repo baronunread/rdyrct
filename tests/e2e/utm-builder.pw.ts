@@ -188,6 +188,16 @@ test("saves tags as a template that survives a reload", async ({ page }) => {
 
   await page.getByRole("button", { name: "Remove template newsletter / email / weekly" }).click();
   await expect(template).toHaveCount(0);
+
+  // Storage that refuses the write says so, rather than "Template saved".
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("full", "QuotaExceededError");
+    };
+  });
+  await page.getByRole("button", { name: "Save as template" }).click();
+  await expect(page.getByText(/Could not save the template/)).toBeVisible();
+  await expect(page.getByText("Template saved")).toHaveCount(0);
 });
 
 test("explains the parameters and answers common questions", async ({ page }) => {

@@ -670,7 +670,10 @@ function useTemplateSave(fields: UtmFields) {
         source.current?.focus();
         return;
       }
-      saveTemplate(fields);
+      if (!saveTemplate(fields)) {
+        toast("Could not save the template: this browser's storage is off or full", "error");
+        return;
+      }
       toast("Template saved");
       trackCta("utm_page_template");
     },
