@@ -28,7 +28,7 @@ const NOINDEX_ROOTS: ReadonlySet<string> = new Set([
 ]);
 
 /** True for an app page or anything beneath one (/links/<slug>, /invite/<token>). */
-export function isNoindexPath(pathname: string): boolean {
+function isNoindexPath(pathname: string): boolean {
   const root = pathname.split("/")[1];
   return root !== undefined && NOINDEX_ROOTS.has(root.toLowerCase());
 }
