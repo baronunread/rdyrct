@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { insertClicks, type ClickMessage } from "../../src/worker/clicks";

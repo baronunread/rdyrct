@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import { asWideEvent } from "../../src/worker/evlog";
 import { logFailure } from "../../src/worker/log-failure";

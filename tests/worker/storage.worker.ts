@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import * as Sentry from "@sentry/cloudflare";
 import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";

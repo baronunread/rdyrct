@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { reset } from "cloudflare:test";
 import { RDYRCT_SITE } from "../../src/shared/site";
 import { applySecurityHeaders } from "../../src/worker/security-headers";

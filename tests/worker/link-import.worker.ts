@@ -3,7 +3,7 @@
  * Short.io, Bitly, Rebrandly or Dub export become links on the same domain and
  * slug, and each short URL then sends people where it used to.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import {

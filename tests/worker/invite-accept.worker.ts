@@ -10,7 +10,7 @@
  * These run on miniflare's SQLite, not on D1 itself, so they pin the
  * behaviour this code depends on rather than proving what production does.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { acceptInviteAtomically } from "../../src/worker/plan";

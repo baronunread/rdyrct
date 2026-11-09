@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { MADE_WITH_SLOT } from "../../src/shared/link-pages";
 import { RDYRCT_SITE } from "../../src/shared/site";
 import { notFoundPage } from "../../src/worker/not-found-page";

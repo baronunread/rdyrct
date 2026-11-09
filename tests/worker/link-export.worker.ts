@@ -2,7 +2,7 @@
  * CSV export of an org's links (#75): every link, quoted and guarded, read
  * from D1 a batch at a time, and in a shape the import reads back.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, fetchWorker, freeOwnerCookie, rawLinkRow, testDb } from "./support";

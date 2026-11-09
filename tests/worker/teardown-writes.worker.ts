@@ -10,7 +10,7 @@
  * These call the insert helpers directly, because the route guard is exactly
  * what a test going through the route would be measuring instead.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";

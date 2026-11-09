@@ -12,7 +12,7 @@
  * fact still lands on current D1 state. Anything added to StorageMessage has
  * to keep that true.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";
 import {

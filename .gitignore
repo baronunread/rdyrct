@@ -14,3 +14,4 @@ package-lock.json
 # remotion renders
 out/
 e2e-timings/
+.vitest/
