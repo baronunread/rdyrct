@@ -83,3 +83,44 @@ test("the pricing page names each plan's click count, and says links keep redire
   await page.getByLabel("Clicks a month, exact number").fill("60000");
   await expect(page.locator('[data-plan="pro"]')).toHaveAttribute("data-match", "true");
 });
+
+/**
+ * The landing's monthly/yearly pill sat off its button once the window
+ * narrowed to a phone: it was measured once. It now measures again whenever
+ * the buttons change size.
+ */
+test("the billing toggle's pill sits on the chosen button on a phone", async ({ page }) => {
+  // Load wide, then narrow to a phone: the buttons grow to their 44px touch
+  // height below sm, and a pill measured once stayed at the wide size.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Monthly" }).first().scrollIntoViewIfNeeded();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const monthly = page.getByRole("button", { name: "Monthly" }).first();
+  const yearly = page.getByRole("button", { name: /Yearly/ }).first();
+  const pill = monthly.locator("xpath=../span");
+  await monthly.scrollIntoViewIfNeeded();
+
+  const matches = async (button: typeof monthly) => {
+    await expect(async () => {
+      const [a, b] = await Promise.all([pill.boundingBox(), button.boundingBox()]);
+      expect(a && b).toBeTruthy();
+      for (const k of ["x", "y", "width", "height"] as const) {
+        expect(Math.abs(a![k] - b![k])).toBeLessThanOrEqual(1);
+      }
+    }).toPass({ timeout: 5_000 });
+  };
+  await matches(monthly);
+  await yearly.click();
+  await matches(yearly);
+});
+
+/** Nothing on the public pages pushes a phone screen sideways. */
+test("the landing, pricing and QR pages fit a 360px phone", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  for (const path of ["/", "/pricing", "/qr-code-generator", "/bitly-alternative", "/docs"]) {
+    await page.goto(path);
+    const width = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(width, path).toBeLessThanOrEqual(360);
+  }
+});

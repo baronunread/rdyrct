@@ -218,16 +218,23 @@ function BillingCycleToggle({
     const btn = buttonRefs.current[interval];
     const container = containerRef.current;
     if (!btn || !container) return;
-    const b = btn.getBoundingClientRect();
-    const c = container.getBoundingClientRect();
-    // clientLeft/Top: an absolute child is placed from the padding box, so the
-    // container's 1px border has to come off or the pill sits 1px low.
-    setPillRect({
-      left: b.left - c.left - container.clientLeft,
-      top: b.top - c.top - container.clientTop,
-      width: b.width,
-      height: b.height,
-    });
+    // offset* are layout boxes from the container's padding box, which is where
+    // an absolute child is placed, and they ignore any transform on the way in.
+    // Measured once, the pill stayed at its old size when the buttons changed:
+    // the min-h-11 touch height switching on below sm, or the web font arriving.
+    // So measure again whenever the buttons change size.
+    const measure = () =>
+      setPillRect({
+        left: btn.offsetLeft,
+        top: btn.offsetTop,
+        width: btn.offsetWidth,
+        height: btn.offsetHeight,
+      });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    observer.observe(btn);
+    return () => observer.disconnect();
   }, [interval]);
 
   return (
@@ -673,7 +680,7 @@ function SelfHostSection() {
     // Its own section after pricing, never a column inside it: it answers
     // "will this still be here next year", and the answer is the code.
     <Section id="self-host" className="py-16 md:py-24">
-      <div className="lit grid overflow-hidden rounded-3xl border border-border bg-surface md:grid-cols-[1fr_1.1fr]">
+      <div className="lit grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-3xl border border-border bg-surface md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="flex flex-col gap-6 p-6 sm:p-10">
           <SplitHeading lead="Run it yourself." rest="The same code, on your own account." />
           <ul className="flex flex-col gap-2 text-muted">
@@ -713,9 +720,13 @@ function SelfHostTerminal() {
         <span className="size-2.5 rounded-full bg-border" />
         <span className="size-2.5 rounded-full bg-border" />
       </div>
-      <pre className="overflow-x-auto p-5 font-mono text-sm leading-7 sm:p-6">
+      {/* On a phone the clone URL wraps under itself (hanging past the "$ ") rather than scrolling off the card. */}
+      <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-7 sm:p-6 sm:text-sm">
         {SELF_HOST_STEPS.map(([command, arg]) => (
-          <code key={command} className="block whitespace-pre">
+          <code
+            key={command}
+            className="block pl-[2ch] -indent-[2ch] whitespace-pre-wrap [overflow-wrap:anywhere] sm:whitespace-pre"
+          >
             <span className="text-muted select-none">$ </span>
             {command}
             {arg && <span className="text-accent"> {arg}</span>}
@@ -1121,7 +1132,8 @@ function PricingTeaser() {
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Pricing</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
-          Start free. Upgrade when you outgrow the plan, or self-host and pay us nothing.
+          Start free. Upgrade when you outgrow the plan, or{" "}
+          <span className="whitespace-nowrap">self-host</span> and pay us nothing.
         </p>
       </div>
 

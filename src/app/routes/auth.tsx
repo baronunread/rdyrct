@@ -200,6 +200,8 @@ function VerifyOtpView({
             Verify and continue
           </BusyContent>
         </Button>
+        {/* Microsoft and others junk mail from young domains, so say where to look. */}
+        <p className="-mb-2 text-center text-xs text-muted">Not there? Check your spam folder.</p>
         <p className="text-center text-xs text-muted">
           {resent ? (
             <span role="status">New code sent</span>

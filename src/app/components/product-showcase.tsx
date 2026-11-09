@@ -65,7 +65,9 @@ export function ProductShowcase() {
   return (
     <section
       aria-label="The rdyrct app"
-      className="relative pt-4 pb-6 [overflow-x:clip] md:pt-8"
+      // Clips the canvas light at the screen edge, not at the column: the negative
+      // margin cancels page-column padding (1.5rem) so the glow reaches the sides.
+      className="relative -mx-6 px-6 pt-4 pb-6 [overflow-x:clip] md:pt-8"
       onPointerEnter={() => setHeld(true)}
       onPointerLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)}
