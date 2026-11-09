@@ -51,6 +51,7 @@ import {
   removeTemplate,
   sameTags,
   saveTemplate,
+  templateKey,
   templateName,
   trimTags,
   useUtmTemplates,
@@ -326,7 +327,7 @@ function Templates({
         return (
           // Radii nest: a 9px chip, 2px of padding, a 7px remove button.
           <span
-            key={name}
+            key={templateKey(template)}
             className={cn(
               "inline-flex max-w-full items-center rounded-[9px] p-0.5 transition-colors duration-150",
               on ? "bg-surface-2 smooth-shadow-ring-xs" : "bg-bg",
@@ -726,7 +727,15 @@ function Builder() {
       className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]"
     >
       <div className="flex flex-col gap-4 px-3 pt-3 pb-2 sm:px-3.5">
-        <Segmented label="Build" items={MODES} value={mode} onChange={setMode} />
+        <Segmented
+          label="Build"
+          items={MODES}
+          value={mode}
+          onChange={(next) => {
+            bulk.clearRefusal();
+            setMode(next);
+          }}
+        />
         {many ? (
           <BulkInputs bulk={bulk} />
         ) : (
@@ -756,7 +765,10 @@ function Builder() {
 
       {many ? <BulkOutput bulk={bulk} /> : <OneLinkOutput one={one} />}
 
-      {note && <p className="px-3 pt-1 text-xs text-butter sm:px-3.5">{note}</p>}
+      {/* Spoken when it changes: a screen reader hears that lines were left out. */}
+      <p role="status" className="px-3 text-xs text-butter empty:hidden sm:px-3.5">
+        {note}
+      </p>
       <CaseNote fields={form.fields} onTidy={form.tidyAll} />
     </div>
   );

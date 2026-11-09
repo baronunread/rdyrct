@@ -35,13 +35,24 @@ const storedSchema = v.pipe(
   ),
 );
 
-/** The name a template goes by: its values in the order they are read, so
- *  two templates that differ show how. */
+/** The name a template goes by: its values in the order they are read, an
+ *  empty one in the middle as "–" so that each value keeps its place and two
+ *  different templates never read the same ("a / – / b" is not "a / b").
+ *  Empty values at the end are left off. */
 export function templateName(fields: UtmFields): string {
-  return [fields.utmSource, fields.utmMedium, fields.utmCampaign, fields.utmContent, fields.utmTerm]
-    .filter(Boolean)
-    .join(" / ");
+  const values = [
+    fields.utmSource,
+    fields.utmMedium,
+    fields.utmCampaign,
+    fields.utmContent,
+    fields.utmTerm,
+  ];
+  while (values.length && !values.at(-1)) values.pop();
+  return values.map((value) => value || "–").join(" / ");
 }
+
+/** A key that differs whenever the tags do, for lists. */
+export const templateKey = (fields: UtmFields) => UTM_KEYS.map(([, key]) => fields[key]).join("\n");
 
 /** The values as the link uses them, with no edge spaces. */
 export const trimTags = (fields: UtmFields): UtmFields => ({

@@ -103,12 +103,23 @@ test("builds many links at once, copies them all and downloads a CSV", async ({
   await page.getByRole("button", { name: "Many links" }).click();
 
   // Nothing to copy marks the address field, as the one-link Copy does.
+  const urls = page.getByLabel("Website URLs");
   await page.getByRole("button", { name: "Copy all" }).click();
   await expect(page.getByText("Paste a link first")).toBeVisible();
+  await expect(urls).toBeFocused();
 
-  await page
-    .getByLabel("Website URLs")
-    .fill("example.com/a\nnot an address\nhttps://example.com/b");
+  // Leaving the mode answers the mark: coming back does not grab focus.
+  await page.getByRole("button", { name: "One link" }).click();
+  await page.getByRole("button", { name: "Many links" }).click();
+  await expect(urls).not.toBeFocused();
+  await expect(urls).not.toHaveAttribute("aria-invalid", "true");
+
+  // Text that holds no web address says so, on Download too.
+  await urls.fill("not an address");
+  await page.getByRole("button", { name: "Download CSV" }).click();
+  await expect(page.getByText("Not a web address", { exact: true })).toBeVisible();
+
+  await urls.fill("example.com/a\nnot an address\nhttps://example.com/b");
   await page.getByPlaceholder("spring-sale", { exact: true }).fill("spring-sale");
   const channels = page.getByRole("group", { name: "Channels" });
   await channels.getByRole("button", { name: "LinkedIn" }).click();

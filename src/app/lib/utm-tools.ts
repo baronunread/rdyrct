@@ -72,6 +72,9 @@ export interface BulkResult {
   links: BulkLink[];
   /** Line numbers (from 1) that are not web addresses. */
   badLines: number[];
+  /** Line numbers (from 1) whose address already had UTM tags, which the
+   *  fields replace. */
+  taggedLines: number[];
   /** True when more links were asked for than MAX_BULK_LINKS. */
   capped: boolean;
 }
@@ -84,13 +87,14 @@ export interface BulkResult {
  */
 export function bulkLinks(text: string, channels: readonly UtmChannel[], fields: UtmFields) {
   const pairs = linkChannels(channels, fields);
-  const result: BulkResult = { links: [], badLines: [], capped: false };
+  const result: BulkResult = { links: [], badLines: [], taggedLines: [], capped: false };
   const seen = new Set<string>();
   text.split(/\r?\n/).forEach((line, index) => {
     if (!line.trim()) return;
     const url = webAddress(line);
     if (!url) return void result.badLines.push(index + 1);
     const address = stripUtmParams(url.toString());
+    if (address !== url.toString()) result.taggedLines.push(index + 1);
     if (seen.has(address)) return;
     seen.add(address);
     for (const pair of pairs) {
@@ -109,6 +113,19 @@ export function linkChannels(channels: readonly UtmChannel[], fields: UtmFields)
   const typed = { label: "", source: fields.utmSource.trim(), medium: fields.utmMedium.trim() };
   if (!channels.length) return [typed];
   return uniqueChannels(typed.source ? [...channels, typed] : channels);
+}
+
+/** What the fields add to the picked channels, said under them, or null
+ *  when nothing is picked (then the fields are the only channel). A typed
+ *  source is one more channel; a medium with no source has no channel to
+ *  belong to, so it is said to be unused rather than dropped quietly. */
+export function typedChannelNote(channels: readonly UtmChannel[], fields: UtmFields) {
+  const source = fields.utmSource.trim();
+  const medium = fields.utmMedium.trim();
+  if (!channels.length) return null;
+  if (source)
+    return `Also one link each for ${[source, medium].filter(Boolean).join(" / ")}, from the fields below.`;
+  return medium ? `Medium “${medium}” is not used: each channel sets its own.` : null;
 }
 
 export const channelKey = ({ source, medium }: UtmChannel) => `${source}\n${medium}`;

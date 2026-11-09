@@ -7,7 +7,9 @@ import {
   bulkLinks,
   channelOptions,
   linkChannels,
+  typedChannelNote,
 } from "../src/app/lib/utm-tools";
+import { templateName } from "../src/app/lib/utm-templates";
 
 const linkedin = PRESETS[2];
 const newsletter = PRESETS[0];
@@ -50,6 +52,38 @@ describe("bulkLinks", () => {
     expect(result.links).toHaveLength(MAX_BULK_LINKS);
     expect(result.capped).toBe(true);
   });
+});
+
+test("names the lines whose own tags the fields replace", () => {
+  const text = "example.com/a\nexample.com/b?utm_campaign=keep&ref=x";
+  const result = bulkLinks(text, [], { ...campaign, utmSource: "x" });
+  expect(result.taggedLines).toEqual([2]);
+  expect(result.links[1]?.tagged).toBe(
+    "https://example.com/b?ref=x&utm_source=x&utm_campaign=spring-sale",
+  );
+});
+
+describe("typedChannelNote", () => {
+  test("nothing to say with no channel picked", () => {
+    expect(typedChannelNote([], { ...EMPTY_UTM, utmSource: "x" })).toBeNull();
+  });
+
+  test("a typed source is one more channel", () => {
+    expect(typedChannelNote([linkedin], { ...EMPTY_UTM, utmSource: "x", utmMedium: "y" })).toBe(
+      "Also one link each for x / y, from the fields below.",
+    );
+  });
+
+  test("a medium with no source is said to be unused", () => {
+    expect(typedChannelNote([linkedin], { ...EMPTY_UTM, utmMedium: "email" })).toContain(
+      "not used",
+    );
+  });
+});
+
+test("templateName keeps each value in its place", () => {
+  expect(templateName({ ...EMPTY_UTM, utmSource: "a", utmMedium: "b" })).toBe("a / b");
+  expect(templateName({ ...EMPTY_UTM, utmSource: "a", utmCampaign: "b" })).toBe("a / – / b");
 });
 
 describe("channels", () => {
