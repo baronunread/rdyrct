@@ -45,7 +45,8 @@ import { MarketingPage } from "../components/marketing-page";
 import { FrameRow, FrameSection, FramedSections, SplitHeading } from "../components/marketing-kit";
 import { FaqList } from "../components/faq-list";
 import { TaggedText } from "../components/utm-tagged-text";
-import { BulkInputs, BulkOutput, bulkNote, useBulkLinks } from "../components/utm-bulk";
+import { BulkInputs, BulkOutput } from "../components/utm-bulk";
+import { bulkNote, useBulkLinks } from "../lib/utm-bulk";
 import { PRESETS, splitTagged, taggedUrl, tidy, webAddress } from "../lib/utm-tools";
 import {
   removeTemplate,
