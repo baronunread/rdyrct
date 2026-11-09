@@ -102,7 +102,9 @@ function Pillar({
       </FrameRow>
       <FrameRow className="px-4 py-4 sm:px-6 sm:py-6">
         <ul
-          className={cn("grid gap-4", features.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2")}
+          // Three across only from lg: at md each card is about 210px wide, too
+          // narrow for a scene (the poster's links broke a letter a line).
+          className={cn("grid gap-4", features.length === 3 ? "lg:grid-cols-3" : "md:grid-cols-2")}
         >
           {features.map((feature) => (
             <FeatureCard key={feature.title} {...feature} />
@@ -157,7 +159,8 @@ function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
         className="relative flex h-56 items-start justify-center overflow-hidden px-5 pt-10"
       >
         <div className="landing-mesh pointer-events-none absolute inset-x-0 top-0 h-48 opacity-70" />
-        <div className="lit relative w-full max-w-sm rounded-xl border border-border/70 bg-surface text-sm">
+        {/* A size container, so a scene can fit a narrow card (a 360px phone). */}
+        <div className="lit @container relative w-full max-w-sm rounded-xl border border-border/70 bg-surface text-sm">
           {scene(step)}
         </div>
       </div>
@@ -317,7 +320,10 @@ function QrSlot({ children }: { children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const near = useInView(box, { once: true, margin: "200px 0px" });
   return (
-    <div ref={box} className="relative grid size-24 shrink-0 rounded-lg bg-white">
+    <div
+      ref={box}
+      className="relative grid size-24 shrink-0 rounded-lg bg-white @max-[16rem]:size-16"
+    >
       {near && <Suspense>{children}</Suspense>}
     </div>
   );
@@ -328,7 +334,8 @@ const SCENE_URL = "https://go.acme.com/spring";
 const POSTER_URL = "https://go.acme.com/poster";
 // A light hairline, not the theme's border: on the dark theme that is a dark
 // ring around a white code.
-const SCENE_FRAME = "size-24 rounded-lg border-black/10";
+// 64px in a card under 16rem, so the text beside it keeps a link on one line.
+const SCENE_FRAME = "size-24 rounded-lg border-black/10 @max-[16rem]:size-16";
 
 /** The code a QR card shows. It encodes what the card says it holds, so a
  *  phone pointed at the page reads the same address. */
@@ -645,7 +652,8 @@ function ClickRecord({ step }: { step: number }) {
         {/* The visitor's address arrives and is struck out, then the note
             says why. Striking the words "never stored" read as the
             opposite. 203.0.113.0/24 is reserved for examples. */}
-        <dd className="flex items-baseline gap-1.5 text-muted max-sm:text-xs">
+        {/* Wraps "not stored" under the address in a 360px card. */}
+        <dd className="flex flex-wrap items-baseline gap-x-1.5 text-muted max-sm:text-xs">
           <span className="relative w-fit font-mono">
             203.0.113.7
             <span
