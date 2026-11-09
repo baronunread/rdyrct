@@ -1,5 +1,5 @@
 // fallow-ignore-file code-duplication -- worker specs repeat their setup so each reads on its own
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";

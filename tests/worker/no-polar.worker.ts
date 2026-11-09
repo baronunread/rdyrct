@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vite-plus/test";
+import { beforeEach, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";

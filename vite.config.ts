@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { devHostVars } from "./scripts/dev-host-keys";
-import { defineConfig, type Plugin, type UserConfig } from "vite-plus";
+import { defineConfig, type Plugin, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
@@ -104,13 +104,6 @@ function selfHostPages(): Plugin {
 }
 
 export default defineConfig(async (): Promise<UserConfig> => ({
-  test: {
-    // Vitest v4 compatibility: preserve mock call history.
-    // Remove after tests no longer rely on calls from setup or earlier tests.
-    // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
-    // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
-    clearMocks: false,
-  },
   plugins: [
     react(),
     tailwindcss(),

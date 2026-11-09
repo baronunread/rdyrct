@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";

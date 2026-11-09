@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vite-plus/test";
+import { beforeEach, expect, it } from "vitest";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, authEnv, fetchWorker, signInCookie, TEST_PASSWORD } from "./support";

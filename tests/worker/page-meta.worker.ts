@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vitest";
 import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
 
 /**

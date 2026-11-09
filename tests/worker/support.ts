@@ -1,4 +1,4 @@
-import { expect } from "vite-plus/test";
+import { expect } from "vitest";
 import type { BillingProvider } from "../../src/worker/billing-provider";
 import { env } from "cloudflare:workers";
 import {

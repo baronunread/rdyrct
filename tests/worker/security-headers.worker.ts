@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applySecurityHeaders, turnstileAllowed } from "../../src/worker/security-headers";

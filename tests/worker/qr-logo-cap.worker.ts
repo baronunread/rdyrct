@@ -6,7 +6,7 @@
  * without end. The cap leaves room for every link to carry its own logo, plus
  * the org's default and a day of uploads nobody saved.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { PLAN_LIMITS } from "../../src/shared/types";

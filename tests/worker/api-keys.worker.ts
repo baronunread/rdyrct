@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
