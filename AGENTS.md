@@ -386,6 +386,12 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   the cancel and the completion. Worker tests drive the steps one by one
   (`marketing.worker.ts`) and the real workflow through the test pool's
   introspection (`newsletter-workflow.worker.ts`).
+- **App pages are noindex, not Disallowed.** `Disallow` stops crawling, not
+  indexing, and hides a noindex from the crawler. The Worker sends
+  `X-Robots-Tag: noindex` on every app and one-off page (`src/worker/noindex.ts`,
+  applied in `serveSpa`), and `public/robots.txt` disallows only `/api/`. A new
+  app route goes in that list. A self-hosted build still serves a disallow-all
+  `robots.txt`.
 - **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
   client in `src/app/lib/turnstile.ts`) guards signup and password reset
   (an `x-turnstile-token` header, verified against `siteverify` in

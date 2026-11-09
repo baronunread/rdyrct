@@ -16,19 +16,11 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /dashboard
-Disallow: /analytics
-Disallow: /links
-Disallow: /members
-Disallow: /organization
-Disallow: /billing
-Disallow: /domains
-Disallow: /api-keys
-Disallow: /settings
-Disallow: /admin
-Disallow: /onboarding
-Disallow: /reset-password
-Disallow: /invite/
+
+# The app pages (/dashboard, /links, /api-keys, /admin and the rest) are not
+# listed here on purpose. Disallow stops crawling, not indexing, and hides a
+# page's noindex from the crawler. The Worker sends X-Robots-Tag: noindex on
+# each of them instead (src/worker/noindex.ts).
 
 Sitemap: https://rdyrct.com/sitemap.xml
 Sitemap: https://rdyrct.com/blog/sitemap.xml

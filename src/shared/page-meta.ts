@@ -181,24 +181,34 @@ Moving from Bitly, Rebrandly, Short.io or Dub? Import your links and keep the sa
 [See rdyrct and Rebrandly compared](/rebrandly-alternative) or [sign up free](/signup).`,
   },
   "/utm-builder": {
-    title: "UTM builder - tag links for Google Analytics, no account",
+    title: "UTM builder for Google Analytics - tag links, no account",
     description:
-      "Build a UTM link for free: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy it or shorten it. No sign-up.",
+      "Build a UTM link for Google Analytics: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy or shorten it. No sign-up.",
     markdown: `# UTM builder
 
 Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
 
 ## The parameters
 
-- \`utm_source\`: the site, newsletter or app that sent the visitor. Required by Google Analytics.
-- \`utm_medium\`: the channel, such as email, social, cpc, banner or qr. Required by Google Analytics.
-- \`utm_campaign\`: the campaign name, so every link in one campaign reports together.
-- \`utm_term\`: the paid keyword. Most links leave it out.
-- \`utm_content\`: which link of several in one place was clicked. Use it for A/B tests.
+- \`utm_source\`: where the visitor came from, such as google or newsletter. Google Analytics 4 shows it as Session source.
+- \`utm_medium\`: the kind of channel, such as email, social, cpc, banner or qr. Session medium.
+- \`utm_campaign\`: the campaign name, so every link in one campaign reports together. Session campaign.
+- \`utm_term\`: the paid keyword. Most links leave it out. Session manual term.
+- \`utm_content\`: which link of several in one place was clicked. Session manual ad content.
+- \`utm_id\`: a campaign ID, matching data you upload to Google Analytics. Session campaign ID. Add it by hand.
+
+Google advises always using source, medium and campaign. A missing one shows as (not set).
 
 ## Keep one spelling per value
 
-UTM values are case sensitive. "Spring-Sale" and "spring-sale" show up as two campaigns. Use lowercase with hyphens everywhere; the builder warns when a value strays from it.
+UTM values are case sensitive. "Spring-Sale" and "spring-sale" show up as two campaigns. Use lowercase with one separator everywhere; the builder warns when a value strays from it.
+
+## Common mistakes
+
+- Tagging links between your own pages. Tag only links that bring people to your site.
+- Mixing upper and lower case in one value.
+- Leaving out source, medium or campaign.
+- Putting personal data, such as an email address, in a tag.
 
 The link is built in your browser. Nothing you type is sent anywhere unless you shorten it.
 

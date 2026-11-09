@@ -126,27 +126,24 @@ test("robots.txt declares both sitemaps", async ({ request }) => {
 // The managed half is a switch in the Cloudflare dashboard with nothing in git
 // behind it. Checking it needs a request to the real hostname, which no suite
 // here makes.
-test("robots.txt keeps the private routes out of the index", async ({ request }) => {
+test("robots.txt blocks the API and lets crawlers read the app pages' noindex", async ({
+  request,
+}) => {
   const robots = await (await request.get("/robots.txt")).text();
+  expect(robots).toContain("Disallow: /api/");
 
-  // Every one of them, not a sample: a regression that drops a single line
-  // is exactly what this is here to catch.
-  for (const path of [
-    "/api/",
-    "/dashboard",
-    "/analytics",
-    "/links",
-    "/members",
-    "/organization",
-    "/billing",
-    "/domains",
-    "/settings",
-    "/admin",
-    "/onboarding",
-    "/reset-password",
-    "/invite/",
-  ]) {
-    expect(robots).toContain(`Disallow: ${path}`);
+  // Disallow stops a crawler fetching a page, not listing it, and hides the
+  // noindex below from it. The app pages are crawlable and say noindex.
+  for (const path of ["/dashboard", "/api-keys", "/links", "/admin", "/invite/"]) {
+    expect(robots).not.toContain(`Disallow: ${path}`);
+  }
+  for (const path of ["/dashboard", "/api-keys", "/links/some-slug", "/invite/abc"]) {
+    const res = await request.get(path);
+    expect(res.headers()["x-robots-tag"], path).toBe("noindex");
+  }
+  for (const path of ["/", "/pricing", "/login"]) {
+    const res = await request.get(path);
+    expect(res.headers()["x-robots-tag"], path).toBeUndefined();
   }
 });
 

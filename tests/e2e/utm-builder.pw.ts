@@ -94,6 +94,24 @@ test("shortens the tagged link, and the short link carries the tags", async ({ p
   );
 });
 
+test("explains the parameters and answers common questions", async ({ page }) => {
+  await page.goto("/utm-builder");
+  for (const name of [
+    "What each UTM parameter is for",
+    "How Google Analytics 4 reads your tags",
+    "Keep one spelling per value",
+    "Common UTM mistakes",
+    "UTM builder questions",
+  ]) {
+    await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+  }
+  await page.getByText("Are UTM parameters case sensitive?").click();
+  await expect(page.getByText("Use lowercase for every value.")).toBeVisible();
+  // The same questions are FAQPage data for a search result.
+  const json = await page.locator('script[type="application/ld+json"]').allTextContents();
+  expect(json.join("\n")).toContain("FAQPage");
+});
+
 test("the footer leads to it", async ({ page }) => {
   await page.goto("/qr-code-generator");
   await page.getByRole("contentinfo").getByRole("link", { name: "UTM builder" }).click();
