@@ -32,7 +32,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // so only the subset a page needs is fetched.
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
-import { ErrorBoundary } from "./components/error-boundary";
+import { ErrorBoundary, RouteError } from "./components/error-boundary";
 import { NewVersionBanner } from "./components/new-version-banner";
 import {
   AppShellSkeleton,
@@ -408,6 +408,9 @@ const router = globalThis.window
       defaultPendingMs: 400,
       defaultPendingMinMs: 350,
       defaultViewTransition: APP_PAGE_TRANSITION,
+      // A route's error gets the same handling as ErrorBoundary (a stale tab
+      // reloads), not the router's own error text.
+      defaultErrorComponent: RouteError,
       // On a desktop the app scrolls inside its sheet, not the window
       // (shellLayout), so a new page has to start that at the top too.
       scrollToTopSelectors: ["window", "[data-app-sheet]"],

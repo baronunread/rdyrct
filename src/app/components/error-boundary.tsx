@@ -1,7 +1,13 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import type { ErrorComponentProps } from "@tanstack/react-router";
+import { Component, useEffect, useMemo, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
 import { captureClientException } from "../lib/sentry";
-import { dismissNewVersion, isChunkLoadError, reloadForNewVersion } from "../lib/new-version";
+import {
+  canReloadForNewVersion,
+  dismissNewVersion,
+  isChunkLoadError,
+  reloadForNewVersion,
+} from "../lib/new-version";
 
 type Props = {
   children: ReactNode;
@@ -75,6 +81,47 @@ export class ErrorBoundary extends Component<Props, State> {
       <FullPageError chunk={this.state.chunkError} />
     );
   }
+}
+
+/** Route errors already handled, so StrictMode's second effect run neither
+ * spends a second reload nor reports the error twice. */
+const handledRouteErrors = new WeakSet<Error>();
+
+/**
+ * The router's error component for every route. The router catches a
+ * route's error itself, inside an outer boundary of its own, so ErrorBoundary
+ * never hears of it and the visitor got the router's "Something went wrong!"
+ * with the raw import error. That is how a stale chunk met on Back or Forward
+ * (which lib/chunk-guard.ts cannot stop) ended. This does what ErrorBoundary
+ * does: a stale chunk reloads onto the current build with nothing shown, and
+ * anything else, or a chunk reloading cannot fix, gets the full-page notice
+ * and a report.
+ */
+export function RouteError({ error: thrown }: ErrorComponentProps) {
+  // The router types what a route threw as unknown: anything can be thrown.
+  const error = useMemo(
+    () => (thrown instanceof Error ? thrown : new Error(String(thrown))),
+    [thrown],
+  );
+  const chunk = isChunkLoadError(error);
+  // Decided once per error, while drawing: the effect below spends a reload,
+  // which would otherwise flip this answer before the browser navigates.
+  const reloading = useMemo(() => chunk && canReloadForNewVersion(error.message), [chunk, error]);
+  useEffect(() => {
+    if (handledRouteErrors.has(error)) return;
+    handledRouteErrors.add(error);
+    if (reloading) {
+      reloadForNewVersion(error.message);
+      return;
+    }
+    // A chunk a reload cannot fix: the notice below says so, so the banner
+    // the failed import queued would be a second copy of it.
+    if (chunk) dismissNewVersion();
+    posthog.captureException(error);
+    captureClientException(error);
+  }, [error, chunk, reloading]);
+  if (reloading) return null;
+  return <FullPageError chunk={chunk} />;
 }
 
 function FullPageError({ chunk }: { chunk?: boolean }) {
