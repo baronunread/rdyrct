@@ -111,7 +111,7 @@ const NAMING = [
 const MISTAKES = [
   [
     "Tagging links inside your own site",
-    "A UTM tag on an internal link can replace where the visitor really came from with your own site. Tag links that bring people to your site, never links between your own pages.",
+    "Google Analytics 4 keeps a visit's first source for the session, but a tagged click inside your site takes the credit for what the visitor does next, such as a sign-up or a sale. Tag links that bring people to your site, never links between your own pages.",
   ],
   [
     "Mixing upper and lower case",
@@ -154,7 +154,7 @@ const FAQS = [
   },
   {
     q: "Should I put UTM tags on links inside my own website?",
-    a: "No. A tag on an internal link can replace the real source of the visit with your own site. Use UTM tags only on links that bring people to your site from somewhere else.",
+    a: "No. Google Analytics 4 keeps the visit's first source for the session, but the tagged click gives your own site the credit for what happens after it, such as a sale. Use UTM tags only on links that bring people to your site from somewhere else.",
   },
   {
     q: "Does this UTM builder store my links?",
