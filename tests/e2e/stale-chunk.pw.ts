@@ -67,3 +67,30 @@ test("the notice leaves the header link clickable", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(banner).toBeVisible();
 });
+
+// Back and Forward change the URL before the guard hears of them, so a page
+// whose code is gone fails while rendering. The router used to catch that
+// itself and show "Something went wrong!" with the raw import error. Its
+// error component is now RouteError, which handles it as ErrorBoundary does:
+// it reloads, and once reloading cannot help (the chunk is still gone here)
+// shows the app's own notice.
+test("Back onto a page whose chunk is gone never shows the router's error", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signUpAndVerify(page, `stale-back-${Date.now()}@gmail.com`, password);
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  await deleteMembersChunk(page);
+  // A history entry for Members that this tab never loaded the code for.
+  await page.evaluate(() => {
+    history.pushState(history.state, "", "/members");
+    history.pushState(history.state, "", "/dashboard");
+  });
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\/members/);
+  await expect(
+    page.getByRole("heading", { name: "A new version is available.", level: 1 }),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Something went wrong!")).toHaveCount(0);
+  await expect(page.getByText(/Failed to fetch dynamically imported module/)).toHaveCount(0);
+});
