@@ -28,6 +28,7 @@ const PAGES = [
   { path: "/vcard-qr-code", title: /vCard QR code generator/ },
   { path: "/wifi-qr-code", title: /WiFi QR code generator/ },
   { path: "/qr-code-monkey-alternative", title: /QR Code Monkey alternative/ },
+  { path: "/flowcode-alternative", title: /Flowcode alternative/ },
   { path: "/tinyurl-alternative", title: /TinyURL alternative/ },
   { path: "/signup", title: /Sign up/ },
   { path: "/privacy", title: /Privacy policy/ },

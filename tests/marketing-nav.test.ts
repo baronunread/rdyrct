@@ -21,6 +21,7 @@ describe("currentNavKey", () => {
       "/wifi-qr-code",
       "/qr-code-monkey-alternative",
       "/tinyurl-alternative",
+      "/flowcode-alternative",
     ]) {
       expect(currentNavKey(path)).toBe("product");
     }

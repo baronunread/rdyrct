@@ -39,6 +39,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/wifi-qr-code",
   "/qr-code-monkey-alternative",
   "/tinyurl-alternative",
+  "/flowcode-alternative",
   "/privacy",
   "/terms",
   "/report",
@@ -344,6 +345,7 @@ What changed in each release. The full text is [CHANGELOG.md](https://github.com
 - [rdyrct vs Short.io](/short-io-alternative)
 - [rdyrct vs TinyURL](/tinyurl-alternative)
 - [rdyrct vs QR Code Monkey, QR.io and QR Code Generator Pro](/qr-code-monkey-alternative)
+- [rdyrct vs Flowcode](/flowcode-alternative)
 
 Each page compares price, custom domains, link limits and analytics history, and says where the other tool is the better choice.`,
   },
@@ -396,6 +398,16 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
 For a static code with your logo, QR Code Monkey and rdyrct's [QR code generator](/qr-code-generator) are both free and need no account. rdyrct's has no ads and sends nothing you type to a server. To count scans or change a code after printing, QR.io charges $39.99 a month ($350 a year) for its one plan, and QR Code Generator Pro has a 14-day trial, then 2 to 250 dynamic codes by plan. rdyrct does it with a short link, free for 30 links, with logo codes from $4 a month.
 
 [Compare in full](/qr-code-monkey-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/flowcode-alternative": {
+    title: "Flowcode alternative: rdyrct vs Flowcode pricing and limits",
+    description:
+      "rdyrct against Flowcode: what each costs for QR codes, the code and scan limits, and when Flowcode's landing pages and enterprise features are worth it. Start free.",
+    markdown: `# Flowcode alternative: rdyrct vs Flowcode
+
+Flowcode's free plan holds 2 codes, and its first paid plan, Pro Plus, is $25 a month billed annually for 50 codes. rdyrct's free plan holds 30 links, each with a QR code, and a custom domain starts at $4 a month. If you need landing pages, CRM integrations or an enterprise team, Flowcode is built for that.
+
+[Compare in full](/flowcode-alternative) or [see rdyrct pricing](/pricing).`,
   },
   "/tinyurl-alternative": {
     title: "TinyURL alternative: rdyrct vs TinyURL pricing and limits",

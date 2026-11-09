@@ -33,6 +33,7 @@ const PRODUCT_PATHS = new Set<string>([
   "/vcard-qr-code",
   "/wifi-qr-code",
   "/qr-code-monkey-alternative",
+  "/flowcode-alternative",
   "/tinyurl-alternative",
 ]);
 

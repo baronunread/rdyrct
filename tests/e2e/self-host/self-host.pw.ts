@@ -25,6 +25,7 @@ test("rdyrct.com's pages are not there", async ({ page }) => {
     "/wifi-qr-code",
     "/qr-code-monkey-alternative",
     "/tinyurl-alternative",
+    "/flowcode-alternative",
   ]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(404);
