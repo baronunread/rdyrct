@@ -218,16 +218,23 @@ function BillingCycleToggle({
     const btn = buttonRefs.current[interval];
     const container = containerRef.current;
     if (!btn || !container) return;
-    const b = btn.getBoundingClientRect();
-    const c = container.getBoundingClientRect();
-    // clientLeft/Top: an absolute child is placed from the padding box, so the
-    // container's 1px border has to come off or the pill sits 1px low.
-    setPillRect({
-      left: b.left - c.left - container.clientLeft,
-      top: b.top - c.top - container.clientTop,
-      width: b.width,
-      height: b.height,
-    });
+    // offset* are layout boxes from the container's padding box, which is where
+    // an absolute child is placed, and they ignore any transform on the way in.
+    // Measured once, the pill stayed at its old size when the buttons changed:
+    // the min-h-11 touch height switching on below sm, or the web font arriving.
+    // So measure again whenever the buttons change size.
+    const measure = () =>
+      setPillRect({
+        left: btn.offsetLeft,
+        top: btn.offsetTop,
+        width: btn.offsetWidth,
+        height: btn.offsetHeight,
+      });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    observer.observe(btn);
+    return () => observer.disconnect();
   }, [interval]);
 
   return (
@@ -1125,7 +1132,8 @@ function PricingTeaser() {
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Pricing</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
-          Start free. Upgrade when you outgrow the plan, or self-host and pay us nothing.
+          Start free. Upgrade when you outgrow the plan, or{" "}
+          <span className="whitespace-nowrap">self-host</span> and pay us nothing.
         </p>
       </div>
 

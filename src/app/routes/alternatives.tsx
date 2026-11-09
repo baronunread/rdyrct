@@ -478,7 +478,8 @@ function AlternativePage({ data }: { data: Alternative }) {
         </FrameSection>
 
         <FrameSection title={`rdyrct and ${data.name}`}>
-          <Table minWidth="min-w-xl" className={LIT_TABLE}>
+          {/* Two products side by side fit a phone; only wider screens hold a minimum width. */}
+          <Table minWidth="sm:min-w-xl" className={LIT_TABLE}>
             <thead>
               <tr>
                 <Th></Th>

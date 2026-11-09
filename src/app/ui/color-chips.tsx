@@ -60,7 +60,7 @@ export function ColorChip({
         <Swatch color={hex} transparent={transparent} className="size-7 max-sm:size-6" />
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate text-xs text-muted">{label}</span>
-          <span className="truncate font-mono text-xs">{transparent ? "None" : hex}</span>
+          <span className="font-mono text-xs whitespace-nowrap">{transparent ? "None" : hex}</span>
         </span>
       </Popover.Trigger>
       <Popover.Portal>
@@ -128,13 +128,15 @@ function Swatch({
 }
 
 /** Chips side by side. On a phone they stay on one line, tighter, and a
- * label truncates before a chip drops to a second line. */
+ * label truncates before a chip drops to a second line. The hex never
+ * truncates: each chip keeps room for it (5.75rem), and only when three of
+ * those do not fit (a 360px screen) does one wrap. */
 export function ColorChips({ children, label }: { children: ReactNode; label: string }) {
   return (
     <div
       role="group"
       aria-label={label}
-      className="flex max-w-full gap-2 max-sm:w-full max-sm:gap-1.5 [&>*]:max-sm:pr-2 [&>*]:max-sm:pl-1"
+      className="flex max-w-full gap-2 max-sm:w-full max-sm:flex-wrap max-sm:gap-1.5 [&>*]:max-sm:min-w-[5.75rem] [&>*]:max-sm:flex-1 [&>*]:max-sm:basis-0 [&>*]:max-sm:pr-2 [&>*]:max-sm:pl-1"
     >
       {children}
     </div>

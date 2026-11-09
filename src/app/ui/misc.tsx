@@ -1,7 +1,8 @@
-import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
+import { useRef, type ReactNode, type ThHTMLAttributes, type TdHTMLAttributes } from "react";
 import { HrefLink } from "../lib/router-search";
 import { cn } from "./cn";
 import { OverflowTip } from "./overflow-tip";
+import { useScrollFade } from "./scroll-fade";
 
 const badgeColors = {
   muted: "border-border text-muted",
@@ -90,26 +91,27 @@ export function Table({
    * rather than the columns shrinking into uselessness. */
   minWidth?: string;
 }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  // A table wider than a phone scrolls; the fade on the hidden edge says so.
+  useScrollFade(scroller);
   return (
     // overscroll-x-none, not -contain. `contain` only stops the scroll
     // chaining to the page; the container still rubber-bands at each end,
     // and that bounce drags the table off its own background so the page
     // shows through beside it. `none` disables the bounce as well.
-    <div
-      className={cn(
-        "overflow-x-auto overscroll-x-none rounded-xl bg-surface smooth-shadow-ring-xs",
-        className,
-      )}
-    >
-      <table
-        className={cn(
-          "w-full text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40",
-          fixed && "table-fixed",
-          minWidth,
-        )}
-      >
-        {children}
-      </table>
+    // The fade masks the inner box only, so the frame and its ring stay whole.
+    <div className={cn("overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs", className)}>
+      <div ref={scroller} className="overflow-x-auto overscroll-x-none">
+        <table
+          className={cn(
+            "w-full text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40",
+            fixed && "table-fixed",
+            minWidth,
+          )}
+        >
+          {children}
+        </table>
+      </div>
     </div>
   );
 }
