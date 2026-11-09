@@ -52,7 +52,9 @@ export function templateName(fields: UtmFields): string {
 }
 
 /** A key that differs whenever the tags do, for lists. */
-export const templateKey = (fields: UtmFields) => UTM_KEYS.map(([, key]) => fields[key]).join("\n");
+export const templateKey = (fields: UtmFields) =>
+  // JSON, not a join: a value decoded from a pasted link can hold a newline.
+  JSON.stringify(UTM_KEYS.map(([, key]) => fields[key]));
 
 /** The values as the link uses them, with no edge spaces. */
 export const trimTags = (fields: UtmFields): UtmFields => ({
