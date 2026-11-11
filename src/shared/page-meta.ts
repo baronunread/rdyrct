@@ -71,7 +71,7 @@ rdyrct is a URL shortener and QR code generator for teams. Create short links on
 
 - Shorten a link without an account, then sign up to manage it.
 - Use a custom domain for links whose slug you choose.
-- Make QR codes with a logo, colours, rounded dots, and PNG or SVG downloads.
+- Make QR codes with a logo, colors, rounded dots, and PNG or SVG downloads.
 - See click country, referrer, device type, and time. rdyrct never stores an IP address.
 
 ## Getting started
@@ -84,12 +84,12 @@ rdyrct is a URL shortener and QR code generator for teams. Create short links on
       "Make a custom QR code for free: your logo, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is made in your browser.",
     markdown: `# QR code generator
 
-Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This QR code generator works in your browser, with no account or watermark.
+Make a QR code for a link or any text. Add your logo, choose colors and dot styles, then download a PNG or SVG. This QR code generator works in your browser, with no account or watermark.
 
 ## How to make a QR code
 
 1. Enter a link or text in the generator.
-2. Choose a dot style and colours, then add an optional logo.
+2. Choose a dot style and colors, then add an optional logo.
 3. Download the finished code as a PNG or SVG.
 
 ## PNG and SVG downloads
@@ -249,7 +249,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 5 team members
 - 30-day click analytics
 - 50,000 clicks counted a month
-- QR codes with a logo, colours, and dot styles
+- QR codes with a logo, colors, and dot styles
 - 1 custom domain, with any slug you choose
 - 1 organization
 
@@ -261,7 +261,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 25 team members
 - 365-day click analytics
 - 500,000 clicks counted a month
-- QR codes with a logo, colours, and dot styles
+- QR codes with a logo, colors, and dot styles
 - 5 custom domains, with any slug you choose
 - 1 organization
 - Direct email support

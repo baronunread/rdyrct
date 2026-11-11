@@ -55,7 +55,7 @@ test("the colours card plays through without drawing its code again", async ({ p
   await page.goto("/");
   const scene = section(page, "Print once. Change it later.")
     .getByRole("listitem")
-    .filter({ has: page.getByRole("heading", { name: "Your logo and colours" }) })
+    .filter({ has: page.getByRole("heading", { name: "Your logo and colors" }) })
     .locator("[data-scene]");
   await scene.scrollIntoViewIfNeeded();
   // One code per colour, all drawn, before the count starts.

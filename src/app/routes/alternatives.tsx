@@ -33,7 +33,7 @@ import { Table, Th, Td } from "../ui/misc";
 const LIT_TABLE = "lit rounded-3xl border border-border";
 import { ArrowRight } from "../ui/icons";
 
-const CHECKED = "October 2026";
+const CHECKED = "November 2026";
 
 const RDYRCT_PRICE_LINE = `Free, or ${PLAN_PRICES.hobby} a month with a custom domain`;
 
@@ -216,7 +216,7 @@ const ALTERNATIVES = {
       `A custom domain from ${PLAN_PRICES.hobby} a month, and ${PLAN_LIMITS.pro.domains} domains on Pro for ${PLAN_PRICES.pro}, where Dub starts at $90.`,
       `A free plan, with ${PLAN_LIMITS.free.links} links and a QR code generator. Dub lists none.`,
       "Click analytics that never store a visitor's IP address.",
-      "Public code you can host yourself, and the API and MCP connector on every plan.",
+      "The API and MCP connector on every plan. Both can be self-hosted: Dub's code is AGPL-3.0 with an enterprise folder under a commercial licence, rdyrct's is MIT.",
     ],
     plans: [
       [
@@ -304,6 +304,7 @@ const ALTERNATIVES = {
     name: "TinyURL",
     path: "/tinyurl-alternative",
     pricingUrl: "tinyurl.com/app/pricing",
+    checked: "October 2026",
     blurb: "The oldest free shortener, with paid branded domains",
     theirPrice: "Free, or $9 a month with a branded domain",
     title: "TinyURL alternative: rdyrct vs TinyURL",
@@ -386,7 +387,7 @@ const ALTERNATIVES = {
     ],
     weWin: [
       `${PLAN_LIMITS.free.links} links on the free plan, each with a QR code, against 2 codes on Flowcode's.`,
-      `A custom domain from ${PLAN_PRICES.hobby} a month, and logo and colour codes on every paid plan.`,
+      `A custom domain from ${PLAN_PRICES.hobby} a month, and logo and color codes on every paid plan.`,
       "Prices you can read: every plan is on our pricing page, with no demo to book.",
       "Scans counted by country, device and time, never with an IP address, plus the API and MCP connector on every plan and public code you can host yourself.",
     ],
@@ -395,7 +396,7 @@ const ALTERNATIVES = {
       [
         "Pro Plus",
         "$25 a month, billed annually",
-        "50 Flowcodes and landing pages, analytics for 6,000 scans, logo and HEX colour control",
+        "50 Flowcodes and landing pages, analytics for 6,000 scans, logo and HEX color control",
       ],
       [
         "Growth",
@@ -625,7 +626,7 @@ const QR_ROWS: [label: string, rdyrct: string, theirs: [string, string, string]]
     "None",
     ["None", "Yes, after a 7-day free trial", "Yes, after a 14-day free trial"],
   ],
-  ["Logo and colours", "Free", ["Free, with gradients", "Yes", "Yes"]],
+  ["Logo and colors", "Free", ["Free, with gradients", "Yes", "Yes"]],
   ["Downloads", "PNG, SVG", ["PNG, SVG, PDF, EPS", "PNG, SVG", "Not stated on its pricing page"]],
   [
     "Codes you can edit and track",
@@ -644,12 +645,7 @@ const QR_ROWS: [label: string, rdyrct: string, theirs: [string, string, string]]
 ];
 
 const QR_PLANS: [tool: string, plan: string, price: string, includes: string][] = [
-  [
-    "QR Code Monkey",
-    "Free",
-    "$0",
-    "Static codes with logo, colours and gradients, ads on the page",
-  ],
+  ["QR Code Monkey", "Free", "$0", "Static codes with logo, colors and gradients, ads on the page"],
   [
     "QR.io",
     "Monthly",
@@ -752,7 +748,7 @@ function QrAlternativePage() {
             </h2>
             <BulletList
               items={[
-                "QR Code Monkey downloads PDF and EPS as well as PNG and SVG, and has colour gradients, templates and a logo gallery.",
+                "QR Code Monkey downloads PDF and EPS as well as PNG and SVG, and has color gradients, templates and a logo gallery.",
                 "QR.io has unlimited dynamic codes and scans on one plan, plus landing pages and bulk creation.",
                 "QR Code Generator Pro has 22 types of QR code, landing pages, and bulk creation from a CSV file.",
               ]}

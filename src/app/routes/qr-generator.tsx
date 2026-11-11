@@ -47,7 +47,7 @@ import { PageHero } from "../components/marketing-kit";
 /** Making a code, in the order the card asks for it. */
 const QR_STEPS = [
   ["Enter a link or text", "Paste the URL or text you want a phone to open."],
-  ["Choose its look", "Pick dot styles and colours, then add an optional logo from your device."],
+  ["Choose its look", "Pick dot styles and colors, then add an optional logo from your device."],
   [
     "Download the code",
     "Save it as PNG for screens and documents, or SVG when you need to scale it for print.",
@@ -497,7 +497,7 @@ export function QrGeneratorPage() {
           generator, so the generator is the answer above the fold. */}
       <PageHero
         title="QR code generator with logo"
-        intro="Add your logo and colours, then download a PNG or an SVG. No account, no watermark, no expiry, and nothing you type leaves your browser."
+        intro="Add your logo and colors, then download a PNG or an SVG. No account, no watermark, no expiry, and nothing you type leaves your browser."
       >
         <QrCard
           encoded={encoded}

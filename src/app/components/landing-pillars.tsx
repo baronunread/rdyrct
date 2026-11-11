@@ -458,7 +458,7 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
         },
         {
           icon: ImagePlus,
-          title: "Your logo and colours",
+          title: "Your logo and colors",
           body: "On every code, as PNG or SVG. Paid plans.",
           // Plain, logo, two colours, then each download pressed in turn.
           steps: 7,

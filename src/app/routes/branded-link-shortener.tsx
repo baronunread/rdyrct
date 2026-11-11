@@ -51,7 +51,7 @@ const PLANS = [
   [
     "Hobby",
     `${PLAN_PRICES.hobby} a month`,
-    `${PLAN_LIMITS.hobby.domains} custom domain, slugs you choose, ${formatNumber(PLAN_LIMITS.hobby.links)} links, QR codes in your colours and logo.`,
+    `${PLAN_LIMITS.hobby.domains} custom domain, slugs you choose, ${formatNumber(PLAN_LIMITS.hobby.links)} links, QR codes in your colors and logo.`,
   ],
   [
     "Pro",
