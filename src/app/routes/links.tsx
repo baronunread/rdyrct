@@ -35,7 +35,7 @@ import { Spinner } from "../ui/spinner";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { Menu, MenuItem, MenuSelect } from "../ui/menu";
-import { PageHeader } from "../ui/misc";
+import { LoadError, PageHeader } from "../ui/misc";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import { FilterChips } from "../ui/filter-chips";
@@ -550,7 +550,9 @@ function LinksBrowser({
   // nothing, and the toolbar has to stay on screen to be cleared.
   // Only the list itself says so: the quota count can be a moment stale, and
   // while the first page loads the toolbar and skeleton hold the table's place.
-  const empty = !filtered && !list.links.isLoading && list.rows.length === 0;
+  // A failed list is neither: it says so, with the toolbar still there.
+  const failed = list.links.isError && !list.links.data;
+  const empty = !filtered && !failed && !list.links.isLoading && list.rows.length === 0;
 
   if (empty) return <NoLinksYet onCreate={onCreate} />;
 
@@ -582,7 +584,13 @@ function LinksBrowser({
       ) : (
         <LinksToolbar list={list} facets={facets.data} domains={domains} />
       )}
-      {list.links.isLoading ? (
+      {failed ? (
+        <LoadError
+          title="Could not load your links"
+          onRetry={() => void list.links.refetch()}
+          retrying={list.links.isFetching}
+        />
+      ) : list.links.isLoading ? (
         <LinkRowsSkeleton />
       ) : list.rows.length === 0 ? (
         <NothingFound />
