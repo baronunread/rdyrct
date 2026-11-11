@@ -12,7 +12,7 @@ import {
   TEST_PASSWORD,
   testDb,
 } from "./support";
-import type { CurrentUser, DomainDTO, LinkInput } from "../../src/shared/types";
+import type { CurrentUser, DomainDTO, JsonValue, LinkInput } from "../../src/shared/types";
 
 /**
  * What a lock does once reconciliation has written it: the redirect path's
@@ -346,5 +346,105 @@ describe("a locked domain takes no new links (#159)", () => {
       new Request("http://localhost/api/orgs/org-1/domains", { headers: { cookie } }),
     );
     expect((await jsonBody<DomainDTO[]>(res))[0].lockedAt).toBe(1);
+  });
+});
+
+describe("a link already on a locked domain stays editable (#485)", () => {
+  const send = (cookie: string, method: string, path: string, body?: JsonValue) =>
+    fetchWorker(
+      new Request(`http://localhost/api/orgs/org-1${path}`, {
+        method,
+        headers: { cookie, "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+    );
+
+  const kv = (slug: string) => env.LINKS.get(`slug:go.example.com:${slug}`);
+
+  async function addresses(linkId: string) {
+    return testDb()
+      .select()
+      .from(schema.linkAddresses)
+      .where(eq(schema.linkAddresses.linkId, linkId));
+  }
+
+  /** A pro owner's link on go.example.com, renamed once (so it has a temp
+   * alias "first") and given a permanent alias "extra", and then the domain
+   * locked under it, the way a downgrade leaves it. */
+  async function linkOnLockedDomain() {
+    const cookie = await seedOwner("pro");
+    await env.DB.prepare(
+      "insert into domains (id, org_id, hostname, status, created_at) values ('dom-1', 'org-1', 'go.example.com', 'active', 0)",
+    ).run();
+    const created = await send(cookie, "POST", "/links", {
+      destination: "https://example.com/a",
+      domainId: "dom-1",
+      slug: "first",
+    });
+    const { id } = await jsonBody<{ id: string }>(created);
+    expect((await send(cookie, "PATCH", `/links/${id}`, { slug: "second" })).status).toBe(200);
+    expect((await send(cookie, "POST", `/links/${id}/addresses`, { slug: "extra" })).status).toBe(
+      201,
+    );
+    await env.DB.prepare("update domains set locked_at = 1 where id = 'dom-1'").run();
+    const rows = await addresses(id);
+    const bySlug = (slug: string) => rows.find((a) => a.slug === slug)!.id;
+    return { cookie, linkId: id, temp: bySlug("first"), extra: bySlug("extra") };
+  }
+
+  it("edits the link, renaming it on the same domain", async () => {
+    const { cookie, linkId } = await linkOnLockedDomain();
+    const res = await send(cookie, "PATCH", `/links/${linkId}`, {
+      slug: "third",
+      destination: "https://example.com/b",
+    });
+    expect(res.status).toBe(200);
+    const primary = (await addresses(linkId)).find((a) => a.kind === "primary")!;
+    expect(primary.slug).toBe("third");
+    expect(JSON.parse((await kv("third"))!).url).toBe("https://example.com/b");
+    // The old primary is a temp alias now, and serves the new destination.
+    expect(JSON.parse((await kv("second"))!).url).toBe("https://example.com/b");
+  });
+
+  it("keeps a temporary alias forever, clearing its expiry in KV too", async () => {
+    const { cookie, linkId, temp } = await linkOnLockedDomain();
+    expect(JSON.parse((await kv("first"))!).expiresAt).toBeTypeOf("number");
+    const res = await send(cookie, "PATCH", `/links/${linkId}/addresses/${temp}`, {
+      kind: "permanent",
+    });
+    expect(res.status).toBe(200);
+    const row = (await addresses(linkId)).find((a) => a.id === temp)!;
+    expect([row.kind, row.expiresAt]).toEqual(["permanent_alias", null]);
+    expect(JSON.parse((await kv("first"))!).expiresAt ?? null).toBeNull();
+  });
+
+  it("promotes an alias to primary", async () => {
+    const { cookie, linkId, extra } = await linkOnLockedDomain();
+    const res = await send(cookie, "PATCH", `/links/${linkId}/addresses/${extra}`, {
+      kind: "primary",
+    });
+    expect(res.status).toBe(200);
+    const [link] = await testDb().select().from(schema.links).where(eq(schema.links.id, linkId));
+    expect(link.slug).toBe("extra");
+    expect(await kv("extra")).not.toBeNull();
+    expect(await kv("second")).not.toBeNull();
+  });
+
+  it("removes an alias from D1 and KV alike", async () => {
+    const { cookie, linkId, extra } = await linkOnLockedDomain();
+    expect(await kv("extra")).not.toBeNull();
+    const res = await send(cookie, "DELETE", `/links/${linkId}/addresses/${extra}`);
+    expect(res.status).toBe(200);
+    const row = (await addresses(linkId)).find((a) => a.id === extra)!;
+    expect(row.retiredAt).not.toBeNull();
+    expect(await kv("extra")).toBeNull();
+  });
+
+  it("still refuses a new alias there", async () => {
+    const { cookie, linkId } = await linkOnLockedDomain();
+    const res = await send(cookie, "POST", `/links/${linkId}/addresses`, { slug: "more" });
+    expect(res.status).toBe(402);
+    expect((await addresses(linkId)).some((a) => a.slug === "more")).toBe(false);
+    expect(await kv("more")).toBeNull();
   });
 });

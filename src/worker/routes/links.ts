@@ -9,6 +9,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { orgDeleting, requireOrgRole } from "../org-role";
 import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
+import { reconcileAfterDelete } from "../reconcile";
 import {
   orgPlan,
   countActiveAddresses,
@@ -496,30 +497,50 @@ async function ownsSlugAsAlias(
   return rows.length > 0;
 }
 
+async function findDomain(db: DB, orgId: string, domainId: string) {
+  const rows = await db
+    .select({ hostname: schema.domains.hostname, lockedAt: schema.domains.lockedAt })
+    .from(schema.domains)
+    .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
+  if (!rows[0]) throw new HTTPException(400, { message: "Unknown domain for this org" });
+  return rows[0];
+}
+
 /**
- * Validates a target domain for a link: must exist and belong to the org.
- * Returns its hostname (used as the KV key prefix), or null for the shared
- * domain.
+ * A link's domain: must exist and belong to the org. Returns its hostname
+ * (used as the KV key prefix), or null for the shared domain.
+ *
+ * A locked domain answers too. Everything that touches an address already on
+ * it (edit, keep forever, promote, remove, the DTO) has to work through the
+ * grace period that lock is about, and refusing here once left D1 written and
+ * KV not (#485). Only a new address is refused: see `newAddressHostname`.
  */
 async function domainHostname(
   db: DB,
   orgId: string,
   domainId: string | null,
 ): Promise<string | null> {
+  return domainId ? (await findDomain(db, orgId, domainId)).hostname : null;
+}
+
+/**
+ * The domain a new link or alias goes on, refused while it is locked: it
+ * stops serving when the org's grace period ends (#159), so a new address
+ * there would die on a known date.
+ */
+async function newAddressHostname(
+  db: DB,
+  orgId: string,
+  domainId: string | null,
+): Promise<string | null> {
   if (!domainId) return null;
-  const rows = await db
-    .select({ hostname: schema.domains.hostname, lockedAt: schema.domains.lockedAt })
-    .from(schema.domains)
-    .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
-  if (!rows[0]) throw new HTTPException(400, { message: "Unknown domain for this org" });
-  // A locked domain stops serving when the org's grace period ends (#159), so
-  // it takes no new links: one that landed here would die on a known date.
-  if (rows[0].lockedAt !== null)
+  const domain = await findDomain(db, orgId, domainId);
+  if (domain.lockedAt !== null)
     throw new HTTPException(402, {
       message: "That domain is locked: upgrade to use it again",
       cause: { code: "domain_locked" },
     });
-  return rows[0].hostname;
+  return domain.hostname;
 }
 
 function assertLinkQuota(count: number, plan: OrgPlan, limits: PlanLimits): void {
@@ -853,7 +874,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // Slugs on the shared domain are always random (every plan): chosen slugs
   // exist only on custom domains, so the shared namespace can't be squatted.
   const [hostname, slug] = await Promise.all([
-    domainHostname(db, orgId, domainId),
+    newAddressHostname(db, orgId, domainId),
     resolveNewSlug(db, body.slug?.trim() || "", domainId),
   ]);
 
@@ -1207,6 +1228,9 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
     ...addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
     deleteQrLogoMsg(link.qrLogo),
   ]);
+  // Bulk delete is this route once per link, so an org over its links cap
+  // stops reconciling as soon as it is back under (#486).
+  await reconcileAfterDelete(c.env, db, orgId, "links");
   return c.json(await okWithQuota(db, orgId));
 });
 
@@ -1250,7 +1274,7 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
   // no domain picker, so there's nothing for a caller to get wrong here.
   const domainId = link.domainId;
   const [hostname, slug] = await Promise.all([
-    domainHostname(db, orgId, domainId),
+    newAddressHostname(db, orgId, domainId),
     resolveNewSlug(db, body.slug?.trim() || "", domainId),
   ]);
 
@@ -1285,7 +1309,12 @@ async function keepAddressForever(c: Context<AppEnv>) {
   if (address.kind !== "temp_alias")
     throw new HTTPException(400, { message: "Only a temporary alias can be made permanent" });
 
-  const { limits } = await orgPlan(db, orgId);
+  // Before the write, so nothing can refuse between it and the KV re-publish
+  // below (#485).
+  const [{ limits }, hostname] = await Promise.all([
+    orgPlan(db, orgId),
+    domainHostname(db, orgId, address.domainId),
+  ]);
 
   // Atomic: the org's links cap is re-checked at write time inside one D1
   // statement (see issue #18). Also guarded on retired_at IS NULL: if the
@@ -1319,7 +1348,6 @@ async function keepAddressForever(c: Context<AppEnv>) {
   // Re-publish is required, not optional: the cached expiresAt in KV must
   // clear too, or the redirect path's lazy-expiry check would still treat
   // this as expired.
-  const hostname = await domainHostname(db, orgId, address.domainId);
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
   return c.json(await okWithQuota(db, orgId));
 }
@@ -1333,18 +1361,22 @@ linkRoutes.delete("/:linkId/addresses/:addressId", requireOrgRole("member"), asy
       message: "Promote another address to primary before removing this one",
     });
 
-  const [hostname, removed] = await Promise.all([
-    domainHostname(db, orgId, address.domainId),
-    db
-      .update(schema.linkAddresses)
-      .set({ retiredAt: Date.now() })
-      .where(and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)))
-      .returning({ id: schema.linkAddresses.id }),
-  ]);
+  // Before the write, not beside it: a lookup that threw after the update
+  // committed left the address retired in D1 and still redirecting from KV
+  // (#485).
+  const hostname = await domainHostname(db, orgId, address.domainId);
+  const removed = await db
+    .update(schema.linkAddresses)
+    .set({ retiredAt: Date.now() })
+    .where(and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)))
+    .returning({ id: schema.linkAddresses.id });
   if (!removed.length) throw new HTTPException(409, { message: "This address is already gone" });
   // Re-publish now instead of waiting for the sweep: a removed address
   // should stop resolving immediately, not up to a day later.
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
+  // A permanent alias counts toward the links cap, so removing one can end
+  // that overage too (#486).
+  await reconcileAfterDelete(c.env, db, orgId, "links");
   return c.json(await okWithQuota(db, orgId));
 });
 
