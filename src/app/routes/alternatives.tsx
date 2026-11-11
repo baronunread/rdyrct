@@ -135,7 +135,7 @@ const ALTERNATIVES = {
     path: "/rebrandly-alternative",
     pricingUrl: "rebrandly.com/pricing",
     blurb: "Branded links and QR codes",
-    theirPrice: "Free, or from $11 a month for more",
+    theirPrice: "Free, or from $11 a month billed yearly",
     title: "Rebrandly alternative: rdyrct vs Rebrandly",
     intro: "Where each is cheaper, and the one thing Rebrandly gives away that we do not.",
     answer: `Rebrandly's free plan includes a custom domain and ours does not. Past the free plans, rdyrct costs less: one custom domain from ${PLAN_PRICES.hobby} a month, where Rebrandly's Essentials costs $11 a month billed yearly. If you need a domain without paying, use Rebrandly.`,

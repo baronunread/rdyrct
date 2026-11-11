@@ -31,8 +31,9 @@ organization can hold, and how far back its click analytics go.
 
 ## REST API and MCP server
 
-- Scoped API keys work with the REST API under /api/orgs/:orgId. Keys are free
-  on every plan.
+- API keys work with the REST API under /api/orgs/:orgId. A key acts as the
+  account that made it, in every organization that account belongs to, with
+  the role it has in each. Keys are free on every plan.
 - A hosted MCP server at https://rdyrct.com/api/mcp answers to OAuth or an API
   key. Its tools: create_link, update_link, delete_link, list_links,
   get_link_stats, get_org_stats, get_plan_usage, invite_member and

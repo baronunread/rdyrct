@@ -132,7 +132,8 @@ const SHIPPED: Item[] = [
   { area: "Links", title: "Anonymous shortening with no account at all" },
   {
     area: "Links",
-    title: "Import from Bitly, Short.io, Rebrandly or Dub, with the same short URLs (paid)",
+    title:
+      "Import from Bitly, Short.io, Rebrandly or Dub, keeping each slug, and the whole URL on a domain you own (paid)",
   },
   { area: "Links", title: "Export every link as a CSV that the import reads back" },
   { area: "Links", title: "Clicks on links made without an account, shown once you sign up" },
