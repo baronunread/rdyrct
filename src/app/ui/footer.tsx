@@ -102,7 +102,7 @@ function Wordmark() {
 const FEATURED_ON = [{ name: "Twelve Tools", href: "https://twelve.tools" }];
 
 /**
- * Fazier's launch badge, one of the two badge images on the site: their verifier
+ * Fazier's launch badge, one of the remote badge images on the site: their verifier
  * reads the homepage HTML for this exact link and image, so it is theirs and
  * not a copy (img-src allows fazier.com for rdyrct.com's build alone,
  * security-headers.ts). Both themes are in the HTML and the page's theme
@@ -163,6 +163,126 @@ function PeerPushBadge() {
         className="h-[2.375rem] w-auto"
       />
     </a>
+  );
+}
+
+/**
+ * Launchstag's badge, from their embed code (light and dark images, their
+ * own, so img-src allows launchstag.com for rdyrct.com's build alone). It is
+ * 198x62, drawn at the row's 38px.
+ */
+function LaunchstagBadge() {
+  const img = "h-[2.375rem] w-auto";
+  return (
+    <a
+      href="https://launchstag.com/p/rdyrct"
+      target="_blank"
+      rel="noopener"
+      className="inline-flex shrink-0 rounded-md opacity-90 transition-opacity hover:opacity-100"
+    >
+      <img
+        src="https://launchstag.com/badge-light.svg"
+        width={198}
+        height={62}
+        alt="Featured on Launchstag"
+        loading="lazy"
+        className={cn(img, "[:root[data-theme=dark]_&]:hidden")}
+      />
+      <img
+        src="https://launchstag.com/badge-dark.svg"
+        width={198}
+        height={62}
+        alt="Featured on Launchstag"
+        loading="lazy"
+        className={cn(img, "hidden [:root[data-theme=dark]_&]:block")}
+      />
+    </a>
+  );
+}
+
+/**
+ * launched.tools' transparent badge, from their embed code: markup and
+ * inline styles, no image, so it needs nothing from the CSP. Two changes:
+ * the title takes the theme's text color, and less padding brings it to the
+ * row's height.
+ */
+function LaunchedToolsBadge() {
+  return (
+    <a
+      href="https://launched.tools/tools/rdyrct"
+      target="_blank"
+      rel="noopener"
+      className="shrink-0 opacity-90 transition-opacity hover:opacity-100"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        background: "transparent",
+        border: "1px solid #D4D7C9",
+        borderRadius: 10,
+        padding: "5px 12px", // theirs is 8px; 5px matches the row's 38px
+        textDecoration: "none",
+        fontFamily: "sans-serif",
+      }}
+    >
+      <span
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 6,
+          background: "#C6F94E",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <svg width="13" height="13" viewBox="128 120 264 264" aria-hidden="true">
+          <path d="M214 120 L392 120 L392 298 Z" fill="#15170F" />
+          <path d="M156 356 L322 190" stroke="#15170F" strokeWidth="78" fill="none" />
+        </svg>
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+        <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>
+          Featured on launched.tools
+        </span>
+        <span style={{ fontSize: 10, color: "#878C79" }}>REVIEWED ✓</span>
+      </span>
+    </a>
+  );
+}
+
+function Badges() {
+  return (
+    <>
+      <FazierBadge />
+      <PeerPushBadge />
+      <LaunchstagBadge />
+      <LaunchedToolsBadge />
+    </>
+  );
+}
+
+/**
+ * The directory badges as one strip that scrolls sideways (`.badge-carousel`
+ * in styles.css), so four badges take the room of two. Every badge is in the
+ * prerendered HTML, which is what each directory's checker reads; the
+ * animation is CSS on that markup, never a script swapping badges in. The
+ * second copy only closes the loop: hidden from screen readers and the tab
+ * order, and gone when the visitor asks for less motion, where the strip
+ * scrolls by hand instead.
+ */
+function BadgeCarousel() {
+  return (
+    <div className="badge-carousel w-full max-w-[22rem] overflow-hidden">
+      <div className="badge-track flex w-max">
+        <div className="flex shrink-0 items-center gap-3 pr-3">
+          <Badges />
+        </div>
+        <div className="badge-copy flex shrink-0 items-center gap-3 pr-3" aria-hidden="true" inert>
+          <Badges />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -340,8 +460,7 @@ export function Footer({ featured = false }: { featured?: boolean }) {
                       </a>
                     ))}
                   </span>
-                  <FazierBadge />
-                  <PeerPushBadge />
+                  <BadgeCarousel />
                 </span>
               </>
             )}

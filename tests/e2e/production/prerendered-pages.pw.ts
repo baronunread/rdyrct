@@ -171,10 +171,12 @@ test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   expect(blank).toEqual([]);
 });
 
-// Twelve Tools, Fazier and PeerPush list rdyrct.com in exchange for a link
-// back from the homepage, and their checks read the served HTML: a followed
-// text link for Twelve Tools, each directory's own badge for the others. On the homepage
-// only, and the dropped directories stay dropped.
+// Twelve Tools, Fazier, PeerPush, Launchstag and launched.tools list
+// rdyrct.com in exchange for a link back from the homepage, and their checks
+// read the served HTML: a followed text link for Twelve Tools, each
+// directory's own badge for the others (in the footer's carousel, which only
+// moves them with CSS). On the homepage only, and the dropped directories
+// stay dropped.
 test("the homepage credits its directories in the served HTML, followed", async ({ request }) => {
   const res = await request.get("/");
   const home = await res.text();
@@ -184,6 +186,8 @@ test("the homepage credits its directories in the served HTML, followed", async 
     "https://twelve.tools",
     "https://fazier.com/launches/rdyrct.com",
     "https://peerpush.com/p/rdyrct",
+    "https://launchstag.com/p/rdyrct",
+    "https://launched.tools/tools/rdyrct",
   ]) {
     expect(anchor(href), href).not.toBe("");
     expect(anchor(href), href).not.toMatch(/nofollow|ugc|sponsored/);
@@ -195,10 +199,15 @@ test("the homepage credits its directories in the served HTML, followed", async 
   expect(home).toContain('src="https://peerpush.com/p/rdyrct/badge.png"');
   expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/fazier\.com/);
   expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/peerpush\.com/);
+  expect(home).toContain('src="https://launchstag.com/badge-light.svg"');
+  expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/launchstag\.com/);
+  expect(home).toContain("Featured on launched.tools");
   for (const dropped of ["turbo0.com", "dang.ai"]) expect(home).not.toContain(dropped);
 
   const pricing = await (await request.get("/pricing")).text();
   expect(pricing).not.toContain("https://twelve.tools");
   expect(pricing).not.toContain("fazier.com/launches");
   expect(pricing).not.toContain("peerpush.com/p/rdyrct");
+  expect(pricing).not.toContain("launchstag.com/p/rdyrct");
+  expect(pricing).not.toContain("launched.tools/tools/rdyrct");
 });
