@@ -96,9 +96,10 @@ function Wordmark() {
   );
 }
 
-/** Directories that list rdyrct.com for free in exchange for a link back
- * from the homepage. Followed links on purpose (that is the deal), so no
- * rel=nofollow; only on the landing page, not on every page. */
+/** Directories that list rdyrct.com for free in exchange for a plain text
+ * link back from the homepage (the badge directories are in BadgeCarousel).
+ * Followed links on purpose (that is the deal), so no rel=nofollow; only on
+ * the landing page, not on every page. */
 const FEATURED_ON = [{ name: "Twelve Tools", href: "https://twelve.tools" }];
 
 /**

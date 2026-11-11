@@ -200,6 +200,20 @@ test("the homepage credits its directories in the served HTML, followed", async 
   expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/fazier\.com/);
   expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/peerpush\.com/);
   expect(home).toContain('src="https://launchstag.com/badge-light.svg"');
+  expect(home).toContain('src="https://launchstag.com/badge-dark.svg"');
+  // The carousel's first row is the one people and screen readers meet: every
+  // badge link is in it, and the copy that closes the loop is hidden and inert.
+  const [, firstRow = "", copyRow = ""] =
+    home.match(/<div class="badge-track[^"]*">(.*?)<div class="badge-copy([^>]*)>/s) ?? [];
+  for (const href of [
+    "https://fazier.com/launches/rdyrct.com",
+    "https://peerpush.com/p/rdyrct",
+    "https://launchstag.com/p/rdyrct",
+    "https://launched.tools/tools/rdyrct",
+  ])
+    expect(firstRow, href).toContain(`href="${href}"`);
+  expect(copyRow).toContain('aria-hidden="true"');
+  expect(copyRow).toContain("inert");
   expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/launchstag\.com/);
   expect(home).toContain("Featured on launched.tools");
   for (const dropped of ["turbo0.com", "dang.ai"]) expect(home).not.toContain(dropped);

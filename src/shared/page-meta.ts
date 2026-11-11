@@ -468,7 +468,7 @@ We collect your account email address and name, plus the organizations, links, d
 
 If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed. If you choose to get product news or offers by email, we record which lists you joined, when, and where you said so.
 
-On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page, the site you came from, your browser, device type, and country. It sets no cookie and keeps no IP address. The footer of our public pages shows badges from Fazier and PeerPush that your browser loads from their sites, which tells them your IP address and browser.
+On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page, the site you came from, your browser, device type, and country. It sets no cookie and keeps no IP address. The footer of our homepage shows badges from Fazier, PeerPush and Launchstag that your browser loads from their sites, which tells them your IP address and browser.
 
 ## Why we process it
 
