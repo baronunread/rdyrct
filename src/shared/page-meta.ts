@@ -71,7 +71,7 @@ rdyrct is a URL shortener and QR code generator for teams. Create short links on
 
 - Shorten a link without an account, then sign up to manage it.
 - Use a custom domain for links whose slug you choose.
-- Make QR codes with a logo, colours, rounded dots, and PNG or SVG downloads.
+- Make QR codes with a logo, colors, rounded dots, and PNG or SVG downloads.
 - See click country, referrer, device type, and time. rdyrct never stores an IP address.
 
 ## Getting started
@@ -84,12 +84,12 @@ rdyrct is a URL shortener and QR code generator for teams. Create short links on
       "Make a custom QR code for free: your logo, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is made in your browser.",
     markdown: `# QR code generator
 
-Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This QR code generator works in your browser, with no account or watermark.
+Make a QR code for a link or any text. Add your logo, choose colors and dot styles, then download a PNG or SVG. This QR code generator works in your browser, with no account or watermark.
 
 ## How to make a QR code
 
 1. Enter a link or text in the generator.
-2. Choose a dot style and colours, then add an optional logo.
+2. Choose a dot style and colors, then add an optional logo.
 3. Download the finished code as a PNG or SVG.
 
 ## PNG and SVG downloads
@@ -249,7 +249,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 5 team members
 - 30-day click analytics
 - 50,000 clicks counted a month
-- QR codes with a logo, colours, and dot styles
+- QR codes with a logo, colors, and dot styles
 - 1 custom domain, with any slug you choose
 - 1 organization
 
@@ -261,7 +261,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 25 team members
 - 365-day click analytics
 - 500,000 clicks counted a month
-- QR codes with a logo, colours, and dot styles
+- QR codes with a logo, colors, and dot styles
 - 5 custom domains, with any slug you choose
 - 1 organization
 - Direct email support
@@ -291,11 +291,11 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
       "How to authenticate against the rdyrct REST API and its hosted MCP server: getting an API key, the endpoints, and the full MCP tool list. Free on every plan.",
     markdown: `# rdyrct developer docs
 
-The REST API answers to a scoped API key. The MCP server answers to OAuth (recommended) or the same key. Both are free on every plan.
+The REST API answers to an API key. The MCP server answers to OAuth (recommended) or the same key. Both are free on every plan.
 
 ## REST API
 
-Every organization route under \`/api/orgs/:orgId\` answers to a key the same way it answers to a signed-in browser: create, read, update and delete links, read click analytics, manage domains and members.
+Every organization route under \`/api/orgs/:orgId\` answers to a key the same way it answers to a signed-in browser: create, read, update and delete links, read click analytics, manage domains and members. A key acts as the account that made it, in every organization that account belongs to, with the role it has in each.
 
 **Getting a key**: while signed in, create one for an organization you own from [API keys](/api-keys), or directly: \`POST /api/orgs/:orgId/api-keys\` with \`{"name": "..."}\`. The response carries the raw key once.
 
@@ -312,7 +312,7 @@ A hosted [MCP](https://modelcontextprotocol.io) endpoint at \`{{MCP_URL}}\`, sta
 
 **OAuth (recommended)**: rdyrct is a full OAuth 2.1 authorization server for this endpoint. Point an MCP client at the URL above and it discovers the flow itself from \`/.well-known/oauth-protected-resource/api/mcp\`, no key to copy or lose. Revoke a connection any time from [API keys](/api-keys)' MCP tab.
 
-**API key**: the same scoped key as the REST API works too, with the same header.
+**API key**: the same key as the REST API works too, with the same header.
 
 Tools: \`create_link\`, \`update_link\`, \`delete_link\`, \`list_links\`, \`get_link_stats\`, \`get_org_stats\`, \`get_plan_usage\`, \`invite_member\`, \`generate_qr_code\`. Every tool but the last takes an optional \`org_id\`, and assumes your sole organization when it is left out.
 

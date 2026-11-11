@@ -64,7 +64,7 @@ const HeroBackdrop = lazy<ComponentType>(() =>
 const faqs = [
   {
     q: "Is the free plan really free?",
-    a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (paid plans).`,
+    a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} members, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (paid plans).`,
   },
   {
     q: "What's the difference between Hobby and Pro?",
@@ -1090,11 +1090,11 @@ function PricingTeaser() {
       name: "Free",
       price: "$0",
       sub: "",
-      // Says the generous part and the catch in one line. The free teammates
+      // Says the generous part and the catch in one line. The free members
       // are the strongest free thing here and were missing; the random slugs
       // are the fact most likely to feel like a bait if somebody only meets
       // it after signing up, and it was buried in a collapsed FAQ.
-      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, QR codes, and ${PLAN_LIMITS.free.analyticsDays}-day click analytics. Slugs on our domain are always random.`,
+      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} members, QR codes, and ${PLAN_LIMITS.free.analyticsDays}-day click analytics. Slugs on our domain are always random.`,
       to: "/signup",
       cta: "Sign up free",
       variant: "outline" as const,

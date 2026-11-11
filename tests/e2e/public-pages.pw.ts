@@ -67,11 +67,11 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser.locator("table")).toHaveCount(0);
 
   // The free plan has to say the generous part and the catch in the same
-  // breath: three teammates is the strongest free thing here, and random
+  // breath: three members is the strongest free thing here, and random
   // slugs is the fact somebody feels lied to about if they only meet it
   // after signing up.
   const free = teaser.getByText("Free", { exact: true }).locator("xpath=ancestor::div[1]");
-  await expect(free).toContainText(/teammates/i);
+  await expect(free).toContainText(/members/i);
   await expect(free).toContainText(/always random/i);
 
   await teaser.getByRole("link", { name: /full comparison/i }).click();

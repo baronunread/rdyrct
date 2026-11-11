@@ -188,9 +188,11 @@ export function DocsPage() {
                 <Chapter id="api" title="REST API">
                   <p>
                     Every organization route under{" "}
-                    <code className="font-mono">/api/orgs/:orgId</code> answers to a scoped API key
-                    the same way it answers to a signed-in browser: create, read, update and delete
-                    links, read click analytics, manage domains and members.
+                    <code className="font-mono">/api/orgs/:orgId</code> answers to an API key the
+                    same way it answers to a signed-in browser: create, read, update and delete
+                    links, read click analytics, manage domains and members. A key acts as the
+                    account that made it, in every organization that account belongs to, with the
+                    role it has in each.
                   </p>
 
                   <h3 className="mt-2 font-bold">Getting a key</h3>
@@ -278,7 +280,7 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     change what the signed-in account has permission for: reading needs at least a{" "}
                     <code className="font-mono">viewer</code> role on the organization, most writes
                     need <code className="font-mono">member</code>. What a tool can do is capped by
-                    the org's plan limits (links, domains, and so on), the same limits that apply in
+                    the org's plan limits (links, domains, members), the same limits that apply in
                     the app itself.
                   </p>
 
@@ -313,14 +315,14 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     <li>"Shorten this URL and tag it 'launch': https://example.com/blog/post"</li>
                     <li>"Make a QR code for our menu page"</li>
                     <li>"How many clicks has my 'launch' link gotten, by country?"</li>
-                    <li>"What's my org's plan usage, links and domains?"</li>
+                    <li>"How many links does my plan allow, and how many are left?"</li>
                     <li>"Invite jane@company.com to my org as a member"</li>
                   </ul>
 
                   <h3 className="mt-2 font-bold">API key (alternative to OAuth)</h3>
                   <p>
                     For a client that takes a static bearer token instead of doing OAuth itself, use
-                    a scoped{" "}
+                    an{" "}
                     <a href="/api-keys" className="text-accent hover:underline">
                       API key
                     </a>{" "}

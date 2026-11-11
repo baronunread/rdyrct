@@ -33,7 +33,7 @@ import { Table, Th, Td } from "../ui/misc";
 const LIT_TABLE = "lit rounded-3xl border border-border";
 import { ArrowRight } from "../ui/icons";
 
-const CHECKED = "October 2026";
+const CHECKED = "November 2026";
 
 const RDYRCT_PRICE_LINE = `Free, or ${PLAN_PRICES.hobby} a month with a custom domain`;
 
@@ -135,12 +135,12 @@ const ALTERNATIVES = {
     path: "/rebrandly-alternative",
     pricingUrl: "rebrandly.com/pricing",
     blurb: "Branded links and QR codes",
-    theirPrice: "Free, or about $8 to $11 a month for more",
+    theirPrice: "Free, or from $11 a month billed yearly",
     title: "Rebrandly alternative: rdyrct vs Rebrandly",
     intro: "Where each is cheaper, and the one thing Rebrandly gives away that we do not.",
-    answer: `Rebrandly's free plan includes a custom domain and ours does not. Past the free plans, rdyrct costs less: one custom domain from ${PLAN_PRICES.hobby} a month, where Rebrandly's Essentials starts at about $11. If you need a domain without paying, use Rebrandly.`,
+    answer: `Rebrandly's free plan includes a custom domain and ours does not. Past the free plans, rdyrct costs less: one custom domain from ${PLAN_PRICES.hobby} a month, where Rebrandly's Essentials costs $11 a month billed yearly. If you need a domain without paying, use Rebrandly.`,
     theirs: {
-      entry: "Free, $0 (Essentials from about $8 to $11 a month)",
+      entry: "Free, $0 (Essentials $11 a month billed yearly, $16 monthly)",
       links: "10 new links and 10 QR codes a month on Free, 250 on Essentials",
       domains: "1 custom domain on Free, 2 on Essentials",
       history: "Not stated (conversion data kept 6 months on Professional)",
@@ -153,28 +153,28 @@ const ALTERNATIVES = {
       "QR codes counted next to links, with 1,500 of each a month on Professional.",
     ],
     weWin: [
-      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 or more.`,
+      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 a month billed yearly, $39 monthly.`,
       `${PLAN_LIMITS.pro.analyticsDays} days of click history on Pro.`,
       "No watermark on QR codes, and no IP address stored on any click.",
       "Teammates on every plan, from 3 on Free. Rebrandly's Free plan has none.",
     ],
     plans: [
       ["Free", "$0", "10 links and 10 QR codes a month, 1 custom domain, watermark"],
-      ["Essentials", "About $8 to $11 a month", "250 links and QR codes, 2 domains"],
+      ["Essentials", "$11 a month yearly, $16 monthly", "250 links and QR codes, 2 domains"],
       [
         "Professional",
-        "About $22 to $32 a month",
+        "$32 a month yearly, $39 monthly",
         "1,500 links and QR codes, 3 domains, 2+ teammates",
       ],
       [
         "Growth",
-        "Higher, several prices listed",
+        "$149 a month yearly, $179 monthly",
         "3,500 links and QR codes, 10 domains, 1 year of conversion data",
       ],
       ["Enterprise", "Custom quote", "Custom limits, 2 years of conversion data"],
     ],
     planNote:
-      "Rebrandly's page lists up to four unlabeled prices per plan, which looks like annual and monthly billing at two volumes. Confirm the cycle on their page.",
+      "Prices from Rebrandly's Standard Plans tab, billed yearly and month to month. A High Volume Plans tab lists larger plans.",
     faq: [
       [
         "Does Rebrandly have a free custom domain?",
@@ -216,7 +216,7 @@ const ALTERNATIVES = {
       `A custom domain from ${PLAN_PRICES.hobby} a month, and ${PLAN_LIMITS.pro.domains} domains on Pro for ${PLAN_PRICES.pro}, where Dub starts at $90.`,
       `A free plan, with ${PLAN_LIMITS.free.links} links and a QR code generator. Dub lists none.`,
       "Click analytics that never store a visitor's IP address.",
-      "Public code you can host yourself, and the API and MCP connector on every plan.",
+      "The API and MCP connector on every plan. Both can be self-hosted: Dub's code is AGPL-3.0 with an enterprise folder under a commercial licence, rdyrct's is MIT.",
     ],
     plans: [
       [
@@ -386,7 +386,7 @@ const ALTERNATIVES = {
     ],
     weWin: [
       `${PLAN_LIMITS.free.links} links on the free plan, each with a QR code, against 2 codes on Flowcode's.`,
-      `A custom domain from ${PLAN_PRICES.hobby} a month, and logo and colour codes on every paid plan.`,
+      `A custom domain from ${PLAN_PRICES.hobby} a month, and logo and color codes on every paid plan.`,
       "Prices you can read: every plan is on our pricing page, with no demo to book.",
       "Scans counted by country, device and time, never with an IP address, plus the API and MCP connector on every plan and public code you can host yourself.",
     ],
@@ -395,7 +395,7 @@ const ALTERNATIVES = {
       [
         "Pro Plus",
         "$25 a month, billed annually",
-        "50 Flowcodes and landing pages, analytics for 6,000 scans, logo and HEX colour control",
+        "50 Flowcodes and landing pages, analytics for 6,000 scans, logo and HEX color control",
       ],
       [
         "Growth",
@@ -625,7 +625,7 @@ const QR_ROWS: [label: string, rdyrct: string, theirs: [string, string, string]]
     "None",
     ["None", "Yes, after a 7-day free trial", "Yes, after a 14-day free trial"],
   ],
-  ["Logo and colours", "Free", ["Free, with gradients", "Yes", "Yes"]],
+  ["Logo and colors", "Free", ["Free, with gradients", "Yes", "Yes"]],
   ["Downloads", "PNG, SVG", ["PNG, SVG, PDF, EPS", "PNG, SVG", "Not stated on its pricing page"]],
   [
     "Codes you can edit and track",
@@ -644,12 +644,7 @@ const QR_ROWS: [label: string, rdyrct: string, theirs: [string, string, string]]
 ];
 
 const QR_PLANS: [tool: string, plan: string, price: string, includes: string][] = [
-  [
-    "QR Code Monkey",
-    "Free",
-    "$0",
-    "Static codes with logo, colours and gradients, ads on the page",
-  ],
+  ["QR Code Monkey", "Free", "$0", "Static codes with logo, colors and gradients, ads on the page"],
   [
     "QR.io",
     "Monthly",
@@ -752,7 +747,7 @@ function QrAlternativePage() {
             </h2>
             <BulletList
               items={[
-                "QR Code Monkey downloads PDF and EPS as well as PNG and SVG, and has colour gradients, templates and a logo gallery.",
+                "QR Code Monkey downloads PDF and EPS as well as PNG and SVG, and has color gradients, templates and a logo gallery.",
                 "QR.io has unlimited dynamic codes and scans on one plan, plus landing pages and bulk creation.",
                 "QR Code Generator Pro has 22 types of QR code, landing pages, and bulk creation from a CSV file.",
               ]}

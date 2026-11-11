@@ -25,6 +25,20 @@ organization can hold, and how far back its click analytics go.
   nobody can claim or squat a word there.
 - On a custom domain (Hobby and Pro), the organization chooses its own slugs.
 - A custom domain is verified and activated through Cloudflare for SaaS.
+- Paid plans (Hobby and Pro) can import links from Bitly, Short.io, Rebrandly,
+  Dub or any CSV file, up to 20,000 rows at a time. Every plan can export its
+  links to CSV.
+
+## REST API and MCP server
+
+- API keys work with the REST API under /api/orgs/:orgId. A key acts as the
+  account that made it, in every organization that account belongs to, with
+  the role it has in each. Keys are free on every plan.
+- A hosted MCP server at https://rdyrct.com/api/mcp answers to OAuth or an API
+  key. Its tools: create_link, update_link, delete_link, list_links,
+  get_link_stats, get_org_stats, get_plan_usage, invite_member and
+  generate_qr_code.
+- Docs: https://rdyrct.com/docs
 
 ## QR codes
 

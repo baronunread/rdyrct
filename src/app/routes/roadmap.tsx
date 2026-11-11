@@ -127,17 +127,18 @@ const LATER: Item[] = [
  */
 const SHIPPED: Item[] = [
   { area: "Links", title: "Short links with a built-in UTM builder, on every plan" },
-  { area: "Links", title: "Custom domains with automatic TLS, and any slug you like" },
+  { area: "Links", title: "Custom domains with automatic TLS, and any slug you like (paid)" },
   { area: "Links", title: "A second short domain, rdyr.cc, for new links" },
   { area: "Links", title: "Anonymous shortening with no account at all" },
   {
     area: "Links",
-    title: "Import from Bitly, Short.io, Rebrandly or Dub, with the same short URLs",
+    title:
+      "Import from Bitly, Short.io, Rebrandly or Dub, keeping each slug, and the whole URL on a domain you own (paid)",
   },
   { area: "Links", title: "Export every link as a CSV that the import reads back" },
   { area: "Links", title: "Clicks on links made without an account, shown once you sign up" },
   { area: "Tools", title: "A free UTM builder, no account needed" },
-  { area: "QR", title: "QR codes on every plan, with your logo and colours on paid ones" },
+  { area: "QR", title: "QR codes on every plan, with your logo and colors on paid ones" },
   { area: "Analytics", title: "Country, referrer, device and campaign, never an IP address" },
   { area: "Teams", title: "Organizations, roles, and single-use email invites" },
   { area: "API", title: "API keys, a scoped REST API, and an MCP server with OAuth sign-in" },
