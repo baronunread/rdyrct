@@ -22,6 +22,7 @@ import { recipientEmailAllowed } from "../rate-limit";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage, memberAvatarUrl } from "../storage";
 import { serveAvatar } from "./avatars";
+import { reconcileAfterDelete } from "../reconcile";
 import { uid, referrerHost, validateQrFields, changesQr, linkUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
@@ -597,6 +598,9 @@ orgRoutes.delete("/:orgId/members/:userId", requireOrgRole("admin"), async (c) =
     c.req.param("userId"),
   );
   await c.var.db.delete(schema.orgMembers).where(memberWhere(orgId, targetId));
+  // One fewer member can bring the org back under its cap, which gives the
+  // demoted ones their roles back (#486).
+  await reconcileAfterDelete(c.env, c.var.db, orgId, "members");
   return c.json({ ok: true });
 });
 

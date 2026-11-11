@@ -9,6 +9,7 @@ import type { AppEnv, DB, Env } from "../env";
 import { orgDeleting, requireOrgRole } from "../org-role";
 import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
+import { reconcileAfterDelete } from "../reconcile";
 import { sharedLinkHost, uid } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
@@ -565,5 +566,8 @@ domainRoutes.delete("/:id", async (c) => {
   await db.delete(schema.domains).where(eq(schema.domains.id, row.id));
   // Syncing the now-orphaned domain key deletes it.
   await enqueueStorage(c.env, [syncDomainMsg(row.hostname)]);
+  // One fewer domain can bring the org back under its cap, which unlocks the
+  // one the downgrade locked (#486).
+  await reconcileAfterDelete(c.env, db, row.orgId, "domains");
   return c.json({ ok: true });
 });

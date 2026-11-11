@@ -343,7 +343,8 @@ async function writeEntitlement(
 
 /**
  * Runs a pass over every org a user owns. Called after any billing event
- * that changes `plan`, and by the admin's manual run.
+ * that changes `plan`, by the admin's manual run, and after a delete that
+ * can end an overage (`reconcileAfterDelete`).
  *
  * Never throws into its caller: a webhook that 500s earns a retry, and ten
  * of those disable the endpoint. A reconciliation that failed is worth an
@@ -391,6 +392,53 @@ export async function reconcileUser(
   } catch (error) {
     captureAlert([{ event: "reconcile_failed", userId }]);
     logFailure("reconcile_failed", error, { userId });
+  }
+}
+
+/**
+ * Runs the pass again after a delete that can bring an org back under one of
+ * its caps (#486): a domain, a member, a link or one of its addresses.
+ *
+ * A plan change is not the only way out of an overage. An owner who reads the
+ * day-0 email and deletes the extra domain has done what it asked, and
+ * without this the domain's siblings stay locked, the banner keeps quoting the
+ * old count from `over_json`, and the day-23 warning still goes out.
+ *
+ * Only when the stored row says the org is over on the resource this delete
+ * shrank: an org with no row, or none over on that resource, has no overage
+ * this delete could end, so every other delete stays off the pass. A bulk
+ * delete (one request per link) stops running it once the org is back under.
+ * The pass recomputes everything from live rows and keeps the grace deadline
+ * (the plan did not change), so a delete that leaves the org still over only
+ * updates the count.
+ *
+ * Never throws, like `reconcileUser`: the delete has already committed, and
+ * a 500 now would tell the owner it failed.
+ */
+export async function reconcileAfterDelete(
+  env: Env,
+  db: DB,
+  orgId: string,
+  resource: keyof OverLimits,
+): Promise<void> {
+  try {
+    const rows = await db
+      .select({ overJson: schema.orgEntitlements.overJson, ownerId: schema.orgMembers.userId })
+      .from(schema.orgEntitlements)
+      .innerJoin(
+        schema.orgMembers,
+        and(
+          eq(schema.orgMembers.orgId, schema.orgEntitlements.orgId),
+          eq(schema.orgMembers.role, "owner"),
+        ),
+      )
+      .where(eq(schema.orgEntitlements.orgId, orgId));
+    const row = rows[0];
+    if (!row || parseOver(row.overJson)[resource] === undefined) return;
+    activeLog.getStore()?.set({ reconcile: { trigger: `${resource}_deleted`, orgId } });
+    await reconcileUser(env, db, row.ownerId);
+  } catch (error) {
+    logFailure("reconcile_after_delete_failed", error, { orgId, resource });
   }
 }
 
@@ -564,9 +612,9 @@ async function notifyDowngrade(
  * The grace-period emails the daily cron owns: the day-23 warning, and any
  * day-0 notice whose send failed at reconciliation time.
  *
- * Reconciliation only runs on a plan change, so without the second of those a
- * transient Resend outage meant the owner heard nothing for 23 days. A send
- * failure leaves the marker null, so tomorrow's run tries again, and the
+ * Reconciliation only runs on a plan change or a delete that can end an
+ * overage, so without the second of those a transient Resend outage meant the
+ * owner heard nothing for 23 days. A send failure leaves the marker null, so tomorrow's run tries again, and the
  * warning window is a week wide rather than a single day for the same reason.
  */
 /**
@@ -599,7 +647,8 @@ export async function sweepGraceWarnings(env: Env, db: DB, now = Date.now()): Pr
         sql`${schema.orgEntitlements.graceEndsAt} > ${now}`,
         or(
           // A day-0 send that failed at reconciliation time. Reconciliation
-          // only runs on a plan change, so nothing else would retry it.
+          // only runs on a plan change or a delete, so nothing else is sure
+          // to retry it.
           isNull(schema.orgEntitlements.notifiedAt),
           and(
             isNull(schema.orgEntitlements.warnedAt),

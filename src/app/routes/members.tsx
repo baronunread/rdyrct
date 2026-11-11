@@ -5,7 +5,14 @@ import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { IconUsers } from "@tabler/icons-react";
 import { Check, ChevronsUpDown, Copy, Link, Plus, Trash2 } from "@/app/ui/icons";
-import { invitesQuery, membersQuery, useCurrentUser, useMembers, useInvites } from "../lib/hooks";
+import {
+  invitesQuery,
+  membersQuery,
+  refreshOverLimit,
+  useCurrentUser,
+  useMembers,
+  useInvites,
+} from "../lib/hooks";
 import { settle, type PageContext } from "../lib/route-preload";
 import { api } from "../lib/api";
 import {
@@ -62,7 +69,10 @@ function useMemberManagement(orgId: string, canManage: boolean) {
 
   const removeMember = useMutation({
     mutationFn: (userId: string) => api(`/orgs/${orgId}/members/${userId}`, { method: "DELETE" }),
-    onSuccess: invalidateMembers,
+    onSuccess: () => {
+      void invalidateMembers();
+      refreshOverLimit(qc, orgId);
+    },
     onError: withErrorToast(toast),
   });
 
