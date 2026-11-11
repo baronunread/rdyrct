@@ -19,7 +19,8 @@ test("a failed /user keeps you signed in and offers Retry", async ({ page }) => 
   await expect(heading).toBeVisible();
   await expect(page).toHaveURL(/\/links$/);
 
-  // The admin guard does not read an outage as "not an admin".
+  // RequireAuth catches the outage before the admin guard runs, so /admin
+  // shows it too rather than a 404.
   await page.goto("/admin");
   await expect(heading).toBeVisible();
   await expect(page.getByRole("heading", { name: "This page does not exist" })).toHaveCount(0);
@@ -30,6 +31,22 @@ test("a failed /user keeps you signed in and offers Retry", async ({ page }) => 
   await page.unroute(/\/api\/user$/);
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Links" })).toBeVisible();
+});
+
+test("a failed /user on /welcome keeps you there and offers Retry", async ({ page }) => {
+  await signUpAndVerify(page, `failed-welcome-${Date.now()}@gmail.com`, password);
+
+  // /welcome sits outside RequireAuth and has its own signed-out check.
+  await fail(page, /\/api\/user$/);
+  await page.goto("/welcome");
+  const heading = page.getByRole("heading", { level: 1, name: "Could not reach rdyrct" });
+  await expect(heading).toBeVisible();
+  await expect(page).toHaveURL(/\/welcome$/);
+
+  await page.unroute(/\/api\/user$/);
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(heading).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/login/);
 });
 
 test("failed lists say so instead of showing an empty org", async ({ page }) => {
@@ -52,6 +69,14 @@ test("failed lists say so instead of showing an empty org", async ({ page }) => 
     {
       path: "/members",
       url: /\/api\/orgs\/[^/]+\/members$/,
+      error: "Could not load the members",
+      empty: page.getByRole("table"),
+    },
+    {
+      // The open invites share the members table, so a failure there fails
+      // it too: an owner would otherwise read pending invites as gone.
+      path: "/members",
+      url: /\/api\/orgs\/[^/]+\/invites$/,
       error: "Could not load the members",
       empty: page.getByRole("table"),
     },

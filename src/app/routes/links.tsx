@@ -584,17 +584,7 @@ function LinksBrowser({
       ) : (
         <LinksToolbar list={list} facets={facets.data} domains={domains} />
       )}
-      {failed ? (
-        <LoadError
-          title="Could not load your links"
-          onRetry={() => void list.links.refetch()}
-          retrying={list.links.isFetching}
-        />
-      ) : list.links.isLoading ? (
-        <LinkRowsSkeleton />
-      ) : list.rows.length === 0 ? (
-        <NothingFound />
-      ) : (
+      <LinkRowsState list={list} failed={failed}>
         <LinksTable
           orgId={orgId}
           rows={list.rows}
@@ -618,9 +608,33 @@ function LinksBrowser({
             onBack: list.onBack,
           }}
         />
-      )}
+      </LinkRowsState>
     </div>
   );
+}
+
+/** What stands where the table goes: the failure, the skeleton, "nothing
+ * found", or the table itself (`children`). */
+function LinkRowsState({
+  list,
+  failed,
+  children,
+}: {
+  list: ReturnType<typeof useLinkPage>;
+  failed: boolean;
+  children: ReactNode;
+}) {
+  if (failed)
+    return (
+      <LoadError
+        title="Could not load your links"
+        onRetry={() => void list.links.refetch()}
+        retrying={list.links.isFetching}
+      />
+    );
+  if (list.links.isLoading) return <LinkRowsSkeleton />;
+  if (list.rows.length === 0) return <NothingFound />;
+  return children;
 }
 
 /** Rows standing in for the first page, in the table's own shape: a card,

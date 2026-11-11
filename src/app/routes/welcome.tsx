@@ -5,6 +5,7 @@ import { Check } from "@/app/ui/icons";
 import type { OrgPlan } from "@/shared/types";
 import { AuthHeading, AuthPanel } from "../components/auth-panel";
 import { SetupFlow, type Payment } from "../components/setup-flow";
+import { Unreachable } from "../components/unreachable";
 import { useAwaitWebhook } from "../lib/await-webhook";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCheckout, useConfirmCheckout, useCurrentUser } from "../lib/hooks";
@@ -238,11 +239,12 @@ function useMoveOn(
   return { moveOn, known: list.known };
 }
 
-/** Signed out (an old tab, an expired session): to sign-in, and back here. */
+/** Signed out (an old tab, an expired session): to sign-in, and back here.
+ * Only a 401 (`null`) means signed out; a failed request is not (#487). */
 function useSignedIn() {
   const navigate = useNavigate();
   const current = useCurrentUser();
-  const signedOut = !current.isLoading && !current.data;
+  const signedOut = current.data === null;
   useEffect(() => {
     if (!signedOut) return;
     const here = window.location.pathname + window.location.search;
@@ -250,7 +252,16 @@ function useSignedIn() {
   }, [signedOut, navigate]);
 }
 
+/** /welcome sits outside RequireAuth, so it says an outage itself rather
+ * than reading it as a sign-out. */
 export function WelcomePage() {
+  const current = useCurrentUser();
+  if (current.isError && current.data === undefined)
+    return <Unreachable onRetry={() => void current.refetch()} retrying={current.isFetching} />;
+  return <Welcome />;
+}
+
+function Welcome() {
   useSignedIn();
   const [params] = useSearchParams();
   const [arrival] = useState(() => readArrival(params));
