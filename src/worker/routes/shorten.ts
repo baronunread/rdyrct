@@ -27,13 +27,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
-import { assertNotShortener } from "../abuse";
-import {
-  assertNotBlocked,
-  assertNotOwnShortLink,
-  holdIfSuspicious,
-  isBlockedHost,
-} from "../abuse-hold";
+import { assertDestinationAllowed, holdIfSuspicious, isBlockedHost } from "../abuse-hold";
 import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { askWebRisk, scoreAndRecord, type SpendLookup } from "../risk";
@@ -90,11 +84,8 @@ shortenRoutes.post("/", async (c) => {
   const destination = normalizeUrl(body.destination.trim());
   if (!isValidHttpUrl(destination))
     throw new HTTPException(400, { message: "That does not look like a web address" });
-  assertNotShortener(destination);
-
   const db = drizzle(c.env.DB, { schema });
-  await assertNotBlocked(db, destination);
-  assertNotOwnShortLink(c.env, destination);
+  await assertDestinationAllowed(c.env, db, destination);
   // An anonymous link has no org, no owner and no human review, so a
   // scam-shaped destination is refused outright rather than held. Signing up
   // makes it a normal link, which is held for review instead.

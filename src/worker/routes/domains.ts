@@ -12,6 +12,7 @@ import { enqueueStorage, syncDomainMsg } from "../storage";
 import { sharedLinkHost, uid } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
+import { assertDestinationAllowed } from "../abuse-hold";
 import type { DomainDTO, PlanLimits } from "@/shared/types";
 
 // e.g. links.example.com: at least one dot, no scheme/port/path
@@ -534,7 +535,12 @@ domainRoutes.patch("/:id", async (c) => {
     if (!isValidHttpUrl(rootRedirect))
       throw new HTTPException(400, {
         message: "Root redirect must be a valid http(s) URL",
+        cause: { code: "bad_destination" },
       });
+    // It serves for the bare host and every slug the host does not know
+    // (index.ts), so it answers more visitors than any one link: the same
+    // rules a link's destination goes through (#488).
+    await assertDestinationAllowed(c.env, db, rootRedirect);
   }
   await db.update(schema.domains).set({ rootRedirect }).where(eq(schema.domains.id, row.id));
   await enqueueStorage(c.env, [row.status === "active" ? syncDomainMsg(row.hostname) : null]);

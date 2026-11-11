@@ -14,7 +14,7 @@ import { captureAlert } from "./sentry";
 import { publishOrgSyncs, queueOrgSyncs } from "./storage";
 import { endSubscriptionBeforeDelete } from "./routes/billing";
 import { startOrgTeardown } from "./routes/orgs";
-import { flagForReview, notifyAdmin, notifyHold } from "./abuse";
+import { assertNotShortener, flagForReview, notifyAdmin, notifyHold } from "./abuse";
 import { RESERVED_SLUGS } from "./util";
 
 /** Refuse a destination whose host an admin has blocked. Called from every
@@ -51,7 +51,7 @@ export async function blockedAmong(db: DB, hosts: string[]): Promise<Set<string>
   return new Set(hosts.filter((host) => hostAndParents(host).some((h) => listed.has(h))));
 }
 
-export async function assertNotBlocked(db: DB, destination: string): Promise<void> {
+async function assertNotBlocked(db: DB, destination: string): Promise<void> {
   if (await isBlockedHost(db, destination))
     throw new HTTPException(422, {
       message: "That destination is not allowed on rdyrct.",
@@ -122,6 +122,23 @@ export function assertNotOwnShortLink(env: Env, destination: string): void {
       message: "A link cannot point at another rdyrct short link.",
       cause: { code: "own_short_link" },
     });
+}
+
+/**
+ * The rules for anywhere rdyrct sends a visitor: not another shortener, not a
+ * blocked host, not one of our own short links. Every create and edit path
+ * runs this one function (links, the anonymous shortener, a custom domain's
+ * root redirect, #488), so a rule added here covers all of them. Each
+ * refusal is a 422 with its own code, which the app maps to the field.
+ */
+export async function assertDestinationAllowed(
+  env: Env,
+  db: DB,
+  destination: string,
+): Promise<void> {
+  assertNotShortener(destination);
+  await assertNotBlocked(db, destination);
+  assertNotOwnShortLink(env, destination);
 }
 
 /* ---------------- banned users ---------------- */

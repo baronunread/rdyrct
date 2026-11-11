@@ -35,7 +35,7 @@ import {
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
-import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../abuse-hold";
+import { assertDestinationAllowed, holdIfSuspicious } from "../abuse-hold";
 import { checkLinkDestination } from "../destination-check";
 import { orgLinkWarning } from "../link-warning";
 import { claimAnonLink } from "./shorten";
@@ -840,8 +840,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId);
   const db = c.var.db;
-  await assertNotBlocked(db, body.destination);
-  assertNotOwnShortLink(c.env, body.destination);
+  await assertDestinationAllowed(c.env, db, body.destination);
 
   const [{ plan, limits }, activeCount] = await Promise.all([
     orgPlan(db, orgId),
@@ -1043,8 +1042,7 @@ async function guardChangedDestination(
   destination: string,
 ) {
   if (destination === existing.destination) return null;
-  await assertNotBlocked(db, destination);
-  assertNotOwnShortLink(env, destination);
+  await assertDestinationAllowed(env, db, destination);
   return existing.suspendedAt ? null : holdIfSuspicious(env, db, orgId, plan, destination);
 }
 

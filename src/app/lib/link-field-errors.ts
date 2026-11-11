@@ -6,7 +6,8 @@
  * destination or a slug belongs on that field, not in a toast. Every such
  * refusal carries a code (`cause: { code }` in `routes/links.ts`,
  * `abuse.ts` and `abuse-hold.ts`), and this reads the code alone: the
- * message is for people and may change.
+ * message is for people and may change. A custom domain's root redirect
+ * goes through the same destination rules (#488) and reads its reason here.
  */
 import { lookup } from "@/shared/lookup";
 import { ApiError } from "./api";
