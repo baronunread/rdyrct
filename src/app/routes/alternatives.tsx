@@ -135,12 +135,12 @@ const ALTERNATIVES = {
     path: "/rebrandly-alternative",
     pricingUrl: "rebrandly.com/pricing",
     blurb: "Branded links and QR codes",
-    theirPrice: "Free, or about $8 to $11 a month for more",
+    theirPrice: "Free, or from $11 a month for more",
     title: "Rebrandly alternative: rdyrct vs Rebrandly",
     intro: "Where each is cheaper, and the one thing Rebrandly gives away that we do not.",
-    answer: `Rebrandly's free plan includes a custom domain and ours does not. Past the free plans, rdyrct costs less: one custom domain from ${PLAN_PRICES.hobby} a month, where Rebrandly's Essentials starts at about $11. If you need a domain without paying, use Rebrandly.`,
+    answer: `Rebrandly's free plan includes a custom domain and ours does not. Past the free plans, rdyrct costs less: one custom domain from ${PLAN_PRICES.hobby} a month, where Rebrandly's Essentials costs $11 a month billed yearly. If you need a domain without paying, use Rebrandly.`,
     theirs: {
-      entry: "Free, $0 (Essentials from about $8 to $11 a month)",
+      entry: "Free, $0 (Essentials $11 a month billed yearly, $16 monthly)",
       links: "10 new links and 10 QR codes a month on Free, 250 on Essentials",
       domains: "1 custom domain on Free, 2 on Essentials",
       history: "Not stated (conversion data kept 6 months on Professional)",
@@ -153,28 +153,28 @@ const ALTERNATIVES = {
       "QR codes counted next to links, with 1,500 of each a month on Professional.",
     ],
     weWin: [
-      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 or more.`,
+      `Pro costs ${PLAN_PRICES.pro} a month for ${PLAN_LIMITS.pro.domains} domains and ${formatNumber(PLAN_LIMITS.pro.links)} links. Rebrandly's Professional lists 3 domains at $32 a month billed yearly, $39 monthly.`,
       `${PLAN_LIMITS.pro.analyticsDays} days of click history on Pro.`,
       "No watermark on QR codes, and no IP address stored on any click.",
       "Teammates on every plan, from 3 on Free. Rebrandly's Free plan has none.",
     ],
     plans: [
       ["Free", "$0", "10 links and 10 QR codes a month, 1 custom domain, watermark"],
-      ["Essentials", "About $8 to $11 a month", "250 links and QR codes, 2 domains"],
+      ["Essentials", "$11 a month yearly, $16 monthly", "250 links and QR codes, 2 domains"],
       [
         "Professional",
-        "About $22 to $32 a month",
+        "$32 a month yearly, $39 monthly",
         "1,500 links and QR codes, 3 domains, 2+ teammates",
       ],
       [
         "Growth",
-        "Higher, several prices listed",
+        "$149 a month yearly, $179 monthly",
         "3,500 links and QR codes, 10 domains, 1 year of conversion data",
       ],
       ["Enterprise", "Custom quote", "Custom limits, 2 years of conversion data"],
     ],
     planNote:
-      "Rebrandly's page lists up to four unlabeled prices per plan, which looks like annual and monthly billing at two volumes. Confirm the cycle on their page.",
+      "Prices from Rebrandly's Standard Plans tab, billed yearly and month to month. A High Volume Plans tab lists larger plans.",
     faq: [
       [
         "Does Rebrandly have a free custom domain?",
@@ -304,7 +304,6 @@ const ALTERNATIVES = {
     name: "TinyURL",
     path: "/tinyurl-alternative",
     pricingUrl: "tinyurl.com/app/pricing",
-    checked: "October 2026",
     blurb: "The oldest free shortener, with paid branded domains",
     theirPrice: "Free, or $9 a month with a branded domain",
     title: "TinyURL alternative: rdyrct vs TinyURL",
