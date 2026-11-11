@@ -443,7 +443,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.
 - **Strict CSP** on published pages, everything self-contained: no remote fonts,
-  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The only remote images are Fazier's and PeerPush's badges in the landing footer, allowed in img-src for rdyrct.com's build only (each directory wants its own image). script-src and frame-src admit Cloudflare Turnstile's script and challenge iframe only on `APP_HOST` and only when both Turnstile keys are set.
+  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The only remote images are Fazier's, PeerPush's and Launchstag's badges in the landing footer's badge carousel, allowed in img-src for rdyrct.com's build only (each directory wants its own image). Every badge stays in the prerendered HTML, since each directory's checker reads that; the carousel only moves it with CSS. script-src and frame-src admit Cloudflare Turnstile's script and challenge iframe only on `APP_HOST` and only when both Turnstile keys are set.
 - Email: `sendEmail()` (`src/worker/email.ts`) uses the Resend HTTP API via plain
   `fetch`, with `RESEND_BASE_URL` pointing at the emulator in dev. Keep it: the
   Resend SDK can't repoint its base URL, which would break the emulator flow.

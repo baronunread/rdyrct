@@ -1567,3 +1567,53 @@ body:has([data-hero]) {
     transform: scaleX(1);
   }
 }
+
+/* The footer's directory badges (BadgeCarousel in ui/footer.tsx): two copies
+   of the row side by side, moved left by one copy's width and started again,
+   so the seam never shows. Slow enough to read a badge as it passes; held
+   still under the pointer, so a badge can be clicked. Keyboard focus stops
+   it outright: the track goes back to the start, and the browser can then
+   scroll the focused badge into view, which it cannot do while a transform
+   holds the track left of the start. The edges fade so a badge leaves
+   rather than gets cut off. */
+.badge-carousel {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1.5rem,
+    #000 calc(100% - 1.5rem),
+    transparent
+  );
+}
+
+@keyframes badge-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .badge-track {
+    animation: badge-scroll 28s linear infinite;
+  }
+
+  .badge-carousel:hover .badge-track {
+    animation-play-state: paused;
+  }
+
+  .badge-carousel:has(:focus-visible) .badge-track {
+    animation: none;
+  }
+}
+
+/* Less motion: one copy, and the strip scrolls by hand. */
+@media (prefers-reduced-motion: reduce) {
+  .badge-carousel {
+    overflow-x: auto;
+    mask-image: none;
+  }
+
+  .badge-copy {
+    display: none;
+  }
+}

@@ -69,7 +69,7 @@ export function PrivacyPage() {
           On rdyrct.com, a page-view counter we run ourselves (Plausible) counts visits: the page,
           the site you came from, your browser, device type, and country. It sets no cookie and
           keeps no IP address, so it cannot tell that two visits came from the same person. The
-          footer of our public pages shows two badges, from Fazier and PeerPush, that your browser
+          footer of our homepage shows badges from Fazier, PeerPush and Launchstag that your browser
           loads from their sites. Like any image from another site, that request tells them your IP
           address and browser.
         </p>
