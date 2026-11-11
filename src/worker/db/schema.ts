@@ -496,6 +496,10 @@ export const linkReports = sqliteTable("link_reports", {
   reporterKey: text("reporter_key"),
   /** When the admin was mailed for this report (migration 0057). */
   notifiedAt: integer("notified_at"),
+  /** The anonymous link the report names (#488, migration 0058). No foreign
+   * key: the anonymous row is deleted after 24 hours, and the report keeps
+   * saying what it was about. */
+  anonLinkId: text("anon_link_id"),
 });
 
 /** Hosts a link may not point at (migration 0039). */

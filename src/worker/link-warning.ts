@@ -10,9 +10,10 @@
  * state lives on the link row and reaches the redirect path through the KV
  * value (storage.ts's desiredLink), so every write here ends in a republish.
  */
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
+import { publishAnonLink } from "./kv";
 import { republishLink, republishOrgLinks } from "./storage";
 
 /** Why a link carries a warning. For the admin; no visitor ever sees it. */
@@ -150,4 +151,30 @@ export async function orgLinkWarning(
     .where(eq(schema.orgs.id, orgId));
   if (!org?.at) return null;
   return { warnedAt: Date.now(), warnReason: org.reason ?? WARN_REASON.traffic };
+}
+
+/* ---------------- anonymous links (#488) ---------------- */
+
+/**
+ * Put the warning page in front of an anonymous link, the rule a free org's
+ * link gets from reports. It has no links row and no D1 fallback on the
+ * redirect path, so the write goes straight to its KV key, and the warning
+ * lives only there: the link is deleted within 24 hours anyway, which is
+ * shorter than any warning an admin would want to lift. An expired or gone
+ * link is left alone: a put would bring its key back. Returns whether it
+ * wrote, so a repeat report does not rewrite the key.
+ */
+export async function warnAnonLink(env: Env, db: DB, anonId: string): Promise<boolean> {
+  const [anon] = await db
+    .select({
+      id: schema.anonLinks.id,
+      slug: schema.anonLinks.slug,
+      destination: schema.anonLinks.destination,
+      expiresAt: schema.anonLinks.expiresAt,
+    })
+    .from(schema.anonLinks)
+    .where(and(eq(schema.anonLinks.id, anonId), gt(schema.anonLinks.expiresAt, Date.now())));
+  if (!anon) return false;
+  await publishAnonLink(env, { ...anon, warned: true });
+  return true;
 }

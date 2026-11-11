@@ -403,13 +403,19 @@ adminLinkRoutes.get("/reports", async (c) => {
       note: schema.linkReports.note,
       contact: schema.linkReports.contact,
       createdAt: schema.linkReports.createdAt,
+      anonLinkId: schema.linkReports.anonLinkId,
     })
     .from(schema.linkReports)
     .leftJoin(schema.orgs, eq(schema.orgs.id, schema.linkReports.orgId))
     .where(eq(schema.linkReports.status, "open"))
     .orderBy(desc(schema.linkReports.createdAt))
     .limit(MAX_ROWS);
-  return c.json(rows satisfies AdminReportRow[]);
+  return c.json(
+    rows.map(({ anonLinkId, ...row }) => ({
+      ...row,
+      anonymous: anonLinkId !== null,
+    })) satisfies AdminReportRow[],
+  );
 });
 
 /** Close a report without acting on it. Kept, not deleted: the count of
@@ -749,7 +755,8 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
  * They live in their own table with no org and no owner, so they cannot
  * appear in the list above, but an abuse report naming a slug will not know
  * or care which table it came from. Listed here so there is one screen to
- * check.
+ * check. A report that names one is stored with its id (#488) and shows in
+ * the reports list.
  *
  * Deleting one is the only action: they expire in 24 hours anyway, and
  * suspending something that is about to vanish is bookkeeping nobody reads.

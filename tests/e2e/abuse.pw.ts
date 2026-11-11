@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+import { makePlatformAdmin, rawSql } from "./db";
 import { openNewLinkForm, signUpProWithDomain } from "./orgs";
 
 /**
@@ -51,4 +52,34 @@ test("a custom domain's root redirect gets the same refusal, on its field (#488)
   await expect(field).not.toHaveAttribute("aria-invalid", "true");
   await field.press("Enter");
   await expect(page.getByText(`${hostname} with no slug now opens example.com/home`)).toBeVisible();
+});
+
+test("a report about an anonymous link reaches the admin as one (#488)", async ({ page }) => {
+  const email = `abuse-anon-report-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await makePlatformAdmin(page, email);
+  // Made on the landing page with no account. Inserted directly: the
+  // shortener's own spec covers making one through Turnstile.
+  const slug = `an${Date.now().toString(36)}`;
+  await rawSql(
+    page,
+    `insert into anon_links (id, slug, destination, claim_token, created_at, expires_at)
+     values (?, ?, 'https://example.com/anon', ?, ?, ?)`,
+    [`anon-${slug}`, slug, `tok-${slug}`, Date.now(), Date.now() + 24 * 60 * 60 * 1000],
+  );
+
+  await page.goto(`/report?link=${slug}`);
+  await page.getByLabel("Details (optional)").fill("fake bank login");
+  await page.getByRole("button", { name: "Send report" }).click();
+  await expect(page.getByText("Thanks. We will look at it.")).toBeVisible({ timeout: 15_000 });
+
+  await page.goto("/admin/links");
+  await page
+    .getByRole("group", { name: "Link lists" })
+    .getByRole("button", { name: "Open reports", exact: true })
+    .click();
+  const report = page.getByRole("row").filter({ hasText: slug });
+  // It says what it named, where it used to say "no match".
+  await expect(report.getByText("anonymous", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(report.getByText("no match")).toHaveCount(0);
 });

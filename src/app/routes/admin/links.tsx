@@ -530,8 +530,9 @@ function LinksTable({
 /** The anonymous list itself. The owned table's columns in the same order,
  * so moving between the two tabs does not mean re-reading the header row.
  * An anonymous link has no organization and records no clicks; those cells
- * say so rather than being left out. Reports are not kept per anonymous link,
- * so that column is the one left out. */
+ * say so rather than being left out. Reports are not counted per anonymous
+ * link, so that column is the one left out; the reports list shows them
+ * (#488). */
 function AnonymousLinksTable({
   rows,
   isPending,
@@ -695,8 +696,15 @@ function AnonymousLinks() {
   );
 }
 
-/** The org a report landed on, or the fact that the address matched no link. */
+/** The org a report landed on, the fact that it named an anonymous link, or
+ * the fact that the address matched no link. */
 function ReportOrg({ report: r }: { report: AdminReportRow }) {
+  if (!r.orgId && r.anonymous)
+    return (
+      <Tooltip content="Made on the landing page with no account. Listed under Anonymous">
+        <span className="text-muted">anonymous</span>
+      </Tooltip>
+    );
   if (!r.orgId)
     return (
       <Tooltip content="The address matched no link">

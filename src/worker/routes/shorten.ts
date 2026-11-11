@@ -29,7 +29,7 @@ import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
 import { assertDestinationAllowed, holdIfSuspicious, isBlockedHost } from "../abuse-hold";
 import { holdReasonFor } from "../../shared/abuse-rules";
-import { publishLink, resolveSlug, unpublishLink } from "../kv";
+import { publishAnonLink, resolveSlug, unpublishLink } from "../kv";
 import { askWebRisk, scoreAndRecord, type SpendLookup } from "../risk";
 import { checkLinkDestination } from "../destination-check";
 import { enqueueStorage, syncLinkMsg } from "../storage";
@@ -96,8 +96,8 @@ shortenRoutes.post("/", async (c) => {
     });
   // And asked of Web Risk (#341) before anything is published, for the same
   // reason: there is no org to hold, the redirect path never re-checks an
-  // anonymous link, and nobody can report one, so a hit found after the key
-  // is live would change nothing. Up to three seconds, and a cached answer
+  // anonymous link, and a report (#488) only puts a warning page in front, so
+  // a hit found after the key is live would change little. Up to three seconds, and a cached answer
   // costs nothing; no key, or no answer, and the link is made as before.
   // Each uncached URL also spends one of this caller's lookups for the day,
   // so one caller cannot spend the site-wide day every org relies on.
@@ -125,26 +125,7 @@ shortenRoutes.post("/", async (c) => {
   };
   await db.insert(schema.anonLinks).values(row);
 
-  // Published with the row's own id in both slots and no org. The redirect
-  // path reads this like any other key; `orgId: ""` is what tells it not to
-  // record a click, since there is no link and no org for one to belong to.
-  await publishLink(
-    c.env,
-    {
-      id: row.id,
-      addressId: row.id,
-      orgId: "",
-      slug: row.slug,
-      destination,
-      expiresAt,
-      utmSource: "",
-      utmMedium: "",
-      utmCampaign: "",
-      utmTerm: "",
-      utmContent: "",
-    },
-    null,
-  );
+  await publishAnonLink(c.env, { ...row, warned: false });
 
   c.executionCtx.waitUntil(scoreAnonLink(c.env, row.id, destination, spendLookup));
 
