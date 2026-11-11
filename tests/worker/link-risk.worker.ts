@@ -238,11 +238,9 @@ describe("re-checking on a click", () => {
         .run();
 
     await clickOn(first, firstUrl);
+    // One click covers the whole host: every link on it comes away with the
+    // verdict, not only the one that was clicked.
     expect((await riskRow(first))?.risk_score).toBe(100);
-
-    // Second click, same host: the cache is warm, and this link still has to
-    // come away with the verdict.
-    await clickOn(second, secondUrl);
     expect((await riskRow(second))?.risk_score).toBe(100);
   });
 
