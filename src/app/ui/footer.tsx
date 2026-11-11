@@ -112,11 +112,16 @@ const FEATURED_ON = [{ name: "Twelve Tools", href: "https://twelve.tools" }];
 const FAZIER_BADGE = (theme: "light" | "dark") =>
   `https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&theme=${theme}`;
 
-function FazierBadge() {
+/** A badge in the carousel; the loop's second copy passes -1 so the keyboard
+ *  meets each badge once (BadgeCarousel). */
+type BadgeProps = { tabIndex?: number };
+
+function FazierBadge({ tabIndex }: BadgeProps) {
   const img = "h-[2.375rem] w-auto"; // 103x44 drawn at 89x38, the row's height
   return (
     <a
       href="https://fazier.com/launches/rdyrct.com"
+      tabIndex={tabIndex}
       target="_blank"
       rel="noopener"
       className="inline-flex shrink-0 rounded-md opacity-90 transition-opacity hover:opacity-100"
@@ -147,10 +152,11 @@ function FazierBadge() {
  * build alone). One image for both themes; it is 230x65, drawn at the row's
  * 38px.
  */
-function PeerPushBadge() {
+function PeerPushBadge({ tabIndex }: BadgeProps) {
   return (
     <a
       href="https://peerpush.com/p/rdyrct"
+      tabIndex={tabIndex}
       target="_blank"
       rel="noopener"
       className="inline-flex shrink-0 rounded-md opacity-90 transition-opacity hover:opacity-100"
@@ -172,11 +178,12 @@ function PeerPushBadge() {
  * own, so img-src allows launchstag.com for rdyrct.com's build alone). It is
  * 198x62, drawn at the row's 38px.
  */
-function LaunchstagBadge() {
+function LaunchstagBadge({ tabIndex }: BadgeProps) {
   const img = "h-[2.375rem] w-auto";
   return (
     <a
       href="https://launchstag.com/p/rdyrct"
+      tabIndex={tabIndex}
       target="_blank"
       rel="noopener"
       className="inline-flex shrink-0 rounded-md opacity-90 transition-opacity hover:opacity-100"
@@ -207,10 +214,11 @@ function LaunchstagBadge() {
  * the title takes the theme's text color, and less padding brings it to the
  * row's height.
  */
-function LaunchedToolsBadge() {
+function LaunchedToolsBadge({ tabIndex }: BadgeProps) {
   return (
     <a
       href="https://launched.tools/tools/rdyrct"
+      tabIndex={tabIndex}
       target="_blank"
       rel="noopener"
       className="shrink-0 opacity-90 transition-opacity hover:opacity-100"
@@ -252,13 +260,13 @@ function LaunchedToolsBadge() {
   );
 }
 
-function Badges() {
+function Badges({ tabIndex }: BadgeProps) {
   return (
     <>
-      <FazierBadge />
-      <PeerPushBadge />
-      <LaunchstagBadge />
-      <LaunchedToolsBadge />
+      <FazierBadge tabIndex={tabIndex} />
+      <PeerPushBadge tabIndex={tabIndex} />
+      <LaunchstagBadge tabIndex={tabIndex} />
+      <LaunchedToolsBadge tabIndex={tabIndex} />
     </>
   );
 }
@@ -268,9 +276,10 @@ function Badges() {
  * in styles.css), so four badges take the room of two. Every badge is in the
  * prerendered HTML, which is what each directory's checker reads; the
  * animation is CSS on that markup, never a script swapping badges in. The
- * second copy only closes the loop: hidden from screen readers and the tab
- * order, and gone when the visitor asks for less motion, where the strip
- * scrolls by hand instead.
+ * second copy only closes the loop. Half the time it is the one on screen, so
+ * a pointer can click it (no `inert`), but it is hidden from screen readers
+ * and out of the tab order, and gone when the visitor asks for less motion,
+ * where the strip scrolls by hand instead.
  */
 function BadgeCarousel() {
   return (
@@ -279,8 +288,8 @@ function BadgeCarousel() {
         <div className="flex shrink-0 items-center gap-3 pr-3">
           <Badges />
         </div>
-        <div className="badge-copy flex shrink-0 items-center gap-3 pr-3" aria-hidden="true" inert>
-          <Badges />
+        <div className="badge-copy flex shrink-0 items-center gap-3 pr-3" aria-hidden="true">
+          <Badges tabIndex={-1} />
         </div>
       </div>
     </div>
