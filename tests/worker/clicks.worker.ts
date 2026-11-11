@@ -6,6 +6,7 @@ import {
   insertClicks,
   isDeletedLink,
   sweepDedupeIds,
+  DEDUPE_SWEEP_SQL,
   type ClickMessage,
 } from "../../src/worker/clicks";
 import {
@@ -229,6 +230,18 @@ describe("sweepDedupeIds (#70)", () => {
     ).first<{ sql: string }>();
 
     expect(index?.sql.toLowerCase()).toContain("where dedupe_id is not null");
+  });
+
+  it("finds what to clear through the live-id index, not the whole click history", async () => {
+    // Through idx_clicks_ts every loop walked each click older than a day, up
+    // to 400 days of them, including the last loop that clears nothing (#489).
+    const plan = await env.DB.prepare(`explain query plan ${DEDUPE_SWEEP_SQL}`)
+      .bind(Date.now() - DAY_MS, 1000)
+      .all<{ detail: string }>();
+    const details = plan.results.map((row) => row.detail).join("\n");
+
+    expect(details).toContain("idx_clicks_live_dedupe_ts");
+    expect(details).not.toContain("idx_clicks_ts ");
   });
 
   it("clears ids past the retry window and keeps the recent ones", async () => {

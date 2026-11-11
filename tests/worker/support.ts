@@ -213,6 +213,21 @@ export function overriding<T extends object>(target: T, overrides: Partial<T>): 
   });
 }
 
+/**
+ * authEnv() with every SQL string the Worker prepares recorded, lowercased,
+ * in `sql`: how a test proves a path sent D1 nothing (#489).
+ */
+export function recordingEnv() {
+  const sql: string[] = [];
+  const db = overriding(env.DB, {
+    prepare(query: string) {
+      sql.push(query.toLowerCase());
+      return env.DB.prepare(query);
+    },
+  });
+  return { env: overrideEnv({ ...authEnv(), DB: db }), sql };
+}
+
 /** The single ClickBuffer instance the redirect path writes to (#225). Its
  * add/alarm/buffered/reset methods are callable straight off the stub as RPC. */
 export function clicksStub(): DurableObjectStub<ClickBuffer> {
