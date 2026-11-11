@@ -27,7 +27,6 @@
  */
 import * as v from "valibot";
 import type { Env } from "./env";
-import { stripUtmParams } from "./util";
 import { logFailure } from "./log-failure";
 
 /** 0 = nothing known against it, 100 = a provider refuses to resolve it. */
@@ -519,19 +518,28 @@ export async function revalidateOnRedirect(
     // link already carrying this verdict is not written again, and a link
     // whose destination has moved on is not relabelled by a KV entry that
     // predates the edit.
+    const staleBefore = Date.now() - HOST_VERDICT_TTL_SECONDS * 1000;
+    // The host is not a column, so the org's stale links whose destination
+    // mentions it are the candidates, and hostnameOf keeps the ones really
+    // on the host. `like` is case-insensitive, so a stored host matches
+    // whatever its case.
+    const { results } = await env.DB.prepare(
+      `select id, destination from links
+        where org_id = ? and destination like ? and (risk_checked_at is null or risk_checked_at < ?)`,
+    )
+      .bind(hit.orgId, `%${hostname}%`, staleBefore)
+      .all<{ id: string; destination: string }>();
+
+    const ids = results
+      .filter((row) => hostnameOf(row.destination) === hostname)
+      .map((row) => row.id);
+    if (!ids.length) return;
+
     await env.DB.prepare(
       `update links set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
-       where id = ? and destination = ? and (risk_checked_at is null or risk_checked_at < ?)`,
+        where id in (${ids.map(() => "?").join(",")})`,
     )
-      .bind(
-        verdict.score,
-        JSON.stringify(verdict.reasons),
-        Date.now(),
-        verdict.provider,
-        hit.linkId,
-        stripUtmParams(hit.url),
-        Date.now() - HOST_VERDICT_TTL_SECONDS * 1000,
-      )
+      .bind(verdict.score, JSON.stringify(verdict.reasons), Date.now(), verdict.provider, ...ids)
       .run();
   } catch (error) {
     logFailure("risk_revalidate_failed", error, { linkId: hit.linkId });
