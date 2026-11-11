@@ -279,7 +279,7 @@ function FreePlans({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <h2 className="text-sm font-medium text-muted">Plans</h2>
-          <p className="text-xs text-muted">Covers every organization you own.</p>
+          <p className="text-xs text-muted">Each plan covers one organization.</p>
         </div>
         <IntervalSwitch interval={interval} onChange={setInterval} />
       </div>
@@ -501,6 +501,15 @@ function canChangePlan(snapshot: PlanActionSnapshot): boolean {
   return snapshot.hasBillingAccount && !snapshot.comped && snapshot.tier !== "enterprise";
 }
 
+/** What the plan pays for: one organization, unless an admin raised this
+ * account's cap (Enterprise). Organizations kept past a downgrade are not
+ * covered: they are read-only, which the over-limit banner says. */
+function coversLine(ownedOrgLimit: number): string {
+  return ownedOrgLimit > 1
+    ? `Covers up to ${ownedOrgLimit} organizations you own.`
+    : "Covers one organization.";
+}
+
 /** A paid plan: what it is, what it costs and when it renews, the way to
  * change or cancel it, and what it is being used for, in one card. */
 function PaidPlan({
@@ -523,7 +532,7 @@ function PaidPlan({
             <span className="text-base font-semibold">{planName(snapshot)}</span>
             {renewal && <span className="text-sm text-muted tnum">{renewal}</span>}
           </p>
-          <p className="mt-0.5 text-xs text-muted">Covers every organization you own.</p>
+          <p className="mt-0.5 text-xs text-muted">{coversLine(usage.ownedOrgLimit)}</p>
         </div>
         {canChangePlan(snapshot) && (
           <div className="flex items-center gap-2">
