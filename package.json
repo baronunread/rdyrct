@@ -127,7 +127,7 @@
     "wrangler": "^4.156.0"
   },
   "overrides": {
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "packageManager": "bun@1.4.4",
   "cloudflare": {
