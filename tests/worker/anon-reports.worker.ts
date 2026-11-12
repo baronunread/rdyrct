@@ -16,6 +16,9 @@ import {
   sweepReportNotices,
 } from "../../src/worker/routes/reports";
 import { publishAnonLink } from "../../src/worker/kv";
+import { warnAnonLink } from "../../src/worker/link-warning";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "../../src/worker/db/schema";
 import type { AdminReportRow } from "../../src/shared/types";
 
 /**
@@ -136,16 +139,13 @@ describe("a report about an anonymous link", () => {
     expect(await visit.text()).toContain("Check where this link goes.");
   });
 
-  it("does not bring an expired link's key back when reports reach the threshold", async () => {
-    await seedAnon();
-    await report();
-    // It expires after the first report, and its key goes with the sweep.
-    await env.DB.prepare("update anon_links set expires_at = ?")
-      .bind(Date.now() - 1)
-      .run();
-    await env.LINKS.delete("slug:anon123");
-    await report();
-    expect(await kvValue()).toBeNull();
+  it("does not bring an expired link's key back when the warning lands after it expired", async () => {
+    // The report lookup skips an expired link, so this is the window between
+    // that lookup and the warning's own read of the row.
+    await seedAnon("anon-old", "old123", Date.now() - 1);
+    await env.LINKS.delete("slug:old123");
+    expect(await warnAnonLink(env, drizzle(env.DB, { schema }), "anon-old")).toBe(false);
+    expect(await kvValue("old123")).toBeNull();
   });
 
   it("leaves a claimed link's key alone when the warning lands after the claim", async () => {
