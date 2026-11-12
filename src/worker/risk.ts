@@ -464,6 +464,51 @@ export async function scoreAndRecord(
 const HOST_VERDICT_TTL_SECONDS = 24 * 60 * 60;
 
 /**
+ * Links this isolate has already run the per-click update for, keyed by link
+ * and destination, to the time that run stops counting (#489).
+ *
+ * Without it every click on an org link sent D1 an `update` that, for a link
+ * scored in the last day, changed nothing. The skip has to cost nothing on
+ * the click path: a D1 read would replace the write it saves, and carrying
+ * the check time in the link's KV value would mean a KV write per link per
+ * day. Memory is per isolate, so a link served by many isolates is written by
+ * each at most once per window, which is what makes a busy link cheap: the
+ * clicks that cost the most are the ones that land on a warm isolate.
+ *
+ * Keyed by link id, with a hash of the destination in the value, so an edit
+ * (which starts its own scan anyway) never inherits the old destination's
+ * skip, and an entry costs the same whatever the destination's length.
+ */
+const recentlyStamped = new Map<string, { until: number; destination: number }>();
+
+/** FNV-1a, 32 bits: only tells one destination from the next for one link,
+ * so a collision costs at most one skipped stamp until the next window. */
+function destinationHash(url: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < url.length; i++) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/** How long a click that found the row already scored skips the next update. */
+const STAMP_RECHECK_MS = 60 * 60 * 1000;
+
+/** Bounds the memo: an isolate serving a long tail of links forgets the
+ * oldest entries rather than growing without limit. */
+const STAMP_MEMO_MAX = 10_000;
+
+function rememberStamp(linkId: string, destination: number, until: number) {
+  recentlyStamped.delete(linkId);
+  recentlyStamped.set(linkId, { until, destination });
+  if (recentlyStamped.size > STAMP_MEMO_MAX) {
+    const oldest = recentlyStamped.keys().next();
+    if (!oldest.done) recentlyStamped.delete(oldest.value);
+  }
+}
+
+/**
  * Re-checks a destination when somebody clicks it, if the answer is stale.
  *
  * This replaced a nightly sweep, which was the wrong axis: a sweep has to get
@@ -515,24 +560,40 @@ export async function revalidateOnRedirect(
     // cold and left every other link pointing at it unscored: the admin
     // table sorts by that score, so the rest hid in plain sight.
     //
-    // The two conditions are what keep this off the hot path in practice: a
-    // link already carrying this verdict is not written again, and a link
-    // whose destination has moved on is not relabelled by a KV entry that
-    // predates the edit.
-    await env.DB.prepare(
+    // A link this isolate already stamped with this cached verdict is skipped
+    // without a statement (#489). A fresh lookup always writes: it is a new
+    // verdict, and it only happens once a day per host.
+    const destination = destinationHash(hit.url);
+    const now = Date.now();
+    const stamped = recentlyStamped.get(hit.linkId);
+    if (cached && stamped && stamped.destination === destination && stamped.until > now) return;
+
+    // The two conditions keep the statement itself cheap: a link already
+    // carrying this verdict is not written again, and a link whose
+    // destination has moved on is not relabelled by a KV entry that predates
+    // the edit.
+    const result = await env.DB.prepare(
       `update links set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
        where id = ? and destination = ? and (risk_checked_at is null or risk_checked_at < ?)`,
     )
       .bind(
         verdict.score,
         JSON.stringify(verdict.reasons),
-        Date.now(),
+        now,
         verdict.provider,
         hit.linkId,
         stripUtmParams(hit.url),
-        Date.now() - HOST_VERDICT_TTL_SECONDS * 1000,
+        now - HOST_VERDICT_TTL_SECONDS * 1000,
       )
       .run();
+    // A row this wrote is fresh for the whole TTL, so every click until then
+    // would be a no-op. One it left alone was scored at some time we did not
+    // read, inside the last day, so it is only safe to skip for a while.
+    rememberStamp(
+      hit.linkId,
+      destination,
+      now + (result.meta.changes > 0 ? HOST_VERDICT_TTL_SECONDS * 1000 : STAMP_RECHECK_MS),
+    );
   } catch (error) {
     logFailure("risk_revalidate_failed", error, { linkId: hit.linkId });
   }

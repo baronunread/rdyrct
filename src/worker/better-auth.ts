@@ -276,6 +276,7 @@ function pendingSignUpResponse(email: string, name: string) {
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
       polarSubscriptionInterval: null,
+      lastSeenAt: null,
       // Never the existing row's id: this account is not the caller's to
       // learn anything about. Same alphabet and length as better-auth's.
       id: uid(32),
@@ -575,6 +576,10 @@ function buildAuth(env: Env) {
           input: false,
         },
         polarSubscriptionInterval: { type: "string", required: false, input: false },
+        // Read with the session, so withSession can tell an hour-old mark
+        // from a fresh one without a query of its own (#489). Written only
+        // by markSeen in session.ts.
+        lastSeenAt: { type: "number", required: false, input: false },
       },
       // Self-service account deletion. Authored links/invites keep working
       // (ON DELETE SET NULL) and memberships cascade. Owned organizations are

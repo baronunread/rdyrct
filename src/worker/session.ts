@@ -47,18 +47,30 @@ function sessionUserOfRow(row: typeof schema.user.$inferSelect): SessionUser {
   };
 }
 
+/** Who a request is from, and when they were last marked here, so the caller
+ * can tell whether this request needs to mark them again. */
+interface Caller {
+  user: SessionUser;
+  lastSeenAt: number | null;
+}
+
 /** A bearer key's owner, resolved to the same shape a session cookie
- * produces, plus the key row's id so the caller can bump its last-used mark. */
+ * produces, plus the key row's id and last-used mark so the caller can bump
+ * it. */
 async function userFromApiKey(
   db: DB,
   authorization: string | undefined,
-): Promise<{ keyId: string; user: SessionUser } | null> {
+): Promise<(Caller & { keyId: string; keyLastUsedAt: number | null }) | null> {
   const raw = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
   if (!raw || !raw.startsWith(API_KEY_PREFIX)) return null;
 
   const hash = await hashApiKey(raw);
   const rows = await db
-    .select({ keyId: schema.apiKeys.id, user: schema.user })
+    .select({
+      keyId: schema.apiKeys.id,
+      keyLastUsedAt: schema.apiKeys.lastUsedAt,
+      user: schema.user,
+    })
     .from(schema.apiKeys)
     .innerJoin(schema.user, eq(schema.apiKeys.userId, schema.user.id))
     .where(and(eq(schema.apiKeys.keyHash, hash), isNull(schema.apiKeys.revokedAt)));
@@ -68,7 +80,12 @@ async function userFromApiKey(
   // entirely, so the same refusal has to happen here.
   if (!row || row.user.banned) return null;
 
-  return { keyId: row.keyId, user: sessionUserOfRow(row.user) };
+  return {
+    keyId: row.keyId,
+    keyLastUsedAt: row.keyLastUsedAt,
+    user: sessionUserOfRow(row.user),
+    lastSeenAt: row.user.lastSeenAt,
+  };
 }
 
 /**
@@ -92,7 +109,7 @@ async function userFromOAuthToken(
   env: Env,
   db: DB,
   authorization: string | undefined,
-): Promise<SessionUser | null> {
+): Promise<Caller | null> {
   const raw = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
   if (!raw || raw.startsWith(API_KEY_PREFIX)) return null;
 
@@ -109,7 +126,7 @@ async function userFromOAuthToken(
     const rows = await db.select().from(schema.user).where(eq(schema.user.id, payload.sub));
     const row = rows[0];
     if (!row || row.banned) return null;
-    return sessionUserOfRow(row);
+    return { user: sessionUserOfRow(row), lastSeenAt: row.lastSeenAt };
   } catch {
     // Not a JWT, an expired one, a bad signature, or the wrong audience: all
     // the same "not authenticated this way" to the caller.
@@ -140,10 +157,29 @@ function sessionUserOf(user: AuthSession["user"]): SessionUser {
 
 const SEEN_EVERY_MS = 60 * 60 * 1000;
 
-/** Records that the account was here, at most once an hour: the condition
- * makes every other request a read that changes nothing. */
-function markSeen(db: DB, userId: string) {
+/**
+ * How stale an API key's last-used mark may get before a request rewrites it.
+ * The keys page shows it as a relative date ("2 minutes ago"), so five minutes
+ * is the most it can lag, for one write per five minutes instead of one per
+ * call (#489). A key never used before is written at once.
+ */
+const KEY_USED_EVERY_MS = 5 * 60 * 1000;
+
+/** Whether a mark last written at `at` is old enough to write again. */
+const due = (at: number | null | undefined, every: number, now: number) =>
+  at == null || at < now - every;
+
+/**
+ * Records that the account was here, at most once an hour.
+ *
+ * Skipped outright when the mark already loaded with the session is under an
+ * hour old, so most signed-in requests send D1 nothing at all (#489). The
+ * condition stays for the requests that do write: two arriving together both
+ * see an old mark, and only the first changes the row.
+ */
+function markSeen(db: DB, userId: string, lastSeenAt: number | null | undefined) {
   const now = Date.now();
+  if (!due(lastSeenAt, SEEN_EVERY_MS, now)) return null;
   return db
     .update(schema.user)
     .set({ lastSeenAt: now })
@@ -185,28 +221,34 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
     const session = await getAuth(c.env).api.getSession({
       headers: c.req.raw.headers,
     });
+    let caller: Caller | null = null;
     if (session) {
-      c.set("user", sessionUserOf(session.user));
+      caller = { user: sessionUserOf(session.user), lastSeenAt: session.user.lastSeenAt ?? null };
     } else {
       const authorization = c.req.header("authorization");
       const viaKey = await userFromApiKey(db, authorization);
       if (viaKey) {
-        c.set("user", viaKey.user);
-        c.executionCtx.waitUntil(
-          db
-            .update(schema.apiKeys)
-            .set({ lastUsedAt: Date.now() })
-            .where(eq(schema.apiKeys.id, viaKey.keyId)),
-        );
+        caller = viaKey;
+        const now = Date.now();
+        if (due(viaKey.keyLastUsedAt, KEY_USED_EVERY_MS, now))
+          c.executionCtx.waitUntil(
+            db
+              .update(schema.apiKeys)
+              .set({ lastUsedAt: now })
+              .where(eq(schema.apiKeys.id, viaKey.keyId)),
+          );
       } else if (!opts.oauthTokenPath || c.req.path === opts.oauthTokenPath) {
-        const viaOAuth = await userFromOAuthToken(c.env, db, authorization);
-        if (viaOAuth) c.set("user", viaOAuth);
+        caller = await userFromOAuthToken(c.env, db, authorization);
       }
     }
-    // Who made the request, on every API event: ids only, never the email.
-    const user = c.var.user;
-    if (user) c.executionCtx.waitUntil(markSeen(db, user.id));
-    if (user) c.get("log")?.set({ user: { id: user.id, plan: user.plan, admin: user.isAdmin } });
+    if (caller) {
+      const { user } = caller;
+      c.set("user", user);
+      const seen = markSeen(db, user.id, caller.lastSeenAt);
+      if (seen) c.executionCtx.waitUntil(seen);
+      // Who made the request, on every API event: ids only, never the email.
+      c.get("log")?.set({ user: { id: user.id, plan: user.plan, admin: user.isAdmin } });
+    }
     await next();
   });
 }
