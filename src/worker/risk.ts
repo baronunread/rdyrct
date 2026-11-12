@@ -475,10 +475,22 @@ const HOST_VERDICT_TTL_SECONDS = 24 * 60 * 60;
  * each at most once per window, which is what makes a busy link cheap: the
  * clicks that cost the most are the ones that land on a warm isolate.
  *
- * The destination is part of the key, so an edit (which starts its own scan
- * anyway) never inherits the old destination's skip.
+ * Keyed by link id, with a hash of the destination in the value, so an edit
+ * (which starts its own scan anyway) never inherits the old destination's
+ * skip, and an entry costs the same whatever the destination's length.
  */
-const recentlyStamped = new Map<string, number>();
+const recentlyStamped = new Map<string, { until: number; destination: number }>();
+
+/** FNV-1a, 32 bits: only tells one destination from the next for one link,
+ * so a collision costs at most one skipped stamp until the next window. */
+function destinationHash(url: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < url.length; i++) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
 
 /** How long a click that found the row already scored skips the next update. */
 const STAMP_RECHECK_MS = 60 * 60 * 1000;
@@ -487,9 +499,9 @@ const STAMP_RECHECK_MS = 60 * 60 * 1000;
  * oldest entries rather than growing without limit. */
 const STAMP_MEMO_MAX = 10_000;
 
-function rememberStamp(key: string, until: number) {
-  recentlyStamped.delete(key);
-  recentlyStamped.set(key, until);
+function rememberStamp(linkId: string, destination: number, until: number) {
+  recentlyStamped.delete(linkId);
+  recentlyStamped.set(linkId, { until, destination });
   if (recentlyStamped.size > STAMP_MEMO_MAX) {
     const oldest = recentlyStamped.keys().next();
     if (!oldest.done) recentlyStamped.delete(oldest.value);
@@ -551,9 +563,10 @@ export async function revalidateOnRedirect(
     // A link this isolate already stamped with this cached verdict is skipped
     // without a statement (#489). A fresh lookup always writes: it is a new
     // verdict, and it only happens once a day per host.
-    const memoKey = `${hit.linkId}\n${hit.url}`;
+    const destination = destinationHash(hit.url);
     const now = Date.now();
-    if (cached && (recentlyStamped.get(memoKey) ?? 0) > now) return;
+    const stamped = recentlyStamped.get(hit.linkId);
+    if (cached && stamped && stamped.destination === destination && stamped.until > now) return;
 
     // The two conditions keep the statement itself cheap: a link already
     // carrying this verdict is not written again, and a link whose
@@ -577,7 +590,8 @@ export async function revalidateOnRedirect(
     // would be a no-op. One it left alone was scored at some time we did not
     // read, inside the last day, so it is only safe to skip for a while.
     rememberStamp(
-      memoKey,
+      hit.linkId,
+      destination,
       now + (result.meta.changes > 0 ? HOST_VERDICT_TTL_SECONDS * 1000 : STAMP_RECHECK_MS),
     );
   } catch (error) {
