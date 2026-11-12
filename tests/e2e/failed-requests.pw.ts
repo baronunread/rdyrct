@@ -44,9 +44,13 @@ test("a failed /user on /welcome keeps you there and offers Retry", async ({ pag
   await expect(page).toHaveURL(/\/welcome$/);
 
   await page.unroute(/\/api\/user$/);
+  const answered = page.waitForResponse((res) => /\/api\/user$/.test(res.url()) && res.ok());
   await page.getByRole("button", { name: "Retry" }).click();
+  await answered;
   await expect(heading).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/login/);
+  // Recovered into the app: the setup flow or the page it hands over to.
+  await expect(page.getByRole("heading").first()).toBeVisible();
 });
 
 test("failed lists say so instead of showing an empty org", async ({ page }) => {

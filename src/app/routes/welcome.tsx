@@ -253,18 +253,20 @@ function useSignedIn() {
 }
 
 /** /welcome sits outside RequireAuth, so it says an outage itself rather
- * than reading it as a sign-out. */
+ * than reading it as a sign-out. The arrival is read here, above the
+ * outage, because Welcome clears the URL once it has it: a Retry that
+ * remounted Welcome would otherwise lose Polar's checkout id and `next`. */
 export function WelcomePage() {
   const current = useCurrentUser();
-  if (current.isError && current.data === undefined)
-    return <Unreachable onRetry={() => void current.refetch()} retrying={current.isFetching} />;
-  return <Welcome />;
-}
-
-function Welcome() {
-  useSignedIn();
   const [params] = useSearchParams();
   const [arrival] = useState(() => readArrival(params));
+  if (current.isError && current.data === undefined)
+    return <Unreachable onRetry={() => void current.refetch()} retrying={current.isFetching} />;
+  return <Welcome arrival={arrival} />;
+}
+
+function Welcome({ arrival }: { arrival: ReturnType<typeof readArrival> }) {
+  useSignedIn();
   const { intent, checkoutId, target, newAccount } = arrival;
   // Polar's way back, where a flow the domain step left resumes.
   const fromCheckout = !!checkoutId || arrival.phase === "cancelled";
