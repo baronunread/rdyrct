@@ -31,7 +31,7 @@ import { InvitePeopleDialog, type EmailInvites } from "../components/invite-peop
 import { ROLE_OPTIONS } from "../lib/members-data";
 import { SplitButton } from "../components/split-button";
 import { UserAvatar } from "../components/user-avatar";
-import { Table, Th, Td, PageHeader } from "../ui/misc";
+import { Table, Th, Td, PageHeader, LoadError } from "../ui/misc";
 import { HrefLink } from "../lib/router-search";
 import { TableSkeleton } from "../ui/skeleton";
 import { MembersSkeleton } from "../components/skeletons";
@@ -416,6 +416,14 @@ function MemberTable({
   const { sorted, sort, setSort } = management;
   const invites: InviteRowData[] = canManage ? (management.invites.data ?? []) : [];
   if (management.members.isLoading) return <TableSkeleton rows={4} />;
+  if (membersFailed(management, canManage))
+    return (
+      <LoadError
+        title="Could not load the members"
+        onRetry={() => void retryMembers(management, canManage)}
+        retrying={management.members.isFetching || management.invites.isFetching}
+      />
+    );
   const columns: Columns = { actions: canManage };
   return (
     <Table fixed>
@@ -494,6 +502,20 @@ function canManageOrg(role: OrgRole): boolean {
 
 type MemberManagement = ReturnType<typeof useMemberManagement>;
 type SeatSummary = { limit: number; taken: number; left: number; invited: ReadonlySet<string> };
+
+/** The people or the open invites failed to load. Either drawn as an empty
+ * list reads as people gone, so the table says it failed instead (#487). */
+function membersFailed(management: MemberManagement, canManage: boolean): boolean {
+  const { members, invites } = management;
+  return (members.isError && !members.data) || (canManage && invites.isError && !invites.data);
+}
+
+function retryMembers(management: MemberManagement, canManage: boolean) {
+  return Promise.all([
+    management.members.refetch(),
+    canManage ? management.invites.refetch() : undefined,
+  ]);
+}
 
 function rowCount(rows: readonly object[] | undefined): number {
   return rows ? rows.length : 0;
@@ -581,9 +603,12 @@ function MembersHeader({
     <PageHeader
       title="Members"
       sub={
-        <span className="tnum">
-          {seatLine(org, canManage, seats, rowCount(management.members.data))}
-        </span>
+        // No count from a list that failed: "0 of 3" would be a wrong answer.
+        membersFailed(management, canManage) ? undefined : (
+          <span className="tnum">
+            {seatLine(org, canManage, seats, rowCount(management.members.data))}
+          </span>
+        )
       }
       action={
         canManage ? <InviteButton org={org} seats={seats} management={management} /> : undefined

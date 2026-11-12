@@ -36,7 +36,7 @@ import { ConfirmDialog } from "../ui/confirm-dialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
-import { PageHeader } from "../ui/misc";
+import { LoadError, PageHeader } from "../ui/misc";
 import { SettingsGroup } from "../ui/settings-rows";
 import { Spinner } from "../ui/spinner";
 import {
@@ -513,6 +513,16 @@ function servingDefaultId(org: UserOrg | null, domains: DomainDTO[] | undefined)
 function DomainsBody({ model }: { model: DomainsModel }) {
   const { domains, org } = model;
   if (domains.isLoading) return <DomainsSkeleton />;
+  // Before the upsell: a plan with no domains whose list failed may still
+  // have some (#159), and an outage must not read as "you have none".
+  if (domains.isError && !domains.data)
+    return (
+      <LoadError
+        title="Could not load your domains"
+        onRetry={() => void domains.refetch()}
+        retrying={domains.isFetching}
+      />
+    );
   if (!model.hasDomains && model.limits.domains === 0)
     return <DomainsLocked orgId={org?.id ?? ""} isOwner={org?.role === "owner"} />;
 

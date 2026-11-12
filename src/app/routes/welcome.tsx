@@ -5,6 +5,7 @@ import { Check } from "@/app/ui/icons";
 import type { OrgPlan } from "@/shared/types";
 import { AuthHeading, AuthPanel } from "../components/auth-panel";
 import { SetupFlow, type Payment } from "../components/setup-flow";
+import { Unreachable } from "../components/unreachable";
 import { useAwaitWebhook } from "../lib/await-webhook";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCheckout, useConfirmCheckout, useCurrentUser } from "../lib/hooks";
@@ -238,11 +239,12 @@ function useMoveOn(
   return { moveOn, known: list.known };
 }
 
-/** Signed out (an old tab, an expired session): to sign-in, and back here. */
+/** Signed out (an old tab, an expired session): to sign-in, and back here.
+ * Only a 401 (`null`) means signed out; a failed request is not (#487). */
 function useSignedIn() {
   const navigate = useNavigate();
   const current = useCurrentUser();
-  const signedOut = !current.isLoading && !current.data;
+  const signedOut = current.data === null;
   useEffect(() => {
     if (!signedOut) return;
     const here = window.location.pathname + window.location.search;
@@ -250,13 +252,25 @@ function useSignedIn() {
   }, [signedOut, navigate]);
 }
 
+/** /welcome sits outside RequireAuth, so it says an outage itself rather
+ * than reading it as a sign-out. The arrival is read here, above the
+ * outage, because Welcome clears the URL once it has it: a Retry that
+ * remounted Welcome would otherwise lose Polar's checkout id and `next`. */
 export function WelcomePage() {
-  useSignedIn();
+  const current = useCurrentUser();
   const [params] = useSearchParams();
   const [arrival] = useState(() => readArrival(params));
+  if (current.isError && current.data === undefined)
+    return <Unreachable onRetry={() => void current.refetch()} retrying={current.isFetching} />;
+  return <Welcome arrival={arrival} />;
+}
+
+function Welcome({ arrival }: { arrival: ReturnType<typeof readArrival> }) {
+  useSignedIn();
   const { intent, checkoutId, target, newAccount } = arrival;
   // Polar's way back, where a flow the domain step left resumes.
   const fromCheckout = !!checkoutId || arrival.phase === "cancelled";
+  // react-doctor-disable-next-line react-doctor/no-derived-useState -- `arrival` is read once in WelcomePage and never changes; it only seeds the phase machine, which moves on its own from there.
   const [phase, setPhase] = useState<Phase>(arrival.phase);
   const user = useCurrentUser().data?.user;
   const { org } = useCurrentOrg();

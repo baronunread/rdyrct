@@ -1,6 +1,8 @@
 import { useRef, type ReactNode, type ThHTMLAttributes, type TdHTMLAttributes } from "react";
 import { HrefLink } from "../lib/router-search";
+import { Button } from "./button";
 import { cn } from "./cn";
+import { BusyContent } from "./spinner";
 import { OverflowTip } from "./overflow-tip";
 import { useScrollFade } from "./scroll-fade";
 
@@ -146,6 +148,37 @@ export function EmptyState({
       <p className="font-semibold">{title}</p>
       {hint && <p className="max-w-sm text-sm text-pretty text-muted">{hint}</p>}
       {action}
+    </div>
+  );
+}
+
+/**
+ * A list that failed to load, in the place its empty state would take. An
+ * error is not an answer: drawn as "nothing here yet", an outage reads as
+ * lost data (#487).
+ */
+export function LoadError({
+  title,
+  hint = "Your data is fine. Try again in a moment, or check your connection.",
+  onRetry,
+  retrying,
+}: {
+  title: string;
+  hint?: string;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
+  return (
+    <div role="alert">
+      <EmptyState
+        title={title}
+        hint={hint}
+        action={
+          <Button variant="outline" onClick={onRetry} aria-busy={retrying || undefined}>
+            <BusyContent busy={retrying}>Retry</BusyContent>
+          </Button>
+        }
+      />
     </div>
   );
 }

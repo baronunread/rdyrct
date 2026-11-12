@@ -46,6 +46,7 @@ import { openCommandMenu } from "../lib/shortcut";
 import { NewLinkHost } from "../components/new-link-host";
 import { OrgMenuItems } from "../components/org-menu-items";
 import { AppNotFound } from "../components/app-not-found";
+import { Unreachable } from "../components/unreachable";
 import { InShell } from "../lib/in-shell";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
@@ -80,8 +81,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
   const shell = useShellUser();
   const navigate = useNavigate();
-  // Only the query says somebody is signed out, and only once it has spoken.
-  const signedOut = !currentUser.isLoading && !currentUser.data;
+  // Only a 401 says somebody is signed out: the query answers null for it
+  // and nothing else. A 5xx or a dropped connection is an error, which must
+  // not send a signed-in person to the login page (#487).
+  const signedOut = currentUser.data === null;
+  const unreachable = currentUser.isError && currentUser.data === undefined;
   // An effect, not the declarative <Navigate>: <Navigate> re-invokes
   // navigate() on every render whose props object isn't the exact same
   // reference as last time (see its source), which JSX makes impossible to
@@ -101,6 +105,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     void navigate({ href, replace: true });
   }, [signedOut, navigate]);
   if (signedOut) return null;
+  if (unreachable)
+    return (
+      <Unreachable onRetry={() => void currentUser.refetch()} retrying={currentUser.isFetching} />
+    );
   // The cache carries the shell through the wait. A browser that has none is
   // on its first visit, and still gets the skeleton.
   if (!shell) return <AppShellSkeleton />;
@@ -111,7 +119,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
  * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
-  if (currentUser.isLoading) return <AdminPlatformSkeleton />;
+  // An error is not "not an admin": RequireAuth above already shows it, and
+  // this never draws a 404 for an outage.
+  if (currentUser.data === undefined) return currentUser.isError ? null : <AdminPlatformSkeleton />;
   if (!currentUser.data?.user.isAdmin) return <AppNotFound />;
   return children;
 }
