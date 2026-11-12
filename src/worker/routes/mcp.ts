@@ -519,7 +519,7 @@ const TOOLS: Tool[] = [
     name: "get_plan_usage",
     title: "Get plan usage",
     description:
-      'How many links the organization\'s plan allows and how many it uses. Returns JSON: the plan ("free", "hobby" or "pro"), links allowed, links used and links left.',
+      'How many links the organization\'s plan allows and how many it uses. Returns JSON: the plan ("free", "hobby" or "pro", or "unlimited" on a copy that runs without billing), links allowed, links used and links left.',
     inputSchema: { type: "object", properties: { org_id: ORG_ID_PROPERTY } },
     annotations: READ_ONLY,
   },

@@ -21,7 +21,7 @@ interface InitializeResponse {
       title?: string;
       description?: string;
       websiteUrl?: string;
-      icons: { src: string }[];
+      icons: { src: string; mimeType?: string; sizes?: string[] }[];
     };
     capabilities: Record<string, JsonValue>;
     instructions?: string;
@@ -34,7 +34,12 @@ interface ToolsListResponse {
       name: string;
       title?: string;
       description?: string;
-      inputSchema: { properties?: Record<string, { description?: string; default?: string }> };
+      inputSchema: {
+        properties?: Record<
+          string,
+          { description?: string; default?: string; minimum?: number; maximum?: number }
+        >;
+      };
       outputSchema?: JsonValue;
       annotations: {
         readOnlyHint?: boolean;
@@ -167,9 +172,11 @@ describe("remote MCP server (#139)", () => {
       websiteUrl: appUrl,
     });
     expect(result.serverInfo.description).toBeTruthy();
-    expect(result.serverInfo.icons.map((i) => i.src)).toEqual([
-      `${appUrl}/connector-icon.svg`,
-      `${appUrl}/connector-icon.png`,
+    // The PNG is 512x512 and the SVG's viewBox is 512: directories read
+    // these to pick an icon, so the whole entry is checked, not just src.
+    expect(result.serverInfo.icons).toEqual([
+      { src: `${appUrl}/connector-icon.svg`, mimeType: "image/svg+xml", sizes: ["any"] },
+      { src: `${appUrl}/connector-icon.png`, mimeType: "image/png", sizes: ["512x512"] },
     ]);
     expect(result.capabilities).toEqual({ tools: {} });
     expect(result.instructions).toContain("org_id");
@@ -229,6 +236,10 @@ describe("remote MCP server (#139)", () => {
       generate_qr_code: [true, false, true, false],
     });
     expect(tools.get("invite_member")!.inputSchema.properties!.role!.default).toBe("member");
+    expect(tools.get("get_org_stats")!.inputSchema.properties!.days).toMatchObject({
+      minimum: 1,
+      maximum: 365,
+    });
   });
 
   it('create_link makes a real link, matching "shorten this link for me"', async () => {
