@@ -78,7 +78,7 @@ async function downgrade(plan: string) {
   await reconcileUser(routeEnv(), testDb(), "owner-1");
 }
 
-const send = (cookie: string, method: string, path: string, body?: object) =>
+const send = (cookie: string, method: string, path: string, body?: { role: string }) =>
   fetchWorker(
     new Request(`http://localhost/api/orgs/org-1${path}`, {
       method,
