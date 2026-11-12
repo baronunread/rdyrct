@@ -47,6 +47,13 @@ test("a custom domain's root redirect gets the same refusal, on its field (#488)
   await expect(row.getByRole("alert")).toHaveText("Another shortener");
   await expect(page.getByText(/with no slug now opens/)).toHaveCount(0);
 
+  // The domain's own host would send every unknown slug back to itself.
+  await field.fill(`https://${hostname}/home`);
+  await field.press("Enter");
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(row.getByRole("alert")).toHaveText("This domain itself");
+  await expect(page.getByText(/with no slug now opens/)).toHaveCount(0);
+
   // Typing clears the mark, and an ordinary address saves.
   await field.fill("https://example.com/home");
   await expect(field).not.toHaveAttribute("aria-invalid", "true");
