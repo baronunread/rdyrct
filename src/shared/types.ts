@@ -966,6 +966,8 @@ export interface AdminReportRow {
   note: string;
   contact: string;
   createdAt: number;
+  /** The address named an anonymous link from the landing page (#488). */
+  anonymous: boolean;
 }
 
 /** An anonymous link made on the landing page (Direction A of #96). It has no

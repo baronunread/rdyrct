@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { buildDestination, type UtmFields } from "./util";
+import { buildDestination, EMPTY_UTM, type UtmFields } from "./util";
 
 /**
  * KV holds the hot path. D1 stays the source of truth.
@@ -94,6 +94,27 @@ export async function publishLink(
     expiresAt: link.expiresAt ?? null,
   };
   await env.LINKS.put(slugKey(hostname, link.slug), JSON.stringify(value));
+}
+
+/**
+ * An anonymous link's key (Direction A of #96), with the row's own id in
+ * both slots and no org: `orgId: ""` is what tells the redirect path not to
+ * record a click, since there is no link and no org for one to belong to.
+ * Carries the warning when reports put one on it (#488).
+ */
+export async function publishAnonLink(
+  env: Env,
+  anon: { id: string; slug: string; destination: string; expiresAt: number; warned: boolean },
+): Promise<void> {
+  const value: KVLink = {
+    linkId: anon.id,
+    addressId: anon.id,
+    orgId: "",
+    url: buildDestination(anon.destination, EMPTY_UTM),
+    expiresAt: anon.expiresAt,
+    ...(anon.warned && { warn: true as const }),
+  };
+  await env.LINKS.put(slugKey(null, anon.slug), JSON.stringify(value));
 }
 
 export async function unpublishLink(

@@ -4,7 +4,15 @@ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflar
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker/routes/domains";
-import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
+import {
+  adminCookie,
+  applyTestMigrations,
+  authEnv,
+  fetchWorker,
+  freeOwnerCookie,
+  jsonBody,
+  overrideEnv,
+} from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
 // Env with a token present and the dev fake off, so the real get-or-create
@@ -396,5 +404,63 @@ describe("adding a domain rejects either of this app's own hosts", () => {
     );
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /domains/:id root redirect (#488)", () => {
+  // It answers for the bare host and every slug the host does not know, so
+  // it goes through the rules a link's destination does.
+  async function setRoot(rootRedirect: string) {
+    const cookie = await freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
+    return fetchWorker(
+      new Request("http://localhost/api/orgs/org-1/domains/domain-1", {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ rootRedirect }),
+      }),
+    );
+  }
+  const stored = async () =>
+    (
+      await env.DB.prepare("select root_redirect as r from domains where id = 'domain-1'").first<{
+        r: string;
+      }>()
+    )?.r;
+
+  it("saves an ordinary address", async () => {
+    const res = await setRoot("acme.example");
+    expect(res.status).toBe(200);
+    expect(await stored()).toBe("https://acme.example");
+  });
+
+  it.each([
+    ["another shortener", "https://bit.ly/abc", "shortener_destination"],
+    ["one of our own short links", `https://${env.SHARED_LINK_HOST}/abc1234`, "own_short_link"],
+    ["a blocked host", "https://scam.example/login", "blocked_destination"],
+    ["a subdomain of a blocked host", "https://login.scam.example/", "blocked_destination"],
+  ])("refuses %s, with the code the form marks its field from", async (_, url, code) => {
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, reason, created_at) values ('scam.example', '', 0)",
+    ).run();
+    const res = await setRoot(url);
+    expect(res.status).toBe(422);
+    expect(await jsonBody<{ code?: string }>(res)).toMatchObject({ code });
+    expect(await stored()).toBe("");
+  });
+
+  it.each([
+    ["the domain's own address", "https://go.example.com/x"],
+    ["the domain's own address in other case", "https://GO.Example.com"],
+  ])("refuses %s: every miss would loop", async (_, url) => {
+    const res = await setRoot(url);
+    expect(res.status).toBe(422);
+    expect(await jsonBody<{ code?: string }>(res)).toMatchObject({ code: "own_domain" });
+    expect(await stored()).toBe("");
+  });
+
+  it("marks an address that is not one with its own code", async () => {
+    const res = await setRoot("not a url");
+    expect(res.status).toBe(400);
+    expect(await jsonBody<{ code?: string }>(res)).toMatchObject({ code: "bad_destination" });
   });
 });

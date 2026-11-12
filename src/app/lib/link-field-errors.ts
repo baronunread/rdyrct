@@ -6,7 +6,8 @@
  * destination or a slug belongs on that field, not in a toast. Every such
  * refusal carries a code (`cause: { code }` in `routes/links.ts`,
  * `abuse.ts` and `abuse-hold.ts`), and this reads the code alone: the
- * message is for people and may change.
+ * message is for people and may change. A custom domain's root redirect
+ * goes through the same destination rules (#488) and reads its reason here.
  */
 import { lookup } from "@/shared/lookup";
 import { ApiError } from "./api";
@@ -30,6 +31,7 @@ const RULES = {
   bad_destination: { field: "destination", reason: "Not a web address" },
   shortener_destination: { field: "destination", reason: "Another shortener" },
   own_short_link: { field: "destination", reason: "Already a short link" },
+  own_domain: { field: "destination", reason: "This domain itself" },
   blocked_destination: { field: "destination", reason: "Not allowed" },
 } satisfies Record<string, { field: LinkErrorField; reason: string }>;
 

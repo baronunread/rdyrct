@@ -23,6 +23,7 @@ import { settle, type PageContext } from "../lib/route-preload";
 import { useCurrentOrg } from "../lib/current-org";
 import { resolveDefaultDomainId } from "../lib/default-domain";
 import { ApiError } from "../lib/api";
+import { linkFieldError } from "../lib/link-field-errors";
 import {
   type PlanLimits,
   type DomainDTO,
@@ -234,7 +235,11 @@ function useDomainActions({
           );
         },
         onError: (e) => {
-          if (e instanceof ApiError && e.status === 400) onFieldError("Not a web address");
+          // The same refusals a link's destination gets (#488), in the
+          // same words.
+          const field = linkFieldError(e);
+          if (field?.field === "destination") onFieldError(field.reason);
+          else if (e instanceof ApiError && e.status === 400) onFieldError("Not a web address");
           else withErrorToast(toast)(e);
         },
       },

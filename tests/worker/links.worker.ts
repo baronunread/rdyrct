@@ -108,6 +108,32 @@ describe("PATCH /orgs/:orgId/links/:linkId", () => {
   });
 });
 
+describe("PATCH /orgs/:orgId/links/:linkId: a changed destination goes through the abuse rules", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(reset);
+
+  it.each([
+    ["a blocked host", "https://scam.example/login", "blocked_destination"],
+    ["another shortener", "https://bit.ly/abc", "shortener_destination"],
+    ["our own short link host", `https://${env.SHARED_LINK_HOST}/abc1234`, "own_short_link"],
+  ])("refuses an edit to %s and keeps the old destination", async (_, destination, code) => {
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, reason, created_at) values ('scam.example', '', 0)",
+    ).run();
+    const cookie = await freeOwnerCookie();
+    const created = await postLink(cookie, { destination: "https://example.com/original" });
+    const { id } = await jsonBody<{ id: string }>(created);
+
+    const res = await patchLink(cookie, id, { destination });
+    expect(res.status).toBe(422);
+    expect((await jsonBody<{ code?: string }>(res)).code).toBe(code);
+    const row = await env.DB.prepare("select destination from links where id = ?")
+      .bind(id)
+      .first<{ destination: string }>();
+    expect(row?.destination).toBe("https://example.com/original");
+  });
+});
+
 describe("link quota usage returned by mutations (#100)", () => {
   beforeEach(applyTestMigrations);
   afterEach(reset);

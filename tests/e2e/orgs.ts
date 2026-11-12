@@ -1,4 +1,4 @@
-import { queryRows } from "./db";
+import { queryRows, setPlan } from "./db";
 import { expect, type Browser, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 
@@ -59,6 +59,15 @@ export async function addActiveCustomDomain(page: Page, hostname?: string) {
   const row = page.locator(`[data-domain="${added}"]`);
   await expect(row.getByText("Live", { exact: true })).toBeVisible({ timeout: 30_000 });
   return added;
+}
+
+/** A signed-up Pro owner with one custom domain already serving. Marks the
+ * test slow for the reason addActiveCustomDomain gives. Returns the host. */
+export async function signUpProWithDomain(page: Page, email: string, password: string) {
+  await signUpAndVerify(page, email, password);
+  // Custom domains are a paid feature.
+  await setPlan(page, email, "pro");
+  return addActiveCustomDomain(page);
 }
 
 /** Opens the Links page's "New link" dialog and returns it. */
