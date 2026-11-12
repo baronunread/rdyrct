@@ -64,3 +64,14 @@ test("crawlers are asked to stay out, and rdyrct.com's guides are gone", async (
     expect(body, path).not.toContain("rdyrct.com");
   }
 });
+
+test("the icons the MCP server names are served from the copy's own host", async ({ request }) => {
+  for (const [path, type] of [
+    ["/connector-icon.svg", "image/svg+xml"],
+    ["/connector-icon.png", "image/png"],
+  ]) {
+    const res = await request.get(path!);
+    expect(res.status(), path).toBe(200);
+    expect(res.headers()["content-type"], path).toContain(type);
+  }
+});
