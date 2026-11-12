@@ -195,9 +195,11 @@ async function reconcileDomainLocks(
  * the outcome does not depend on who happened to log in. Nobody is removed:
  * a viewer keeps their membership, their seat and everything they could read.
  *
- * A relaxing pass (after a delete) demotes nobody and ignores seniority: it
- * restores demoted members, longest-standing first, only into the writer
- * seats the cap has free, so the owner's own choice of writers stands.
+ * A relaxing pass (after a delete) changes no role at all. A seat a delete
+ * frees is the owner's to give: they may have confirmed a demoted member as
+ * viewer, and that confirmation keeps `previous_role` on purpose so an
+ * upgrade restores them (#29). Filling the seat from `previous_role` here
+ * would hand it to that person behind the owner's back.
  */
 async function reconcileMemberRoles(
   db: DB,
@@ -215,28 +217,10 @@ async function reconcileMemberRoles(
     .where(eq(schema.orgMembers.orgId, orgId))
     .orderBy(asc(schema.orgMembers.createdAt), asc(schema.orgMembers.userId));
 
+  if (mode === "relax") return { count: rows.length, demoted: [] };
+
   const where = (userId: string) =>
     and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.userId, userId));
-
-  if (mode === "relax") {
-    const room = Math.max(0, limit - rows.filter((row) => row.role !== "viewer").length);
-    const restoring = rows
-      .flatMap((row) =>
-        row.role === "viewer" && row.previousRole !== null && row.previousRole !== "viewer"
-          ? [{ userId: row.userId, role: row.previousRole }]
-          : [],
-      )
-      .slice(0, room);
-    await Promise.all(
-      restoring.map((row) =>
-        db
-          .update(schema.orgMembers)
-          .set({ role: row.role, previousRole: null })
-          .where(where(row.userId)),
-      ),
-    );
-    return { count: rows.length, demoted: [] };
-  }
 
   const owner = rows.find((r) => r.role === "owner");
   const rest = rows.filter((r) => r !== owner);
@@ -307,7 +291,12 @@ async function reconcileOrg(
   // a timestamp) is what keeps a repeat run from extending a grace period
   // that is already counting down.
   const planChanged = orgPlanOf(previous?.plan) !== plan || previous === null;
-  if (mode === "relax" && planChanged) return null;
+  if (mode === "relax" && planChanged) {
+    // The plan change's own pass owns this org. Logged, because a failed
+    // full pass would otherwise leave every delete silently doing nothing.
+    activeLog.getStore()?.set({ reconcile: { skipped: "plan_changed", orgId: org.id } });
+    return null;
+  }
 
   // Three independent resources: neither read nor write of one depends on
   // another, so they go out together.
@@ -322,7 +311,7 @@ async function reconcileOrg(
   if (members.count > limits.members) over.members = members.count;
   if (domains.count > limits.domains) over.domains = domains.count;
 
-  const { graceEndsAt, notifiedAt, warnedAt } = graceFor(over, previous, planChanged, now);
+  const { graceEndsAt, notifiedAt, warnedAt } = graceFor(over, previous, planChanged, now, mode);
 
   await writeEntitlement(db, {
     orgId: org.id,
@@ -372,8 +361,17 @@ function graceFor(
   } | null,
   planChanged: boolean,
   now: number,
+  mode: PassMode,
 ) {
   if (!isOverLimit(over)) return { graceEndsAt: null, notifiedAt: null, warnedAt: null };
+  // A relaxing pass only ever lifts: it never starts a grace period (and so
+  // never queues a day-0 email). Only a plan or limit change does.
+  if (mode === "relax")
+    return {
+      graceEndsAt: previous?.graceEndsAt ?? null,
+      notifiedAt: previous?.notifiedAt ?? null,
+      warnedAt: previous?.warnedAt ?? null,
+    };
   if (planChanged || previous?.graceEndsAt == null)
     return { graceEndsAt: now + GRACE_PERIOD_MS, notifiedAt: null, warnedAt: null };
   return {
@@ -452,11 +450,11 @@ export async function reconcileUser(
  * Runs a relaxing pass after a delete that can bring an org back under one of
  * its caps (#486): a domain, a member, a link or one of its addresses.
  *
- * It only lifts: it unlocks what now fits, restores roles through
- * `previous_role`, rewrites the counts and stops the grace emails. It never
- * locks or demotes anything (`mode: "relax"`), so an owner who chose who keeps
- * write access keeps that choice, and it leaves an org whose plan changed
- * since the last pass to the plan change's own pass.
+ * It only lifts: it unlocks what now fits, rewrites the counts and stops the
+ * grace emails. It never locks, demotes, restores a role or starts a grace
+ * period (`mode: "relax"`), so who keeps write access stays the owner's
+ * choice, and it leaves an org whose plan changed since the last pass to the
+ * plan change's own pass.
  *
  * A plan change is not the only way out of an overage. An owner who reads the
  * day-0 email and deletes the extra domain has done what it asked, and
@@ -655,7 +653,9 @@ async function notifyDowngrade(
   state: OrgEntitlement,
   now: number,
 ): Promise<void> {
-  if (!isOverLimit(state.over) || state.notifiedAt !== null) return;
+  // No grace period means none started: a relaxing pass found the org over
+  // but starts nothing, so it owes no day-0 email either.
+  if (!isOverLimit(state.over) || state.notifiedAt !== null || state.graceEndsAt === null) return;
   // Best-effort, and unmarked on failure: the daily sweep retries it, and a
   // dead Resend must not make a pass whose D1 writes all landed report
   // `reconcile_failed`.

@@ -166,7 +166,7 @@ describe("deleting the domain a downgrade put over the cap", () => {
 });
 
 describe("removing a member a downgrade put over the cap", () => {
-  it("gives the demoted member their role back and clears the banner", async () => {
+  it("clears the banner and leaves the freed seat for the owner to give", async () => {
     // Free allows three: the owner and the two longest-standing members.
     const cookie = await seed({ members: 3 });
     await downgrade("free");
@@ -181,9 +181,12 @@ describe("removing a member a downgrade put over the cap", () => {
 
     expect((await send(cookie, "DELETE", "/members/member-0")).status).toBe(200);
 
-    expect(await role("member-2")).toBe("member");
     expect(await bannerState(cookie)).toEqual({ over: {}, graceEndsAt: null });
     expect(await day23Mail()).toEqual([]);
+    // A delete changes no role: the seat is the owner's to give.
+    expect(await role("member-2")).toBe("viewer");
+    expect((await send(cookie, "PATCH", "/members/member-2", { role: "member" })).status).toBe(200);
+    expect(await role("member-2")).toBe("member");
   });
 });
 
@@ -215,13 +218,44 @@ describe("a delete after the owner chose who writes", () => {
     expect((await bannerState(cookie)).over).toEqual({ members: 5 });
   });
 
-  it("still restores a demoted member into a free writer seat", async () => {
+  it("does not hand a freed writer seat to a viewer the owner confirmed", async () => {
     const cookie = await seed({ members: 5 });
     await downgrade("free");
-    // Remove a writer: one seat opens, and the longest-standing viewer takes it.
+    // The owner confirms member-2 as a viewer. Its previous_role stays, on
+    // purpose, so an upgrade restores it (#29).
+    expect((await send(cookie, "PATCH", "/members/member-2", { role: "viewer" })).status).toBe(200);
+
+    // Remove a writer: one seat opens, and nobody is moved into it.
     expect((await send(cookie, "DELETE", "/members/member-1")).status).toBe(200);
-    expect(await roles()).toMatchObject({ "member-0": "member", "member-2": "member" });
-    expect((await roles())["member-3"]).toBe("viewer");
+    expect(await roles()).toMatchObject({
+      "member-0": "member",
+      "member-2": "viewer",
+      "member-3": "viewer",
+    });
+
+    // An upgrade is still what puts demoted members back.
+    await downgrade("pro");
+    expect(await roles()).toMatchObject({ "member-2": "member", "member-3": "member" });
+  });
+});
+
+describe("a relaxing pass", () => {
+  it("never starts a grace period or a day-0 email, even for an org found over", async () => {
+    await seed({ domains: 3 });
+    await downgrade("hobby");
+    // A row that says "under" while the live counts are over: no route gets
+    // here today, which is why the pass itself has to refuse.
+    await env.DB.prepare(
+      "update org_entitlements set over_json = '{}', grace_ends_at = null, notified_at = null where org_id = 'org-1'",
+    ).run();
+    mail.sent.length = 0;
+
+    await reconcileUser(routeEnv(), testDb(), "owner-1", Date.now(), "relax");
+
+    const after = await entitlement();
+    expect(JSON.parse(after.overJson)).toEqual({ domains: 3 });
+    expect(after.graceEndsAt).toBeNull();
+    expect(mail.sent).toEqual([]);
   });
 });
 
