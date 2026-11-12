@@ -89,10 +89,14 @@ function ForgotView({
     <AuthPanel>
       <AuthHeading>Reset your password</AuthHeading>
       {sent ? (
-        <p className="text-center text-sm text-pretty text-muted">
-          If that account exists, we sent a reset link to{" "}
-          <span className="font-mono text-text">{getValues("email")}</span>.
-        </p>
+        <div className="flex flex-col gap-2 text-center">
+          <p className="text-sm text-pretty text-muted">
+            If that account exists, we sent a reset link to{" "}
+            <span className="font-mono text-text">{getValues("email")}</span>.
+          </p>
+          {/* Same young-domain junk filtering as the sign-in code. */}
+          <p className="text-xs text-muted">Not there? Check your spam folder.</p>
+        </div>
       ) : (
         <form onSubmit={onFormSubmit} noValidate className="flex flex-col gap-4">
           <Field label="Email" error={errors.email?.message}>
