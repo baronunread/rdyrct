@@ -448,6 +448,16 @@ describe("PATCH /domains/:id root redirect (#488)", () => {
     expect(await stored()).toBe("");
   });
 
+  it.each([
+    ["the domain's own address", "https://go.example.com/x"],
+    ["the domain's own address in other case", "https://GO.Example.com"],
+  ])("refuses %s: every miss would loop", async (_, url) => {
+    const res = await setRoot(url);
+    expect(res.status).toBe(422);
+    expect(await jsonBody<{ code?: string }>(res)).toMatchObject({ code: "own_domain" });
+    expect(await stored()).toBe("");
+  });
+
   it("marks an address that is not one with its own code", async () => {
     const res = await setRoot("not a url");
     expect(res.status).toBe(400);

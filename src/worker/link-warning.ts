@@ -13,7 +13,7 @@
 import { and, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { publishAnonLink } from "./kv";
+import { publishAnonLink, resolveSlug } from "./kv";
 import { republishLink, republishOrgLinks } from "./storage";
 
 /** Why a link carries a warning. For the admin; no visitor ever sees it. */
@@ -175,6 +175,12 @@ export async function warnAnonLink(env: Env, db: DB, anonId: string): Promise<bo
     .from(schema.anonLinks)
     .where(and(eq(schema.anonLinks.id, anonId), gt(schema.anonLinks.expiresAt, Date.now())));
   if (!anon) return false;
+  // Only if the key still belongs to this anonymous link. A claim landing
+  // since the read has republished the slug under the organization link's id,
+  // and putting the anonymous value over it would stop that link resolving
+  // when the anonymous expiry passes (as forgetAnonLink guards its delete).
+  const published = await resolveSlug(env, anon.slug, null);
+  if (published && published.linkId !== anon.id) return false;
   await publishAnonLink(env, { ...anon, warned: true });
   return true;
 }

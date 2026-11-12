@@ -136,6 +136,58 @@ describe("a report about an anonymous link", () => {
     expect(await visit.text()).toContain("Check where this link goes.");
   });
 
+  it("does not bring an expired link's key back when reports reach the threshold", async () => {
+    await seedAnon();
+    await report();
+    // It expires after the first report, and its key goes with the sweep.
+    await env.DB.prepare("update anon_links set expires_at = ?")
+      .bind(Date.now() - 1)
+      .run();
+    await env.LINKS.delete("slug:anon123");
+    await report();
+    expect(await kvValue()).toBeNull();
+  });
+
+  it("leaves a claimed link's key alone when the warning lands after the claim", async () => {
+    await seedAnon();
+    await report();
+    // A claim republished the slug under the organization link's id between
+    // the warning's read of the row and its write.
+    const claimed = {
+      linkId: "link-1",
+      addressId: "addr-1",
+      orgId: "org-1",
+      url: "https://example.com/anon",
+    };
+    await env.LINKS.put("slug:anon123", JSON.stringify(claimed));
+    await report();
+    expect(await kvValue()).toEqual(claimed);
+  });
+
+  it("mails the admin on the first report only, not on each one after", async () => {
+    await seedAnon();
+    const mail = captureEmails();
+    try {
+      await report();
+      // The quiet window is over, so only the first-report rule holds a mail back.
+      await env.DB.prepare("update link_reports set notified_at = notified_at - ?")
+        .bind(REPORT_NOTICE_WINDOW_MS + 1)
+        .run();
+      await report();
+      expect(mail.sent.filter((m) => m.to === ADMIN)).toHaveLength(1);
+    } finally {
+      mail.restore();
+    }
+  });
+
+  it("does not count reports an admin has already dealt with toward the warning", async () => {
+    await seedAnon();
+    for (let i = 0; i < REPORTERS_TO_WARN - 1; i++) await report();
+    await env.DB.prepare("update link_reports set status = 'dismissed'").run();
+    await report();
+    expect(await kvValue()).not.toHaveProperty("warn");
+  });
+
   it("counts reporters per link, so reports on two links do not add up", async () => {
     await seedAnon();
     await seedAnon("anon-2", "other12");

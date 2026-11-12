@@ -126,10 +126,13 @@ export function assertNotOwnShortLink(env: Env, destination: string): void {
 
 /**
  * The rules for anywhere rdyrct sends a visitor: not another shortener, not a
- * blocked host, not one of our own short links. Every create and edit path
- * runs this one function (links, the anonymous shortener, a custom domain's
- * root redirect, #488), so a rule added here covers all of them. Each
- * refusal is a 422 with its own code, which the app maps to the field.
+ * blocked host, not one of our own short links. Link create and edit, the
+ * anonymous shortener and a custom domain's root redirect (#488) run this one
+ * function, so a rule added here covers them. Bulk import (routes/link-import.ts)
+ * keeps its own copy: it checks a whole file against one blocklist read and
+ * reports a reason per row instead of throwing, so a rule added here must be
+ * added there too. Each refusal here is a 422 with its own code, which the app
+ * maps to the field.
  */
 export async function assertDestinationAllowed(
   env: Env,

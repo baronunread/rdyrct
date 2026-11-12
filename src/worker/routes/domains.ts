@@ -541,6 +541,14 @@ domainRoutes.patch("/:id", async (c) => {
     // (index.ts), so it answers more visitors than any one link: the same
     // rules a link's destination goes through (#488).
     await assertDestinationAllowed(c.env, db, rootRedirect);
+    // And not this host itself: the root redirect also answers every miss, so
+    // a redirect back to the host would loop on each one. Other custom domains
+    // are not checked here (see #488).
+    if (new URL(rootRedirect).hostname.toLowerCase() === row.hostname.toLowerCase())
+      throw new HTTPException(422, {
+        message: "The root redirect cannot point at this domain itself.",
+        cause: { code: "own_domain" },
+      });
   }
   await db.update(schema.domains).set({ rootRedirect }).where(eq(schema.domains.id, row.id));
   await enqueueStorage(c.env, [row.status === "active" ? syncDomainMsg(row.hostname) : null]);

@@ -31,6 +31,7 @@ const RULES = {
   bad_destination: { field: "destination", reason: "Not a web address" },
   shortener_destination: { field: "destination", reason: "Another shortener" },
   own_short_link: { field: "destination", reason: "Already a short link" },
+  own_domain: { field: "destination", reason: "This domain itself" },
   blocked_destination: { field: "destination", reason: "Not allowed" },
 } satisfies Record<string, { field: LinkErrorField; reason: string }>;
 
