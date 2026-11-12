@@ -262,6 +262,20 @@ describe("remote MCP server (#139)", () => {
     expect(links).toHaveLength(1);
   });
 
+  it("a refused destination reaches the agent with its reason, not just a status", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const res = await callMcp(
+      `Bearer ${key}`,
+      toolCall("create_link", { destination: "https://bit.ly/3xExamplE" }),
+    );
+    const body = await jsonBody<JsonRpcResponse>(res);
+    expect(body.result?.isError).toBe(true);
+    const text = body.result!.content![0]!.text!;
+    expect(text).toMatch(/shortener/i);
+    expect(text).not.toMatch(/Request failed with status/);
+  });
+
   it("get_plan_usage answers the free plan's cap without a round trip through the API", async () => {
     const cookie = await freeOwnerCookie();
     const { key } = await mintKey(cookie);

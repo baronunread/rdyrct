@@ -43,6 +43,18 @@ const internal = new Hono<AppEnv>();
 // own paths carry no /api prefix at all), only by dispatch() below, so an
 // OAuth token authenticates here exactly as it did at the public /api/mcp
 // route that already checked it once (#242).
+// A refusal keeps its words. Hono's default answers an HTTPException as plain
+// text, which ok() below cannot read, so the agent got "Request failed with
+// status 422" instead of "another link shortener". Anything else is rethrown
+// to the tool call's own catch, which logs it and answers generically.
+internal.onError((err, c) => {
+  if (err instanceof HTTPException) return c.json({ message: err.message }, err.status);
+  if (EvlogError.isEvlogError(err))
+    // SAFETY: every createError() call site passes a real HTTP status
+    // (400-599); the fallback covers one that left it unset.
+    return c.json({ message: err.message }, (err.status ?? 500) as ContentfulStatusCode);
+  throw err;
+});
 internal.use("*", withSession());
 internal.use("*", enforceSignedApiRateLimit);
 internal.route("/orgs", orgRoutes);
@@ -368,7 +380,7 @@ const TOOLS: Tool[] = [
     name: "create_link",
     title: "Create a short link",
     description:
-      "Shorten a URL into a new short link. Returns the link as JSON: its short URL (url), slug, destination, title and domain, plus the organization's count of links in use (quotaUsage). Needs the member role or higher. Refuses when the organization already has a link to the same destination on the same domain, or is at its plan's link limit. Some destinations are refused (blocked hosts, other link shorteners, rdyrct short links), and the error says which; one that looks like a scam is saved on hold and does not redirect until rdyrct reviews it.",
+      "Shorten a URL into a new short link. Returns the link as JSON: its short URL (url), slug, destination, title and domain, plus the organization's count of links in use (quotaUsage). Needs the member role or higher. Refuses when the organization already has a link to the same destination on the same domain, or is at its plan's link limit. Some destinations are refused (blocked hosts, other link shorteners, rdyrct short links), and the error says which. On a free plan, one that looks like a scam is saved on hold and does not redirect until rdyrct reviews it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -405,7 +417,7 @@ const TOOLS: Tool[] = [
     name: "update_link",
     title: "Update a short link",
     description:
-      "Point an existing link at a new destination, or change its title. The slug and short URL stay the same, so anyone who already has the link reaches the new destination; the old destination is not kept. Find the link by slug, or by its current destination. Needs the member role or higher. Returns the updated link as JSON. Some destinations are refused (blocked hosts, other link shorteners, rdyrct short links), and the error says which; one that looks like a scam is saved on hold and does not redirect until rdyrct reviews it.",
+      "Point an existing link at a new destination, or change its title. The slug and short URL stay the same, so anyone who already has the link reaches the new destination; the old destination is not kept. Find the link by slug, or by its current destination. Needs the member role or higher. Returns the updated link as JSON. Some destinations are refused (blocked hosts, other link shorteners, rdyrct short links), and the error says which. On a free plan, one that looks like a scam is saved on hold and does not redirect until rdyrct reviews it.",
     inputSchema: {
       type: "object",
       properties: {
