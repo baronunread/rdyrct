@@ -78,11 +78,20 @@ async function downgrade(plan: string) {
   await reconcileUser(routeEnv(), testDb(), "owner-1");
 }
 
-const send = (cookie: string, method: string, path: string) =>
+const send = (cookie: string, method: string, path: string, body?: object) =>
   fetchWorker(
-    new Request(`http://localhost/api/orgs/org-1${path}`, { method, headers: { cookie } }),
+    new Request(`http://localhost/api/orgs/org-1${path}`, {
+      method,
+      headers: body ? { cookie, "content-type": "application/json" } : { cookie },
+      body: body ? JSON.stringify(body) : undefined,
+    }),
     routeEnv(),
   );
+
+async function roles() {
+  const rows = await testDb().select().from(schema.orgMembers);
+  return Object.fromEntries(rows.map((r) => [r.userId, r.role]));
+}
 
 async function entitlement() {
   const [row] = await testDb()
@@ -178,7 +187,80 @@ describe("removing a member a downgrade put over the cap", () => {
   });
 });
 
+describe("a delete after the owner chose who writes", () => {
+  it("never takes that choice back", async () => {
+    // Free allows three writers. Seniority keeps the owner, member-0 and
+    // member-1; member-2 to member-4 are demoted.
+    const cookie = await seed({ members: 5 });
+    await downgrade("free");
+    expect(await roles()).toMatchObject({ "member-0": "member", "member-2": "viewer" });
+
+    // The owner swaps: member-0 steps down, member-4 writes.
+    expect((await send(cookie, "PATCH", "/members/member-0", { role: "viewer" })).status).toBe(200);
+    expect((await send(cookie, "PATCH", "/members/member-4", { role: "member" })).status).toBe(200);
+    const chosen = {
+      "owner-1": "owner",
+      "member-0": "viewer",
+      "member-1": "member",
+      "member-2": "viewer",
+      "member-3": "viewer",
+      "member-4": "member",
+    };
+    expect(await roles()).toEqual(chosen);
+
+    // Removing a viewer leaves five members on a three-writer plan.
+    expect((await send(cookie, "DELETE", "/members/member-3")).status).toBe(200);
+
+    expect(await roles()).toEqual({ ...chosen, "member-3": undefined });
+    expect((await bannerState(cookie)).over).toEqual({ members: 5 });
+  });
+
+  it("still restores a demoted member into a free writer seat", async () => {
+    const cookie = await seed({ members: 5 });
+    await downgrade("free");
+    // Remove a writer: one seat opens, and the longest-standing viewer takes it.
+    expect((await send(cookie, "DELETE", "/members/member-1")).status).toBe(200);
+    expect(await roles()).toMatchObject({ "member-0": "member", "member-2": "member" });
+    expect((await roles())["member-3"]).toBe("viewer");
+  });
+});
+
+describe("a delete that races a plan change", () => {
+  it("leaves the grace period and the day-0 email to the plan change's own pass", async () => {
+    const cookie = await seed({ domains: 3 });
+    await downgrade("hobby");
+    const before = await entitlement();
+    mail.sent.length = 0;
+
+    // The webhook has written the new plan but its pass has not run yet.
+    await env.DB.prepare("update user set plan = 'free' where id = 'owner-1'").run();
+    expect((await send(cookie, "DELETE", "/domains/dom-2")).status).toBe(200);
+
+    const after = await entitlement();
+    expect(after.plan).toBe("hobby");
+    expect(after.graceEndsAt).toBe(before.graceEndsAt);
+    expect(after.reconciledAt).toBe(before.reconciledAt);
+    expect(mail.sent).toEqual([]);
+  });
+});
+
 describe("deleting links a downgrade put over the cap", () => {
+  it("clears the overage when the last permanent alias over the cap is removed", async () => {
+    const cookie = await seed({});
+    // Free allows 30 addresses: the primaries fill it, one permanent alias is the 31st.
+    await seedFillerLinks(testDb(), "org-1", 30, "f");
+    await env.DB.prepare(
+      "insert into link_addresses (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at) values ('alias-1', 'f-link-0', 'org-1', null, 'f-extra', 'permanent_alias', 'created', null, null, 0)",
+    ).run();
+    await downgrade("free");
+    expect((await bannerState(cookie)).over).toEqual({ links: 31 });
+
+    expect((await send(cookie, "DELETE", "/links/f-link-0/addresses/alias-1")).status).toBe(200);
+
+    expect(await bannerState(cookie)).toEqual({ over: {}, graceEndsAt: null });
+    expect(await day23Mail()).toEqual([]);
+  });
+
   it("clears the overage once the org is back under, and not before", async () => {
     const cookie = await seed({});
     // Free allows 30: two over.
