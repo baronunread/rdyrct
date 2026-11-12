@@ -368,7 +368,7 @@ const TOOLS: Tool[] = [
     name: "create_link",
     title: "Create a short link",
     description:
-      "Shorten a URL into a new short link. Returns the link as JSON: its short URL (url), slug, destination, title and domain, plus the organization's count of links in use (quotaUsage). Needs the member role or higher. Refuses when the organization already has a link to the same destination on the same domain, or is at its plan's link limit.",
+      "Shorten a URL into a new short link. Returns the link as JSON: its short URL (url), slug, destination, title and domain, plus the organization's count of links in use (quotaUsage). Needs the member role or higher. Refuses when the organization already has a link to the same destination on the same domain, or is at its plan's link limit. Some destinations are refused (blocked hosts, other link shorteners, rdyrct short links), and the error says which; one that looks like a scam is saved on hold and does not redirect until rdyrct reviews it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -405,7 +405,7 @@ const TOOLS: Tool[] = [
     name: "update_link",
     title: "Update a short link",
     description:
-      "Point an existing link at a new destination, or change its title. The slug and short URL stay the same, so anyone who already has the link reaches the new destination; the old destination is not kept. Find the link by slug, or by its current destination. Needs the member role or higher. Returns the updated link as JSON.",
+      "Point an existing link at a new destination, or change its title. The slug and short URL stay the same, so anyone who already has the link reaches the new destination; the old destination is not kept. Find the link by slug, or by its current destination. Needs the member role or higher. Returns the updated link as JSON. Some destinations are refused (blocked hosts, other link shorteners, rdyrct short links), and the error says which; one that looks like a scam is saved on hold and does not redirect until rdyrct reviews it.",
     inputSchema: {
       type: "object",
       properties: {
