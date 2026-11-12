@@ -204,6 +204,45 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   await expect(page.getByText(/every link still works/)).toBeVisible();
 });
 
+test("deleting the domain a downgrade put over the cap lifts the banner without a plan change (#486)", async ({
+  page,
+}) => {
+  test.slow();
+  const email = await adminAccount(page, "downgrade-fix-by-hand");
+
+  await setComp(page, email, "grant");
+  const hostname = await addActiveCustomDomain(page);
+  await setComp(page, email, "revoke");
+  await page.goto("/domains");
+  await expect(page.getByText(/^Stops [A-Z][a-z]{2} \d+$/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Over the Free plan", { exact: true })).toBeVisible();
+
+  // The owner does what the notice asks. Nothing else changes: no plan
+  // change, no reload.
+  await page.getByRole("button", { name: `Actions for ${hostname}` }).click();
+  await page.getByRole("menuitem", { name: "Delete domain" }).click();
+  await page
+    .getByRole("dialog", { name: "Delete domain" })
+    .getByRole("button", { name: "Delete domain" })
+    .click();
+
+  // The dialog names the host too, so it has to be gone before the row can be.
+  await expect(page.getByRole("dialog", { name: "Delete domain" })).toBeHidden({
+    timeout: 20_000,
+  });
+  await expect(page.getByText(hostname)).toBeHidden();
+  await expect(page.getByText("Over the Free plan", { exact: true })).toBeHidden();
+  const [entitlement] = await queryRows<{ over_json: string; grace_ends_at: number | null }>(
+    page,
+    `select over_json, grace_ends_at from org_entitlements
+     where org_id = (select m.org_id from org_members m join user u on u.id = m.user_id
+                     where u.email = ? and m.role = 'owner')`,
+    [email],
+  );
+  expect(JSON.parse(entitlement.over_json)).toEqual({});
+  expect(entitlement.grace_ends_at).toBeNull();
+});
+
 test("losing seats demotes the newest members to viewer, and says so", async ({
   page,
   browser,

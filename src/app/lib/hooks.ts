@@ -13,6 +13,7 @@ import { lastAuth, setLastAuth } from "./last-auth";
 import posthog from "./posthog";
 import { FUNNEL, captureGoogleSignup } from "./funnel";
 import type { LinkImportDTO } from "@/shared/link-import";
+import { isOverLimit } from "@/shared/types";
 import type {
   BillingDetails,
   CurrentUser,
@@ -259,6 +260,16 @@ function applyQuotaUsage(qc: ReturnType<typeof useQueryClient>, orgId: string, q
   );
 }
 
+/**
+ * After a delete in an org that is over a cap: the server may have just
+ * reconciled it back under (#486), and the banner, the grace date and the
+ * locks all come from the user query. An org that is fine skips the refetch.
+ */
+export function refreshOverLimit(qc: ReturnType<typeof useQueryClient>, orgId: string) {
+  const org = qc.getQueryData<CurrentUser | null>(["user"])?.orgs.find((o) => o.id === orgId);
+  if (org && isOverLimit(org.over)) void qc.invalidateQueries({ queryKey: ["user"] });
+}
+
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
   const invalidate = (quota: QuotaUsage) => {
@@ -288,7 +299,10 @@ export function useLinkMutations(orgId: string) {
   const remove = useMutation({
     mutationFn: (id: string) =>
       api<WithQuotaUsage<{ ok: true }>>(`/orgs/${orgId}/links/${id}`, { method: "DELETE" }),
-    onSuccess: invalidate,
+    onSuccess: (quota) => {
+      invalidate(quota);
+      refreshOverLimit(qc, orgId);
+    },
   });
   return { create, update, remove };
 }
@@ -325,7 +339,10 @@ export function useAddressMutations(orgId: string, linkId: string) {
   const remove = useMutation({
     mutationFn: (addressId: string) =>
       api<WithQuotaUsage<{ ok: true }>>(address(addressId), { method: "DELETE" }),
-    onSuccess: invalidate,
+    onSuccess: (quota) => {
+      invalidate(quota);
+      refreshOverLimit(qc, orgId);
+    },
   });
   const promote = useMutation({
     mutationFn: (addressId: string) =>
@@ -429,7 +446,10 @@ export function useDomainMutations(orgId: string) {
   });
   const remove = useMutation({
     mutationFn: (id: string) => api(`/orgs/${orgId}/domains/${id}`, { method: "DELETE" }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      void invalidate();
+      refreshOverLimit(qc, orgId);
+    },
   });
   // The default lives on the org, not the domain, so this invalidates
   // ["user"]: that is where the app reads the org from (#69).

@@ -26,6 +26,7 @@
     "posthog:upload": "POSTHOG_CLI_PROJECT_ID=${POSTHOG_CLI_PROJECT_ID:-240147} posthog-cli --host ${POSTHOG_CLI_HOST:-https://eu.posthog.com} sourcemap process --directory dist/client/assets --release-name rdyrct --delete-after",
     "deploy": "bun scripts/deploy.ts",
     "setup": "bun scripts/setup.ts",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply DB --local",
     "db:seed:local": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" bun scripts/seed-local.ts",
     "check:contrast": "bun scripts/check-contrast.ts",
@@ -127,7 +128,7 @@
     "wrangler": "^4.156.0"
   },
   "overrides": {
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "packageManager": "bun@1.4.4",
   "cloudflare": {

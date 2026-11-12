@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
+import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody, recordingEnv } from "./support";
 import { revalidateOnRedirect, scoreAndRecord } from "../../src/worker/risk";
 import type { JsonValue } from "../../src/shared/types";
 
@@ -203,13 +203,18 @@ describe("re-checking on a click", () => {
   const clickOn = (linkId: string, url: string) =>
     revalidateOnRedirect(authEnv(), { linkId, orgId: "org-1", url });
 
-  it("records the verdict for the link that was clicked", async () => {
+  /** A link on BLOCKED that has never been scored. */
+  async function unscoredLink() {
     stubResolver();
-    const cookie = await freeOwnerCookie();
-    const linkId = await createLink(cookie, BLOCKED);
+    const linkId = await createLink(await freeOwnerCookie(), BLOCKED);
     await env.DB.prepare("update links set risk_checked_at = null, risk_score = null where id = ?")
       .bind(linkId)
       .run();
+    return linkId;
+  }
+
+  it("records the verdict for the link that was clicked", async () => {
+    const linkId = await unscoredLink();
 
     await clickOn(linkId, BLOCKED);
 
@@ -244,6 +249,38 @@ describe("re-checking on a click", () => {
     // come away with the verdict.
     await clickOn(second, secondUrl);
     expect((await riskRow(second))?.risk_score).toBe(100);
+  });
+
+  it("sends D1 nothing for a second click on a link already stamped (#489)", async () => {
+    // The update's own condition made this a no-op, but it was still one D1
+    // statement per click on every org link.
+    const linkId = await unscoredLink();
+    await clickOn(linkId, BLOCKED);
+    expect((await riskRow(linkId))?.risk_score).toBe(100);
+
+    const recording = recordingEnv();
+    await revalidateOnRedirect(recording.env, { linkId, orgId: "org-1", url: BLOCKED });
+
+    expect(recording.sql).toEqual([]);
+  });
+
+  it("still stamps a link whose destination changed after its last click", async () => {
+    // The skip is keyed by destination too: an edit must not inherit it.
+    stubResolver();
+    const cookie = await freeOwnerCookie();
+    const firstUrl = "https://malware.example/before";
+    const secondUrl = "https://malware.example/after";
+    const linkId = await createLink(cookie, firstUrl);
+    await clickOn(linkId, firstUrl);
+    await env.DB.prepare(
+      "update links set destination = ?, risk_checked_at = null, risk_score = null where id = ?",
+    )
+      .bind(secondUrl, linkId)
+      .run();
+
+    await clickOn(linkId, secondUrl);
+
+    expect((await riskRow(linkId))?.risk_score).toBe(100);
   });
 
   it("leaves a link alone when its destination has moved on", async () => {

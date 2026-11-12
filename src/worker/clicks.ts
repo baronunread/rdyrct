@@ -281,6 +281,16 @@ const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEDUPE_SWEEP_CHUNK = 1000;
 
 /**
+ * One chunk of the sweep. `idx_clicks_live_dedupe_ts` (migration 0058) covers
+ * exactly the rows the inner select asks for, about a day of clicks, so each
+ * loop reads what it clears and the last, empty loop reads nothing. Through
+ * `idx_clicks_ts` it walked every click older than the cutoff (#489).
+ */
+export const DEDUPE_SWEEP_SQL = `update clicks set dedupe_id = null where id in (
+  select id from clicks where dedupe_id is not null and ts < ? limit ?
+)`;
+
+/**
  * Clear dedupe ids old enough that no flush retry can still reference them.
  *
  * `clicks` is the only unbounded table here and keeps 400 days, so a unique
@@ -292,11 +302,7 @@ const DEDUPE_SWEEP_CHUNK = 1000;
  */
 export async function sweepDedupeIds(env: Env): Promise<number> {
   const cutoff = Date.now() - DEDUPE_WINDOW_MS;
-  const stmt = env.DB.prepare(
-    `update clicks set dedupe_id = null where id in (
-       select id from clicks where dedupe_id is not null and ts < ? limit ?
-     )`,
-  );
+  const stmt = env.DB.prepare(DEDUPE_SWEEP_SQL);
   let cleared = 0;
   let changes = 0;
   do {
