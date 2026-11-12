@@ -270,6 +270,7 @@ function Welcome({ arrival }: { arrival: ReturnType<typeof readArrival> }) {
   const { intent, checkoutId, target, newAccount } = arrival;
   // Polar's way back, where a flow the domain step left resumes.
   const fromCheckout = !!checkoutId || arrival.phase === "cancelled";
+  // react-doctor-disable-next-line react-doctor/no-derived-useState -- `arrival` is read once in WelcomePage and never changes; it only seeds the phase machine, which moves on its own from there.
   const [phase, setPhase] = useState<Phase>(arrival.phase);
   const user = useCurrentUser().data?.user;
   const { org } = useCurrentOrg();

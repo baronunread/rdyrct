@@ -44,7 +44,7 @@ test("a failed /user on /welcome keeps you there and offers Retry", async ({ pag
   await expect(page).toHaveURL(/\/welcome$/);
 
   await page.unroute(/\/api\/user$/);
-  const answered = page.waitForResponse((res) => /\/api\/user$/.test(res.url()) && res.ok());
+  const answered = page.waitForResponse((res) => res.url().endsWith("/api/user") && res.ok());
   await page.getByRole("button", { name: "Retry" }).click();
   await answered;
   await expect(heading).toHaveCount(0);
