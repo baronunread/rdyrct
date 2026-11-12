@@ -5,7 +5,7 @@ import { createError, EvlogError } from "evlog";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import type { JsonValue, LinkStats, OrgStats } from "../../shared/types";
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, Implementation, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { requireMcpAuth } from "@better-auth/mcp";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env, SessionUser } from "../env";
@@ -332,131 +332,277 @@ const qrArgs = v.object({ url: v.pipe(v.string(), v.trim(), v.minLength(1), v.ma
 
 /* ---------------- tool list (protocol-facing JSON Schema) ---------------- */
 
+/** Every tool but generate_qr_code takes this, and resolveOrg() explains it. */
+const ORG_ID_PROPERTY = {
+  type: "string",
+  description:
+    "The organization's id. Leave it out when the person belongs to one organization. With more than one, the tool answers with each one's name and id; pass the id they mean.",
+};
+
+/** How a tool finds a link, for update_link and delete_link (findOneLink). */
+const FIND_BY_SLUG = {
+  type: "string",
+  description:
+    'The link\'s slug: the part of the short link after the domain, "promo" in a short link ending /promo. list_links returns the slug of each link it finds.',
+};
+
+/**
+ * Hints for the client, read off each handler below:
+ * - readOnlyHint: the handler only reads (GET routes, orgPlan, or no I/O).
+ * - destructiveHint: it deletes or overwrites something the person cannot
+ *   get back through these tools.
+ * - idempotentHint: a second call with the same arguments changes nothing
+ *   further.
+ * - openWorldHint: it reaches past the organization's own data (an email to
+ *   an outside address).
+ */
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
 const TOOLS: Tool[] = [
   {
     name: "create_link",
-    description: "Shorten a URL into an rdyrct link. Returns the short link and its destination.",
+    title: "Create a short link",
+    description:
+      "Shorten a URL into a new short link. Returns the link as JSON: its short URL (url), slug, destination, title and domain, plus the organization's count of links in use (quotaUsage). Needs the member role or higher. Refuses when the organization already has a link to the same destination on the same domain, or is at its plan's link limit.",
     inputSchema: {
       type: "object",
       properties: {
-        destination: { type: "string", description: "The URL to shorten" },
+        destination: {
+          type: "string",
+          description: "The http(s) URL the short link sends visitors to.",
+        },
         slug: {
           type: "string",
-          description: "A chosen slug, custom domains only. Omit for random.",
+          description:
+            "A slug of the person's choosing. Only allowed with domain: links on the shared domain always get a random slug. Leave it out for a random one.",
         },
-        title: { type: "string", description: "An optional label for the link" },
+        title: {
+          type: "string",
+          description: "A label for the link, shown in the person's link list.",
+        },
         domain: {
           type: "string",
-          description: "Put it on this custom domain instead of the shared one",
+          description:
+            'The hostname of one of the organization\'s own active domains, such as "go.example.com". Leave it out to use the shared domain.',
         },
-        org_id: {
-          type: "string",
-          description: "Which organization, if the person has more than one",
-        },
+        org_id: ORG_ID_PROPERTY,
       },
       required: ["destination"],
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
     },
   },
   {
     name: "update_link",
+    title: "Update a short link",
     description:
-      'Point an existing link at a new destination, or rename its title. Find it by slug (e.g. "promo") or by its current destination URL.',
+      "Point an existing link at a new destination, or change its title. The slug and short URL stay the same, so anyone who already has the link reaches the new destination; the old destination is not kept. Find the link by slug, or by its current destination. Needs the member role or higher. Returns the updated link as JSON.",
     inputSchema: {
       type: "object",
       properties: {
-        slug: { type: "string", description: 'The link\'s slug, e.g. "promo"' },
+        slug: FIND_BY_SLUG,
         destination: {
           type: "string",
-          description: "The link's current destination, to find it by",
+          description:
+            "Part or all of the link's current destination URL, to find it by when the slug is not known. Must match one link only.",
         },
-        new_destination: { type: "string", description: "The new destination URL" },
-        title: { type: "string" },
-        org_id: { type: "string" },
+        new_destination: {
+          type: "string",
+          description: "The http(s) URL the link should send visitors to from now on.",
+        },
+        title: {
+          type: "string",
+          description: "The link's new label. An empty string clears it.",
+        },
+        org_id: ORG_ID_PROPERTY,
       },
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
     },
   },
   {
     name: "delete_link",
-    description: "Delete a link. Find it by slug or by the destination URL it points to.",
+    title: "Delete a short link",
+    description:
+      "Delete a link for good: its short URL stops working and its click history goes with it. This cannot be undone. Find the link by slug, or by its destination. Needs the member role or higher. Returns the deleted link's slug.",
     inputSchema: {
       type: "object",
       properties: {
-        slug: { type: "string" },
-        destination: { type: "string", description: "The destination URL it points to" },
-        org_id: { type: "string" },
+        slug: FIND_BY_SLUG,
+        destination: {
+          type: "string",
+          description:
+            "Part or all of the link's destination URL, to find it by when the slug is not known. Must match one link only.",
+        },
+        org_id: ORG_ID_PROPERTY,
       },
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
     },
   },
   {
     name: "list_links",
-    description: "Search or list an organization's links, with their click counts.",
+    title: "Find short links",
+    description:
+      "Search an organization's links. Returns a JSON array of up to 10 links, each with its id, slug, domain (null for the shared domain), short URL, destination, title and click count.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Filter by slug, destination or title" },
-        org_id: { type: "string" },
+        query: {
+          type: "string",
+          description:
+            "Text to match against each link's slug, destination and title. Leave it out to list the newest links.",
+        },
+        org_id: ORG_ID_PROPERTY,
       },
     },
+    annotations: READ_ONLY,
   },
   {
     name: "get_link_stats",
+    title: "Get a link's clicks",
     description:
-      "How many clicks one link has gotten, and where from: countries, referrers and devices.",
+      "How many clicks one link has had and where they came from, over the longest period the organization's plan keeps. Returns JSON: the link's slug, domain, short URL, destination and title, total clicks, clicks in the last 7 days, the time of the last click, and click counts by country, referrer and device.",
     inputSchema: {
       type: "object",
       properties: {
-        slug: { type: "string", description: 'The link\'s slug, e.g. "promo"' },
-        domain: { type: "string", description: "Its custom domain, if not on the shared domain" },
-        org_id: { type: "string" },
+        slug: FIND_BY_SLUG,
+        domain: {
+          type: "string",
+          description:
+            'The hostname of the custom domain the link is on, such as "go.example.com". Needed only when the same slug is on more than one domain; left out, the link on the shared domain comes first.',
+        },
+        org_id: ORG_ID_PROPERTY,
       },
       required: ["slug"],
     },
+    annotations: READ_ONLY,
   },
   {
     name: "get_org_stats",
+    title: "Get an organization's clicks",
     description:
-      "An organization's links overall: total and recent clicks, the top-performing links, and links with no clicks in the last 30 days.",
+      "An organization's links overall. Returns JSON: clicks in the period (totalClicks), the number of links, clicks in the last 7 days, the most-clicked links in the period, and links with no clicks in the last 30 days.",
     inputSchema: {
       type: "object",
       properties: {
-        days: { type: "integer", description: "The analytics window, in days. Defaults to 7." },
-        org_id: { type: "string" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description:
+            "How many days back to count clicks and rank links. Leave it out for the longest period the organization's plan keeps; a longer one is cut to that.",
+        },
+        org_id: ORG_ID_PROPERTY,
       },
     },
+    annotations: READ_ONLY,
   },
   {
     name: "get_plan_usage",
+    title: "Get plan usage",
     description:
-      "How many links the organization is allowed on its current plan, and how many are left.",
-    inputSchema: { type: "object", properties: { org_id: { type: "string" } } },
+      'How many links the organization\'s plan allows and how many it uses. Returns JSON: the plan ("free", "hobby" or "pro"), links allowed, links used and links left.',
+    inputSchema: { type: "object", properties: { org_id: ORG_ID_PROPERTY } },
+    annotations: READ_ONLY,
   },
   {
     name: "invite_member",
-    description: "Invite someone to an organization by email.",
+    title: "Invite a member",
+    description:
+      "Invite someone to the organization: emails them a link to join, which lasts 7 days. Needs the admin role or higher, and a free seat on the plan. Asking again for an address that already has an open invite sends no second email; it renews that invite with the role given. Returns JSON: the invite, any address the email failed to reach (failed), and any address that already had an open invite (reused).",
     inputSchema: {
       type: "object",
       properties: {
-        email: { type: "string" },
+        email: { type: "string", description: "The email address to send the invite to." },
         role: {
           type: "string",
           enum: ["viewer", "member", "admin"],
-          description: "Defaults to member",
+          default: "member",
+          description:
+            "What the new member may do: a viewer only reads, a member also makes and changes links, an admin also manages members.",
         },
-        org_id: { type: "string" },
+        org_id: ORG_ID_PROPERTY,
       },
       required: ["email"],
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
     },
   },
   {
     name: "generate_qr_code",
-    description: "Make a QR code for a URL. Returns a PNG image.",
+    title: "Make a QR code",
+    description:
+      "Make a QR code for any http(s) URL, such as a short link's url. Changes nothing in any organization. Returns a 512 by 512 PNG image.",
     inputSchema: {
       type: "object",
-      properties: { url: { type: "string" } },
+      properties: {
+        url: {
+          type: "string",
+          maxLength: 2048,
+          description: "The http(s) URL the QR code opens.",
+        },
+      },
       required: ["url"],
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
   },
 ];
+
+/* ---------------- server info (the initialize handshake) ---------------- */
+
+/** How an agent should use the tools, sent once in the initialize reply. */
+const SERVER_INSTRUCTIONS = [
+  "rdyrct makes short links, counts their clicks, and makes QR codes.",
+  "Every tool but generate_qr_code acts on one organization. Leave org_id out when the person belongs to one; if they belong to more, the tool answers with each one's name and id, and you call it again with the id they mean.",
+  'A slug is the part of a short link after the domain: in a short link ending /promo, the slug is "promo". Find a link by its slug, or by its destination when the person names the page it points to. list_links returns both.',
+  "Links on the shared domain get a random slug. A chosen slug needs one of the organization's own domains (the domain argument).",
+  "A tool refuses what the person's role or plan does not allow, and says why. Pass that on rather than retrying.",
+].join("\n");
+
+/** The server's own description of itself. Its URLs come from APP_URL, so a
+ * self-hosted copy points at itself, not rdyrct.com. Both icons are in
+ * public/, which a self-hosted build keeps (scripts/self-host-files.ts). */
+function serverInfo(env: Env): Implementation {
+  return {
+    name: "rdyrct",
+    version: "1.0.0",
+    title: "rdyrct",
+    description:
+      "Make and change short links, read their click stats, check plan limits, invite teammates, and make QR codes.",
+    websiteUrl: env.APP_URL,
+    icons: [
+      { src: `${env.APP_URL}/connector-icon.svg`, mimeType: "image/svg+xml", sizes: ["any"] },
+      { src: `${env.APP_URL}/connector-icon.png`, mimeType: "image/png", sizes: ["512x512"] },
+    ],
+  };
+}
 
 /* ---------------- tool handlers ---------------- */
 
@@ -737,7 +883,10 @@ mcpRoutes.all("/", async (c) => {
     import("@modelcontextprotocol/sdk/types.js"),
     import("@hono/mcp"),
   ]);
-  const server = new Server({ name: "rdyrct", version: "1.0.0" }, { capabilities: { tools: {} } });
+  const server = new Server(serverInfo(c.env), {
+    capabilities: { tools: {} },
+    instructions: SERVER_INSTRUCTIONS,
+  });
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {

@@ -4,12 +4,46 @@ import { env } from "cloudflare:workers";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 import type { ApiKeyDTO, JsonValue } from "../../src/shared/types";
+import type { Env } from "../../src/worker/env";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
   id: number;
   method: string;
-  params?: { name: string; arguments: Record<string, JsonValue> };
+  params?: { name: string; arguments: Record<string, JsonValue> } | Record<string, JsonValue>;
+}
+
+interface InitializeResponse {
+  result: {
+    serverInfo: {
+      name: string;
+      version: string;
+      title?: string;
+      description?: string;
+      websiteUrl?: string;
+      icons: { src: string }[];
+    };
+    capabilities: Record<string, JsonValue>;
+    instructions?: string;
+  };
+}
+
+interface ToolsListResponse {
+  result: {
+    tools: {
+      name: string;
+      title?: string;
+      description?: string;
+      inputSchema: { properties?: Record<string, { description?: string; default?: string }> };
+      outputSchema?: JsonValue;
+      annotations: {
+        readOnlyHint?: boolean;
+        destructiveHint?: boolean;
+        idempotentHint?: boolean;
+        openWorldHint?: boolean;
+      };
+    }[];
+  };
 }
 
 interface JsonRpcResponse {
@@ -49,7 +83,11 @@ async function revokeKey(cookie: string, keyId: string): Promise<void> {
   await waitOnExecutionContext(ctx);
 }
 
-async function callMcp(authorization: string | undefined, body: JsonRpcRequest): Promise<Response> {
+async function callMcp(
+  authorization: string | undefined,
+  body: JsonRpcRequest,
+  testEnv: Env = authEnv(),
+): Promise<Response> {
   const ctx = createExecutionContext();
   const headers = new Headers({
     accept: "application/json, text/event-stream",
@@ -62,12 +100,23 @@ async function callMcp(authorization: string | undefined, body: JsonRpcRequest):
       headers,
       body: JSON.stringify(body),
     }),
-    authEnv(),
+    testEnv,
     ctx,
   );
   await waitOnExecutionContext(ctx);
   return res;
 }
+
+const INITIALIZE: JsonRpcRequest = {
+  jsonrpc: "2.0",
+  id: 1,
+  method: "initialize",
+  params: {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "test", version: "1" },
+  },
+};
 
 function toolCall(name: string, args: Record<string, JsonValue>): JsonRpcRequest {
   return { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } };
@@ -102,6 +151,84 @@ describe("remote MCP server (#139)", () => {
         "generate_qr_code",
       ]),
     );
+  });
+
+  it("introduces itself in the handshake, with its URLs on this deployment's own host", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const res = await callMcp(`Bearer ${key}`, INITIALIZE);
+    expect(res.status).toBe(200);
+    const { result } = await jsonBody<InitializeResponse>(res);
+    const appUrl = authEnv().APP_URL;
+    expect(result.serverInfo).toMatchObject({
+      name: "rdyrct",
+      version: "1.0.0",
+      title: "rdyrct",
+      websiteUrl: appUrl,
+    });
+    expect(result.serverInfo.description).toBeTruthy();
+    expect(result.serverInfo.icons.map((i) => i.src)).toEqual([
+      `${appUrl}/connector-icon.svg`,
+      `${appUrl}/connector-icon.png`,
+    ]);
+    expect(result.capabilities).toEqual({ tools: {} });
+    expect(result.instructions).toContain("org_id");
+    expect(result.instructions).toContain("slug");
+  });
+
+  it("points a self-hosted copy at its own address, never rdyrct.com", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const res = await callMcp(`Bearer ${key}`, INITIALIZE, {
+      ...authEnv(),
+      APP_URL: "https://links.example.org",
+    });
+    const { result } = await jsonBody<InitializeResponse>(res);
+    expect(result.serverInfo.websiteUrl).toBe("https://links.example.org");
+    expect(result.serverInfo.icons.map((i) => i.src)).toEqual([
+      "https://links.example.org/connector-icon.svg",
+      "https://links.example.org/connector-icon.png",
+    ]);
+  });
+
+  it("gives every tool a title, all four hints and a described input", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const res = await callMcp(`Bearer ${key}`, { jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const { result } = await jsonBody<ToolsListResponse>(res);
+    const tools = new Map(result.tools.map((t) => [t.name, t]));
+    for (const tool of tools.values()) {
+      expect(tool.title, tool.name).toBeTruthy();
+      expect(tool.description, tool.name).toBeTruthy();
+      for (const [prop, spec] of Object.entries(tool.inputSchema.properties ?? {}))
+        expect(spec.description, `${tool.name}.${prop}`).toBeTruthy();
+      // No tool returns structuredContent, so none claims an output schema.
+      expect(tool.outputSchema, tool.name).toBeUndefined();
+    }
+    const hints = Object.fromEntries(
+      [...tools].map(([name, t]) => [
+        name,
+        [
+          t.annotations.readOnlyHint,
+          t.annotations.destructiveHint,
+          t.annotations.idempotentHint,
+          t.annotations.openWorldHint,
+        ],
+      ]),
+    );
+    // [readOnly, destructive, idempotent, openWorld]
+    expect(hints).toEqual({
+      create_link: [false, false, false, false],
+      update_link: [false, true, true, false],
+      delete_link: [false, true, false, false],
+      list_links: [true, false, true, false],
+      get_link_stats: [true, false, true, false],
+      get_org_stats: [true, false, true, false],
+      get_plan_usage: [true, false, true, false],
+      invite_member: [false, false, false, true],
+      generate_qr_code: [true, false, true, false],
+    });
+    expect(tools.get("invite_member")!.inputSchema.properties!.role!.default).toBe("member");
   });
 
   it('create_link makes a real link, matching "shorten this link for me"', async () => {
