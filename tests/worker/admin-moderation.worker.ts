@@ -550,6 +550,24 @@ describe("deleting a user as an admin", () => {
     expect((await admin("/users/nobody", cookie, { method: "DELETE" })).status).toBe(404);
     expect((await admin("/users/admin-1", cookie, { method: "DELETE" })).status).toBe(400);
   });
+
+  it("refuses another platform admin, the way the ban path does", async () => {
+    const cookie = await adminCookie();
+    await env.DB.prepare(
+      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('admin-2', 'Other Admin', 'other-admin@example.com', 1, 1, 'free', 0, 0)",
+    ).run();
+
+    const res = await admin("/users/admin-2", cookie, { method: "DELETE" });
+
+    expect(res.status).toBe(400);
+    expect(await jsonBody<{ message: string }>(res)).toMatchObject({
+      message: "Cannot delete a platform admin",
+    });
+    const left = await env.DB.prepare("select count(*) as n from user where id = 'admin-2'").first<{
+      n: number;
+    }>();
+    expect(left?.n).toBe(1);
+  });
 });
 
 describe("who may reach any of this", () => {
