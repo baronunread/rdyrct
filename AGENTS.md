@@ -556,3 +556,13 @@ in production, but it is a safety net — not a substitute for choosing the fiel
 Check coverage with `npx @evlog/cli map --no-write`. Diagnose setup with `npx @evlog/cli doctor`.
 Deeper guidance is in the `review-logging-patterns` skill — read it before a logging change.
 <!-- evlog:end -->
+
+<!-- polylane:start -->
+## Investigate production with Polylane
+
+[Polylane](https://polylane.com/?ref=github.onboarding-pr) is an AI production engineer. It monitors deploys, telemetry, provider incidents, and your infrastructure. It records suspected problems as Issues. It investigates them and proposes fixes as pull requests. It connects to this repository and serves coding agents through the [Polylane MCP server](https://mcp.polylane.com/mcp).
+
+- For a production question about an error, spike, deploy, or missing signal, query Polylane through its MCP tools before you inspect code.
+- When debugging a failure, start from the Issue Polylane recorded. It carries the evidence from its investigation.
+- Polylane assesses pull requests in this repository for production impact. Read the impact assessment comment before you merge a change to a production path.
+<!-- polylane:end -->
