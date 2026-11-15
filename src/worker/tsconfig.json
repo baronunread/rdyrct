@@ -1,7 +1,8 @@
 {
   // oxlint's type-aware rules read the nearest tsconfig.json. Without this one,
   // the Worker files fall into the app project (which excludes them) and
-  // every Worker type resolves to `any`. `bun check` does not read this file.
-  "extends": "../../tsconfig.worker.json",
-  "include": ["./**/*.ts", "../shared"]
+  // every Worker type resolves to `any`. It adds nothing of its own: the
+  // files and options all come from tsconfig.worker.json, so the two cannot
+  // drift. `bun check` does not read this file.
+  "extends": "../../tsconfig.worker.json"
 }
