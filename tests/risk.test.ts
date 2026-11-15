@@ -108,8 +108,9 @@ describe("destinations it will not look up", () => {
 describe("Google Web Risk", () => {
   const KEY = "test-web-risk-key";
 
-  /** Web Risk answers `webRisk`; the DNS resolver answers clean, or fails. */
-  function providers(webRisk: JsonValue | "fail", options: { dnsFails?: boolean } = {}) {
+  /** Web Risk answers `webRisk`, or fails when it is the string "fail"; the
+   * DNS resolver answers clean, or fails. */
+  function providers(webRisk: JsonValue, options: { dnsFails?: boolean } = {}) {
     const calls: { url: string; key: string | null }[] = [];
     globalThis.fetch = async (input, init) => {
       const url = String(input instanceof Request ? input.url : input);

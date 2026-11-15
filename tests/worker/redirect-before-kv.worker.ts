@@ -25,7 +25,7 @@ import {
 const SHARED_HOST = env.SHARED_LINK_HOST!;
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

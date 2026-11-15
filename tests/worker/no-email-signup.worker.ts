@@ -8,7 +8,7 @@ import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./
  * auth instance per isolate, built from the env of the first request.
  */
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

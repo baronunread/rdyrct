@@ -179,7 +179,8 @@ function VerifyOtpView({
                 onChange={field.onChange}
                 onComplete={(v) => {
                   field.onChange(v);
-                  onComplete(v, clearOtp);
+                  // `runVerify` reports its own failures.
+                  void onComplete(v, clearOtp);
                 }}
                 disabled={busy}
                 autoFocus
@@ -672,7 +673,7 @@ async function trySignUp(
     // Funnel step 4 (#64), at the boundary that actually means "an account
     // was accepted". Before goVerify, so a failure to send the code cannot
     // lose the signup that already happened.
-    captureEmailSignup(posthog.capture, signup);
+    captureEmailSignup((event, props) => posthog.capture(event, props), signup);
     // No email provider: there is no code to send, so the account is already
     // usable. Sign in with what was just typed.
     if (deps.emailEnabled) await deps.goVerify(email);
@@ -701,7 +702,7 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   if (!deps.authPassword) {
     clearPending();
     deps.toast("Email verified. Sign in to continue.");
-    deps.navigate({ href: `/login?next=${encodeURIComponent(deps.next)}`, replace: true });
+    void deps.navigate({ href: `/login?next=${encodeURIComponent(deps.next)}`, replace: true });
     return false;
   }
   const { error: signInError } = await authClient.signIn.email({
@@ -824,7 +825,7 @@ function useRedirectWhenSignedIn(deps: {
   useEffect(() => {
     if (!user || verifyPhase !== "idle") return;
     clearPending();
-    navigate({ href: sanitizeNext(next, user.user.isAdmin), replace: true });
+    void navigate({ href: sanitizeNext(next, user.user.isAdmin), replace: true });
   }, [user, navigate, next, verifyPhase]);
   return verifyPhase === "idle" && (!!user || (authHint && isPending));
 }

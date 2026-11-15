@@ -90,7 +90,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
       }),
     onSuccess: ({ invites }, role) => {
       posthog.capture("member_invited", { invite_type: "link", role });
-      invalidateInvites();
+      void invalidateInvites();
       const invite = invites[0];
       if (invite) {
         void copyInvite(inviteUrl(invite.token)).catch(() => {});
@@ -112,7 +112,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
         role: variables.role,
         count: variables.emails.length,
       });
-      invalidateInvites();
+      void invalidateInvites();
     },
     onError: withErrorToast(toast),
   });

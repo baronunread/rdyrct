@@ -53,7 +53,7 @@ const countIn = async (table: "links" | "anon_links", slug: string) =>
   );
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

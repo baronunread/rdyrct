@@ -41,7 +41,10 @@ async function throwIfNotOk(res: Response): Promise<void> {
 
 export async function api<T>(
   path: string,
-  init?: Omit<RequestInit, "body"> & { body?: unknown },
+  init?: Omit<RequestInit, "body" | "headers"> & {
+    body?: unknown;
+    headers?: Record<string, string>;
+  },
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (init?.body !== undefined) headers["content-type"] = "application/json";

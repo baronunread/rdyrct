@@ -22,7 +22,7 @@ import { PLAN_LIMITS, type CurrentUser, type JsonValue } from "../../src/shared/
  */
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 afterEach(reset);

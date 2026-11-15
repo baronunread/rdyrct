@@ -475,7 +475,7 @@ function useAdminUserActions() {
       body: { isAdmin?: boolean; banned?: boolean };
     }) => api(`/admin/users/${userId}`, { method: "PATCH", body }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       setConfirm(null);
     },
     onError: withErrorToast(toast),
@@ -487,8 +487,8 @@ function useAdminUserActions() {
   // `["user"]` goes too: an admin can comp their own account, and the cached
   // current user carries the plan that the rest of the app gates on.
   const compChanged = () => {
-    qc.invalidateQueries({ queryKey: ["admin", "users"] });
-    qc.invalidateQueries({ queryKey: ["user"] });
+    void qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    void qc.invalidateQueries({ queryKey: ["user"] });
   };
 
   const grantComp = useMutation({
@@ -534,7 +534,7 @@ function useAdminUserActions() {
   const remove = useMutation({
     mutationFn: (userId: string) => api(`/admin/users/${userId}`, { method: "DELETE" }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin"] });
+      void qc.invalidateQueries({ queryKey: ["admin"] });
       setConfirm(null);
       toast("User deleted");
     },

@@ -278,7 +278,7 @@ async function lookupWebRisk(
   for (const threat of WEB_RISK_THREATS) params.append("threatTypes", threat);
   try {
     if (d1 && !(await takeWebRiskLookup(d1))) return "capped";
-    const res = await fetch(`${WEB_RISK_SEARCH}?${params}`, {
+    const res = await fetch(`${WEB_RISK_SEARCH}?${params.toString()}`, {
       headers: { "x-goog-api-key": key },
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     });

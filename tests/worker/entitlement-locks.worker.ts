@@ -145,7 +145,9 @@ describe("a locked org (#160)", () => {
     );
     const body = await jsonBody<CurrentUser>(res);
     // Sorted: currentUserFor has no ORDER BY, so row order is incidental.
-    expect(body.orgs.map((o) => [o.id, o.locked]).sort()).toEqual([
+    expect(
+      body.orgs.map((o) => [o.id, o.locked] as const).sort((x, y) => x[0].localeCompare(y[0])),
+    ).toEqual([
       ["org-1", false],
       ["org-2", true],
     ]);

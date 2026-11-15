@@ -29,6 +29,7 @@ import {
   testEnv,
   unreachableBilling,
 } from "./support";
+import type { ApiInit } from "./support";
 
 /**
  * A ban: the user is out, every org they own answers "disabled" on every
@@ -39,7 +40,7 @@ import {
 const db = () => drizzle(env.DB, { schema });
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const api = (path: string, cookie: string, init: RequestInit = {}) =>
+const api = (path: string, cookie: string, init: ApiInit = {}) =>
   fetchWorker(
     new Request(`http://localhost/api${path}`, {
       ...init,
@@ -121,7 +122,7 @@ async function replay0046() {
 const realFetch = globalThis.fetch;
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
   // The destination check runs after each create: an answer it reads as "no
   // verdict", so nothing lands after the test has ended.

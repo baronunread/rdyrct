@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
+import {
+  applyTestMigrations,
+  bodyText,
+  captureEmails,
+  fetchWorker,
+  overrideEnv,
+  requestUrl,
+} from "./support";
 import { spendToken } from "../../src/worker/turnstile";
 
 /**
@@ -32,9 +39,9 @@ type Siteverify = { success: boolean; action?: string; "error-codes"?: string[] 
 function siteverify(answer: Siteverify | Error | "not json") {
   const real = globalThis.fetch;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    const url = input instanceof Request ? input.url : String(input);
+    const url = requestUrl(input);
     if (!url.includes("challenges.cloudflare.com")) return real(input, init);
-    sent.push(new URLSearchParams(String(init?.body)));
+    sent.push(new URLSearchParams(bodyText(init)));
     if (answer instanceof Error) throw answer;
     if (answer === "not json") return new Response("<html>bad gateway</html>", { status: 502 });
     return Response.json(answer);
@@ -43,7 +50,7 @@ function siteverify(answer: Siteverify | Error | "not json") {
 
 beforeEach(async () => {
   sent = [];
-  reset();
+  await reset();
   await applyTestMigrations();
   captureEmails({ mx: "deliverable" });
 });

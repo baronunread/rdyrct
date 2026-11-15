@@ -130,7 +130,7 @@ describe("org creation: owned-org cap under concurrency (#18)", () => {
     const cookie = await seedFreeUser("racer-1", "racer1@example.com");
 
     const [a, b] = await Promise.all([postOrg(cookie), postOrg(cookie)]);
-    const statuses = [a.status, b.status].sort();
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
 
     expect(statuses).toEqual([201, 402]);
 
@@ -223,7 +223,7 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
       acceptInvite(cookieA, "invite-a"),
       acceptInvite(cookieB, "invite-b"),
     ]);
-    const statuses = [a.status, b.status].sort();
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
 
     expect(statuses).toEqual([200, 402]);
 
@@ -248,7 +248,7 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
       acceptInvite(cookieA, "bearer-invite"),
       acceptInvite(cookieB, "bearer-invite"),
     ]);
-    expect([a.status, b.status].sort()).toEqual([200, 404]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([200, 404]);
 
     const joined = await env.DB.prepare(
       "select count(*) as n from org_members where org_id = 'org-race' and user_id in ('racer-d', 'racer-e')",
@@ -289,7 +289,7 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
       acceptInvite(cookie, "bearer-invite"),
       acceptInvite(cookie, "bearer-invite"),
     ]);
-    const statuses = [a.status, b.status].sort();
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
 
     expect(statuses).toEqual([200, 409]);
 
@@ -320,7 +320,7 @@ describe("link creation: links cap under concurrency (#18)", () => {
       postLink(cookie, "org-links"),
       postLink(cookie, "org-links"),
     ]);
-    const statuses = [a.status, b.status].sort();
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
 
     expect(statuses).toEqual([201, 402]);
 
@@ -369,7 +369,7 @@ describe("alias creation: the per-link cap under concurrency", () => {
       postAddress(cookie, "org-alias", linkId),
       postAddress(cookie, "org-alias", linkId),
     ]);
-    expect([a.status, b.status].sort()).toEqual([201, 402]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 402]);
 
     const held = await env.DB.prepare(
       "select count(*) as n from link_addresses where link_id = ? and retired_at is null",
@@ -399,7 +399,7 @@ describe("domain creation: domains cap under concurrency (#18)", () => {
       postDomain(cookie, "org-domains", "race-a.example.com"),
       postDomain(cookie, "org-domains", "race-b.example.com"),
     ]);
-    const statuses = [a.status, b.status].sort();
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
 
     expect(statuses).toEqual([201, 402]);
 

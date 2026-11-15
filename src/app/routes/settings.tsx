@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { settle } from "../lib/route-preload";
+import { dataUrlOf } from "@/app/lib/data-url";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
@@ -48,7 +49,7 @@ function usePendingPicture() {
     }
     let live = true;
     const reader = new FileReader();
-    reader.onload = () => live && setUrl(String(reader.result));
+    reader.onload = () => live && setUrl(dataUrlOf(reader));
     reader.readAsDataURL(blob);
     return () => {
       live = false;

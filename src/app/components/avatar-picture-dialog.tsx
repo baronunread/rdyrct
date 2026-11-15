@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
+import { dataUrlOf } from "@/app/lib/data-url";
 import { errorMessage } from "@/app/lib/error-message";
 import { AVATAR_MAX_DIMENSION } from "@/shared/types";
 import { ImagePlus, Trash2 } from "@/app/ui/icons";
@@ -154,7 +155,7 @@ export function AvatarPictureDialog({
   const loadFile = (file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setSrc(String(reader.result));
+    reader.onload = () => setSrc(dataUrlOf(reader));
     reader.onerror = () => toast("Could not read this image", "error");
     reader.readAsDataURL(file);
   };

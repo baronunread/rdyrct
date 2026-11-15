@@ -59,7 +59,7 @@ async function walk(cookie: string, query: string): Promise<string[]> {
 }
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

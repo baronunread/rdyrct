@@ -415,8 +415,8 @@ export function AdminOrgsPage() {
   const remove = useMutation({
     mutationFn: (orgId: string) => api(`/admin/orgs/${orgId}`, { method: "DELETE" }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin"] });
-      qc.invalidateQueries({ queryKey: ["user"] });
+      void qc.invalidateQueries({ queryKey: ["admin"] });
+      void qc.invalidateQueries({ queryKey: ["user"] });
       setDeleting(null);
       toast("Organization deleted");
     },

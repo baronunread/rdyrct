@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import * as v from "valibot";
 import type { BillingProvider } from "../../src/worker/billing-provider";
 import { env } from "cloudflare:workers";
 import {
@@ -345,7 +346,7 @@ export function captureEmails({
     started = true;
     // SAFETY: the only caller of this branch is sendEmail(), which posts a
     // JSON body of exactly these four fields to Resend.
-    const email = JSON.parse(String(init?.body ?? "{}")) as CapturedEmail;
+    const email = JSON.parse(bodyText(init) || "{}") as CapturedEmail;
     if (refuse?.includes(email.to)) return new Response("down", { status: 500 });
     sent.push(email);
     if (hold) await hold;
@@ -732,16 +733,16 @@ export function captureBatches(status: (call: number) => number = () => 200) {
   let calls = 0;
   const original = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
-    const url = String(input instanceof Request ? input.url : input);
+    const url = requestUrl(input);
     if (!url.endsWith("/emails/batch")) return original(input, init);
     const headers = new Headers(init?.headers);
     // SAFETY: the only sender of this request is deliverBatch(), which posts
     // an array of exactly these fields.
-    const emails = JSON.parse(String(init?.body ?? "[]")) as Posted[];
+    const emails = JSON.parse(bodyText(init) || "[]") as Posted[];
     const answer = status(calls);
     calls += 1;
     const key = headers.get("idempotency-key");
-    const body = String(init?.body ?? "");
+    const body = bodyText(init);
     const seen = key === null ? undefined : delivered.get(key);
     if (answer === 409 || (seen !== undefined && seen !== body)) {
       return Response.json({ name: "invalid_idempotent_request" }, { status: 409 });
@@ -777,4 +778,22 @@ export async function fillFreePlanLinks(): Promise<void> {
     );
   }
   await env.DB.batch(statements);
+}
+
+/** The init of a worker API request in tests: headers as a plain record, so a
+ * helper can spread them without an array of pairs turning into indices. */
+export type ApiInit = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
+
+/** The address a mocked `fetch` was called with. */
+export function requestUrl(input: RequestInfo | URL): string {
+  return input instanceof Request ? input.url : input.toString();
+}
+
+/** The body a mocked `fetch` was given, as text: a string or form fields,
+ * "" for no body. */
+export function bodyText(init?: RequestInit): string {
+  const body = init?.body;
+  if (body instanceof URLSearchParams) return body.toString();
+  const text = v.safeParse(v.string(), body);
+  return text.success ? text.output : "";
 }

@@ -65,7 +65,8 @@ export function InvitePage() {
       await qc.invalidateQueries({ queryKey: ["user"] });
       posthog.capture("organization_invite_accepted");
       setOrg(res.orgId);
-      navigate({ to: "/dashboard" });
+      // Not awaited: a failed navigation is not a failed invite.
+      void navigate({ to: "/dashboard" });
     } catch (e) {
       toast(errorMessage(e), "error");
       // A 404 here means the link is spent or revoked, and the card is still

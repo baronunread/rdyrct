@@ -48,7 +48,7 @@ export async function submitResetPassword({
       return;
     }
     toast("Password updated, sign in with your new password");
-    navigate({ to: "/login", replace: true });
+    void navigate({ to: "/login", replace: true });
   } finally {
     setBusy(false);
   }

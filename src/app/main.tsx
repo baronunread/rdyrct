@@ -522,7 +522,11 @@ if (root) {
     // without this the client adds one, React finds a tree that differs from
     // the HTML (error #418) and throws the prerendered DOM away.
     router.ssr = { manifest: undefined };
-    Promise.race([router.load(), new Promise((resolve) => setTimeout(resolve, HYDRATE_WAIT_MS))])
+    // Nothing to wait for: the catch below swallows a failed load.
+    void Promise.race([
+      router.load(),
+      new Promise((resolve) => setTimeout(resolve, HYDRATE_WAIT_MS)),
+    ])
       .catch(() => {})
       .then(() => hydrateRoot(root, <App />));
   } else {

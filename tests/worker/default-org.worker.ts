@@ -36,7 +36,7 @@ async function ownedOrgs(userId: string) {
 }
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

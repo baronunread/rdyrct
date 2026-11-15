@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Webhook } from "standardwebhooks";
+import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
@@ -359,7 +360,7 @@ billingRoutes.post("/checkout/:id/confirm", requireUser, async (c) => {
   // (POST /checkout above) and Polar does not let the client change it, so
   // this rejects both a stranger's checkout id and a stale one from before
   // an account switch.
-  if (String(checkout.metadata.userId ?? "") !== user.id) {
+  if (metadataUserId(checkout.metadata) !== user.id) {
     throw new HTTPException(404, { message: "Not found" });
   }
   log.set({ userId: user.id, checkoutId, checkoutStatus: checkout.status });
@@ -459,6 +460,13 @@ function notStale(at: Date) {
  * `notStale`. `null` means "nothing to write" (e.g. no userId in metadata).
  */
 
+/** The user id server-side checkout creation put in Polar metadata, or "" when
+ * the metadata has none or it is not a string. */
+function metadataUserId(metadata: Record<string, JsonValue> | null | undefined): string {
+  const parsed = v.safeParse(v.string(), metadata?.userId);
+  return parsed.success ? parsed.output : "";
+}
+
 /** Which user an event addresses: its checkout metadata, or the subscription
  * id we already stored for them.
  *
@@ -468,7 +476,7 @@ function notStale(at: Date) {
  * over it (#84). Nothing here sums two subscriptions, and the product does
  * not sell a second one. */
 function subjectOf(event: PolarEvent) {
-  const userId = String(event.data.metadata?.userId ?? "");
+  const userId = metadataUserId(event.data.metadata);
   return userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id);
 }
 
@@ -530,7 +538,7 @@ async function planForProductOrAlert(env: Env, event: PolarEvent, userId: string
 }
 
 async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
-  const userId = String(event.data.metadata?.userId ?? "");
+  const userId = metadataUserId(event.data.metadata);
   if (!userId) return null;
   const plan = await planForProductOrAlert(env, event, userId);
   if (!plan) return null;
@@ -569,7 +577,7 @@ function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
 }
 
 function subscriptionCanceledMutation(db: Db, event: PolarEvent) {
-  const userId = String(event.data.metadata?.userId ?? "");
+  const userId = metadataUserId(event.data.metadata);
   const periodEnd = event.data.current_period_end ?? event.data.ends_at;
   if (!userId && !event.data.id) return null;
   const at = eventAt(event);
@@ -597,7 +605,7 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
   // Polar puts both on every subscription payload. Without them there is no
   // snapshot to apply, and guessing the missing half would write fiction.
   if (!status || !event.data.product_id) return null;
-  const userId = String(event.data.metadata?.userId ?? "");
+  const userId = metadataUserId(event.data.metadata);
   const plan = await planForProductOrAlert(env, event, userId || null);
   if (!plan) return null;
   const at = eventAt(event);
@@ -620,7 +628,7 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
 }
 
 function subscriptionUncanceledMutation(db: Db, event: PolarEvent) {
-  const userId = String(event.data.metadata?.userId ?? "");
+  const userId = metadataUserId(event.data.metadata);
   if (!userId && !event.data.id) return null;
   const at = eventAt(event);
   return db
@@ -690,9 +698,8 @@ function verifiesWith(key: string, body: string, headers: Record<string, string>
  */
 async function applyPolarEvent(env: Env, db: Db, event: PolarEvent): Promise<void> {
   const subjectId = PLAN_EVENTS.has(event.type) ? await subjectIdOf(db, event) : null;
-  const mutation = await mutationFor(db, env, event);
-  if (!mutation) return;
-  const result = await mutation;
+  const result = await mutationFor(db, env, event);
+  if (!result) return;
   if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
   // `reconcileUser` swallows its own failures: a webhook that 500s earns a
   // retry, and ten of those disable the endpoint.
@@ -792,7 +799,7 @@ async function alertIfNoSuchSubject(db: Db, event: PolarEvent): Promise<void> {
       event: "polar_webhook_no_matching_user",
       type: event.type,
       subscriptionId: event.data.id,
-      userId: String(event.data.metadata?.userId ?? "") || null,
+      userId: metadataUserId(event.data.metadata) || null,
     },
   ]);
 }
