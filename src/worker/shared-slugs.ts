@@ -3,8 +3,8 @@ import * as schema from "./db/schema";
 import type { DB } from "./env";
 import { randomSlug } from "./util";
 
-/** Draws before giving up. A clash is about one in 27.5 billion per draw, so
- * five in a row means the database is refusing writes, not a full pool. */
+/** Draws before giving up. A clash is about one in 27.5 billion per draw
+ * while the pool is young, so five in a row should never happen. */
 const ATTEMPTS = 5;
 
 /**

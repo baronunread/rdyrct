@@ -759,3 +759,22 @@ export function captureBatches(status: (call: number) => number = () => 200) {
     restore: () => (globalThis.fetch = original),
   };
 }
+
+/** Fills org-1 to the free plan's 30 links with raw rows, each with the
+ * primary address that makes it count against the cap. */
+export async function fillFreePlanLinks(): Promise<void> {
+  const statements = [];
+  for (let i = 0; i < 30; i++) {
+    statements.push(
+      env.DB.prepare(
+        `insert into links (id, org_id, slug, destination, created_at)
+         values (?, 'org-1', ?, 'https://example.com', 0)`,
+      ).bind(`full-${i}`, `full${i}`),
+      env.DB.prepare(
+        `insert into link_addresses (id, link_id, org_id, slug, kind, created_at)
+         values (?, ?, 'org-1', ?, 'primary', 0)`,
+      ).bind(`addr-${i}`, `full-${i}`, `full${i}`),
+    );
+  }
+  await env.DB.batch(statements);
+}

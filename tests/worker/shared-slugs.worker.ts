@@ -5,6 +5,7 @@ import {
   applyTestMigrations,
   authEnv,
   fetchWorker,
+  fillFreePlanLinks,
   freeOwnerCookie,
   jsonBody,
   testDb,
@@ -82,6 +83,22 @@ describe("allocateSharedSlug", () => {
   });
 });
 
+describe("a refused create", () => {
+  it("issues no slug, so retrying at the cap does not grow the table", async () => {
+    const cookie = await freeOwnerCookie();
+    await fillFreePlanLinks();
+    const count = async () =>
+      (await env.DB.prepare("select count(*) as n from issued_slugs").first<{ n: number }>())?.n;
+    const before = await count();
+
+    const res = await orgApi(cookie, "POST", "/links", {
+      destination: "https://example.com/one-more",
+    });
+    expect(res.status).toBe(402);
+    expect(await count()).toBe(before);
+  });
+});
+
 describe("a slug never comes back", () => {
   it("after its link is deleted", async () => {
     const cookie = await freeOwnerCookie();
@@ -106,6 +123,26 @@ describe("a slug never comes back", () => {
     );
     await env.DB.prepare("delete from orgs where id = 'org-1'").run();
     expect(await issued(slug)).toBe(true);
+    expect(await allocateSharedSlug(testDb(), drawing(slug, "fresh06"))).toBe("fresh06");
+  });
+
+  it("after an extra address is removed, which retires it without deleting anything", async () => {
+    const cookie = await freeOwnerCookie();
+    const { id } = await jsonBody<{ id: string }>(
+      await orgApi(cookie, "POST", "/links", { destination: "https://example.com/aliased" }),
+    );
+    const added = await orgApi(cookie, "POST", `/links/${id}/addresses`, {});
+    expect(added.status).toBe(201);
+    // The route answers with the link; the new address is its alias row.
+    const alias = (await env.DB.prepare(
+      "select id, slug from link_addresses where link_id = ? and kind = 'permanent_alias'",
+    )
+      .bind(id)
+      .first<{ id: string; slug: string }>())!;
+    expect(await issued(alias.slug)).toBe(true);
+
+    expect((await orgApi(cookie, "DELETE", `/links/${id}/addresses/${alias.id}`)).status).toBe(200);
+    expect(await allocateSharedSlug(testDb(), drawing(alias.slug, "fresh07"))).toBe("fresh07");
   });
 
   it("after an anonymous link expires and is swept", async () => {

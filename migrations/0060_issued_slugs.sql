@@ -21,3 +21,9 @@ INSERT OR IGNORE INTO issued_slugs (slug, issued_at)
 -- from the pool of 27.5 billion.
 INSERT OR IGNORE INTO issued_slugs (slug, issued_at)
   SELECT slug, created_at FROM link_reports;
+-- So does the audit entry for a link a platform admin deleted: most often a
+-- takedown, so a slug somebody may well have spread around.
+INSERT OR IGNORE INTO issued_slugs (slug, issued_at)
+  SELECT json_extract(detail, '$.slug'), created_at FROM admin_actions
+  WHERE action IN ('link.delete', 'anon_link.delete')
+    AND json_extract(detail, '$.slug') IS NOT NULL;

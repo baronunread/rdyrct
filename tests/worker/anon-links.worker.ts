@@ -8,6 +8,7 @@ import {
   freeOwnerCookie,
   jsonBody,
   overrideEnv,
+  fillFreePlanLinks,
   recordingLimit,
 } from "./support";
 import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
@@ -156,24 +157,7 @@ describe("the plan's link cap", () => {
     await freeOwnerCookie();
     const anon = await seedAnon();
 
-    // Fill the free plan's allowance with raw rows, each with the primary
-    // address that makes it count.
-    const statements = [];
-    for (let i = 0; i < 30; i++) {
-      statements.push(
-        env.DB.prepare(
-          `insert into links (id, org_id, slug, destination, title, utm_source, utm_medium,
-             utm_campaign, utm_term, utm_content, qr_logo, qr_style, qr_color, qr_corner,
-             qr_bg, qr_eye_color, created_at)
-           values (?, 'org-1', ?, 'https://example.com', '', '', '', '', '', '', '', '', '', '', '', '', 0)`,
-        ).bind(`full-${i}`, `full${i}`),
-        env.DB.prepare(
-          `insert into link_addresses (id, link_id, org_id, slug, kind, created_at)
-           values (?, ?, 'org-1', ?, 'primary', 0)`,
-        ).bind(`addr-${i}`, `full-${i}`, `full${i}`),
-      );
-    }
-    await env.DB.batch(statements);
+    await fillFreePlanLinks();
 
     expect(await claimAnonLink(authEnv(), "org-1", "free-1", anon.claimToken)).toBeNull();
     // And the anonymous row survives, so the link keeps working until it
