@@ -84,8 +84,9 @@ function KeepItFooter({ link }: { link: StoredAnonLink }) {
     >
       {clicks ? (
         <>
-          <span className="tnum font-bold text-text">{clicksLabel(clicks)} so far.</span> Sign up to
-          keep this link and see where they came from.
+          <span className="tnum font-bold text-text">{clicksLabel(clicks)} so far.</span> Works for
+          24 hours, then someone else can get its address. Sign up to keep it for good and see where
+          they came from.
         </>
       ) : (
         "Works for 24 hours, then someone else can get its address. Sign up to keep it for good."

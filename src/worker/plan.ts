@@ -277,6 +277,14 @@ export async function insertLinkWithinLimit(
     env.DB.prepare(
       `delete from links where id = ? and not exists (select 1 from link_addresses where link_id = ?)`,
     ).bind(link.id, link.id),
+    // A shared-domain address keeps its slug reserved for good, in the same
+    // batch as the insert. A new link's slug is already reserved, so this is a
+    // no-op; it matters for a claim, whose landing-page slug the expiry sweep
+    // may have freed between the claim's expiry check and this write.
+    env.DB.prepare(
+      `insert or ignore into issued_slugs (slug, issued_at)
+         select slug, created_at from link_addresses where id = ? and domain_id is null`,
+    ).bind(address.id),
   ]);
   return results[1].meta.changes > 0;
 }

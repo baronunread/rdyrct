@@ -8,9 +8,12 @@ import {
   fillFreePlanLinks,
   freeOwnerCookie,
   jsonBody,
+  rawAddressRow,
+  rawLinkRow,
   testDb,
 } from "./support";
 import { allocateSharedSlug } from "../../src/worker/shared-slugs";
+import { insertLinkWithinLimit } from "../../src/worker/plan";
 import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 import type { JsonValue } from "../../src/shared/types";
 
@@ -114,6 +117,39 @@ describe("a link made without an account", () => {
     await env.DB.prepare("delete from links where id = ?").bind(link!.id).run();
     expect(await issued(slug)).toBe(true);
     expect(await allocateSharedSlug(testDb(), drawing(slug, "fresh04"))).toBe("fresh04");
+  });
+
+  it("reserves the slug again when a claim lands after the sweep freed it", async () => {
+    // The other order of the race: the claim passed its expiry check, the
+    // sweep then freed the slug, and only then does the claim's insert run.
+    await freeOwnerCookie();
+    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/late"));
+    await expire(slug);
+    await sweepExpiredAnonLinks(authEnv());
+    expect(await issued(slug)).toBe(false);
+
+    const inserted = await insertLinkWithinLimit(
+      testDb(),
+      authEnv(),
+      rawLinkRow({
+        id: "link-late",
+        orgId: "org-1",
+        slug,
+        destination: "https://example.com/late",
+        createdAt: Date.now(),
+      }),
+      rawAddressRow({
+        id: "addr-late",
+        linkId: "link-late",
+        orgId: "org-1",
+        slug,
+        kind: "primary",
+        createdAt: Date.now(),
+      }),
+      30,
+    );
+    expect(inserted).toBe(true);
+    expect(await issued(slug)).toBe(true);
   });
 
   it("never frees a slug an account's link holds, even if the sweep races a claim", async () => {
