@@ -10,7 +10,8 @@
  * button that was pressed, and that is the ceiling without an account: the
  * second link is the point where trying it becomes signing up.
  *
- * The link lasts 24 hours. Signing up keeps it: the claim token goes to
+ * The link lasts 24 hours, and then its slug is free for a later random draw
+ * (sweepExpiredAnonLinks). Signing up keeps it for good: the claim token goes to
  * localStorage and the app spends it once the new account has an org, so the
  * first dashboard is not empty (#65).
  */
@@ -87,7 +88,7 @@ function KeepItFooter({ link }: { link: StoredAnonLink }) {
           keep this link and see where they came from.
         </>
       ) : (
-        "Works for 24 hours. Sign up to keep it and see where its clicks come from."
+        "Works for 24 hours, then someone else can get its address. Sign up to keep it for good."
       )}
     </HeroFooter>
   );

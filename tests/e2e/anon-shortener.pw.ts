@@ -41,6 +41,9 @@ test("a visitor with no account gets a working short link", async ({ page }) => 
   const response = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(response.status()).toBe(302);
   expect(response.headers()["location"]).toBe(destination);
+
+  // Temporary, slug included, and the page says so before anyone relies on it.
+  await expect(page.getByText("then someone else can get its address")).toBeVisible();
 });
 
 test("the short link is on the shared link host, not the app's own host", async ({ page }) => {

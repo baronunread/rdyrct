@@ -184,7 +184,7 @@ const FAQS = [
   },
   {
     q: "Does this UTM builder store my links?",
-    a: "No. The link is built in your browser and nothing is sent unless you press Shorten it. Templates you save stay in this browser. A short link made here works for 24 hours; sign up to keep it.",
+    a: "No. The link is built in your browser and nothing is sent unless you press Shorten it. Templates you save stay in this browser. A short link made here works for 24 hours, then someone else can get its address; sign up to keep it for good.",
   },
 ] as const;
 
@@ -410,7 +410,9 @@ function ShortLinkResult({ link }: { link: AnonLink }) {
         >
           {link.url.replace(/^https?:\/\//, "")}
         </a>
-        <span className="text-xs text-muted">Works for 24 hours. Sign up to keep it.</span>
+        <span className="text-xs text-muted">
+          Works for 24 hours, then someone else can get its address. Sign up to keep it for good.
+        </span>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <CopyButton

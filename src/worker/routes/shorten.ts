@@ -337,5 +337,16 @@ async function forgetAnonLink(env: Env, row: { id: string; slug: string }): Prom
   // because the row that would tell the next sweep to retry is gone too.
   const published = await resolveSlug(env, row.slug, null);
   if (!published || published.linkId === row.id) await unpublishLink(env, row.slug, null);
-  await drizzle(env.DB, { schema }).delete(schema.anonLinks).where(eq(schema.anonLinks.id, row.id));
+  await env.DB.batch([
+    env.DB.prepare("delete from anon_links where id = ?").bind(row.id),
+    // A link made without an account is temporary, slug included: once it
+    // expires unclaimed, its slug goes back to allocateSharedSlug. Nobody can
+    // choose a shared-domain slug, so it can only come back to a random draw.
+    // Not while an account's link holds it: a claim racing this sweep keeps
+    // the slug, and an account's slug is never handed out again.
+    env.DB.prepare(
+      `delete from issued_slugs where slug = ?
+         and not exists (select 1 from link_addresses where slug = ? and domain_id is null)`,
+    ).bind(row.slug, row.slug),
+  ]);
 }
