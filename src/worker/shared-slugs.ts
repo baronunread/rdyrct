@@ -11,7 +11,10 @@ const ATTEMPTS = 5;
  * Hands out a shared-domain slug nobody has ever had, and records it as
  * issued.
  *
- * Never reissued, even after its link is deleted: an old post, email or
+ * An account's slug (any plan) is never reissued, even after its link is
+ * deleted. The one exception is a link made without an account, which the
+ * landing page sells as temporary: sweepExpiredAnonLinks frees its slug once
+ * it expires unclaimed. Otherwise: an old post, email or
  * printed QR code still points at it, and whoever got it next could send
  * all of them anywhere. That is how dead bit.ly links in old brand tweets
  * came to show pages their owners never linked.

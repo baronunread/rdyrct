@@ -8,10 +8,13 @@ import {
   fillFreePlanLinks,
   freeOwnerCookie,
   jsonBody,
+  rawAddressRow,
+  rawLinkRow,
   testDb,
 } from "./support";
 import { allocateSharedSlug } from "../../src/worker/shared-slugs";
-import { sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
+import { insertLinkWithinLimit } from "../../src/worker/plan";
+import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 import type { JsonValue } from "../../src/shared/types";
 
 /**
@@ -83,6 +86,130 @@ describe("allocateSharedSlug", () => {
   });
 });
 
+describe("a link made without an account", () => {
+  // Temporary, slug included: the landing page says so. An account's links,
+  // free plan too, keep theirs for good.
+  const expire = (slug: string) =>
+    env.DB.prepare("update anon_links set expires_at = ? where slug = ?")
+      .bind(Date.now() - HOUR, slug)
+      .run();
+
+  it("gives its slug back once it expires unclaimed", async () => {
+    const res = await shorten("https://example.com/anon");
+    expect(res.status).toBe(201);
+    const { slug } = await jsonBody<{ slug: string }>(res);
+    expect(await issued(slug)).toBe(true);
+
+    await expire(slug);
+    expect(await sweepExpiredAnonLinks(authEnv())).toBe(1);
+    expect(await issued(slug)).toBe(false);
+    expect(await allocateSharedSlug(testDb(), drawing(slug))).toBe(slug);
+  });
+
+  it("keeps its slug for good once an account claims it", async () => {
+    await freeOwnerCookie();
+    const { slug, claimToken } = await jsonBody<{ slug: string; claimToken: string }>(
+      await shorten("https://example.com/claimed"),
+    );
+    const link = await claimAnonLink(authEnv(), "org-1", "free-1", claimToken);
+    expect(link?.slug).toBe(slug);
+
+    await env.DB.prepare("delete from links where id = ?").bind(link!.id).run();
+    expect(await issued(slug)).toBe(true);
+    expect(await allocateSharedSlug(testDb(), drawing(slug, "fresh04"))).toBe("fresh04");
+  });
+
+  // A claim checks expiry, then awaits several calls before its insert. These
+  // stage the sweep landing in that gap: the insert runs with the claim's
+  // guard after the landing-page row is already gone.
+  async function anonIdOf(slug: string) {
+    const row = await env.DB.prepare("select id from anon_links where slug = ?")
+      .bind(slug)
+      .first<{ id: string }>();
+    return row!.id;
+  }
+  const lateClaim = (slug: string, anonId: string) =>
+    insertLinkWithinLimit(
+      testDb(),
+      authEnv(),
+      rawLinkRow({
+        id: "link-late",
+        orgId: "org-1",
+        slug,
+        destination: "https://example.com/late",
+        createdAt: Date.now(),
+      }),
+      rawAddressRow({
+        id: "addr-late",
+        linkId: "link-late",
+        orgId: "org-1",
+        slug,
+        kind: "primary",
+        createdAt: Date.now(),
+      }),
+      30,
+      anonId,
+    );
+  const accountAddresses = async (slug: string) =>
+    (
+      await env.DB.prepare("select count(*) as n from link_addresses where slug = ?")
+        .bind(slug)
+        .first<{ n: number }>()
+    )?.n;
+
+  it("refuses a claim that lands after the sweep removed its link", async () => {
+    await freeOwnerCookie();
+    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/late"));
+    const anonId = await anonIdOf(slug);
+    await expire(slug);
+    await sweepExpiredAnonLinks(authEnv());
+
+    expect(await lateClaim(slug, anonId)).toBe(false);
+    expect(await accountAddresses(slug)).toBe(0);
+  });
+
+  it("refuses it even once a new landing-page link has drawn the freed slug", async () => {
+    await freeOwnerCookie();
+    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/first"));
+    const anonId = await anonIdOf(slug);
+    await expire(slug);
+    await sweepExpiredAnonLinks(authEnv());
+    // The freed slug comes back to a new link before the claim resumes.
+    expect(await allocateSharedSlug(testDb(), drawing(slug))).toBe(slug);
+    await env.DB.prepare(
+      `insert into anon_links (id, slug, destination, claim_token, created_at, expires_at)
+       values ('anon-new', ?, 'https://example.com/second', 'tok-new', ?, ?)`,
+    )
+      .bind(slug, Date.now(), Date.now() + 24 * HOUR)
+      .run();
+
+    expect(await lateClaim(slug, anonId)).toBe(false);
+    expect(await accountAddresses(slug)).toBe(0);
+    expect(await issued(slug)).toBe(true);
+  });
+
+  it("never frees a slug an account's link holds, even if the sweep races a claim", async () => {
+    // Staged: the sweep's anonymous row is still there, expired, while an
+    // organization link already answers on the same slug.
+    await freeOwnerCookie();
+    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/race"));
+    await env.DB.batch([
+      env.DB.prepare(
+        `insert into links (id, org_id, slug, destination, created_at)
+         values ('link-race', 'org-1', ?, 'https://example.com/race', 0)`,
+      ).bind(slug),
+      env.DB.prepare(
+        `insert into link_addresses (id, link_id, org_id, slug, kind, created_at)
+         values ('addr-race', 'link-race', 'org-1', ?, 'primary', 0)`,
+      ).bind(slug),
+    ]);
+    await expire(slug);
+
+    await sweepExpiredAnonLinks(authEnv());
+    expect(await issued(slug)).toBe(true);
+  });
+});
+
 describe("a refused create", () => {
   it("issues no slug, so retrying at the cap does not grow the table", async () => {
     const cookie = await freeOwnerCookie();
@@ -143,19 +270,6 @@ describe("a slug never comes back", () => {
 
     expect((await orgApi(cookie, "DELETE", `/links/${id}/addresses/${alias.id}`)).status).toBe(200);
     expect(await allocateSharedSlug(testDb(), drawing(alias.slug, "fresh07"))).toBe("fresh07");
-  });
-
-  it("after an anonymous link expires and is swept", async () => {
-    const res = await shorten("https://example.com/anon");
-    expect(res.status).toBe(201);
-    const { slug } = await jsonBody<{ slug: string }>(res);
-    expect(await issued(slug)).toBe(true);
-
-    await env.DB.prepare("update anon_links set expires_at = ? where slug = ?")
-      .bind(Date.now() - HOUR, slug)
-      .run();
-    expect(await sweepExpiredAnonLinks(authEnv())).toBe(1);
-    expect(await allocateSharedSlug(testDb(), drawing(slug, "fresh04"))).toBe("fresh04");
   });
 
   it("while an anonymous link still holds it, for an org link too", async () => {

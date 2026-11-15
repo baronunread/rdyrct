@@ -41,6 +41,9 @@ test("a visitor with no account gets a working short link", async ({ page }) => 
   const response = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(response.status()).toBe(302);
   expect(response.headers()["location"]).toBe(destination);
+
+  // Temporary, slug included, and the page says so before anyone relies on it.
+  await expect(page.getByText("then someone else can get its address")).toBeVisible();
 });
 
 test("the short link is on the shared link host, not the app's own host", async ({ page }) => {
@@ -67,6 +70,9 @@ test("an anonymous link shows its click total but records no click details", asy
   // been handled.
   await page.reload();
   await expect(page.getByText("1 click so far.")).toBeVisible({ timeout: 15_000 });
+  // The count replaces the plain footer, and the notice that the link is
+  // temporary stays with it: these are the people actually using the link.
+  await expect(page.getByText("then someone else can get its address")).toBeVisible();
 
   // Scoped to clicks belonging to no real link, which is the only shape an
   // anonymous click could take. Counting every row in the table made this
