@@ -996,6 +996,11 @@ function useAuthFlow(mode: "login" | "signup") {
         setVerifyPhase,
       });
       return true;
+    } catch {
+      // A dropped connection, not a wrong code: say so, and leave the code in
+      // place so pressing Verify again retries it.
+      failSubmit("Could not check the code. Try again.");
+      return false;
     } finally {
       setBusy(false);
     }
