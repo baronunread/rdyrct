@@ -222,6 +222,14 @@ including the admin screens. It exists because this repo is edited by agents
 constantly and each one otherwise re-derives the same conventions out of
 `src/app/ui/` by guessing. Same reason this file exists.
 
+**The blog is another repo**: `rdyrct-blog`
+(`github.com/baronunread/rdyrct-blog`, checked out beside this one), a
+static Astro site with its own Worker on the `rdyrct.com/blog*` route. One
+Markdown file per post in `src/content/blog/`; its README has the rules
+(never rename or delete a post with backlinks). Preview a post with that
+repo's own `bun run dev`. A blog post goes there, never as a page in this
+repo.
+
 **rdyrct-email** (`.claude/skills/rdyrct-email`, symlinked from
 `.agents/skills`) is how mail gets built and previewed on `renderEmail()`,
 and why a newsletter only ever goes to people who opted in to its list.
