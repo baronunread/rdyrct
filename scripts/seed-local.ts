@@ -922,6 +922,12 @@ async function seed() {
   await seedPlanHistory(now, day);
   await seedEdgeCases(now);
 
+  // The seed writes link_addresses directly, past allocateSharedSlug, so
+  // record its shared-domain slugs the way the app would have.
+  await sqlBatch([
+    "INSERT OR IGNORE INTO issued_slugs (slug, issued_at) SELECT slug, created_at FROM link_addresses WHERE domain_id IS NULL",
+  ]);
+
   /* summary */
   console.log("\nSeeded:");
   console.log(`  users:  ${users.length} (password for all: ${PASSWORD})`);

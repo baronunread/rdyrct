@@ -95,6 +95,21 @@ export async function createQuickLink(page: Page, destination: string) {
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 }
 
+/** Signs up a fresh account, creates one link from the dashboard, checks it
+ * redirects on the first click, and returns its slug and destination. */
+export async function signUpWithLiveLink(page: Page, prefix: string) {
+  await signUpAndVerify(page, `${prefix}-${Date.now()}@gmail.com`, E2E_PASSWORD);
+  const destination = `https://example.com/${prefix}-${Date.now()}`;
+  await createQuickLink(page, destination);
+  const [{ slug }] = await queryRows<{ slug: string }>(
+    page,
+    "select slug from links where destination = ?",
+    [destination],
+  );
+  await expectRedirect(page, slug, destination);
+  return { slug, destination };
+}
+
 /**
  * Signs up an owner, creates a link invite from Members, and returns the
  * owner's address with the token behind it.

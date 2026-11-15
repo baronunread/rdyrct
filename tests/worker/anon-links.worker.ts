@@ -8,11 +8,10 @@ import {
   freeOwnerCookie,
   jsonBody,
   overrideEnv,
+  fillFreePlanLinks,
   recordingLimit,
 } from "./support";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "../../src/worker/db/schema";
-import { claimAnonLink, slugTaken, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
+import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 import { publishLink } from "../../src/worker/kv";
 
 /**
@@ -158,110 +157,13 @@ describe("the plan's link cap", () => {
     await freeOwnerCookie();
     const anon = await seedAnon();
 
-    // Fill the free plan's allowance with raw rows, each with the primary
-    // address that makes it count.
-    const statements = [];
-    for (let i = 0; i < 30; i++) {
-      statements.push(
-        env.DB.prepare(
-          `insert into links (id, org_id, slug, destination, title, utm_source, utm_medium,
-             utm_campaign, utm_term, utm_content, qr_logo, qr_style, qr_color, qr_corner,
-             qr_bg, qr_eye_color, created_at)
-           values (?, 'org-1', ?, 'https://example.com', '', '', '', '', '', '', '', '', '', '', '', '', 0)`,
-        ).bind(`full-${i}`, `full${i}`),
-        env.DB.prepare(
-          `insert into link_addresses (id, link_id, org_id, slug, kind, created_at)
-           values (?, ?, 'org-1', ?, 'primary', 0)`,
-        ).bind(`addr-${i}`, `full-${i}`, `full${i}`),
-      );
-    }
-    await env.DB.batch(statements);
+    await fillFreePlanLinks();
 
     expect(await claimAnonLink(authEnv(), "org-1", "free-1", anon.claimToken)).toBeNull();
     // And the anonymous row survives, so the link keeps working until it
     // expires rather than vanishing into a refused claim.
     expect(await countIn("anon_links", anon.slug)).toBe(1);
     expect(await countIn("links", anon.slug)).toBe(0);
-  });
-});
-
-describe("picking a slug nobody owns", () => {
-  // The check used to read KV alone. An organization link is written to D1
-  // first and published after, so a slug taken inside that window looked
-  // free, and the anonymous link minted on it overwrote a redirect that
-  // already belonged to somebody.
-  const db = () => drizzle(env.DB, { schema });
-
-  // The org and its owner, so a link row can hang off something real.
-  beforeEach(async () => {
-    await freeOwnerCookie();
-  });
-
-  async function seedAddress(
-    slug: string,
-    extra: Partial<{ domainId: string | null; retiredAt: number | null }> = {},
-  ) {
-    await env.DB.prepare(
-      `insert into links (id, org_id, slug, destination, created_at)
-       values (?, 'org-1', ?, 'https://example.com/held', ?)`,
-    )
-      .bind(`link-${slug}`, slug, Date.now())
-      .run();
-    await env.DB.prepare(
-      `insert into link_addresses (id, link_id, org_id, domain_id, slug, kind, created_at, retired_at)
-       values (?, ?, ?, ?, ?, 'primary', ?, ?)`,
-    )
-      .bind(
-        `addr-${slug}`,
-        `link-${slug}`,
-        "org-1",
-        extra.domainId ?? null,
-        slug,
-        Date.now(),
-        extra.retiredAt ?? null,
-      )
-      .run();
-  }
-
-  async function seedDomain(id: string) {
-    await env.DB.prepare(
-      `insert into domains (id, org_id, hostname, status, created_at)
-       values (?, 'org-1', ?, 'active', ?)`,
-    )
-      .bind(id, `${id}.example.com`, Date.now())
-      .run();
-  }
-
-  it("refuses one an organization link holds in D1 but has not published", async () => {
-    await seedAddress("unpublished");
-    expect(await env.LINKS.get("slug:unpublished")).toBeNull();
-
-    expect(await slugTaken(authEnv(), db(), "unpublished")).toBe(true);
-  });
-
-  it("refuses one an anonymous row already holds", async () => {
-    const anon = await seedAnon();
-    expect(await slugTaken(authEnv(), db(), anon.slug)).toBe(true);
-  });
-
-  it("refuses one that is published, whichever table owns it", async () => {
-    await env.LINKS.put("slug:published", JSON.stringify({ linkId: "x" }));
-    expect(await slugTaken(authEnv(), db(), "published")).toBe(true);
-  });
-
-  it("allows one whose address was retired, or belongs to a custom domain", async () => {
-    // A retired address stops answering, and the same slug on somebody's
-    // own domain is a different key and a different link.
-    await seedAddress("retired", { retiredAt: Date.now() });
-    await seedDomain("dom-1");
-    await seedAddress("ondomain", { domainId: "dom-1" });
-
-    expect(await slugTaken(authEnv(), db(), "retired")).toBe(false);
-    expect(await slugTaken(authEnv(), db(), "ondomain")).toBe(false);
-  });
-
-  it("allows one nothing has taken", async () => {
-    expect(await slugTaken(authEnv(), db(), "nobodys")).toBe(false);
   });
 });
 

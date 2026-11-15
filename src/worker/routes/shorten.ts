@@ -22,7 +22,7 @@ import type { JsonValue } from "../../shared/types";
 import { optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
@@ -36,7 +36,8 @@ import { enqueueStorage, syncLinkMsg } from "../storage";
 import { orgLinkWarning } from "../link-warning";
 import { spendToken } from "../turnstile";
 import { TURNSTILE_FAILED_CODE } from "@/shared/types";
-import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
+import { isValidHttpUrl, linkUrl, normalizeUrl, uid } from "../util";
+import { allocateSharedSlug } from "../shared-slugs";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
 import { spendAnonWebRiskLookup, WEB_RISK_NOTICE } from "../destination-check";
@@ -113,7 +114,7 @@ shortenRoutes.post("/", async (c) => {
   const expiresAt = now + ANON_LINK_TTL_MS;
   const row = {
     id: uid(),
-    slug: await allocateSlug(c.env),
+    slug: await allocateSharedSlug(db),
     destination,
     claimToken: uid() + uid(),
     createdAt: now,
@@ -196,62 +197,6 @@ async function scoreAnonLink(
   // The caller's budget again: the answer above is usually cached, but one
   // that was over budget or failed must not be asked here at the site's cost.
   await scoreAndRecord(env, id, destination, "anon_links", spendLookup);
-}
-
-/** A random slug that is not already taken, in either table. */
-async function allocateSlug(env: Env): Promise<string> {
-  const db = drizzle(env.DB, { schema });
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = randomSlug();
-    if (!(await slugTaken(env, db, slug))) return slug;
-  }
-  throw new HTTPException(503, { message: "Could not allocate a link. Try again." });
-}
-
-/**
- * Whether anything already answers on this slug of the shared domain.
- *
- * Both stores, because neither alone is enough. KV is the redirect
- * namespace, so one read covers every published address whichever table
- * owns it. But an organization link is written to D1 first and published
- * after, and a slug taken inside that window is invisible to KV: checking
- * KV alone let an anonymous link be minted on it and then overwrite the
- * redirect somebody else's link already owned.
- *
- * Still not a lock. Two writers can pass this at the same instant, and only
- * the unique index on `anon_links.slug` actually decides between two
- * anonymous inserts. What this closes is the window that was wide enough to
- * matter, at the cost of one indexed lookup on a path that already does
- * several.
- */
-export async function slugTaken(
-  env: Env,
-  db: ReturnType<typeof drizzle>,
-  slug: string,
-): Promise<boolean> {
-  if (await env.LINKS.get(`slug:${slug}`)) return true;
-
-  const [address] = await db
-    .select({ id: schema.linkAddresses.id })
-    .from(schema.linkAddresses)
-    .where(
-      and(
-        eq(schema.linkAddresses.slug, slug),
-        // The shared domain only: the same slug on somebody's custom domain
-        // is a different key and a different link.
-        isNull(schema.linkAddresses.domainId),
-        isNull(schema.linkAddresses.retiredAt),
-      ),
-    )
-    .limit(1);
-  if (address) return true;
-
-  const [anon] = await db
-    .select({ id: schema.anonLinks.id })
-    .from(schema.anonLinks)
-    .where(eq(schema.anonLinks.slug, slug))
-    .limit(1);
-  return !!anon;
 }
 
 /**

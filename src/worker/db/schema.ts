@@ -701,6 +701,15 @@ export const webRiskUsage = sqliteTable("web_risk_usage", {
 });
 
 /**
+ * Every slug ever handed out on the shared domain (migration 0060), so none
+ * is handed out twice. Only grows; see allocateSharedSlug in shared-slugs.ts.
+ */
+export const issuedSlugs = sqliteTable("issued_slugs", {
+  slug: text("slug").primaryKey(),
+  issuedAt: integer("issued_at").notNull(),
+});
+
+/**
  * Links made on the landing page by someone with no account (Direction A of
  * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a
  * row is written, none of those exist for this visitor.

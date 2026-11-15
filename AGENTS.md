@@ -222,6 +222,14 @@ including the admin screens. It exists because this repo is edited by agents
 constantly and each one otherwise re-derives the same conventions out of
 `src/app/ui/` by guessing. Same reason this file exists.
 
+**The blog is another repo**: `rdyrct-blog`
+(`github.com/baronunread/rdyrct-blog`, checked out beside this one), a
+static Astro site with its own Worker on the `rdyrct.com/blog*` route. One
+Markdown file per post in `src/content/blog/`; its README has the rules
+(never rename or delete a post with backlinks). Preview a post with that
+repo's own `bun run dev`. A blog post goes there, never as a page in this
+repo.
+
 **rdyrct-email** (`.claude/skills/rdyrct-email`, symlinked from
 `.agents/skills`) is how mail gets built and previewed on `renderEmail()`,
 and why a newsletter only ever goes to people who opted in to its list.
@@ -407,7 +415,12 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   (WAF rules, Workers limiters, Turnstile) and the dashboard rules to apply
   by hand.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
-  `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
+  `domain:{host}`. **A shared-domain slug is issued once, ever**: every one
+  comes from `allocateSharedSlug` (`src/worker/shared-slugs.ts`), which
+  records it in `issued_slugs` and never hands it out again, even after its
+  link is deleted, so nobody can inherit a dead link that old posts and
+  printed QR codes still point at. Never write a shared-domain slug any other
+  way. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
   country/referrer/device/timestamp, **never an IP address**.
 - **User-supplied images live in R2** (binding `MEDIA`, bucket `rdyrct-media` in

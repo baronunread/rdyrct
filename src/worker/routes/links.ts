@@ -40,6 +40,7 @@ import { assertDestinationAllowed, holdIfSuspicious } from "../abuse-hold";
 import { checkLinkDestination } from "../destination-check";
 import { orgLinkWarning } from "../link-warning";
 import { claimAnonLink } from "./shorten";
+import { allocateSharedSlug } from "../shared-slugs";
 import {
   attentionNote,
   cursorValueOf,
@@ -445,8 +446,9 @@ async function findSameDestinationLinks(
 }
 
 /**
- * Slug uniqueness is per-domain (null domain = the shared default host), and
- * lives on the active address set, not on `links` directly: a slug a link
+ * Slug uniqueness on a custom domain. (A new shared-domain slug never comes
+ * here: allocateSharedSlug issues each one once, ever.) It lives on the
+ * active address set, not on `links` directly: a slug a link
  * just moved away from stays reserved by its own temp_alias/permanent_alias
  * row, not free for a stranger to grab, while a retired row never blocks
  * anything. `excludeLinkId` excludes every row belonging to that link (not
@@ -568,16 +570,26 @@ function assertQrAllowed(
 /**
  * Resolves the slug for a new link: honors a chosen slug (custom domains
  * only) or allocates a random one, retrying on the unlikely collision.
+ *
+ * Null on the shared domain: that slug comes from allocateSharedSlug, which
+ * issues each one for good, so the caller draws it (issueSlug) only once
+ * nothing else can refuse the request. Otherwise every refused create would
+ * use up a slug.
  */
-async function resolveNewSlug(db: DB, requested: string, domainId: string | null): Promise<string> {
+async function resolveNewSlug(
+  db: DB,
+  requested: string,
+  domainId: string | null,
+): Promise<string | null> {
   if (requested && domainId === null)
     throw new HTTPException(400, {
       message:
         "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
       cause: { code: "slug_locked" },
     });
+  if (domainId === null) return null;
   if (requested) {
-    if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, domainId === null);
+    if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, false);
     return requested;
   }
   for (let i = 0; i < 5; i++) {
@@ -586,6 +598,10 @@ async function resolveNewSlug(db: DB, requested: string, domainId: string | null
   }
   throw new HTTPException(500, { message: "Could not allocate slug" });
 }
+
+/** The slug resolveNewSlug settled on, or a fresh shared-domain one. Call it
+ * after the last check that can refuse the request. */
+const issueSlug = (db: DB, resolved: string | null) => resolved ?? allocateSharedSlug(db);
 
 /**
  * Resolves the slug for a rename: keeps the existing slug unless a new one
@@ -872,7 +888,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const domainId = body.domainId ?? null;
   // Slugs on the shared domain are always random (every plan): chosen slugs
   // exist only on custom domains, so the shared namespace can't be squatted.
-  const [hostname, slug] = await Promise.all([
+  const [hostname, resolvedSlug] = await Promise.all([
     newAddressHostname(db, orgId, domainId),
     resolveNewSlug(db, body.slug?.trim() || "", domainId),
   ]);
@@ -892,7 +908,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       orgId,
       linkId: body.mergeIntoLinkId,
       domainId,
-      slug,
+      slug: await issueSlug(db, resolvedSlug),
       hostname,
       destination: body.destination,
       utm,
@@ -921,6 +937,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   }
 
   assertLinkQuota(activeCount, plan, limits);
+  const slug = await issueSlug(db, resolvedSlug);
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
   // A scam-shaped destination is created on hold: it exists, and a human
   // decides whether it redirects. Applied before the insert so it never serves.
@@ -1102,10 +1119,9 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     activeAddressesOf(db, existing.id),
   ]);
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
-  // Only a custom-domain address leaves a temporary alias behind: shared-domain
-  // slugs are random and never meant to be preserved (resolveRenamedSlug
-  // already forbids choosing one), so a link moving away from the shared
-  // domain just drops its old key like before.
+  // Only a custom-domain address leaves a temporary alias behind. A link's
+  // domain cannot change (checked above) and a shared-domain slug cannot be
+  // renamed (resolveRenamedSlug), so a shared-domain link never moves.
   const createsAlias = moved && existing.domainId !== null;
   if (createsAlias) await assertAliasQuota(db, existing.id);
 
@@ -1271,10 +1287,11 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
   // An alias always lives on the same domain as the link it addresses (#38):
   // no domain picker, so there's nothing for a caller to get wrong here.
   const domainId = link.domainId;
-  const [hostname, slug] = await Promise.all([
+  const [hostname, resolvedSlug] = await Promise.all([
     newAddressHostname(db, orgId, domainId),
     resolveNewSlug(db, body.slug?.trim() || "", domainId),
   ]);
+  const slug = await issueSlug(db, resolvedSlug);
 
   const address = newAddressRow(link.id, orgId, domainId, slug, "permanent_alias", "created");
   const { dto, status } = await insertAddressAndRespond(
