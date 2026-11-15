@@ -407,7 +407,12 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   (WAF rules, Workers limiters, Turnstile) and the dashboard rules to apply
   by hand.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
-  `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
+  `domain:{host}`. **A shared-domain slug is issued once, ever**: every one
+  comes from `allocateSharedSlug` (`src/worker/shared-slugs.ts`), which
+  records it in `issued_slugs` and never hands it out again, even after its
+  link is deleted, so nobody can inherit a dead link that old posts and
+  printed QR codes still point at. Never write a shared-domain slug any other
+  way. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
   country/referrer/device/timestamp, **never an IP address**.
 - **User-supplied images live in R2** (binding `MEDIA`, bucket `rdyrct-media` in

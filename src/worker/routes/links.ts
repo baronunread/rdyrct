@@ -40,6 +40,7 @@ import { assertDestinationAllowed, holdIfSuspicious } from "../abuse-hold";
 import { checkLinkDestination } from "../destination-check";
 import { orgLinkWarning } from "../link-warning";
 import { claimAnonLink } from "./shorten";
+import { allocateSharedSlug } from "../shared-slugs";
 import {
   attentionNote,
   cursorValueOf,
@@ -568,6 +569,8 @@ function assertQrAllowed(
 /**
  * Resolves the slug for a new link: honors a chosen slug (custom domains
  * only) or allocates a random one, retrying on the unlikely collision.
+ * Shared-domain slugs come from allocateSharedSlug, which never hands out
+ * one that was issued before, live or deleted.
  */
 async function resolveNewSlug(db: DB, requested: string, domainId: string | null): Promise<string> {
   if (requested && domainId === null)
@@ -576,6 +579,7 @@ async function resolveNewSlug(db: DB, requested: string, domainId: string | null
         "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
       cause: { code: "slug_locked" },
     });
+  if (domainId === null) return allocateSharedSlug(db);
   if (requested) {
     if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, domainId === null);
     return requested;
@@ -1102,10 +1106,9 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     activeAddressesOf(db, existing.id),
   ]);
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
-  // Only a custom-domain address leaves a temporary alias behind: shared-domain
-  // slugs are random and never meant to be preserved (resolveRenamedSlug
-  // already forbids choosing one), so a link moving away from the shared
-  // domain just drops its old key like before.
+  // Only a custom-domain address leaves a temporary alias behind. A link's
+  // domain cannot change (checked above) and a shared-domain slug cannot be
+  // renamed (resolveRenamedSlug), so a shared-domain link never moves.
   const createsAlias = moved && existing.domainId !== null;
   if (createsAlias) await assertAliasQuota(db, existing.id);
 
