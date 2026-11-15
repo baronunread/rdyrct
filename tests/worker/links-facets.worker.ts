@@ -71,7 +71,7 @@ const list = (cookie: string, query: string) =>
   get<{ items: LinkListItem[]; nextCursor: string | null }>(cookie, `?limit=100&${query}`);
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

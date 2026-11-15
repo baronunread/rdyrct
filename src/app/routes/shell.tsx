@@ -808,7 +808,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
     // A link detail page's slug may not exist under the new org; every other
     // route (including platform admin) has nothing org-specific in its URL,
     // so switching org there should leave the user right where they are.
-    if (window.location.pathname.startsWith("/links/")) navigate({ to: "/dashboard" });
+    // Nothing follows the navigation, so nothing waits on it.
+    if (window.location.pathname.startsWith("/links/")) void navigate({ to: "/dashboard" });
   };
 
   const createOrg = async () => {
@@ -829,7 +830,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
       // first prompt, and create their org from the switcher instead.
       await claimPendingLinks(created.id);
       setOrg(created.id);
-      navigate({ to: "/dashboard" });
+      // Not awaited: a failed navigation is not a failed org creation.
+      void navigate({ to: "/dashboard" });
     } catch (e) {
       toast(orgCreateErrorMessage(e), "error");
     } finally {

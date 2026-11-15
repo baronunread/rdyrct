@@ -10,7 +10,7 @@ import { applyTestMigrations, fetchWorker, freeOwnerCookie, jsonBody } from "./s
  */
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

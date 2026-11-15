@@ -18,7 +18,7 @@ import { hashPassword } from "../../src/worker/password";
 import type { JsonValue } from "../../src/shared/types";
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

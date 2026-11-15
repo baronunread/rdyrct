@@ -19,6 +19,7 @@ import {
   testDb,
   testEnv,
 } from "./support";
+import type { ApiInit } from "./support";
 
 /**
  * What puts links on hold, and what an admin's abuse decision does (the
@@ -28,7 +29,7 @@ import {
 
 const SCAM = "https://phonepewheel-production.up.railway.app/";
 
-const api = (path: string, cookie: string, init: RequestInit = {}) =>
+const api = (path: string, cookie: string, init: ApiInit = {}) =>
   fetchWorker(
     new Request(`http://localhost/api${path}`, {
       ...init,
@@ -39,7 +40,7 @@ const api = (path: string, cookie: string, init: RequestInit = {}) =>
 const createLink = (cookie: string, destination: string) =>
   api("/orgs/org-1/links", cookie, { method: "POST", body: JSON.stringify({ destination }) });
 
-const admin = (path: string, cookie: string, init: RequestInit = {}) =>
+const admin = (path: string, cookie: string, init: ApiInit = {}) =>
   api(`/admin${path}`, cookie, init);
 
 const row = (sql: string, ...binds: (string | number)[]) =>
@@ -54,7 +55,7 @@ async function syncKv(slug: string) {
 const realFetch = globalThis.fetch;
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);

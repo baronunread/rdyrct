@@ -15,6 +15,7 @@ import {
   stubQueue,
   testEnv,
 } from "./support";
+import type { ApiInit } from "./support";
 
 /**
  * Admin link moderation (#67).
@@ -37,7 +38,7 @@ async function createLink(cookie: string, destination = "https://example.com/one
   return await jsonBody<{ id: string; slug: string }>(res);
 }
 
-const admin = (path: string, cookie: string, init: RequestInit = {}) =>
+const admin = (path: string, cookie: string, init: ApiInit = {}) =>
   fetchWorker(
     new Request(`http://localhost/api/admin${path}`, {
       ...init,
@@ -80,7 +81,7 @@ async function slugsOf(linkId: string): Promise<string[]> {
 const realFetch = globalThis.fetch;
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
   // The destination scorer (#68) runs on create through waitUntil and would
   // otherwise reach the real resolver and write real scores, which the risk
@@ -288,9 +289,9 @@ describe("suspension does not wait on the queue (#101)", () => {
     expect(await liveKey(slugs[0]!)).toBe(true);
 
     // The delayed recheck the route queued reads D1 again.
-    expect(sent.map((m) => m.op === "kv_sync" && m.key).sort()).toEqual(
-      slugs.map((s) => `slug:${s}`).sort(),
-    );
+    expect(
+      sent.flatMap((m) => (m.op === "kv_sync" ? [m.key] : [])).sort((x, y) => x.localeCompare(y)),
+    ).toEqual(slugs.map((s) => `slug:${s}`).sort((x, y) => x.localeCompare(y)));
     const db = drizzle(env.DB, { schema });
     for (const message of sent) await applyStorageMessage(testEnv, db, message);
     expect(await heldKey(slugs[0]!)).toBe(true);

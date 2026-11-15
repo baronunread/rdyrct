@@ -133,7 +133,7 @@ const makeOrgNew = () =>
   env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

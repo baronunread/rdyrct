@@ -43,7 +43,7 @@ const flaggedAt = async () =>
   )?.at ?? null;
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

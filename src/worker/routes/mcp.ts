@@ -227,7 +227,7 @@ async function searchLinks(
 ): Promise<LinkSummary[]> {
   const params = new URLSearchParams({ q: query, limit: "10" });
   const result = ok(
-    await dispatch(env, ctx, authorization, "GET", `/orgs/${orgId}/links?${params}`),
+    await dispatch(env, ctx, authorization, "GET", `/orgs/${orgId}/links?${params.toString()}`),
   );
   const page = v.parse(
     v.object({

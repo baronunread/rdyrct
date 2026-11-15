@@ -66,7 +66,7 @@ const reportRows = async () =>
 const kvValue = (slug = "anon123") => env.LINKS.get(`slug:${slug}`, "json");
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

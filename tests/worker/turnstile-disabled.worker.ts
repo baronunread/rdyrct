@@ -10,7 +10,7 @@ import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./
  * that instance closes over the env that built it.
  */
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
   captureEmails({ mx: "deliverable" });
 });

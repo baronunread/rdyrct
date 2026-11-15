@@ -11,7 +11,7 @@ import { applyTestMigrations, authEnv, signInCookie, TEST_PASSWORD } from "./sup
  * state, set on each request from that request's env.
  */
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

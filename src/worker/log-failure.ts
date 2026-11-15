@@ -1,4 +1,5 @@
 import { createLoggerStorage } from "evlog/toolkit/storage";
+import * as v from "valibot";
 import type { JsonValue } from "../shared/types";
 
 // Its own module, free of `cloudflare:workers`, so code the Bun unit tests
@@ -8,6 +9,18 @@ import type { JsonValue } from "../shared/types";
  * store by id). `asWideEvent` runs background work in it too, so
  * `logFailure` finds whichever event is active. */
 export const { storage: activeLog } = createLoggerStorage("wide event", "evlog:hono");
+
+/** A thrown value that is not an Error, as text: a string as it is, anything
+ * else as JSON (`String({})` is "[object Object]"), nothing as "". */
+function describe(cause: unknown): string {
+  const text = v.safeParse(v.string(), cause);
+  if (text.success) return text.output;
+  try {
+    return JSON.stringify(cause) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 /** Context for a failure: plain values, never a raw body. */
 type Fields = { [key: string]: JsonValue };
@@ -25,7 +38,7 @@ export function logFailure(message: string, cause?: unknown, fields?: Fields): v
     console.error(message, fields ?? "", cause ?? "");
     return;
   }
-  const error = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause ?? "");
+  const error = cause instanceof Error ? `${cause.name}: ${cause.message}` : describe(cause);
   log.warn(message);
   log.set({ failures: [{ message, error, ...fields }] });
 }

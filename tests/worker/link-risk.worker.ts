@@ -82,7 +82,7 @@ async function riskRow(linkId: string) {
 }
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 

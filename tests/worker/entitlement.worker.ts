@@ -15,6 +15,7 @@ import {
   POLAR_WEBHOOK_SECRET,
   seedBillingUser as seedUser,
 } from "./support";
+import type { ApiInit } from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
 beforeEach(async () => {
@@ -58,7 +59,7 @@ async function postWebhook(event: JsonValue): Promise<Response> {
   return res;
 }
 
-async function adminFetch(cookie: string, path: string, init: RequestInit = {}): Promise<Response> {
+async function adminFetch(cookie: string, path: string, init: ApiInit = {}): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost${path}`, {
@@ -199,7 +200,7 @@ describe("comps (#81)", () => {
 });
 
 describe("subscription statuses (#84)", () => {
-  const updated = (over: JsonValue & object) => ({
+  const updated = (over: { [key: string]: JsonValue }) => ({
     type: "subscription.updated",
     data: {
       id: "sub_1",

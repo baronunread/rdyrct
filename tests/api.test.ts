@@ -27,7 +27,7 @@ function stubFetch(res: {
 }) {
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = async (url, init) => {
-    calls.push({ url: String(url), init });
+    calls.push({ url: url instanceof Request ? url.url : url.toString(), init });
     const init2 = {
       status: res.status ?? (res.ok ? 200 : 500),
       statusText: res.statusText ?? "OK",

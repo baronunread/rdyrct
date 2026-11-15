@@ -273,12 +273,13 @@ export function refreshOverLimit(qc: ReturnType<typeof useQueryClient>, orgId: s
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
   const invalidate = (quota: QuotaUsage) => {
-    qc.invalidateQueries({ queryKey: ["links", orgId] });
-    qc.invalidateQueries({ queryKey: ["stats", orgId] });
+    // Refetches run behind the mutation: its callers do not wait for them.
+    void qc.invalidateQueries({ queryKey: ["links", orgId] });
+    void qc.invalidateQueries({ queryKey: ["stats", orgId] });
     applyQuotaUsage(qc, orgId, quota);
     // A rename can leave the old slug behind as a temp alias: refetch any
     // addresses list already open for this org's links, not just on remount.
-    qc.invalidateQueries({ queryKey: ["addresses", orgId] });
+    void qc.invalidateQueries({ queryKey: ["addresses", orgId] });
   };
   const create = useMutation({
     mutationFn: (body: LinkInput) =>
@@ -322,9 +323,10 @@ export const addressesQuery = (orgId: string, linkId: string | null) =>
 export function useAddressMutations(orgId: string, linkId: string) {
   const qc = useQueryClient();
   const invalidate = (quota: QuotaUsage) => {
-    qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
-    qc.invalidateQueries({ queryKey: ["links", orgId] });
-    qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
+    // Refetches run behind the mutation: its callers do not wait for them.
+    void qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
+    void qc.invalidateQueries({ queryKey: ["links", orgId] });
+    void qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
     applyQuotaUsage(qc, orgId, quota);
   };
   const address = (addressId: string) => `/orgs/${orgId}/links/${linkId}/addresses/${addressId}`;

@@ -40,7 +40,7 @@ export type PagePreload = (qc: QueryClient, orgId: string, page: PageContext) =>
 export async function settle(
   work: readonly (PromiseLike<object | null | void> | undefined)[],
 ): Promise<void> {
-  await Promise.allSettled(work);
+  await Promise.allSettled(work.map((item) => Promise.resolve(item)));
 }
 
 /**

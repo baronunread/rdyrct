@@ -44,7 +44,9 @@ describe("email invites when a send fails", () => {
     );
     expect(status).toBe(201);
     expect(body.failed).toEqual(["down@example.com"]);
-    expect(body.invites.map((i) => i.email).sort()).toEqual(["down@example.com", "ok@example.com"]);
+    expect(
+      body.invites.map((i) => i.email).sort((x, y) => (x ?? "").localeCompare(y ?? "")),
+    ).toEqual(["down@example.com", "ok@example.com"]);
     expect(sent.map((m) => m.to)).toEqual(["ok@example.com"]);
   });
 

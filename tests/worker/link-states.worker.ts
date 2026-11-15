@@ -50,7 +50,7 @@ const get = (url: string) =>
   );
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
   await resetClicks();
 });
@@ -260,7 +260,7 @@ describe("reports put a warning on the link", () => {
 
   it("only queues a report on a paid org's link, which stays as it is", async () => {
     for (const plan of ["hobby", "pro"] as const) {
-      reset();
+      await reset();
       await applyTestMigrations();
       await seedLink();
       await ownedBy(plan);

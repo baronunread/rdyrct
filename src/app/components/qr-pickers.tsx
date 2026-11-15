@@ -320,7 +320,8 @@ function LogoRow({
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        take(e.dataTransfer.files?.[0]);
+        // `take` shows its own errors.
+        void take(e.dataTransfer.files?.[0]);
       }}
     >
       <input
@@ -331,7 +332,7 @@ function LogoRow({
         className="hidden"
         disabled={disabled}
         onChange={(e) => {
-          take(e.target.files?.[0]);
+          void take(e.target.files?.[0]);
           // Reset, so picking the same file again fires again.
           e.target.value = "";
         }}

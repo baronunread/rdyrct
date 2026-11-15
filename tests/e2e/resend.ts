@@ -1,5 +1,12 @@
 import { expect, type Page } from "@playwright/test";
+import * as v from "valibot";
 import type { JsonValue } from "../../src/shared/types";
+
+/** A JSON value that should be text: the text, or "" for anything else. */
+function asText(value: JsonValue | undefined): string {
+  const text = v.safeParse(v.string(), value);
+  return text.success ? text.output : "";
+}
 
 function isRecord(value: JsonValue): value is { [k: string]: JsonValue } {
   return value instanceof Object && !Array.isArray(value);
@@ -11,8 +18,8 @@ function isRecord(value: JsonValue): value is { [k: string]: JsonValue } {
  * is a bare `\d{6}`, so it must never be reached while the text carries a
  * real code. */
 function codeFromBody(email: { [k: string]: JsonValue }): string {
-  const text = String(email.text ?? "");
-  const html = String(email.html ?? "");
+  const text = asText(email.text);
+  const html = asText(email.html);
   return (
     text.match(/^\s*(\d{6})\s*$/m)?.[1] ??
     text.match(/\b\d{6}\b/)?.[0] ??
@@ -34,7 +41,7 @@ function inboxList(value: JsonValue): JsonValue[] {
 function addressedTo(item: JsonValue, email: string): boolean {
   if (!isRecord(item)) return false;
   const to = Array.isArray(item.to) ? item.to : [item.to];
-  return to.some((addr) => String(addr).includes(email));
+  return to.some((addr) => asText(addr).includes(email));
 }
 
 /** The verification code from the *newest* email the emulator holds for
@@ -57,7 +64,7 @@ export async function subjectsSentTo(page: Page, email: string): Promise<string[
   if (!response.ok()) return [];
   return inboxList(await response.json())
     .filter((item) => addressedTo(item, email))
-    .map((item) => (isRecord(item) ? String(item.subject ?? "") : ""));
+    .map((item) => (isRecord(item) ? asText(item.subject) : ""));
 }
 
 async function latestOtp(page: Page, email: string) {
@@ -184,5 +191,5 @@ export async function latestMailTextTo(page: Page, email: string): Promise<strin
   if (!response.ok()) return null;
   const mine = inboxList(await response.json()).filter((item) => addressedTo(item, email));
   const newest = mine.at(-1);
-  return newest && isRecord(newest) ? String(newest.text ?? "") : null;
+  return newest && isRecord(newest) ? asText(newest.text) : null;
 }

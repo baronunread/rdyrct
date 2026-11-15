@@ -125,7 +125,8 @@ function makeSwitchTo(
   return (id) => {
     close();
     setOrg(id);
-    if (window.location.pathname.startsWith("/links/")) navigate({ to: "/dashboard" });
+    // Nothing follows the navigation, so nothing waits on it.
+    if (window.location.pathname.startsWith("/links/")) void navigate({ to: "/dashboard" });
   };
 }
 

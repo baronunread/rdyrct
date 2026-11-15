@@ -947,7 +947,7 @@ function useCelebration() {
     setShowCelebration(true);
     const colors = ["#cdb9f5", "#b9e6c9", "#f5b8c8", "#f2e3b3", "#b9d9f0"];
     for (const angle of [60, 120]) {
-      confetti({
+      void confetti({
         particleCount: 40,
         angle,
         spread: 70,
@@ -1271,7 +1271,7 @@ function firstLinkAction(
   if (!shouldOfferFirstLink(usage.org, usage.linkQuotaCount)) return undefined;
   return () => {
     dismiss();
-    navigate({ to: "/dashboard" });
+    void navigate({ to: "/dashboard" });
   };
 }
 

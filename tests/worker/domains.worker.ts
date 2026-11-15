@@ -13,6 +13,7 @@ import {
   jsonBody,
   overrideEnv,
 } from "./support";
+import { requestUrl } from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
 // Env with a token present and the dev fake off, so the real get-or-create
@@ -45,7 +46,7 @@ function mockCustomHostnames(handlers: {
   delete?: (url: string) => Response | Promise<Response>;
 }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const method = init?.method ?? "GET";
     if (matchesRoute(method, url, "GET") && handlers.get) return handlers.get();
     if (matchesRoute(method, url, "POST") && handlers.post) return handlers.post();
@@ -274,7 +275,7 @@ describe("domain reads do not mutate", () => {
     const cfCalls = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input: RequestInfo | URL) => {
-        if (String(input).includes("api.cloudflare.com")) throw new Error("GET route hit CF");
+        if (requestUrl(input).includes("api.cloudflare.com")) throw new Error("GET route hit CF");
         throw new Error("unexpected fetch");
       });
 
@@ -293,7 +294,8 @@ describe("domain reads do not mutate", () => {
     expect((await statusOf("domain-1"))?.status).toBe("checking_dns");
 
     // No call reached the Cloudflare API from either read route.
-    for (const c of cfCalls.mock.calls) expect(String(c[0])).not.toContain("api.cloudflare.com");
+    for (const c of cfCalls.mock.calls)
+      expect(requestUrl(c[0])).not.toContain("api.cloudflare.com");
   });
 });
 
