@@ -27,7 +27,7 @@ import type { JsonValue } from "../../src/shared/types";
 const HOUR = 60 * 60 * 1000;
 
 beforeEach(async () => {
-  reset();
+  await reset();
   await applyTestMigrations();
 });
 
