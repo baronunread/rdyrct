@@ -175,8 +175,15 @@ export function guardedAddressInsertStatement(
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
   addressLimit: number,
+  /** A claim: the landing-page link it takes over, which must still exist. */
+  claimOf?: string,
 ) {
   const columns = addressColumns(address);
+  // A claim checks expiry, then awaits several calls before this insert. If
+  // the expiry sweep removed the landing-page row in that gap, it also freed
+  // the slug, which may already belong to a new link. So a claim lands only
+  // while its row is still there, decided in this same statement.
+  const claim = claimOf ? "and exists (select 1 from anon_links where id = ?)" : "";
   return env.DB.prepare(
     `insert into link_addresses
        (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
@@ -189,8 +196,17 @@ export function guardedAddressInsertStatement(
        select count(*) from link_addresses
        where link_id = ? and retired_at is null
      ) < ?
-     ${NOT_DELETING}`,
-  ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit, address.orgId);
+     ${NOT_DELETING}
+     ${claim}`,
+  ).bind(
+    ...columns,
+    address.orgId,
+    linkLimit,
+    address.linkId,
+    addressLimit,
+    address.orgId,
+    ...(claimOf ? [claimOf] : []),
+  );
 }
 
 /**
@@ -267,24 +283,18 @@ export async function insertLinkWithinLimit(
   link: typeof schema.links.$inferInsert,
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
+  /** A claim: the landing-page link it takes over, which must still exist. */
+  claimOf?: string,
 ): Promise<boolean> {
   const linkInsert = db.insert(schema.links).values(link).toSQL();
   const results = await env.DB.batch([
     toD1Statement(env, linkInsert),
     // A brand-new link has no addresses yet, so the per-link ceiling cannot
     // bind here: 1 is the smallest value that always lets the primary land.
-    guardedAddressInsertStatement(env, address, linkLimit, 1),
+    guardedAddressInsertStatement(env, address, linkLimit, 1, claimOf),
     env.DB.prepare(
       `delete from links where id = ? and not exists (select 1 from link_addresses where link_id = ?)`,
     ).bind(link.id, link.id),
-    // A shared-domain address keeps its slug reserved for good, in the same
-    // batch as the insert. A new link's slug is already reserved, so this is a
-    // no-op; it matters for a claim, whose landing-page slug the expiry sweep
-    // may have freed between the claim's expiry check and this write.
-    env.DB.prepare(
-      `insert or ignore into issued_slugs (slug, issued_at)
-         select slug, created_at from link_addresses where id = ? and domain_id is null`,
-    ).bind(address.id),
   ]);
   return results[1].meta.changes > 0;
 }

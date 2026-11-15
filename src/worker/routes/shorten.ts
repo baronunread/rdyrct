@@ -280,7 +280,7 @@ export async function claimAnonLink(
   // Through the same plan-guarded insert every other link goes through, not a
   // raw one: claiming is still creating a link in somebody's organization,
   // and an org one under its limit must not be able to take ten.
-  if (!(await insertLinkWithinLimit(db, env, link, address, limits.links))) return null;
+  if (!(await insertLinkWithinLimit(db, env, link, address, limits.links, anon.id))) return null;
 
   // Only once the link exists: an anon row deleted alongside a refused
   // insert would take the slug down with it.

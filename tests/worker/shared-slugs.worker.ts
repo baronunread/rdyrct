@@ -119,16 +119,17 @@ describe("a link made without an account", () => {
     expect(await allocateSharedSlug(testDb(), drawing(slug, "fresh04"))).toBe("fresh04");
   });
 
-  it("reserves the slug again when a claim lands after the sweep freed it", async () => {
-    // The other order of the race: the claim passed its expiry check, the
-    // sweep then freed the slug, and only then does the claim's insert run.
-    await freeOwnerCookie();
-    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/late"));
-    await expire(slug);
-    await sweepExpiredAnonLinks(authEnv());
-    expect(await issued(slug)).toBe(false);
-
-    const inserted = await insertLinkWithinLimit(
+  // A claim checks expiry, then awaits several calls before its insert. These
+  // stage the sweep landing in that gap: the insert runs with the claim's
+  // guard after the landing-page row is already gone.
+  async function anonIdOf(slug: string) {
+    const row = await env.DB.prepare("select id from anon_links where slug = ?")
+      .bind(slug)
+      .first<{ id: string }>();
+    return row!.id;
+  }
+  const lateClaim = (slug: string, anonId: string) =>
+    insertLinkWithinLimit(
       testDb(),
       authEnv(),
       rawLinkRow({
@@ -147,8 +148,43 @@ describe("a link made without an account", () => {
         createdAt: Date.now(),
       }),
       30,
+      anonId,
     );
-    expect(inserted).toBe(true);
+  const accountAddresses = async (slug: string) =>
+    (
+      await env.DB.prepare("select count(*) as n from link_addresses where slug = ?")
+        .bind(slug)
+        .first<{ n: number }>()
+    )?.n;
+
+  it("refuses a claim that lands after the sweep removed its link", async () => {
+    await freeOwnerCookie();
+    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/late"));
+    const anonId = await anonIdOf(slug);
+    await expire(slug);
+    await sweepExpiredAnonLinks(authEnv());
+
+    expect(await lateClaim(slug, anonId)).toBe(false);
+    expect(await accountAddresses(slug)).toBe(0);
+  });
+
+  it("refuses it even once a new landing-page link has drawn the freed slug", async () => {
+    await freeOwnerCookie();
+    const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/first"));
+    const anonId = await anonIdOf(slug);
+    await expire(slug);
+    await sweepExpiredAnonLinks(authEnv());
+    // The freed slug comes back to a new link before the claim resumes.
+    expect(await allocateSharedSlug(testDb(), drawing(slug))).toBe(slug);
+    await env.DB.prepare(
+      `insert into anon_links (id, slug, destination, claim_token, created_at, expires_at)
+       values ('anon-new', ?, 'https://example.com/second', 'tok-new', ?, ?)`,
+    )
+      .bind(slug, Date.now(), Date.now() + 24 * HOUR)
+      .run();
+
+    expect(await lateClaim(slug, anonId)).toBe(false);
+    expect(await accountAddresses(slug)).toBe(0);
     expect(await issued(slug)).toBe(true);
   });
 
