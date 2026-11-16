@@ -189,7 +189,8 @@ const ALTERNATIVES = {
         `Each plan covers one organization, and only its owner pays. For several organizations, email us about Enterprise.`,
       ],
     ],
-    blog: { href: "/blog/rebrandly-alternatives", label: "More on Rebrandly alternatives" },
+    // Not /blog/rebrandly-alternatives: that post now redirects back to this page.
+    blog: { href: "/blog/rebrandly-vs-bitly", label: "Rebrandly vs Bitly, compared" },
   },
   dub: {
     name: "Dub",
@@ -298,7 +299,7 @@ const ALTERNATIVES = {
         `Yes. Short.io includes domains on its free plan. rdyrct includes ${PLAN_LIMITS.hobby.domains} from Hobby and ${PLAN_LIMITS.pro.domains} on Pro.`,
       ],
     ],
-    blog: { href: "/blog/short-io-alternatives", label: "More on Short.io alternatives" },
+    // No blog link: /blog/short-io-alternatives now redirects back to this page.
   },
   tinyurl: {
     name: "TinyURL",

@@ -5,8 +5,10 @@
  * robots.txt cannot do this. `Disallow` stops a crawler fetching a page, not
  * listing it (a link from elsewhere is enough), and it also stops the crawler
  * from ever reading a noindex. So the app pages are left crawlable and answer
- * with `X-Robots-Tag: noindex`. Public pages (the marketing pages, /login,
- * /signup, /privacy, /terms) are not in this list on purpose.
+ * with `X-Robots-Tag: noindex`. Public pages (the marketing pages, /signup,
+ * /privacy, /terms) are not in this list on purpose. /login and /report are:
+ * nobody searches for a sign-in form or the abuse report form, and indexed
+ * they only add thin pages to the site's count.
  */
 const NOINDEX_ROOTS: ReadonlySet<string> = new Set([
   "dashboard",
@@ -25,6 +27,8 @@ const NOINDEX_ROOTS: ReadonlySet<string> = new Set([
   "reset-password",
   "invite",
   "consent",
+  "login",
+  "report",
 ]);
 
 /** True for an app page or anything beneath one (/links/<slug>, /invite/<token>). */

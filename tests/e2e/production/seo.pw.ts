@@ -138,14 +138,30 @@ test("robots.txt blocks the API and lets crawlers read the app pages' noindex", 
   for (const path of ["/dashboard", "/api-keys", "/links", "/admin", "/invite/"]) {
     expect(robots).not.toContain(`Disallow: ${path}`);
   }
-  for (const path of ["/dashboard", "/api-keys", "/links/some-slug", "/invite/abc"]) {
+  // /login and /report are public but one-off forms, so they say noindex too.
+  for (const path of [
+    "/dashboard",
+    "/api-keys",
+    "/links/some-slug",
+    "/invite/abc",
+    "/login",
+    "/report",
+  ]) {
     const res = await request.get(path);
     expect(res.headers()["x-robots-tag"], path).toBe("noindex");
   }
-  for (const path of ["/", "/pricing", "/login"]) {
+  for (const path of ["/", "/pricing", "/signup"]) {
     const res = await request.get(path);
     expect(res.headers()["x-robots-tag"], path).toBeUndefined();
   }
+});
+
+test("the shared structured data has no app node Google would reject", async ({ request }) => {
+  // Google fails a SoftwareApplication with no rating or review on every page
+  // that carries it (Ahrefs audit, 2026-11: 29 pages).
+  const html = await (await request.get("/pricing")).text();
+  expect(html).toContain('"@type": "Organization"');
+  expect(html).not.toContain('"@type": "SoftwareApplication"');
 });
 
 test("a slug that resolves to nothing answers 404", async ({ request }) => {

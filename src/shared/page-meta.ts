@@ -107,7 +107,7 @@ The QR code and optional logo are processed in your browser. rdyrct does not rec
   "/wifi-qr-code": {
     title: "WiFi QR code generator - share your WiFi password, free",
     description:
-      "Make a WiFi QR code that joins your network when a guest scans it: name, password and security, with your logo and colors. Free, no account, made in your browser.",
+      "Make a WiFi QR code that joins your network when a guest scans it: name, password and security, plus your logo. Free, no account, made in your browser.",
     markdown: `# WiFi QR code generator
 
 Make a QR code that joins your WiFi network when a guest points a phone camera at it. Enter the network name, the password and the kind of security (WPA, WEP or none), then download a PNG or SVG. No account, and the password never leaves your browser.
@@ -119,7 +119,7 @@ The code holds a line such as \`WIFI:T:WPA;S:Cafe guests;P:password;;\`, which i
   "/vcard-qr-code": {
     title: "vCard QR code generator - QR code for business cards, free",
     description:
-      "Put your contact details in a vCard QR code for a business card or badge: one scan saves you to a phone's contacts. Free, no account, PNG or SVG, made in your browser.",
+      "Put your contact details in a vCard QR code for a business card or badge: one scan saves you to a phone's contacts. Free, no account, PNG or SVG.",
     markdown: `# vCard QR code generator for business cards
 
 Put your name, phone, email, company and website in a QR code. One scan offers to save you as a contact on iPhone and Android. The code holds a vCard 3.0 and is made in your browser. No account, no watermark, no expiry.
@@ -160,7 +160,7 @@ Sources: [Google, August 1, 2025](https://blog.google/technology/developers/goog
   "/branded-link-shortener": {
     title: "Custom URL shortener - branded short links on your own domain",
     description:
-      "A custom URL shortener for your own domain: branded short links with words you choose, TLS set up for you, QR codes and click analytics. From $4 a month, with a free plan.",
+      "A custom URL shortener for your own domain: branded short links with words you choose, TLS included, QR codes and click analytics. Free plan, paid from $4.",
     markdown: `# Custom URL shortener
 
 Put short links on your own domain, such as go.yourcompany.com/spring, instead of a generic shortener's. People see who sent the link before they tap it.
@@ -336,7 +336,7 @@ Accept: application/json, text/event-stream
   "/changelog": {
     title: "rdyrct changelog - what changed in each release",
     description:
-      "What changed in each release of rdyrct, the open-source URL shortener and QR code generator: new features, fixes, and anything an upgrade changes for self-hosters.",
+      "What changed in each release of rdyrct, the open-source URL shortener and QR code generator: new features, fixes, and what an upgrade means for self-hosters.",
     markdown: `# rdyrct changelog
 
 What changed in each release. The full text is [CHANGELOG.md](https://github.com/baronunread/rdyrct/blob/main/CHANGELOG.md) in the repository, and every change is a [merged pull request](https://github.com/baronunread/rdyrct/pulls?q=is%3Apr+is%3Amerged).`,
@@ -370,7 +370,7 @@ Bitly's first plan with a custom domain is Growth at $29 a month on annual billi
   "/rebrandly-alternative": {
     title: "Rebrandly alternative: rdyrct vs Rebrandly pricing, limits",
     description:
-      "rdyrct against Rebrandly: plan prices, custom domains, link and QR limits, and the one thing Rebrandly's free plan gives that ours does not. Start free, no card.",
+      "rdyrct against Rebrandly: plan prices, custom domains, link and QR limits, and the one thing Rebrandly's free plan gives that ours does not. Start free.",
     markdown: `# Rebrandly alternative: rdyrct vs Rebrandly
 
 Rebrandly's free plan includes a custom domain and rdyrct's does not. Past the free plans, rdyrct costs less: a custom domain from $4 a month.
@@ -410,7 +410,7 @@ For a static code with your logo, QR Code Monkey and rdyrct's [QR code generator
   "/flowcode-alternative": {
     title: "Flowcode alternative: rdyrct vs Flowcode pricing and limits",
     description:
-      "rdyrct against Flowcode: what each costs for QR codes, the code and scan limits, and when Flowcode's landing pages and enterprise features are worth it. Start free.",
+      "rdyrct against Flowcode: what each costs for QR codes, code and scan limits, and when Flowcode's landing pages and enterprise features are worth it. Start free.",
     markdown: `# Flowcode alternative: rdyrct vs Flowcode
 
 Flowcode's free plan holds 2 codes, and its first paid plan, Pro Plus, is $25 a month billed annually for 50 codes. rdyrct's free plan holds 30 links, each with a QR code, and a custom domain starts at $4 a month. If you need landing pages, CRM integrations or an enterprise team, Flowcode is built for that.

@@ -40,8 +40,8 @@
       name="twitter:description"
       content="URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
-    <!-- The SoftwareApplication offer below mirrors PLAN_PRICES in
-         src/shared/types.ts; Polar sets what is actually charged. -->
+    <!-- No SoftwareApplication node: Google rejects one without ratings or
+         reviews, and there are none to cite honestly. Add it back with them. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -66,21 +66,6 @@
             "url": "https://rdyrct.com",
             "description": "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
             "publisher": { "@id": "https://rdyrct.com/#organization" }
-          },
-          {
-            "@type": "SoftwareApplication",
-            "name": "rdyrct",
-            "url": "https://rdyrct.com",
-            "description": "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
-            "applicationCategory": "BusinessApplication",
-            "operatingSystem": "Any web browser",
-            "offers": {
-              "@type": "AggregateOffer",
-              "lowPrice": "0",
-              "highPrice": "9",
-              "priceCurrency": "USD",
-              "offerCount": "3"
-            }
           }
         ]
       }
