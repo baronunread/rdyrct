@@ -9,14 +9,12 @@
  * dangling `@id` reference, which parses fine and describes a graph whose
  * halves no longer connect.
  *
- * And the offer mirrors PLAN_PRICES in src/shared/types.ts, so raising a
- * price leaves a stale number quoted here, in the one place built to be
- * quoted back.
+ * And a node Google holds to stricter rules (an app with no ratings) fails
+ * its rich-result check on every page at once.
  */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as v from "valibot";
-import { PLAN_PRICES } from "../src/shared/types";
 
 /**
  * A node keeps whatever else it declares (`looseObject`), because this suite
@@ -35,14 +33,6 @@ const Document = v.object({
 
 /** What `publisher` and `isPartOf` hold: a pointer to another node, nothing else. */
 const Reference = v.object({ "@id": v.string() });
-
-const SoftwareApplication = v.looseObject({
-  offers: v.looseObject({
-    lowPrice: v.string(),
-    highPrice: v.string(),
-    priceCurrency: v.string(),
-  }),
-});
 
 /**
  * Parsed, not asserted: an unparseable block or a node missing its `@type`
@@ -76,16 +66,17 @@ test("every @id a node points at is a node in the same graph", () => {
   }
 });
 
-test("the quoted price is the price this app charges", () => {
-  const app = graph().find((node) => node["@type"] === "SoftwareApplication");
-  expect(app, "the graph should describe the app itself").toBeDefined();
-
-  const { offers } = v.parse(SoftwareApplication, app);
-  // PLAN_PRICES carries the currency symbol for display; schema.org wants the
-  // bare number beside priceCurrency.
-  expect(offers.highPrice).toBe(PLAN_PRICES.pro.replace("$", ""));
-  expect(offers.lowPrice, "the free plan is the bottom of the range").toBe("0");
-  expect(offers.priceCurrency).toBe("USD");
+test("no app or product node goes without the ratings Google requires of it", () => {
+  // Google's rich-result check fails a SoftwareApplication (and its subtypes)
+  // that has no aggregateRating or review, on every page this head ships on.
+  // There are no ratings to cite honestly, so the node stays out until there are.
+  const rated = ["SoftwareApplication", "WebApplication", "MobileApplication", "Product"];
+  for (const node of graph().filter((n) => rated.includes(n["@type"]))) {
+    expect(
+      "aggregateRating" in node || "review" in node,
+      `${node["@type"]} needs aggregateRating or review`,
+    ).toBe(true);
+  }
 });
 
 const FaqPage = v.object({

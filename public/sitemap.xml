@@ -7,9 +7,10 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://rdyrct.com/blog</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://rdyrct.com/signup</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
   <url>
     <loc>https://rdyrct.com/qr-code-generator</loc>

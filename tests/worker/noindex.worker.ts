@@ -50,11 +50,15 @@ describe("X-Robots-Tag on app pages", () => {
     "/reset-password",
     "/invite/abc123",
     "/consent",
+    // One-off public forms: nobody searches for them, and indexed they only
+    // add thin pages (Ahrefs audit, 2026-11).
+    "/login",
+    "/report",
   ])("%s is noindex", async (path) => {
     expect(await robots(path)).toBe("noindex");
   });
 
-  it.each(["/", "/pricing", "/login", "/signup", "/utm-builder", "/privacy"])(
+  it.each(["/", "/pricing", "/signup", "/utm-builder", "/privacy"])(
     "%s is not noindex",
     async (path) => {
       expect(await robots(path)).toBeNull();
