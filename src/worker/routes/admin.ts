@@ -1076,10 +1076,14 @@ adminRoutes.delete("/users/:userId", async (c) => {
   // has to say who was deleted, and afterwards there is nowhere left to look
   // it up (#67).
   const target = await db
-    .select({ email: schema.user.email })
+    .select({ email: schema.user.email, isAdmin: schema.user.isAdmin })
     .from(schema.user)
     .where(eq(schema.user.id, targetId));
   if (!target[0]) throw new HTTPException(404, { message: "User not found" });
+  // The same protection the ban path gives: a platform admin is never removed
+  // by another admin. "Remove platform admin" is how an admin loses the role.
+  if (target[0].isAdmin)
+    throw new HTTPException(400, { message: "Cannot delete a platform admin" });
   const owned = await db
     .select({ orgId: schema.orgMembers.orgId })
     .from(schema.orgMembers)
