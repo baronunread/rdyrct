@@ -8,14 +8,8 @@ import {
 import { HOME_LINK } from "./not-found-home";
 import { ShortHostFrame } from "./short-host-frame";
 
-/**
- * The two pages a short link answers with instead of redirecting (#344),
- * baked into the build by scripts/prerender-404.tsx and served by the Worker
- * (src/worker/link-state-page.ts). Never rendered by the app itself: they
- * show on rdyr.cc and on customers' own domains, which never boot it.
- */
+// Never rendered by the app: they show on rdyr.cc and customers' domains, which never boot it.
 
-/** A held link: suspended by an admin or by an automatic check. */
 export function HeldView() {
   return (
     <ShortHostFrame>
@@ -28,7 +22,6 @@ export function HeldView() {
   );
 }
 
-/** A link whose owner was banned. */
 export function DisabledView() {
   return (
     <ShortHostFrame madeWith>
@@ -41,11 +34,6 @@ export function DisabledView() {
   );
 }
 
-/**
- * A link with a warning: it still works, one click later. The Worker writes
- * the destination's host into the host slot and its URL into the button, so
- * the visitor reads where they are going before they go.
- */
 export function WarnView() {
   return (
     <ShortHostFrame>
@@ -69,8 +57,6 @@ export function WarnView() {
   );
 }
 
-/** The mark's hop, stopped: the dot leaves, the arc runs, and where the
- *  landing dot would be there is a pause sign. */
 function PausedHop() {
   return (
     <svg
@@ -88,7 +74,6 @@ function PausedHop() {
   );
 }
 
-/** The same hop, ended: a cross where the landing dot would be. */
 function StoppedHop() {
   return (
     <svg

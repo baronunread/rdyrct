@@ -42,8 +42,6 @@ function isOrgOwner(isPlatformAdmin: boolean, role: OrgRole | undefined): boolea
   return isPlatformAdmin || role === "owner";
 }
 
-/** The org-name field: syncs its default value when the current org
- * changes, and saves via PATCH. */
 function useOrgRenameForm(org: UserOrg | null) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -89,7 +87,6 @@ function useOrgRenameForm(org: UserOrg | null) {
   return { register, rename, currentName, isSubmitting, clearName: () => reset({ name: "" }) };
 }
 
-/** The delete-organization confirm dialog and its request. */
 function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -110,7 +107,6 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
       close();
       clearNameField();
       toast("Organization deleted");
-      // useCurrentOrg falls back to the next org (or NoOrgState everywhere).
       await qc.refetchQueries({ queryKey: ["user"] });
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -122,12 +118,7 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
   return { open, setOpen, close, confirmName, setConfirmName, pending, deleteOrg };
 }
 
-/**
- * Which domain new links start on (#69), chosen where the organization's
- * other settings live. Only domains that are serving are offered, the same
- * list the link editor reads, so the choice can never point at one that
- * resolves nowhere. Admins choose; everyone else reads it.
- */
+/** Only serving domains are offered, so the choice cannot point at one that resolves nowhere (#69). */
 function DefaultDomainRow({ orgId, canChange }: { orgId: string; canChange: boolean }) {
   const toast = useToast();
   const linkHost = useLinkHost();
@@ -246,8 +237,6 @@ function OrgRows({
   );
 }
 
-/** "Its 199 links and 2 domains stop working at once." Counted when the
- * counts are in, and said without them until then. */
 function deleteHint(links: number | undefined, domains: number): string {
   if (links === undefined) return "Its links and domains stop working at once.";
   const linkPart = links === 1 ? "1 link" : `${links.toLocaleString("en-US")} links`;
@@ -258,8 +247,7 @@ function deleteHint(links: number | undefined, domains: number): string {
 function DeleteOrgGroup({ orgId, onDelete }: { orgId: string; onDelete: () => void }) {
   const links = useLinkQuotaUsage(orgId).data?.count;
   const domains = useOrgLimits().domains.data?.length ?? 0;
-  // The only organization somebody belongs to can't be deleted (the Worker
-  // refuses it too): the way out is deleting the account.
+  // The only organization somebody belongs to can't be deleted (the Worker refuses it too).
   const only = (useCurrentUser().data?.orgs.length ?? 0) <= 1;
   return (
     <SettingsGroup danger>
@@ -331,9 +319,6 @@ function DeleteOrgDialog({
   );
 }
 
-/** Everything the organization page's first frame reads (see
- * lib/route-preload.ts): the default-domain choices, and for the owner the
- * counts the delete row quotes. */
 export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
   return settle([
     preloadOrgDomains(qc, org, user),
@@ -369,9 +354,7 @@ export function OrganizationPage() {
           currentName={currentName}
           isSubmitting={isSubmitting}
         />
-        {/* Keyed by plan too: a style tried on Free and saved after checkout
-            (lib/pending-qr-style.ts) lands with the plan change, and the
-            card starts again from what is now saved. */}
+        {/* Keyed by plan too: a style saved after checkout lands with the plan change, and the card restarts from what is saved. */}
         <QrDefaultsCard key={`${org.id}:${org.plan}:${org.qrStyle}:${org.qrColor}:${org.qrLogo}`} />
         {isOwner && <DeleteOrgGroup orgId={orgId} onDelete={() => deleteOrgFlow.setOpen(true)} />}
       </div>

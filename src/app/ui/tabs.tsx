@@ -3,7 +3,6 @@ import { useState, type ReactNode } from "react";
 import { cn } from "./cn";
 import { StableLabel } from "./stable-label";
 
-/** What sits in the tab row's corner: the open tab's own, else the card's. */
 function cornerOf(
   tabs: { value: string; end?: ReactNode }[],
   active: string | undefined,
@@ -12,24 +11,14 @@ function cornerOf(
   return tabs.find((t) => t.value === active)?.end ?? fallback;
 }
 
-/**
- * Several lists in one card, switched by underline tabs (rdyrct-design, "The
- * app's surfaces"): "Top links · Decaying · Dead", "Referrers · Campaigns".
- * The tab names the list, so the card needs no title of its own. Base UI owns
- * the keyboard and ARIA: arrow keys move between tabs, Tab moves into the
- * panel.
- */
 export function PanelTabs({
   tabs,
   defaultValue,
   end,
   className,
 }: {
-  /** `count` follows the label, muted, when there is one. `end` replaces
-   * the card's own `end` while that tab is open (a list's Show all). */
   tabs: { value: string; label: string; count?: number; panel: ReactNode; end?: ReactNode }[];
   defaultValue?: string;
-  /** Something on the right of the tab row, e.g. an "All links" link. */
   end?: ReactNode;
   className?: string;
 }) {
@@ -55,26 +44,22 @@ export function PanelTabs({
               )}
             </BaseTabs.Tab>
           ))}
-          {/* One underline that slides to the chosen tab; the panel itself
-              swaps at once. */}
+          {/* One underline that slides to the chosen tab; the panel itself swaps at once. */}
           <BaseTabs.Indicator className="absolute bottom-0 left-0 h-[1.5px] w-(--active-tab-width) translate-x-(--active-tab-left) bg-text transition-[translate,width] duration-200 ease-out motion-reduce:transition-none" />
         </BaseTabs.List>
         {corner && <div className="ml-auto shrink-0 pb-2.5 text-xs text-muted">{corner}</div>}
       </div>
-      {/* Every panel stays mounted in the same grid cell and only the active
-          one is visible, so the card is as tall as its tallest list and
-          switching tabs never moves the card, or the one beside it in a row. */}
+      {/* Every panel stays mounted in the same grid cell and only the active one is visible, so
+         the card is as tall as its tallest list and switching tabs never moves it. */}
       <div className="grid">
         {tabs.map((tab) => (
           <BaseTabs.Panel
             key={tab.value}
             value={tab.value}
             keepMounted
-            // Base UI hides an inactive panel with the `hidden` attribute,
-            // which Tailwind's base layer turns into display: none
-            // !important, out of reach of any utility. Dropped here: the
-            // panel keeps its place but goes invisible (data-hidden), and
-            // Base UI's `inert` keeps it out of focus and the a11y tree.
+            // Base UI hides an inactive panel with `hidden`, which Tailwind's base layer turns into
+            // display: none !important. Dropped here: the panel keeps its place but goes invisible
+            // (data-hidden), and Base UI's `inert` keeps it out of focus and the a11y tree.
             render={(props) => <div {...props} hidden={undefined} />}
             className="col-start-1 row-start-1 min-w-0 data-[hidden]:invisible"
           >

@@ -27,23 +27,9 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Spinner } from "../ui/spinner";
 
-/**
- * Between signing in and the app, for a new organization.
- *
- * The sign-in card arrives here: from the email code (routes/auth.tsx), back
- * from Google, or back from Polar after a pricing link. It says what just
- * happened, then becomes the organization card of the setup flow
- * (components/setup-flow.tsx): name, first link, domain, team. At the end
- * that card becomes the org switcher as the app builds around it.
- *
- * Only an owner whose org has no links yet gets the flow (useWelcomeList);
- * anybody else goes straight on into the app with the same hand-over.
- */
-
 type Phase = "opening" | "failed" | "confirming" | "slow" | "on" | "cancelled" | "google" | "flow";
 
-/** What the URL asks for. Pure, because render may run it twice; the page
- * strips the URL in an effect, so a reload is a plain visit. */
+/** Pure, because render may run it twice; the page strips the URL in an effect. */
 function readArrival(search: URLSearchParams) {
   const checkoutId = search.get("checkout_id");
   const cancelled = search.get("checkout") === "cancelled";
@@ -54,15 +40,11 @@ function readArrival(search: URLSearchParams) {
     checkoutId,
     cancelled,
     phase,
-    // Where the sign-in was going, if it is a page of the app.
     target: isAppPage(next) ? next : "/dashboard",
     newAccount: search.get("signup") === "google",
   };
 }
 
-/** The card a way in opens on. A checkout the flow's domain step opened
- * comes back to that step, which says how it went; one from a pricing link
- * gets a card. */
 function arrivalPhase(via: string | null, checkoutId: string | null, cancelled: boolean): Phase {
   if (via === "email") return "flow";
   if (via === "google") return "google";
@@ -71,9 +53,6 @@ function arrivalPhase(via: string | null, checkoutId: string | null, cancelled: 
   return checkoutId ? "confirming" : "cancelled";
 }
 
-/** Into the app, once: the card in view (this page's, or the flow's
- * organization card) becomes the org switcher. An account with no org left
- * goes to the dashboard, which asks for one. */
 function useEnterApp(target: string) {
   const navigate = useNavigate();
   const user = useCurrentUser();
@@ -92,7 +71,6 @@ function useEnterApp(target: string) {
   return (wait: number) => setDelay((current) => current ?? wait);
 }
 
-/** A pricing link: off to Polar, unless there is nothing to buy. */
 function useOpenCheckout(
   phase: Phase,
   intent: PlanIntent | null,
@@ -120,8 +98,7 @@ function useOpenCheckout(
   };
 }
 
-/** Back from a paid checkout: the plan turning paid is the webhook landing.
- * Past the poll, Polar is asked directly, as the billing page does. */
+/** The plan turning paid is the webhook landing. Past the poll, Polar is asked directly, as billing does. */
 function useConfirmPayment(
   waiting: boolean,
   checkoutId: string | null,
@@ -145,8 +122,6 @@ function useConfirmPayment(
   });
 }
 
-/** Back from Polar, the payment confirmed: on the card, or on the flow's
- * domain step when that is where the checkout started. */
 function usePayment(
   arrival: { phase: Phase; checkoutId: string | null },
   phase: Phase,
@@ -169,8 +144,6 @@ function usePayment(
   return payment;
 }
 
-/** Polar answered after the card gave up waiting: keep asking, slowly, and
- * say so the moment the plan turns paid. */
 function useLateWebhook(slow: boolean, plan: OrgPlan | undefined, onPaid: () => void) {
   const qc = useQueryClient();
   const paid = useEffectEvent(onPaid);
@@ -185,8 +158,6 @@ function useLateWebhook(slow: boolean, plan: OrgPlan | undefined, onPaid: () => 
   }, [slow, plan, qc]);
 }
 
-/** The shell's code and the dashboard's data, loading while a card is up,
- * so the hand-over lands on a page already drawn. */
 function usePreloadApp(target: string) {
   const router = useRouter();
   useEffect(() => {
@@ -195,18 +166,12 @@ function usePreloadApp(target: string) {
   }, [target, router]);
 }
 
-/** What the flow changed and the dashboard draws from. */
 const ORG_DATA = new Set(["stats", "links", "linkQuotaUsage", "user"]);
 
-/** How long each card stays up before it moves on. */
 const HOLD = { on: 1400, cancelled: 1600, google: 1600 } satisfies Partial<Record<Phase, number>>;
 const holdFor = (phase: Phase): number | undefined =>
   phase === "on" || phase === "cancelled" || phase === "google" ? HOLD[phase] : undefined;
 
-/**
- * After a card: the flow for an organization not set up yet (no links, no
- * finished flow), the app for anybody else, however they signed in.
- */
 function useMoveOn(
   phase: Phase,
   intent: PlanIntent | null,
@@ -216,7 +181,6 @@ function useMoveOn(
 ) {
   const { org } = useCurrentOrg();
   const list = useWelcomeList(fromCheckout);
-  // The hold before the flow, released if the page goes first.
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(timer.current), []);
   const moveOn = (hold: number) => {
@@ -228,7 +192,6 @@ function useMoveOn(
       arriveInFlow(() => setPhase("flow"));
     }, hold);
   };
-  // Each closing card moves on once, after its hold.
   const moved = useRef(false);
   useEffect(() => {
     const hold = holdFor(phase);
@@ -239,8 +202,7 @@ function useMoveOn(
   return { moveOn, known: list.known };
 }
 
-/** Signed out (an old tab, an expired session): to sign-in, and back here.
- * Only a 401 (`null`) means signed out; a failed request is not (#487). */
+/** Only a 401 (`null`) means signed out; a failed request is not (#487). */
 function useSignedIn() {
   const navigate = useNavigate();
   const current = useCurrentUser();
@@ -252,10 +214,8 @@ function useSignedIn() {
   }, [signedOut, navigate]);
 }
 
-/** /welcome sits outside RequireAuth, so it says an outage itself rather
- * than reading it as a sign-out. The arrival is read here, above the
- * outage, because Welcome clears the URL once it has it: a Retry that
- * remounted Welcome would otherwise lose Polar's checkout id and `next`. */
+/** /welcome sits outside RequireAuth, so it says an outage itself. The arrival is read above the outage:
+ * a Retry that remounted Welcome would lose Polar's checkout id and `next`. */
 export function WelcomePage() {
   const current = useCurrentUser();
   const [params] = useSearchParams();
@@ -268,15 +228,12 @@ export function WelcomePage() {
 function Welcome({ arrival }: { arrival: ReturnType<typeof readArrival> }) {
   useSignedIn();
   const { intent, checkoutId, target, newAccount } = arrival;
-  // Polar's way back, where a flow the domain step left resumes.
   const fromCheckout = !!checkoutId || arrival.phase === "cancelled";
   // react-doctor-disable-next-line react-doctor/no-derived-useState -- `arrival` is read once in WelcomePage and never changes; it only seeds the phase machine, which moves on its own from there.
   const [phase, setPhase] = useState<Phase>(arrival.phase);
   const user = useCurrentUser().data?.user;
   const { org } = useCurrentOrg();
   const enterApp = useEnterApp(target);
-  // A card that arrives on a full page load (Google, Polar) rises in; from
-  // the email code it is already on screen, carried over by the transition.
   const [entering] = useState(() => arrival.phase !== "flow");
   usePreloadApp(target);
   const payment = usePayment(arrival, phase, setPhase, user?.plan);
@@ -317,7 +274,6 @@ function Welcome({ arrival }: { arrival: ReturnType<typeof readArrival> }) {
   );
 }
 
-/** What the card says, for the phase it is in. */
 function cardWords(
   phase: Phase,
   intent: PlanIntent | null,
@@ -329,7 +285,6 @@ function cardWords(
   return copyFor(phase, intent ? PLAN_NAME[intent.target] : "Your plan", intent, orgName);
 }
 
-/** The card itself, between signing in and what comes next. */
 function WelcomeCard({
   phase,
   entering,
@@ -369,8 +324,6 @@ function WelcomeCard({
   );
 }
 
-/** Once in, the flow runs to its end: its own link step gives the org the
- * link that would otherwise say it is set up. */
 function useAdmitted(fromCheckout: boolean) {
   const list = useWelcomeList(fromCheckout);
   const [admitted, setAdmitted] = useState(false);
@@ -378,14 +331,11 @@ function useAdmitted(fromCheckout: boolean) {
   return { admitted, skip: list.known && !list.listed && !admitted };
 }
 
-/** Where a flow picks up: the step and plan this browser kept, if any. */
 function useResume(orgId: string, intent: PlanIntent | null) {
   const setup = useOrgSetup(orgId);
   return { intent: setup?.plan ?? intent, at: setup?.at ?? ("name" as const) };
 }
 
-/** Whether this org gets the flow, and where it picks up. An org that
- * does not moves on into the app; one that does has its flow started. */
 function useFlowGate(
   intent: PlanIntent | null,
   fromCheckout: boolean,
@@ -401,11 +351,6 @@ function useFlowGate(
   return { org, skip, resume };
 }
 
-/**
- * The flow itself. Drawn at once, so the sign-in card has the organization
- * card to become; the rare org that turns out not to get one (it already
- * had links) moves on into the app instead.
- */
 function WelcomeFlow({
   intent,
   fromCheckout,
@@ -431,8 +376,6 @@ function WelcomeFlow({
       payment={payment}
       onDone={async () => {
         finishSetup(org.id);
-        // The dashboard was fetched before the flow made a link; fetched
-        // again so it lands as a dashboard, not as its first-run screen.
         await qc
           .refetchQueries({ predicate: (q) => ORG_DATA.has(String(q.queryKey[0])) })
           .catch(() => {});
@@ -442,13 +385,11 @@ function WelcomeFlow({
   );
 }
 
-/** What the card says in each phase. */
 interface WelcomeCopy {
   heading: string;
   body: ReactNode;
 }
 
-/** The words for a plan, an org and a phase. */
 interface CopyContext {
   name: string;
   intent: PlanIntent | null;
@@ -487,8 +428,6 @@ function copyFor(phase: Phase, name: string, intent: PlanIntent | null, orgName:
   return COPY[phase]({ name, intent, orgName });
 }
 
-/** Back from Google, before the card moves on. A new account says so, with
- * the address Google gave; a returning one only that it is signed in. */
 function googleCopy(newAccount: boolean, email: string): WelcomeCopy {
   if (!newAccount) return { heading: "Signed in with Google", body: "" };
   return {
@@ -501,8 +440,6 @@ function googleCopy(newAccount: boolean, email: string): WelcomeCopy {
   };
 }
 
-/** The round mark above the heading: a spinner while waiting, a check once
- * something is done, nothing when there is nothing to show. */
 function Mark({ phase }: { phase: Phase }) {
   if (phase !== "opening" && phase !== "confirming" && phase !== "on" && phase !== "google")
     return null;

@@ -14,42 +14,15 @@ import { useShellUser } from "../lib/hooks";
 import { useShellOrgs } from "../lib/current-org";
 import { UserAvatar } from "./user-avatar";
 
-/**
- * Page-level loading skeletons, one per route, used both as the lazy chunk's
- * Suspense fallback and as the route's own loading state so a page shows one
- * shape from first paint to content.
- *
- * The rule they follow: **draw only what the page is certain to render, in
- * the order it renders it.** Anything conditional is left out. Content
- * arriving below what is already on screen moves nothing, while a
- * placeholder for something that never arrives moves everything above it
- * when it disappears. Two of these used to guess: the dashboard drew stat
- * cards and five list cards at an account whose first-run page is a header
- * and one field, and analytics drew four bar lists where the real page puts
- * a three-column breakdown.
- */
+/** Draw only what the page is certain to render, in the order it renders it: a placeholder
+ * for something that never arrives moves everything above it when it disappears. */
 
-/**
- * Stands in for PageHeader, which every route opens with, so its height has
- * to match exactly or the page below it moves on every route.
- *
- * An h1 at text-xl (28px line box), then, only where the page has one, a
- * `mt-1` sub at text-sm (20px), with `mb-6` under it. Settings, Organization
- * and the dashboard have no sub, so it is off unless asked for. The bars are
- * shorter than the text they replace, so each sits in a box of the line's
- * height rather than setting it.
- *
- * `action` is whatever the page hangs on the right, drawn at the size of the
- * real controls (`ButtonSkeleton` for a 36px button).
- */
 function HeaderSkeleton({
   sub = false,
   subWidth = "w-32 sm:w-64",
   action,
 }: {
   sub?: boolean;
-  /** The sub bar's width. Set it where the page's own line is long enough
-   * to push the action under the title on a phone. */
   subWidth?: string;
   action?: ReactNode;
 } = {}) {
@@ -61,8 +34,6 @@ function HeaderSkeleton({
         </span>
         {sub && (
           <span className="mt-1 flex h-5 items-center">
-            {/* narrower on a phone, so the title block leaves the action
-                room beside it, as the real one does */}
             <Skeleton className={cn("h-3", subWidth)} />
           </span>
         )}
@@ -72,26 +43,18 @@ function HeaderSkeleton({
   );
 }
 
-/** A `md` Button (h-9, rounded-lg) at the width its label takes. */
 function ButtonSkeleton({ className }: { className: string }) {
   return <Skeleton className={cn("h-9 shrink-0 rounded-lg", className)} />;
 }
 
-/** A `sm` Button (h-8). */
 function SmallButtonSkeleton({ className }: { className: string }) {
   return <Skeleton className={cn("h-8 shrink-0 rounded-lg", className)} />;
 }
 
-/** NewLinkButton: icon, "New link" and its `C` key, which hides on a phone. */
 function NewLinkButtonSkeleton() {
   return <ButtonSkeleton className="w-[6.625rem] sm:w-[8.5rem]" />;
 }
 
-/**
- * Segmented: a 9px track, 2px of padding, segments 28px tall (36 on a
- * phone, where they also gain 2px a side). `labels` are the label widths in
- * px, so each segment is as wide as the real one.
- */
 function SegmentedSkeleton({ labels }: { labels: number[] }) {
   return (
     <div className="flex w-fit shrink-0 animate-pulse gap-0.5 rounded-[9px] bg-surface-2 p-0.5">
@@ -108,15 +71,8 @@ function SegmentedSkeleton({ labels }: { labels: number[] }) {
   );
 }
 
-/** The range presets' labels (24h, 7d, 30d, 365d) as RangeControl sets them. */
 const RANGE_LABEL = { "24h": 21, "7d": 14, "30d": 21, "365d": 27 } as const;
 
-/**
- * StatsChart: the strip of figures over the chart in one card. Each figure is
- * a text-xs label over a text-xl leading-tight value (25px) in `px-2.5 py-2`,
- * the first one shaded; the chart sits in `px-4 pt-1 pb-3` at its own height.
- * On a phone a figure takes at least 40%, so three or four make two rows.
- */
 function StatsChartSkeleton({ figures, chartHeight }: { figures: number; chartHeight: number }) {
   return (
     <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
@@ -142,11 +98,6 @@ function StatsChartSkeleton({ figures, chartHeight }: { figures: number; chartHe
   );
 }
 
-/**
- * PanelTabs: underline tabs (`pb-2.5` under a 20px label) over a hairline,
- * `mb-3`, then the panel, all in `px-4 pt-3 pb-3.5`. `tabs` are the label
- * widths; `end` draws the quiet link some panels put on the right.
- */
 function PanelSkeleton({
   tabs,
   end,
@@ -172,8 +123,6 @@ function PanelSkeleton({
   );
 }
 
-/** A row of underline tabs over a hairline drawn as an inset shadow: each a
- * 20px text-sm label with `pb-2.5` under it. */
 function TabsSkeleton({
   tabs,
   className,
@@ -199,8 +148,6 @@ function TabsSkeleton({
 
 const barWidths = [92, 71, 58, 44, 33, 24, 17];
 
-/** BarList: 30px bars `gap-y-0.5` apart, the count in its own column. The
- * app's lists have no column heads; the tab says what they list. */
 function BarListSkeleton({ rows }: { rows: number }) {
   return (
     <div className="flex flex-col">
@@ -216,8 +163,6 @@ function BarListSkeleton({ rows }: { rows: number }) {
   );
 }
 
-/** PlacesPanel: the Countries tab and Show all over the map (270px, its
- * 16px footnote under it) and the list beside it, stacked on a phone. */
 function PlacesSkeleton({ className }: { className?: string }) {
   return (
     <PanelSkeleton tabs={["w-16"]} end className={className}>
@@ -234,8 +179,6 @@ function PlacesSkeleton({ className }: { className?: string }) {
   );
 }
 
-/** The plain lists in a panel (recent clicks, team activity): h-8 rows split
- * by hairlines, a name on the left and a quiet figure on the right. */
 function LineListSkeleton({ rows }: { rows: number }) {
   return (
     <div className="flex flex-col">
@@ -259,22 +202,11 @@ function ChartCardSkeleton() {
   return (
     <Card>
       <Skeleton className="mb-3 h-2.5 w-24" />
-      {/* the real AreaChart with its paddings: the card measures 241 */}
       <Skeleton className="h-[187px] w-full" />
     </Card>
   );
 }
 
-/**
- * /dashboard once there is a link: "Dashboard" with the range (three
- * segments) and New link on the right, New link first on a phone; then,
- * `gap-6` apart, the four-figure strip over the chart (180) and the two
- * panels side by side: top links as a bar list, recent clicks as eight h-8
- * rows.
- *
- * An account on its very first run gets a header and one field instead, so
- * it watches this shape go once. Every visit after that lands on it.
- */
 export function DashboardSkeleton() {
   return (
     <SkeletonStatus>
@@ -330,17 +262,6 @@ export function DashboardSkeleton() {
   );
 }
 
-/**
- * /analytics: the title over "All links · last N days", the range (four
- * segments) and Export CSV (a `sm` button) on the right; then the figure
- * strip over the chart (180), then the grid: links and sources, the
- * countries map across both columns, devices and the by-hour panel (260).
- *
- * The strip has three figures until the API sends clicks per link; a figure
- * more or fewer only changes their widths. The by-hour panel is left out of
- * the 24-hour view and before the first click; it is last, so leaving it
- * drawn moves nothing above it.
- */
 export function AnalyticsSkeleton() {
   return (
     <SkeletonStatus>
@@ -382,20 +303,10 @@ export function AnalyticsSkeleton() {
   );
 }
 
-/** admin/layout.tsx's tab label widths, measured: Usage, Users,
- * Organizations, Links, Audit log. */
 const adminTabWidths = ["w-10", "w-9", "w-[5.5rem]", "w-8", "w-14"];
 
-/** The usage range (7d, 30d, 90d) in the Platform header. */
 const adminRangeLabels = [14, 21, 21];
 
-/**
- * The whole /admin section before AdminLayout has rendered (its chunk is
- * loading, or the guard is waiting on the user): "Platform" over its line,
- * the range on Usage, the underline tabs, then the open tab's content. The
- * title is a bar, not the word: whoever is waiting may not be an admin, and
- * the section answers everybody else with a 404.
- */
 export function AdminPlatformSkeleton() {
   const location = useLocation();
   const onUsage = location.pathname === "/admin" || location.pathname === "/admin/";
@@ -426,20 +337,14 @@ export function AdminPlatformSkeleton() {
   );
 }
 
-/** The open admin tab's content alone, for AdminLayout's own Suspense: by
- * then the real title and tabs are on screen above it. */
 export function AdminSectionSkeleton() {
   const location = useLocation();
   const onUsage = location.pathname === "/admin" || location.pathname === "/admin/";
   return onUsage ? <AdminUsageSkeleton /> : <AdminTableSkeleton />;
 }
 
-/** The usage chart's height (usage.tsx). */
 const ADMIN_CHART_HEIGHT = 200;
 
-/** /admin: mirrors the page below the layout's title and tabs: the figure
- * strip over the chart, then two cards side by side. Here rather than in
- * usage.tsx so the section's frame can draw it before that chunk loads. */
 export function AdminUsageSkeleton() {
   return (
     <SkeletonStatus testId="admin-usage-skeleton" className="flex flex-col gap-6">
@@ -474,8 +379,6 @@ export function AdminUsageSkeleton() {
   );
 }
 
-/** /admin/users, /orgs and /links: the filter pills and the search box in
- * one row (`mb-4`; on a phone the search goes on top), then the table. */
 function AdminTableSkeleton() {
   return (
     <div data-testid="admin-table-skeleton">
@@ -492,12 +395,10 @@ function AdminTableSkeleton() {
   );
 }
 
-/** /admin/audit after its real header and search box have already rendered. */
 export function AdminAuditRowsSkeleton() {
   return <TableSkeleton rows={6} testId="admin-audit-rows-skeleton" />;
 }
 
-/** Generic content placeholder for route guards (e.g. RequireAdmin). */
 function PageSkeleton() {
   return (
     <div>
@@ -507,11 +408,6 @@ function PageSkeleton() {
   );
 }
 
-/**
- * SettingsGroup: an optional small heading (a text-sm line, with its hint
- * beside it) `gap-2` above one card whose rows are split by inset hairlines.
- * `title` and `hint` are bar widths.
- */
 function GroupSkeleton({
   title,
   hint,
@@ -545,8 +441,6 @@ function GroupSkeleton({
   );
 }
 
-/** SettingsRow: label (and its one-line hint) on the left, the control on the
- * right, `min-h-14`; on a phone the control drops under the label. */
 function RowSkeleton({
   label,
   hint,
@@ -577,11 +471,6 @@ function RowSkeleton({
   );
 }
 
-/**
- * The centred column Settings, Organization, Billing and Domains share, with
- * the page header inside it: the header has to sit where the page's own
- * does, or the title jumps sideways when the page arrives.
- */
 function SettingsPageSkeleton({
   header,
   testId,
@@ -599,9 +488,6 @@ function SettingsPageSkeleton({
   );
 }
 
-/** The domain list while it loads: the same rows domains.tsx draws (min-h-
- * [60px], `py-3`: the hostname over its detail line, then the status and the
- * row's menu on the right). */
 const domainRows = [40, 55];
 
 export function DomainsSkeleton() {
@@ -629,7 +515,6 @@ export function DomainsSkeleton() {
   );
 }
 
-/** Admin org dialog: chart plus the members and links tables. */
 const detailTables = ["w-16", "w-12"];
 
 export function OrgDetailSkeleton() {
@@ -657,8 +542,6 @@ export function OrgDetailSkeleton() {
   );
 }
 
-/** /invite: the two lines of `text-sm` invite text, then the action button
- * `mt-5` below, inside the existing centered card. */
 export function InviteSkeleton() {
   return (
     <SkeletonStatus className="flex flex-col items-center">
@@ -673,24 +556,14 @@ export function InviteSkeleton() {
   );
 }
 
-/**
- * Sidebar for the loading shell. Everything static renders for real (brand,
- * nav, theme toggle — which already works, theme needs no user data); only
- * the data renders as skeleton bars: the org name and the user identity.
- * Fixed-height wrappers keep each bar as tall as the text line it stands in,
- * so the loaded sidebar replaces this without anything moving. Classes
- * mirror AppShell's sidebar.
- */
 function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
   const hide = collapsed ? "opacity-0" : undefined;
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* the mark, then search and fold (shell.tsx, SidebarTop) */}
       <div className="hidden h-14 items-center gap-1 px-3 md:flex">
         <span className="grid size-9 shrink-0 place-items-center">
           <LogoMark className="h-[18px]" />
         </span>
-        {/* The fold button's place, drawn so it is there before it works. */}
         <span className={cn("ml-auto grid size-8 place-items-center text-muted", hide)}>
           <PanelLeftClose size={16} />
         </span>
@@ -701,12 +574,6 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
     </div>
   );
 }
-
-/*
- * The org and the person come from the last /user this browser saw, when it
- * has one: they draw for real, as the loaded sidebar will, so only a first
- * visit still shows bars. Chrome only (AGENTS.md, the cache).
- */
 
 function OrgRowSkeleton({ hide }: { hide?: string }) {
   const { org, orgs } = useShellOrgs();
@@ -719,7 +586,6 @@ function OrgRowSkeleton({ hide }: { hide?: string }) {
         <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
           <OrgNameSkeleton name={name} />
         </span>
-        {/* Only where the loaded sidebar has a menu to open. */}
         {orgs.length > 1 && (
           <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", hide)} />
         )}
@@ -731,8 +597,6 @@ function OrgRowSkeleton({ hide }: { hide?: string }) {
 const ORG_INITIAL =
   "grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg";
 
-/** `name`: the org's, "" when no org is cached yet (a bar), or null for the
- *  build's slot the head script fills. */
 function OrgInitialSkeleton({ name }: { name: string | null }) {
   if (name === null)
     return <span aria-hidden data-shell-slot="org-initial" className={ORG_INITIAL} />;
@@ -750,9 +614,6 @@ function OrgNameSkeleton({ name }: { name: string | null }) {
   return <span className="truncate font-semibold">{name}</span>;
 }
 
-/** Real labels and icons, inert until the shell mounts, the page being
- *  opened lit as the shell lights it. Same icon size as the shell's nav
- *  (16), or the labels move 1px on swap. */
 function NavSkeleton({ hide }: { hide?: string }) {
   const { pathname } = useLocation();
   return (
@@ -799,9 +660,6 @@ function AccountSkeleton({ hide }: { hide?: string }) {
   );
 }
 
-/** First paint of the authenticated app: real sidebar chrome + skeleton
- * content. Layout classes mirror AppShell so the swap doesn't shift,
- * folded sidebar included. */
 export function AppShellSkeleton({ folded }: { folded?: boolean } = {}) {
   // The build renders both widths and lets the head script pick one; the app
   // reads the stored choice.
@@ -814,7 +672,6 @@ export function AppShellSkeleton({ folded }: { folded?: boolean } = {}) {
         <SidebarSkeleton collapsed={collapsed} />
       </aside>
 
-      {/* phone top bar: the menu button, the logo, the search button */}
       <div className="fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-1.5 bg-bg/90 px-3 backdrop-blur md:hidden">
         <span className="grid size-10 place-items-center text-text">
           <MenuIcon size={20} />
@@ -830,7 +687,6 @@ export function AppShellSkeleton({ folded }: { folded?: boolean } = {}) {
       <main className={layout.main}>
         <div data-app-sheet className={layout.scroller}>
           <div className="mx-auto w-full max-w-5xl flex-1">
-            {/* whichever page was asked for, not always the dashboard */}
             <RouteSkeleton />
           </div>
         </div>
@@ -839,8 +695,6 @@ export function AppShellSkeleton({ folded }: { folded?: boolean } = {}) {
   );
 }
 
-/** One line of a two-line table cell: bold text-sm (20px) over mono text-xs
- * (16px), `gap-0.5`. */
 function TwoLineCellSkeleton({ first, second }: { first: string; second: string }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -854,8 +708,6 @@ function TwoLineCellSkeleton({ first, second }: { first: string; second: string 
   );
 }
 
-/** Table's frame and a header row (Th: `py-2.5` around a text-xs line, then
- * its 1px rule). `children` are the body rows. */
 function TableFrameSkeleton({
   head,
   headClassName,
@@ -873,8 +725,6 @@ function TableFrameSkeleton({
   );
 }
 
-/** A Th's text-xs label as a bar, in the cell's own padding and width: 36px,
- * `py-2.5` around a 16px line. */
 function HeadCellSkeleton({ className, bar }: { className?: string; bar?: string }) {
   return (
     <div className={cn("flex h-9 items-center px-4", className)}>
@@ -890,19 +740,6 @@ const linkRowWidths = [
   ["w-3/5", "w-1/3"],
 ];
 
-/**
- * /links: "Links" over the count, Import and Export (quiet, `sm` and up; a
- * 40px menu button on a phone) beside New link; then, `gap-4` apart, the
- * toolbar row (44px from `sm`, the search on the right; on a phone the
- * search alone, full width and 44px tall) and the table: a checkbox column
- * (from `sm`), the link with its 28px thumbnail, the destination (30%, from
- * `lg`), clicks, created (from `sm`) and the actions, in 63px rows, with the
- * pager's 48px line under them. A phone has no table header.
- *
- * The filter chips and the domain filter are left out: the chips wait on
- * their counts and only fill space beside the search, and the domain filter
- * only exists for an organization with a custom domain.
- */
 export function LinksSkeleton() {
   return (
     <SkeletonStatus testId="links-page-skeleton">
@@ -970,13 +807,6 @@ export function LinksSkeleton() {
   );
 }
 
-/**
- * /members: "Members" over the seat count with the Invite split button on
- * the right, then the people table (a 32px avatar before the name over the
- * email, the role, the join date and the row actions from `sm`) and the
- * line about roles under it. The seats-full notice, the pending invites and
- * the last-active column only exist for some organizations.
- */
 export function MembersSkeleton() {
   return (
     <SkeletonStatus testId="members-page-skeleton" className="flex flex-col">
@@ -1019,10 +849,6 @@ export function MembersSkeleton() {
   );
 }
 
-/**
- * /domains, for somebody who can add one: "Domains" over the count with Add
- * domain on the right, then the domain rows, all in the settings column.
- */
 export function DomainsPageSkeleton() {
   // A plain box, not a status: the rows below announce the loading once.
   return (
@@ -1033,17 +859,10 @@ export function DomainsPageSkeleton() {
   );
 }
 
-/** Every other /domains reader (no access, or a free plan): the title alone,
- * where the page puts it. */
 export function DomainsHeaderSkeleton() {
   return <SettingsPageSkeleton testId="domains-header-skeleton" header={<HeaderSkeleton />} />;
 }
 
-/**
- * UsageRow: the label, the meter and "n of m" in one row (`py-3`, 44px) from
- * `sm`; on a phone the meter drops under the label and figure, 58px.
- * `hint` is the clicks row, whose "· resets …" wraps its label on a phone.
- */
 function MeterRowSkeleton({ label, hint }: { label: string; hint?: boolean }) {
   return (
     <div className="px-4 py-3">
@@ -1060,15 +879,13 @@ function MeterRowSkeleton({ label, hint }: { label: string; hint?: boolean }) {
   );
 }
 
-/** Each plan's feature lines (Free, Hobby, Pro), as widths close to the
- * text each stands in for. Every width is unique in its list: it is the key. */
+/** Every width is unique in its list: it is the key. */
 const planFeatureLines = [
   ["w-16", "w-18", "w-34", "w-36"],
   ["w-16", "w-18", "w-28", "w-34", "w-38", "w-32"],
   ["w-18", "w-22", "w-30", "w-26", "w-36", "w-40", "w-32"],
 ];
 
-/** PlanCard: name, price, the feature list and the button at the foot. */
 function PlanCardSkeleton({ lines }: { lines: string[] }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
@@ -1092,14 +909,6 @@ function PlanCardSkeleton({ lines }: { lines: string[] }) {
   );
 }
 
-/**
- * /billing. Free (or not yet known), which is most people who open it: the
- * title over its one line, the Usage group (links, members, clicks counted
- * and organizations you own), then Plans with the billing cycle switch and
- * the three plan cards. Paid: one card with the plan row (name and renewal,
- * Change plan and Cancel) over its five meters, then Payment and Invoices,
- * a row each.
- */
 export function BillingSkeleton({ plan }: { plan?: OrgPlan } = {}) {
   if (plan && plan !== "free")
     return (
@@ -1163,12 +972,6 @@ export function BillingSkeleton({ plan }: { plan?: OrgPlan } = {}) {
   );
 }
 
-/**
- * /settings: Account (the picture and name with Save beside them, the
- * email, the theme), Signing in (password, Google, other devices) and the
- * delete-account group outlined in the danger colour, `gap-8` apart in the
- * settings column. The Google row only exists where Google sign-in is on.
- */
 export function SettingsSkeleton() {
   return (
     <SettingsPageSkeleton testId="settings-page-skeleton" header={<HeaderSkeleton />}>
@@ -1207,16 +1010,10 @@ export function SettingsSkeleton() {
   );
 }
 
-/** ApiTabBar: "API keys", "MCP" and the Docs link as underline tabs over a
- * hairline, `mb-5`. Shared by both tab skeletons below so switching tabs (or
- * reloading on either one) never moves the bar itself. */
 function ApiTabBarSkeleton() {
   return <TabsSkeleton tabs={["w-14", "w-8", "w-12"]} className="mb-5" />;
 }
 
-/** /api-keys?tab=keys (the default): Create key beside the title (the keys
- * are the owner's, and so is this tab), then the keys table, Name, Key
- * (from `sm`), Created (from `md`) and Last used, in 41px rows. */
 export function ApiKeysSkeleton() {
   return (
     <SkeletonStatus testId="api-keys-page-skeleton">
@@ -1258,9 +1055,6 @@ export function ApiKeysSkeleton() {
   );
 }
 
-/** /api-keys?tab=mcp: same header and tab bar, then the hero and the setup
- * card. The Connected list above the card appears only for somebody with a
- * grant, which the query has not answered yet. */
 function McpTabSkeleton() {
   return (
     <SkeletonStatus testId="mcp-tab-skeleton">
@@ -1274,8 +1068,6 @@ function McpTabSkeleton() {
   );
 }
 
-/** The QR editor's rows: label width and row height (Colours holds two
- * lines of controls). */
 const qrEditorRows = [
   { label: "w-10", h: "h-16" },
   { label: "w-14", h: "h-16" },
@@ -1283,12 +1075,6 @@ const qrEditorRows = [
   { label: "w-12", h: "h-16" },
 ];
 
-/**
- * /organization, as its owner sees it: the name row (field and Save), the
- * default domain and the ID, the QR code defaults editor, and the delete
- * group outlined in the danger colour. Every plan shows the editor; a free
- * one adds a one-line strip under it, the second last thing on the page.
- */
 export function OrganizationSkeleton() {
   return (
     <SettingsPageSkeleton testId="organization-page-skeleton" header={<HeaderSkeleton />}>
@@ -1310,9 +1096,6 @@ export function OrganizationSkeleton() {
         </RowSkeleton>
       </GroupSkeleton>
       <GroupSkeleton title="w-28" hint="w-80">
-        {/* The QR editor every plan shows (inert on a free one): Dots,
-            Corners, Colours and Logo rows, the preview beside them (on a
-            phone, above). */}
         <div className="grid overflow-hidden rounded-xl sm:grid-cols-[minmax(0,1fr)_220px]">
           <div className="flex min-w-0 flex-col px-4 py-1 max-sm:order-last">
             {qrEditorRows.map(({ label, h }) => (
@@ -1336,13 +1119,6 @@ export function OrganizationSkeleton() {
   );
 }
 
-/**
- * /links/:slug: the 56px QR code beside the title over the short address,
- * and on the right the range (three segments), Edit, QR code and the 36px
- * menu (on a phone, a row of their own). Then the main column (the
- * three-figure strip over the chart, then Countries and Referrers cut at
- * seven rows) beside the 16rem facts card, which drops under it below `lg`.
- */
 export function LinkDetailSkeleton() {
   return (
     <SkeletonStatus>
@@ -1385,16 +1161,8 @@ export function LinkDetailSkeleton() {
   );
 }
 
-/** One fact in the link's side card: a text-xs label over text-sm lines. */
-/**
- * The skeleton a path stands behind.
- *
- * One map, because three different gates need the same answer: the shell
- * while the user query resolves, the Suspense boundary while a route's chunk
- * downloads, and the admin guard. They each used to answer with something
- * generic, so a cold load of /links opened with a dashboard (a create field
- * and three stat cards), then a table, then the page.
- */
+/** One map, because the shell, the Suspense boundary and the admin guard need the same
+ * answer. Each used to answer generically, so a cold load of /links opened on a dashboard. */
 const PAGE_SKELETONS = {
   "/dashboard": DashboardSkeleton,
   "/analytics": AnalyticsSkeleton,
@@ -1407,23 +1175,18 @@ const PAGE_SKELETONS = {
   "/admin": AdminPlatformSkeleton,
 } satisfies Record<string, () => ReactElement>;
 
-/** /api-keys carries which of its two tabs is open in ?tab=, not in the
- * path, so PAGE_SKELETONS can't tell them apart on its own. */
+/** /api-keys carries its tab in ?tab=, not the path, so PAGE_SKELETONS cannot tell them apart. */
 function apiKeysSkeletonFor(search: string): () => ReactElement {
   return new URLSearchParams(search).get("tab") === "mcp" ? McpTabSkeleton : ApiKeysSkeleton;
 }
 
 function skeletonFor(pathname: string, search: string): () => ReactElement {
-  // The two routes with something after the prefix: an admin tab is the
-  // Platform frame over a table, and a single link is its own page.
   if (pathname.startsWith("/admin/")) return AdminPlatformSkeleton;
   if (pathname.startsWith("/links/")) return LinkDetailSkeleton;
   if (pathname === "/api-keys") return apiKeysSkeletonFor(search);
   return lookup(PAGE_SKELETONS, pathname) ?? PageSkeleton;
 }
 
-/** The same thing for callers that are inside the router and have no path in
- * hand, which is all of them. */
 export function RouteSkeleton() {
   const location = useLocation();
   const Page = skeletonFor(location.pathname, location.searchStr);

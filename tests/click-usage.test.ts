@@ -68,7 +68,6 @@ describe("clickCapNotice", () => {
   });
 
   test("after a downgrade, names the cap rather than claiming the org recorded only that many", () => {
-    // A Pro org with 100,000 clicks this month, now on Free.
     const notice = clickCapNotice(org, { clicks: 100_000, limit: 5_000 }, OCT_31_LATE);
     expect(notice?.text).toContain("has reached the 5,000 clicks its plan counts in October.");
     expect(notice?.text).not.toContain("recorded its 5,000");
@@ -103,7 +102,6 @@ describe("clickCapNotice", () => {
     expect(clickCapNotice({ ...pro, role: "admin" }, usage, OCT_31_LATE)?.text).toMatch(
       / The owner can write to support@mail\.rdyrct\.com for more\.$/,
     );
-    // Only at the cap: at 80% there is nothing to ask for yet.
     expect(
       clickCapNotice(pro, { clicks: 400_000, limit: 500_000 }, OCT_31_LATE)?.text,
     ).not.toContain("write to");

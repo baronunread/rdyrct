@@ -1,31 +1,6 @@
-/**
- * The public unsubscribe page, `/unsubscribe?t=<token>` (marketing.ts).
- *
- * Served by the Worker as plain HTML rather than by the SPA, so it works with
- * no sign-in, no cookie and no script, and in a self-hosted copy exactly as
- * on rdyrct.com (a fork that sends newsletters needs it too).
- *
- * The page only ever turns lists off. The token is in an email, and an
- * email can be forwarded: whoever holds it may stop that person's mail, but
- * never start it. GET shows a ticked box for each list the person is on,
- * Save, and a smaller "Unsubscribe from all"; a list they are not on shows
- * as off, with a link to Settings, where signing in is what lets them turn
- * it on. A mail scanner or a link preview fetches every URL in a message,
- * and a GET that changed anything would remove people who never clicked.
- * POST does it:
- *
- * - `action=save` from the form: each list the person is on and left
- *   unticked goes off. A box for a list they are not on is ignored, so a
- *   forged form cannot opt anyone in.
- * - `action=all` from the form (or `scope=all` in the query, from a page
- *   served before the form had boxes): off both lists.
- * - anything else, which is a mail client's RFC 8058 one-click request
- *   (`List-Unsubscribe=One-Click`, token in the query): off the list the
- *   email came from, and only that one, with no page in between.
- *
- * The token names the list the email went to. Besides one-click, that only
- * decides which box comes first.
- */
+// Plain HTML from the Worker, not the SPA: no sign-in, cookie or script, in a self-hosted copy too. The page only turns lists off: the token is in an email,
+// and email can be forwarded. A scanner or link preview fetches every URL, so GET changes nothing and POST does (form, or a mail client RFC 8058 one-click).
+// A box for a list the person is not on is ignored, so a forged form cannot opt anyone in.
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
@@ -113,17 +88,8 @@ const invalid = () =>
     `<h1>This link is not valid</h1><p>Copy the whole link from the email, or turn these emails off in Settings after you sign in.</p>`,
   );
 
-/**
- * Per token, before the token is checked: the page is public, with no
- * session and no Turnstile, so this is what bounds how often one link can
- * make us verify it, read D1 or write it. The auth namespace's 30 a minute,
- * under a key of its own so it never spends anybody's sign-in tries.
- * Not per caller: a mail provider sends many readers' one-click requests
- * from a few addresses, and a 429 there would lose a real unsubscribe. A
- * forged token gets past this only as far as the HMAC check, which reads
- * nothing. A request with no token at all is answered first, since it costs
- * nothing.
- */
+// Per token, before the token is checked: the page is public, so this bounds how often a link can make us verify it or touch D1. Not per caller:
+// a mail provider sends many one-click requests from a few addresses, and a 429 would lose a real unsubscribe.
 unsubscribeRoutes.use("*", async (c, next) => {
   const token = c.req.query("t");
   if (!token) return next();
@@ -146,8 +112,7 @@ unsubscribeRoutes.use("*", async (c, next) => {
   return res;
 });
 
-/** The form is three short fields and one-click is one: anything bigger is
- * not either of them, and is refused before it is read. */
+// Anything bigger than the form or a one-click request is refused before it is read.
 const UNSUBSCRIBE_BODY_LIMIT = 4 * 1024;
 
 unsubscribeRoutes.use(
@@ -163,7 +128,6 @@ unsubscribeRoutes.use(
   }),
 );
 
-/** What each list sends, under its name. */
 const LIST_HINTS = {
   news: "New features and tips",
   offers: "Deals on paid plans",
@@ -171,26 +135,21 @@ const LIST_HINTS = {
 
 const ACCOUNT_MAIL = "Account email, such as sign-in codes, still arrives.";
 
-/** The page's own address, token and all. */
 const selfUrl = (token: string) => `${UNSUBSCRIBE_PATH}?t=${encodeURIComponent(token)}`;
 
-/** The token's list first: it is the one the reader came about. */
 const listsFrom = (first: MarketingList) => [
   first,
   ...MARKETING_LISTS.filter((list) => list !== first),
 ];
 
-/** A list the reader is on: a ticked box, to untick. */
 function listRow(list: MarketingList): string {
   return `<label class="list"><input type="checkbox" name="${list}" value="on" checked><span><b>${MARKETING_LIST_LABELS[list]}</b><small>${LIST_HINTS[list]}</small></span></label>`;
 }
 
-/** A list the reader is not on: no box, because this page cannot turn one on. */
 function offRow(list: MarketingList): string {
   return `<div class="off"><span><b>${MARKETING_LIST_LABELS[list]}</b><small>${LIST_HINTS[list]}</small></span><em>Off</em></div>`;
 }
 
-/** The lists the reader is not on, and where to turn them on. */
 function offSection(lists: MarketingList[]): string {
   if (lists.length === 0) return "";
   const how =
@@ -200,7 +159,6 @@ function offSection(lists: MarketingList[]): string {
   return `<section class="offs" aria-labelledby="offs-heading"><h2 id="offs-heading">Not getting</h2><div class="rows">${lists.map(offRow).join("")}</div><p>${how}</p></section>`;
 }
 
-/** What the reader gets now, as one sentence. */
 function nowGets(state: MarketingState): string {
   if (state.news && state.offers) return "You get product news and offers.";
   if (state.news) return "You get product news only.";
@@ -228,16 +186,13 @@ unsubscribeRoutes.get("/", async (c) => {
   );
 });
 
-/** The form's fields. A one-click body (`List-Unsubscribe=One-Click`) has
- * none of them, which is what tells the two apart. */
+// A one-click body has none of the form fields, which tells the two apart.
 const formSchema = v.object({
   action: v.optional(v.picklist(["save", "all"])),
   news: v.optional(v.literal("on")),
   offers: v.optional(v.literal("on")),
 });
 
-/** What a POST asks for. `keep` is the boxes left ticked: a list in it
- * stays as it is, on or off. */
 type Wanted =
   | { kind: "save"; keep: Record<MarketingList, boolean> }
   | { kind: "off"; from: MarketingList | "all" };
@@ -254,9 +209,6 @@ function wantedOf(
   return { kind: "off", from: list };
 }
 
-/** Applies the answer; `found` is false for an account that is gone,
- * `changed` is false when the answer was already so (a repeat writes
- * nothing), and `state` is where the reader stands after it. */
 async function applyWanted(
   db: DB,
   userId: string,
@@ -270,9 +222,7 @@ async function applyWanted(
     const changed = await unsubscribeUser(db, userId, wanted.from);
     return { found: true, changed, state: changed ? await marketingState(db, userId) : before };
   }
-  // Only a list that is on and was unticked is written: one left on keeps
-  // the time and source of its opt-in, and one that is off stays off
-  // whatever the form says.
+  // Only a list that is on and was unticked is written: one left on keeps its opt-in time and source.
   const stop = (list: MarketingList) => (before[list] && !wanted.keep[list] ? false : undefined);
   const answer = { source: "settings" as const, news: stop("news"), offers: stop("offers") };
   if (before.asked && answer.news === undefined && answer.offers === undefined)
@@ -281,7 +231,6 @@ async function applyWanted(
   return { found: applied, changed: applied, state };
 }
 
-// The form and a mail client's one-click request: 200 either way.
 unsubscribeRoutes.post("/", async (c) => {
   const log = c.get("log");
   const token = c.req.query("t") ?? "";
@@ -303,12 +252,9 @@ unsubscribeRoutes.post("/", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const { found, changed, state } = await applyWanted(db, named.userId, wanted);
   log?.set({ unsubscribe: { valid: true, list: named.list, wanted, found, changed } });
-  // Only a change is audited: the link is public and never expires, so a
-  // repeat (a mail client retrying, or somebody sending it on a loop) must
-  // cost no write and leave no entry.
+  // Only a change is audited: the link is public and never expires, so a repeat must cost no write.
   if (changed)
     log?.audit({
-      // The page only turns lists off, from the form or from one click.
       action: "marketing.unsubscribe",
       actor: { type: "user", id: named.userId },
       target: { type: "user", id: named.userId },

@@ -1,22 +1,10 @@
 /**
- * The local dev addresses of this checkout: the app, the Resend inbox and the
- * Google sign-in emulator, each a portless name.
- *
- * One name per checkout, so two checkouts (the main one and a worktree) can
- * run side by side: `rdyrct` in the main checkout, `rdyrct-<branch>` in a git
- * worktree. Each name is a single DNS label (`rdyrct-mail`, never
- * `mail.rdyrct`): in portless's LAN mode they become `.local` names, and
- * Windows only finds single-label `.local` names on the network.
- *
- * portless decides the TLD (`.localhost`, or `.local` in LAN mode), so the
- * URLs come from `portless get` rather than being spelled out here.
- *
- * Run it to print them: `bun scripts/dev-hosts.ts` (or `... app` for one).
+ * Each name is one DNS label (`rdyrct-mail`, never `mail.rdyrct`): in LAN mode they become `.local` names,
+ * and Windows only finds single-label ones. portless picks the TLD, so URLs come from `portless get`.
  */
 import { $ } from "bun";
 import { DEV_HOST_KEYS } from "./dev-host-keys";
 
-/** A git branch as one DNS label: lowercase letters, digits and hyphens. */
 export function label(branch: string): string {
   return branch
     .toLowerCase()
@@ -25,7 +13,6 @@ export function label(branch: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** `rdyrct` in the main checkout, `rdyrct-<branch>` in a linked worktree. */
 export async function devName(): Promise<string> {
   const [gitDir, commonDir] = (await $`git rev-parse --absolute-git-dir --git-common-dir`.text())
     .trim()
@@ -33,7 +20,6 @@ export async function devName(): Promise<string> {
   const common = (await $`realpath ${commonDir}`.text()).trim();
   if (gitDir === common) return "rdyrct";
   const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim();
-  // A detached worktree has no branch; its directory name stands in.
   const id = branch === "HEAD" ? (await $`basename ${process.cwd()}`.text()).trim() : branch;
   return `rdyrct-${label(id)}`;
 }

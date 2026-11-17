@@ -1,15 +1,10 @@
-/**
- * What the QR type pages (/wifi-qr-code, /vcard-qr-code, /whatsapp-qr-code)
- * put inside the code. Each returns "" until the fields hold enough for a
- * phone to act on, so the card shows its empty state rather than a code that
- * scans to nothing.
- */
+// Each returns "" until the fields hold enough for a phone to act on, so the card shows
+// its empty state rather than a code that scans to nothing.
 
 export type WifiSecurity = "WPA" | "WEP" | "nopass";
 
-/** The ZXing Wi-Fi format, which iOS and Android cameras both read:
- *  `WIFI:T:WPA;S:name;P:password;;`. `\ ; , : "` are escaped with a
- *  backslash, so a network called `Cafe;2` does not end the field early. */
+// The ZXing Wi-Fi format, which iOS and Android cameras both read.
+// `\ ; , : "` are escaped, so a network called `Cafe;2` does not end the field early.
 export function wifiPayload(wifi: {
   ssid: string;
   password: string;
@@ -35,8 +30,6 @@ export interface Contact {
   website: string;
 }
 
-/** A vCard 3.0, the version every phone's contacts app imports. Empty fields
- *  are left out; `\ , ;` and line breaks are escaped as RFC 2426 asks. */
 export function vcardPayload(contact: Contact): string {
   const escape = (value: string) =>
     value
@@ -69,11 +62,8 @@ export function vcardPayload(contact: Contact): string {
   return lines.filter(Boolean).join("\r\n");
 }
 
-/** A wa.me link: the number in international form with only its digits, and
- *  an optional message WhatsApp types into the chat. Only a number written
- *  internationally (a leading +, then digits, spaces and the usual
- *  punctuation) counts: "07700 900123" would make a link to the wrong
- *  country, and "ext 42" would join the extension onto the number. */
+// Only an internationally written number counts: "07700 900123" would link
+// to the wrong country, and "ext 42" would join the extension onto the number.
 export function whatsappPayload(phone: string, message: string): string {
   if (!/^\+[\d\s().-]+$/.test(phone.trim())) return "";
   const digits = phone.replace(/\D/g, "");

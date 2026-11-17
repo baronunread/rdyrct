@@ -3,7 +3,6 @@ import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows, seedSubscriber } from "./db";
 import { SUBSCRIPTION_ACCESS } from "../../src/worker/entitlement";
 
-/** The subscription statuses that entitle, as the Worker decides it. */
 const ENTITLING = Object.entries(SUBSCRIPTION_ACCESS)
   .filter(([, grants]) => grants)
   .map(([status]) => `'${status}'`)
@@ -13,8 +12,6 @@ const password = "test-password-123";
 
 const digits = (text: string | null) => Number((text ?? "").replace(/[^0-9]/g, ""));
 
-/** The "Paid" figure on /admin: people who pay, comps excluded. Its value is
- * the first figure in the button; the share beside it is not. */
 async function paidUsers(page: Page): Promise<number> {
   const figure = page
     .getByRole("group", { name: "Figure to chart" })
@@ -22,9 +19,6 @@ async function paidUsers(page: Page): Promise<number> {
   return digits(await figure.locator(".tnum").first().textContent());
 }
 
-/** The plan-mix footnote: "5 comped. 7% pay. 24 subscriptions." A comp is
- * not a fourth plan, it is how some of the paid rows were paid for, so it is
- * counted there rather than on a figure of its own. */
 async function footnote(page: Page, noun: RegExp): Promise<number> {
   const line = (await page.getByText(/ comped\./).textContent()) ?? "";
   const match = new RegExp(`([\\d,]+) ${noun.source}`).exec(line);
@@ -33,16 +27,8 @@ async function footnote(page: Page, noun: RegExp): Promise<number> {
 const compedCount = (page: Page) => footnote(page, /comped/);
 const subscriberCount = (page: Page) => footnote(page, /subscriptions?/);
 
-/**
- * The three /admin counts a comp could wrongly move, each against the rows it
- * stands for, written here from the definitions rather than the Worker's
- * formula: somebody pays when they are on a paid plan that no comp gave them.
- *
- * Neither a fixed number nor a before/after delta holds: every other worker
- * in the run gives itself a paying subscription (setPlan) whenever it needs a
- * paid feature, at moments this test cannot predict. So the page and the rows
- * are read together, and read again until no other test wrote in between.
- */
+// Every other worker gives itself a paying subscription at moments this test cannot
+// predict, so the page and the rows are read together until no other test wrote between.
 async function expectCountsMatchRows(page: Page) {
   await expect(async () => {
     await page.goto("/admin");
@@ -61,34 +47,25 @@ async function expectCountsMatchRows(page: Page) {
   }).toPass({ timeout: 30_000 });
 }
 
-/**
- * A comp and a subscription grant the same access and are not the same fact
- * (#81), and only one of them is somebody paying (#82). This walks both
- * through the admin area, which is the only place the difference is visible.
- */
+// A comp and a subscription grant the same access (#81), but only one is somebody paying (#82).
 test("an admin can comp a user, and the comp never counts as a subscriber", async ({ page }) => {
   const subscriber = `playwright-sub-${Date.now()}@gmail.com`;
   const admin = `playwright-admin-${Date.now()}@gmail.com`;
 
   await signUpAndVerify(page, admin, password);
   await makePlatformAdmin(page, admin);
-  // A real paying subscription, the way a Polar webhook leaves the row.
   await seedSubscriber(page, subscriber, "pro");
 
   await page.goto("/admin/users");
   const subscriberRow = page.getByRole("row", { name: new RegExp(subscriber) });
-  // The whole platform's user list: slower to come back than one org's page.
   await expect(subscriberRow).toContainText("pro", { timeout: 10_000 });
 
-  // The admin's own row: free, and not comped.
   const adminRow = page.getByRole("row", { name: new RegExp(admin) });
   await expect(adminRow).toContainText("free");
   await expect(adminRow).not.toContainText("comped");
 
   await expectCountsMatchRows(page);
 
-  // Comp the admin's own account. The reason is required: pressing the
-  // button without one marks the field and grants nothing.
   await page.goto("/admin/users");
   await adminRow.getByRole("button", { name: `Actions for` }).click();
   await page.getByRole("menuitem", { name: "Comp a paid plan" }).click();
@@ -106,19 +83,16 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await expect(adminRow).toContainText("comped");
   await expect(adminRow).toContainText("pro");
 
-  // The reason an admin typed is kept, and reachable: it hangs off the badge
-  // on hover rather than adding a line to every comped row. Asserted as
-  // hidden first, so a reason that leaked back into the row would fail here
-  // rather than pass on the wrong element.
+  // The reason an admin typed hangs off the badge on hover, not in the row. Asserted hidden
+  // first, so a reason that leaked into the row would fail here.
   const reason = page.getByText("Design partner");
   await expect(reason).toBeHidden();
   await adminRow.getByText("comped").hover();
   await expect(reason).toBeVisible();
 
-  // A comp grants access but is not a paying customer: it is in the comped
-  // count, and in neither the paid-users total nor the subscriber total. The
-  // counts alone cannot say so: a comp that wrote a subscription would move a
-  // card and the rows behind it together. So the admin's own row is read too.
+  // A comp is in the comped count but in neither the paid-users nor the subscriber total.
+  // The counts alone cannot say so (a comp that wrote a subscription moves a card and its
+  // rows together), so the admin's own row is read too.
   await expectCountsMatchRows(page);
   const [own] = await queryRows<{ plan: string | null; status: string | null }>(
     page,
@@ -127,7 +101,6 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   );
   expect(own).toEqual({ plan: null, status: null });
 
-  // Revoking it takes the access away again, and leaves the subscriber alone.
   await page.goto("/admin/users");
   await adminRow.getByRole("button", { name: `Actions for` }).click();
   await page.getByRole("menuitem", { name: "Revoke comp" }).click();

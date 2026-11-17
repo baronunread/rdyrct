@@ -1,14 +1,6 @@
 /**
- * `bun run setup`: a self-hosted copy on your own Cloudflare account, from a
- * fresh clone, in one command. `deploySelfHosted` is also what the Deploy to
- * Cloudflare button runs (through scripts/deploy.ts) on every build of the
- * repository it makes.
- *
- * wrangler.jsonc ships rdyrct.com's deployment: its resource ids, its domain,
- * its Polar products and Sentry project. This rewrites the copy's config into a
- * self-hosted one (`selfHostConfig`), lets wrangler create the KV namespace, D1
- * database and R2 bucket on the first deploy (automatic provisioning, which
- * only happens for bindings with no id), and applies the migrations.
+ * Rewrites the copy's wrangler.jsonc (rdyrct.com's resource ids, domain, Polar products, Sentry) into a self-hosted one;
+ * wrangler provisions bindings with no id on first deploy. `deploySelfHosted` is also what the Deploy button runs.
  */
 import { $ } from "bun";
 import { randomBytes } from "node:crypto";
@@ -19,12 +11,10 @@ import { namesRdyrct } from "./site-mode";
 
 const WRANGLER = new URL("../wrangler.jsonc", import.meta.url);
 
-/** Until the worker exists its workers.dev address may be unknown, so the
- *  first deploy carries this and a second one replaces it. */
+/** Until the worker exists its workers.dev address may be unknown: the first deploy carries this, a second replaces it. */
 const PENDING_HOST = "pending.workers.dev";
 
-/** Vars that describe rdyrct.com's own accounts. Each one is optional, and a
- *  copy that kept ours would report its errors to our Sentry project. */
+/** A copy that kept ours would report its errors to our Sentry project. */
 const RDYRCT_ONLY_VARS = [
   "MAIL_FROM",
   "WELCOME_FROM",
@@ -41,20 +31,14 @@ const RDYRCT_ONLY_VARS = [
 ];
 
 type Target = {
-  /** The worker's name. Every resource the copy creates is named after it
-   *  (`links` gets `links-storage`, `links-qr-logos`, ...), because Wrangler
-   *  finds a resource with no id by its name: a copy that kept ours would bind
-   *  to rdyrct.com's database, bucket and queues on an account that has them. */
+  /** Every resource is named after it, and Wrangler finds a resource with no id by name: a copy that kept ours
+   * would bind to rdyrct.com's database on an account that has them. */
   name: string;
-  /** Serve the workers.dev address, which wrangler.jsonc turns off. */
   workersDev: boolean;
-  /** Drop rdyrct.com's KV and D1 ids so wrangler creates the copy's own. The
-   *  Deploy button keeps the ids: it creates the resources and writes them in. */
+  /** The Deploy button keeps the ids: it creates the resources and writes them in. */
   dropIds: boolean;
 };
 
-/** wrangler.jsonc, comments kept, pointed at `host` (a custom domain or the
- *  worker's workers.dev address) instead of rdyrct.com. */
 export function selfHostConfig(source: string, host: string, target: Target): string {
   const changes: [JSONPath, string | boolean | undefined][] = [
     ...resourceNames(source, target.name),
@@ -89,8 +73,6 @@ const Named = v.object({
 
 type Edit = [JSONPath, string];
 
-/** Each top-level resource name, with the config's worker name swapped for
- *  `name` where it leads. The `playwright` environment keeps its own. */
 function resourceNames(source: string, name: string): Edit[] {
   const config = v.parse(Named, parse(source));
   const rename = (old: string) =>
@@ -124,14 +106,11 @@ function resourceNames(source: string, name: string): Edit[] {
   ];
 }
 
-/** Every queue the config consumes, the dead-letter one included. */
 function queueNames(config: string): string[] {
   return v.parse(Named, parse(config)).queues.consumers.map((q) => q.queue);
 }
 
-/** Whether the account already has the config's database. A failed listing
- *  throws rather than reading as "no database", so an update never skips its
- *  migration because the API was down. */
+/** A failed listing throws, so an update never skips its migration because the API was down. */
 async function databaseExists(config: string): Promise<boolean> {
   const wanted = v.parse(Named, parse(config)).d1_databases.map((d) => d.database_name);
   const listed = v.parse(
@@ -147,8 +126,6 @@ async function writeConfig(text: string) {
   await $`bun fmt ${WRANGLER.pathname}`.nothrow().quiet();
 }
 
-/** `name.subdomain.workers.dev`, when the environment can ask the API for the
- *  account's subdomain. Workers Builds hands wrangler a token and account. */
 async function workersDevHost(name: string): Promise<string | undefined> {
   const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token } = process.env;
   if (!account || !token) return undefined;
@@ -164,8 +141,7 @@ async function workersDevHost(name: string): Promise<string | undefined> {
   return body.success ? `${name}.${body.output.result.subdomain}.workers.dev` : undefined;
 }
 
-/** The secrets this deploy has to add: a session key the first time (never
- *  again, or everyone would be signed out), and the admin when one is given. */
+/** A session key only the first time: never again, or everyone is signed out. */
 async function newSecrets(admin: string | undefined): Promise<string> {
   const listed = await $`bunx wrangler secret list --format json`.nothrow().quiet();
   const existing = v.safeParse(
@@ -181,8 +157,6 @@ async function newSecrets(admin: string | undefined): Promise<string> {
   ].join("");
 }
 
-/** `wrangler deploy` with whatever secrets are new, returning what it printed
- *  (it prints as it runs too, since wrangler may ask you to log in). */
 async function deployWithSecrets(admin?: string, domain?: string): Promise<string> {
   const secrets = await newSecrets(admin);
   const file = ".setup-secrets.env";
@@ -196,13 +170,10 @@ async function deployWithSecrets(admin?: string, domain?: string): Promise<strin
   return deploy.stdout.toString();
 }
 
-/** Build, migrate and deploy a copy whose wrangler.jsonc still describes
- *  rdyrct.com, and return the host it now answers on. */
 export async function deploySelfHosted(options: {
   source: string;
   domain?: string;
   admin?: string;
-  /** Defaults to the name in `source`. */
   name?: string;
   dropIds: boolean;
 }): Promise<string> {
@@ -235,22 +206,18 @@ export async function deploySelfHosted(options: {
     process.exit(1);
   }
   await writeConfig(selfHostConfig(source, host, target));
-  // Nothing in the build reads the host, so this deploy needs no rebuild.
   await $`bunx wrangler deploy --var APP_URL:https://${host} --var APP_HOST:${host}`;
   return host;
 }
 
-/** The workers.dev address `wrangler deploy` printed. Its output lists the
- *  vars first, and APP_URL is still the placeholder then, so skip that one. */
+/** Its output lists the vars first, with APP_URL still the placeholder: skip that one. */
 export function deployedHost(output: string): string | undefined {
   return [...output.matchAll(/https:\/\/([\w.-]+\.workers\.dev)/g)]
     .map((match) => match[1])
     .find((host) => host !== PENDING_HOST);
 }
 
-/** Asks for the worker's name and returns it once the account has no worker
- *  by that name, so setup can never deploy over one, rdyrct.com's included.
- *  Any answer but "no such worker" (code 10007) stops it. */
+/** Any answer but "no such worker" (code 10007) stops it: setup never deploys over a worker, rdyrct.com's included. */
 async function freeWorkerName(): Promise<string> {
   const name = (prompt("Name for the worker and its resources:", "rdyrct") ?? "").trim();
   if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(name)) {
@@ -277,7 +244,6 @@ if (import.meta.main) {
     process.exit(0);
   }
 
-  // A rerun after a stop keeps the name the first run chose and deployed.
   const name = source.includes(PENDING_HOST) ? undefined : await freeWorkerName();
   const domain = prompt(
     "Domain on your Cloudflare account (links.example.com), or Enter for a workers.dev address:",

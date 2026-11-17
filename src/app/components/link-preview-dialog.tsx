@@ -14,8 +14,6 @@ function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
     <div className="flex flex-col items-center gap-3">
       <QRPreview url={url} {...resolveQrLook(link, orgQr)} downloadName={`qr-${link.slug}`} />
       <div className="flex min-w-0 max-w-full items-center gap-2">
-        {/* The whole address, wrapped if it must: this dialog exists to show
-            it, and a cut-off one is no use to copy by eye. */}
         <p className="min-w-0 font-mono text-sm font-bold wrap-break-word">{url}</p>
         <CopyButton
           text={url}
@@ -27,9 +25,6 @@ function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
   );
 }
 
-/** Mirrors LinkPreviewContent block for block, at the same sizes, so the
- * dialog does not resize when the link arrives: the 208px QR box, the two
- * download buttons (h-8), then the short-URL line and its copy button. */
 function LinkPreviewLoading() {
   return (
     <SkeletonStatus label="Creating your link…" className="flex flex-col items-center gap-3">
@@ -46,17 +41,7 @@ function LinkPreviewLoading() {
   );
 }
 
-/** The short URL and its QR code for one link, in a dialog: shared by "link
- * just created" (dashboard quick-create) and "show QR" (links table row
- * action). Same content, different title.
- *
- * `loading` opens the dialog before the link exists, showing a placeholder
- * the exact size of the filled content, so the palette's quick-create has
- * something on screen between the click and the created link.
- *
- * The QR is here on every plan. Only its look (logo, colors, shapes) is
- * paid, and `orgQr` already resolves to the built-in defaults for a free
- * org, which cannot have set any. */
+/** The QR shows on every plan; only its look is paid, and `orgQr` already resolves to the defaults for a free org. */
 export function LinkPreviewDialog({
   title,
   link,

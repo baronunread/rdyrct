@@ -1,19 +1,11 @@
-/**
- * What deleting an account destroys, and what it says first (#119).
- *
- * An organization has no plan of its own: `orgPlan` reads its owner's. One
- * kept alive without an owner would have no plan, no billing and nobody who
- * could delete it, so the account cannot go without them. That is a large
- * thing to do quietly, which makes the confirmation part of the feature
- * rather than decoration around it.
- */
+// #119: an org has no plan of its own (orgPlan reads its owner's), so deleting an
+// account takes the orgs it owns. The confirmation has to name them.
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows, rawSql } from "./db";
 
 const password = "test-password-123";
 
-/** Signs up, and reports the account and organization signup hands it. */
 async function ownerWithOrg(page: Page, prefix: string) {
   const email = `${prefix}-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
@@ -28,7 +20,6 @@ async function ownerWithOrg(page: Page, prefix: string) {
   return { email, userId: row.userId, org: { id: row.id, name: row.name } };
 }
 
-/** Adds the destructive scope the dialog and teardown both have to honour. */
 async function addAccountDeletionScope(
   page: Page,
   owner: Awaited<ReturnType<typeof ownerWithOrg>>,
@@ -119,7 +110,6 @@ test("the delete-account confirmation names every organization it will destroy",
   await expect(dialog.getByText(scope.memberOnly.name, { exact: true })).toHaveCount(0);
   await expect(dialog.getByText(/None of it can be recovered/)).toBeVisible();
 
-  // Closing it changes nothing: the warning is a question, not a step.
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   const stillHere = await queryRows<{ n: number }>(
@@ -140,12 +130,9 @@ test("deleting the account takes the organizations it owns, teammates and all", 
 
   await dialog.getByRole("button", { name: "Delete account" }).click();
 
-  // Signed out, back on the landing page.
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
 
-  // Gone, rather than left behind with no owner: that was the state nothing
-  // in the product could express or repair. The workflow is asynchronous, so
-  // wait for its durable outcome instead of assuming it beat the redirect.
+  // The workflow is asynchronous: wait for its durable outcome, not the redirect.
   await expect
     .poll(async () => {
       const owned = await queryRows<{ n: number }>(

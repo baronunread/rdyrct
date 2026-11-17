@@ -20,12 +20,6 @@ import {
   sweepReportNotices,
 } from "../../src/worker/routes/reports";
 
-/**
- * The public report form. The browser test covers sending one (it runs Turnstile);
- * these cover what it does with the answer: stored whether or not the slug
- * exists, and flagging the org only at the threshold, never suspending.
- */
-
 const report = (link: string, extra: Record<string, string> = {}) =>
   fetchWorker(
     new Request("http://localhost/api/reports", {
@@ -163,7 +157,6 @@ describe("the admin's report mail", () => {
       ).first<{ n: number }>();
       expect(rows?.n).toBe(50);
 
-      // A made-up slug costs no mail.
       await reportFrom("nope1234", "192.0.2.200");
       expect(toAdmin(mail.sent)).toBe(1);
     } finally {
@@ -179,11 +172,9 @@ describe("the admin's report mail", () => {
       await reportFrom("s1", "192.0.2.2");
       expect(toAdmin(mail.sent)).toBe(1);
 
-      // Still inside the window: the sweep sends nothing.
       await sweepReportNotices(mailEnv());
       expect(toAdmin(mail.sent)).toBe(1);
 
-      // The window passes: the report on s1 is told in one digest, once.
       await env.DB.prepare("update link_reports set notified_at = notified_at - ?")
         .bind(REPORT_NOTICE_WINDOW_MS + 1)
         .run();
@@ -191,7 +182,6 @@ describe("the admin's report mail", () => {
       await sweepReportNotices(mailEnv());
       expect(toAdmin(mail.sent)).toBe(2);
 
-      // And a quiet link reported after the next window still mails at once.
       await env.DB.prepare("update link_reports set notified_at = notified_at - ?")
         .bind(REPORT_NOTICE_WINDOW_MS + 1)
         .run();

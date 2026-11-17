@@ -1,14 +1,7 @@
 /**
- * Pages that must stay out of a search index: the signed-in app and the
- * one-off flows around it.
- *
- * robots.txt cannot do this. `Disallow` stops a crawler fetching a page, not
- * listing it (a link from elsewhere is enough), and it also stops the crawler
- * from ever reading a noindex. So the app pages are left crawlable and answer
- * with `X-Robots-Tag: noindex`. Public pages (the marketing pages, /signup,
- * /privacy, /terms) are not in this list on purpose. /login and /report are:
- * nobody searches for a sign-in form or the abuse report form, and indexed
- * they only add thin pages to the site's count.
+ * `Disallow` stops crawling, not listing, and hides a noindex from the crawler.
+ * So app pages stay crawlable and answer `X-Robots-Tag: noindex`. /login and
+ * /report are listed on purpose: indexed, they only add thin pages.
  */
 const NOINDEX_ROOTS: ReadonlySet<string> = new Set([
   "dashboard",
@@ -31,14 +24,12 @@ const NOINDEX_ROOTS: ReadonlySet<string> = new Set([
   "report",
 ]);
 
-/** True for an app page or anything beneath one (/links/<slug>, /invite/<token>). */
 function isNoindexPath(pathname: string): boolean {
   const root = pathname.split("/")[1];
   return root !== undefined && NOINDEX_ROOTS.has(root.toLowerCase());
 }
 
-/** The response with `X-Robots-Tag: noindex` when its path is an app page.
- *  Copies the response: the asset binding's headers are immutable. */
+/** Copies the response: the asset binding's headers are immutable. */
 export function withNoindex(response: Response, url: URL): Response {
   if (!isNoindexPath(url.pathname)) return response;
   const copy = new Response(response.body, response);

@@ -1,23 +1,3 @@
-/**
- * One way of saying "this is over your plan", used everywhere it is true
- * (#163).
- *
- * The product used to say nothing. The links page showed a bare `500 / 30
- * links` with no explanation and no way out, error copy assumed you were *at*
- * the cap rather than 500 past it, and a downgraded org's members, domains
- * and analytics gave no signal at all. Three surfaces inventing three
- * explanations is how a person ends up believing their data was deleted.
- *
- * So there are two components and one sentence-builder here, and every
- * locked or over-limit screen uses them:
- *
- * - `OverLimitBanner`: one per org, at the top of the app, listing what is
- *   over and what to do.
- * - `LockedPanel`: what a frozen thing shows in place of its controls, with
- *   the countdown when there is one.
- * - `ClickCapBanner`: the month's tracked clicks at 80% and at 100% of the
- *   plan's cap (#387), on the dashboard and analytics.
- */
 import type { ReactNode } from "react";
 import { Lock } from "@/app/ui/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -48,14 +28,6 @@ function BillingLink({ label = "See plans", primary }: { label?: string; primary
   );
 }
 
-/**
- * The org-wide banner. Renders only when there is something to say, so every
- * page can mount it unconditionally.
- *
- * Nothing here is a warning colour. The state is "you have more than you pay
- * for", not "something broke", and painting it red would make an ordinary
- * billing fact look like an outage.
- */
 export function OverLimitBanner() {
   const { org } = useCurrentOrg();
   const clicks = useClickCapNotice();
@@ -64,7 +36,6 @@ export function OverLimitBanner() {
   if (!isOverLimit(org.over)) return null;
   if (domainsStopped(org)) return <DomainStoppedNotice org={org} />;
   const facts = overFacts(org);
-  // The month's clicks join the same line rather than a second banner.
   if (clicks?.reached) facts.push({ label: "Clicks counted", value: clicks.figure, over: true });
   return (
     <Notice
@@ -76,9 +47,6 @@ export function OverLimitBanner() {
   );
 }
 
-/** The grace period ran out and the custom domains stopped answering. That
- * is no longer "more than you pay for": links are broken, so it says so in
- * the danger colour and leads with the fix. */
 function domainsStopped(org: UserOrg): boolean {
   return org.over.domains !== undefined && !!org.graceEndsAt && !graceRunning(org.graceEndsAt);
 }
@@ -96,7 +64,6 @@ function DomainStoppedNotice({ org }: { org: UserOrg }) {
     });
   if (org.graceEndsAt) facts.push({ label: "Since", value: monthDay(org.graceEndsAt) });
   facts.push({ label: "Its links", value: "answer “not found”", over: true });
-  // Links or members over the cap too: same line, never a second banner.
   for (const fact of overFacts(org)) if (fact.over) facts.push(fact);
   return (
     <Notice
@@ -116,12 +83,9 @@ const TIER_NAMES = {
   unlimited: "Unlimited",
 } satisfies Record<AccountTier, string>;
 
-/** "Links 184 of 30", one per resource over its cap, then the domains'
- * deadline when there is one. */
 function overFacts(org: UserOrg): Fact[] {
   const limits = org.limits;
-  // Domains are left out of the counts: "Custom domains 1 of 0" reads as
-  // a glitch. What matters about them is the day they stop.
+  // "Custom domains 1 of 0" reads as a glitch: domains are left out of the counts.
   const facts: Fact[] = OVER_LIMIT_KEYS.flatMap((key) => {
     const count = org.over[key];
     if (count === undefined || key === "domains") return [];
@@ -145,15 +109,6 @@ const FACT_LABELS = {
   domains: "Custom domains",
 } satisfies Record<(typeof OVER_LIMIT_KEYS)[number], string>;
 
-/**
- * A locked org, with the two ways out (#160): upgrade, or keep this one
- * active instead of whichever org currently is.
- *
- * The second is a real choice, not a nag. Reconciliation defaults to the
- * oldest org so an owner who ignores this still has a working account; this
- * is how they say they meant a different one. It is reversible: the same
- * button on the other org swaps them back.
- */
 function LockedOrgNotice({ org }: { org: UserOrg }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -184,8 +139,7 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
       }
       action={
         <div className="flex items-center gap-2">
-          {/* The route is owner-only, so anybody else gets a button whose one
-            outcome is a 403 toast. Everyone still sees the explanation. */}
+          {/* Owner-only route: anyone else would get a button whose one outcome is a 403 toast. */}
           {org.role === "owner" && (
             <Button
               variant="outline"
@@ -203,43 +157,25 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
   );
 }
 
-/**
- * What to do about it, which differs by what is over.
- *
- * Over-cap links and members are not read-only: every link stays editable and
- * deletable, and only *new* ones are blocked. Only the domains have a
- * deadline, and only while it is still ahead.
- */
 function overLimitAdvice(org: UserOrg): string {
   const blocked = [
     org.over.links !== undefined && "links",
     org.over.members !== undefined && "members",
   ].filter(Boolean);
-  // The domain's deadline is already a fact on the line above; saying it
-  // again here only made the note three lines long.
   const parts = ["Nothing was deleted and every link still works."];
   if (blocked.length > 0)
     parts.push(`You can't add ${blocked.join(" or ")} until you upgrade or make room.`);
   return parts.join(" ");
 }
 
-/** "Nov 6": a deadline this close needs no year. */
 function monthDay(at: number): string {
   return new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/**
- * Tracked clicks this month, once they pass 80% of the plan's cap (#387).
- *
- * Not a warning colour either: nothing broke. The first thing it says past
- * the cap is that the links still work, because that is the first thing
- * somebody reading "limit reached" worries about.
- */
 export function ClickCapBanner() {
   const { org } = useCurrentOrg();
   const notice = useClickCapNotice();
   if (!notice) return null;
-  // Over the plan or locked, the banner above the page already says it.
   if (org && (org.locked || (isOverLimit(org.over) && notice.reached))) return null;
   return (
     <Notice
@@ -251,8 +187,6 @@ export function ClickCapBanner() {
   );
 }
 
-/** `text` with the support address, where it appears, as a mail link. The
- * words stay in click-usage.ts, shared with the email. */
 function WithSupportLink({ text }: { text: string }) {
   const [before, after] = text.split(SUPPORT_EMAIL);
   if (after === undefined) return text;
@@ -267,7 +201,6 @@ function WithSupportLink({ text }: { text: string }) {
   );
 }
 
-/** What the cap banner says for the current org, or null. */
 function useClickCapNotice() {
   const { org } = useCurrentOrg();
   const usage = useClickUsage(org?.id ?? "");
@@ -284,17 +217,10 @@ function useClickCapNotice() {
 interface Fact {
   label: string;
   value: string;
-  /** Past the cap: set in the danger colour. */
   over?: boolean;
-  /** An identifier (a hostname): set in mono. */
   mono?: boolean;
 }
 
-/**
- * The one notice (rdyrct-design, "Over the plan is one notice"): a state, a
- * line of facts, one action, and a plain sentence under it. Butter for "more
- * than you pay for", danger only for an org that is read-only.
- */
 function Notice({
   title,
   facts,
@@ -312,8 +238,6 @@ function Notice({
     <div className="mb-6 flex flex-col gap-2">
       <div
         className={cn(
-          // On a phone the title, the facts and the action stack, so the facts
-          // get the full width instead of a narrow column beside the title.
           "flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl py-2 pr-2 pl-4 max-sm:flex-col max-sm:items-stretch max-sm:py-3 max-sm:pr-3",
           tone === "bad"
             ? "bg-[color-mix(in_oklab,var(--danger)_6%,var(--surface))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_35%,transparent)]"
@@ -333,8 +257,6 @@ function Notice({
           {facts.map((f) => (
             <div key={f.label} className="flex max-w-full min-w-0 gap-1.5">
               <dt className="shrink-0 text-muted">{f.label}</dt>
-              {/* A long hostname shortens with an ellipsis rather than running
-                  off a phone's edge; the full name is in a tooltip. */}
               <OverflowTip content={f.mono ? f.value : undefined}>
                 <dd
                   className={cn(
@@ -356,14 +278,6 @@ function Notice({
   );
 }
 
-/**
- * The one way to say "this needs a paid plan" or "this is locked": a row
- * with what it is, why, and one way back. Every paid feature a plan lacks
- * shows this, not its own upsell. A deadline belongs to the org banner
- * above, not here a second time. `bare` drops the card, for a panel
- * that sits as a row inside a `SettingsGroup`. `primary` is for a screen
- * where upgrading is the only thing to do.
- */
 export function LockedPanel({
   title,
   reason,

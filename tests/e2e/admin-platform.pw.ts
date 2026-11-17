@@ -4,15 +4,6 @@ import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows, rawSql } from "./db";
 import { createQuickLink } from "./orgs";
 
-/**
- * The platform screens' frame and the controls the redesign added: one fixed
- * title over the tabs, the usage range in the URL and on the server, the
- * figure the chart plots, a list that shows its worst five without dropping
- * the rest, the link filters and their counts, the plan states on the orgs
- * list, pictures on the users list, Polar's plan changes in the audit log,
- * and every tab on a phone.
- */
-
 const password = "test-password-123";
 
 async function admin(page: import("@playwright/test").Page, label: string) {
@@ -35,7 +26,6 @@ test("the title stays put across the tabs, and the usage range lives in the URL"
   await expect(page).toHaveURL(/[?&]range=90d/);
   await expect(range.getByRole("button", { name: "90d" })).toHaveAttribute("aria-pressed", "true");
 
-  // The chart plots the figure that is picked, and says which.
   const figures = page.getByRole("group", { name: "Figure to chart" });
   await expect(figures.getByRole("button", { name: /^Users/ })).toHaveAttribute(
     "aria-pressed",
@@ -49,7 +39,6 @@ test("the title stays put across the tabs, and the usage range lives in the URL"
   );
   await expect(page.getByText("New organizations per day")).toBeVisible();
 
-  // Another tab: the same title in the same place, and no range control.
   const title = await page.getByRole("heading", { level: 1, name: "Platform" }).boundingBox();
   await page
     .getByRole("navigation", { name: "Platform sections" })
@@ -65,7 +54,6 @@ test("the title stays put across the tabs, and the usage range lives in the URL"
 
 test("over or near their plan shows the worst five, and every row on request", async ({ page }) => {
   await admin(page, "admin-caps");
-  // Eight orgs pressing on their plan, whatever the local database holds.
   await page.route("**/api/admin/usage*", async (route) => {
     const response = await route.fetch();
     const json = await response.json();
@@ -82,7 +70,6 @@ test("over or near their plan shows the worst five, and every row on request", a
   await page.goto("/admin");
 
   await expect(page.getByText("Showing 5 of 8")).toBeVisible({ timeout: 10_000 });
-  // Worst first: 190% is on show, 50% waits behind the button.
   await expect(page.getByRole("cell", { name: "Cap Org 7" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Cap Org 0" })).toHaveCount(0);
 
@@ -115,7 +102,6 @@ test("a reported link says so, and the Reported filter finds it", async ({ page 
   await expect(row.getByText("Reported", { exact: true })).toBeVisible({ timeout: 10_000 });
 
   const lists = page.getByRole("group", { name: "Link lists" });
-  // Counted by the server, so the pills say a number past the list's cap.
   await expect(lists.getByRole("button", { name: "All", exact: true })).toContainText("1");
   await expect(lists.getByRole("button", { name: "Reported", exact: true })).toContainText("1");
   await expect(lists.getByRole("button", { name: "Suspended", exact: true })).toContainText("0");
@@ -123,7 +109,6 @@ test("a reported link says so, and the Reported filter finds it", async ({ page 
   await expect(row).toHaveCount(0);
   await lists.getByRole("button", { name: "Reported", exact: true }).click();
   await expect(row).toBeVisible();
-  // The host and slug share one line.
   expect((await row.boundingBox())!.height).toBeLessThan(56);
 });
 
@@ -141,7 +126,6 @@ test("the range reaches the server: links per day and sign-ups by plan", async (
   await figures.getByRole("button", { name: /^Clicks/ }).click();
   await expect(page.getByText("Clicks per day", { exact: true })).toBeVisible();
 
-  // Sign-ups split by plan, rather than the figures it showed without them.
   await page.getByRole("tab", { name: "Sign-ups" }).click();
   const signups = page.getByRole("tabpanel", { name: "Sign-ups" });
   await expect(signups).toContainText("Hobby");
@@ -244,8 +228,6 @@ test("every platform tab fits a phone", async ({ page }) => {
     await expect(page.getByRole("status")).toHaveCount(0, { timeout: 10_000 });
     const overflow = await page.evaluate(() => {
       const page = document.documentElement.scrollWidth - window.innerWidth;
-      // A table folds into a list on a phone, so its card never scrolls
-      // sideways either.
       const tables = [...document.querySelectorAll("table")].map(
         (t) => t.parentElement!.scrollWidth - t.parentElement!.clientWidth,
       );

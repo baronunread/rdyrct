@@ -13,7 +13,6 @@ function userWith(orgs: UserOrg[], isAdmin = false): CurrentUser {
   return { user: { id: "u1", isAdmin }, orgs } as CurrentUser;
 }
 
-/** A client whose user and config are already answered, so nothing fetches. */
 function clientWith(user: CurrentUser | null): QueryClient {
   const qc = new QueryClient();
   qc.setQueryData(["user"], user);

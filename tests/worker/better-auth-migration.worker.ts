@@ -5,10 +5,8 @@ import { hashPassword } from "../../src/worker/password";
 import { signInCookie, TEST_PASSWORD } from "./support";
 
 const issuerMigration = "0028_better_auth_account_issuer.sql";
-// The MCP OAuth plugin (#139 follow-up) needs its tables to exist before
-// withSession can resolve a session at all, on any route — unrelated to the
-// account.issuer story this file replays, so it's applied unconditionally
-// rather than gated behind `< issuerMigration` like the rest of the setup.
+// The MCP OAuth plugin (#139) needs its tables before withSession can resolve
+// any session, so this one is applied unconditionally, not gated by issuerMigration.
 const oauthTablesMigration = "0031_mcp_oauth.sql";
 
 function migrationNamed(name: string) {
@@ -17,14 +15,12 @@ function migrationNamed(name: string) {
   return migration;
 }
 
-/** A user row as every migration before 0028 shaped it. */
 function legacyUser(id: string, email: string) {
   return env.DB.prepare(
     "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values (?, ?, ?, 1, 0, 'free', 0, 0)",
   ).bind(id, id, email);
 }
 
-/** An account row before 0028: no issuer column exists yet. */
 async function legacyAccount(id: string, accountId: string, userId: string) {
   return env.DB.prepare(
     "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'credential', ?, ?, 0, 0)",

@@ -1,14 +1,9 @@
-/**
- * The links page's data beyond the shared hooks: the filter counts, the
- * list rows, creator names and past imports.
- */
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import type { LinkDTO, LinkFacets, LinkFilter, LinkInput, LinkListItem } from "@/shared/types";
 import type { LinkImportHistory } from "@/shared/link-import";
 import { api } from "./api";
 import { useMembers } from "./hooks";
 
-/** One row of the table: the list route's item. */
 export type LinkRow = LinkListItem;
 
 export interface LinkPageQuery {
@@ -33,12 +28,8 @@ function queryString(query: LinkPageQuery): string {
   return params.toString();
 }
 
-/**
- * One page of links, like `useLinks`, plus the chip's `filter`.
- *
- * The key starts ["links", orgId], so every invalidation the link mutations
- * already do (create, edit, delete, import) refreshes this too.
- */
+// The key starts ["links", orgId], so every invalidation the link mutations
+// already do (create, edit, delete, import) refreshes this too.
 export const useLinkRows = (orgId: string, query: LinkPageQuery) =>
   useQuery(linkRowsQuery(orgId, query));
 
@@ -50,8 +41,6 @@ export const linkRowsQuery = (orgId: string, query: LinkPageQuery) =>
     placeholderData: keepPreviousData,
   });
 
-/** The chip counts. Until they arrive (or if they fail) the page shows no
- * chips, rather than chips with no numbers. */
 export const useLinkFacets = (orgId: string) => useQuery(linkFacetsQuery(orgId));
 
 export const linkFacetsQuery = (orgId: string) =>
@@ -62,15 +51,11 @@ export const linkFacetsQuery = (orgId: string) =>
     staleTime: 30_000,
   });
 
-/** Member names by user id, for "who made it" under each Created date. A
- * creator who has left the org is not in the list, and the row then shows
- * the date alone. */
 export function useCreatorNames(orgId: string): Map<string, string> {
   const members = useMembers(orgId);
   return new Map((members.data ?? []).map((m) => [m.userId, m.name || m.email]));
 }
 
-/** Imports this org has finished, newest first. */
 export const useImportHistory = (orgId: string) =>
   useQuery<LinkImportHistory>({
     queryKey: ["link-import", orgId, "history"],
@@ -85,7 +70,6 @@ const DAY_MONTH_YEAR = new Intl.DateTimeFormat("en", {
   year: "numeric",
 });
 
-/** "Oct 23" this year, "Oct 23, 2025" before it. */
 export function tableDate(ts: number): string {
   const date = new Date(ts);
   return (date.getFullYear() === new Date().getFullYear() ? DAY_MONTH : DAY_MONTH_YEAR).format(
@@ -93,24 +77,16 @@ export function tableDate(ts: number): string {
   );
 }
 
-/** The link's address as one line, "go.example.com/slug". */
 export function addressOf(link: Pick<LinkDTO, "url" | "slug">): string {
   return `${new URL(link.url).host}/${link.slug}`;
 }
 
-/**
- * The line under a link's sparkline. A link that never had a click says so
- * in danger, whatever its age; anything else the server flagged (a drop, a
- * quiet week, a warning page) reads as a caution.
- */
 export function trendNote(link: LinkRow): { tone: "warn" | "bad"; text: string } | null {
   if (link.clicks === 0) return { tone: "bad", text: "No clicks yet" };
   if (link.attention) return { tone: "warn", text: link.attention };
   return null;
 }
 
-/** What a saved link used, for PostHog: four "did they fill in any of
- * these" questions. */
 export function linkFeatures(data: LinkInput) {
   const any = (...fields: (string | null | undefined)[]) => fields.some(Boolean);
   return {

@@ -1,8 +1,4 @@
-/**
- * Password hashing for BetterAuth (see better-auth.ts): WebCrypto PBKDF2 is
- * native (fast) on Workers, unlike BetterAuth's default scrypt implementation
- * which burns CPU budget.
- */
+// WebCrypto PBKDF2 is native on Workers. BetterAuth default scrypt burns CPU budget.
 
 const PBKDF2_ITERATIONS = 100_000;
 

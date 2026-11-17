@@ -1,20 +1,4 @@
-/**
- * /branded-link-shortener: the page for "branded link shortener", "branded
- * url shortener" and "branded short links". Search Console showed about 120
- * impressions a month for those words with nothing of ours above position 70,
- * because no page was about them: the blog post is an article, and the search
- * wants a product.
- *
- * The heading leads with "custom URL shortener", the same search with ten
- * times the volume (1,300 US searches a month against 140 for "branded link
- * shortener", Google Ads data, November 2026). "Branded" stays in the intro
- * and the title, and the address stays put so no link to it breaks.
- *
- * So the page answers what someone choosing one needs: what it takes to put
- * links on their own domain, what it costs, and what changes for the people
- * who click. Figures come from PLAN_LIMITS and PLAN_PRICES so they cannot
- * drift from the plans.
- */
+/** Figures come from PLAN_LIMITS and PLAN_PRICES so they cannot drift from the plans. */
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
 import { EndBand, FrameSection, FramedSections } from "../components/marketing-kit";

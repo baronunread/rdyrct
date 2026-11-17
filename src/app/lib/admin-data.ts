@@ -1,11 +1,3 @@
-/**
- * The platform-admin queries the redesigned screens read.
- *
- * `AdminUsageData` is the shared DTO plus the two fields the Worker does not
- * send yet: the screens use each when it is there and say so when it is not.
- * The query keys are the ones `hooks.ts` uses, so every invalidation that
- * already targets `["admin", …]` reaches these too.
- */
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
@@ -17,15 +9,12 @@ import type {
   SeriesPoint,
 } from "@/shared/types";
 
-/** The ranges the usage page offers. */
 export type UsageRange = 7 | 30 | 90;
 
 export type AdminUsageData = AdminUsage & {
-  /** People paying, per day, same window as `series`. Nothing records a
-   * plan's history before the `plan.change` audit entries, so the Worker
-   * cannot draw this yet. */
+  // Nothing records a plan's history before the `plan.change` audit entries,
+  // so the Worker cannot draw this yet.
   paidSeries?: SeriesPoint[];
-  /** Every org over or near its plan; `capPressure` may be cut short. */
   capPressureTotal?: number;
 };
 
@@ -56,7 +45,6 @@ export const adminOrgsQuery = queryOptions<AdminOrgRow[]>({
   queryFn: () => api("/admin/orgs"),
 });
 
-/** The link list's filters, each one a parameter the Worker reads. */
 export type AdminLinkFilter = "all" | "reported" | "flagged" | "suspended" | "warned";
 
 const FILTER_PARAM = {
@@ -89,7 +77,6 @@ export const adminLinksQuery = (params: AdminLinksParams) =>
     placeholderData: keepPreviousData,
   });
 
-/** How many links each filter holds, under the same search and org. */
 export const useAdminLinkCounts = (params: Omit<AdminLinksParams, "filter">) =>
   useQuery(adminLinkCountsQuery(params));
 

@@ -3,14 +3,6 @@ import { enterCode, signUpAndVerify, skipSetup, submitSignup } from "./resend";
 import { queryRows, setPlan } from "./db";
 import { createQuickLink } from "./orgs";
 
-/**
- * A new organization's setup flow (components/setup-flow.tsx, on
- * /welcome): its name, its first link, a domain of its own, its team, with
- * the organization card filling in beside the questions. Polar's side is
- * stubbed at the browser, the way the billing specs do it; Google's return
- * is the URL it comes back to.
- */
-
 const password = "test-password-123";
 
 const card = (page: Page) => page.getByRole("complementary", { name: "Your organization" });
@@ -24,7 +16,6 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await expect(heading(page, "Check your email")).toBeVisible({ timeout: 30_000 });
   await enterCode(page, email);
 
-  // The flow, with the organization card beside it, named from the domain.
   await expect(heading(page, "What should we call your organization?")).toBeVisible({
     timeout: 30_000,
   });
@@ -32,13 +23,11 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await expect(card(page)).toContainText("Example");
   await expect(card(page)).toContainText("go.example.org");
 
-  // The card renames as the name is typed, and the name is saved.
   const name = page.getByRole("textbox", { name: "Name" });
   await name.fill("Acme Coffee");
   await expect(card(page)).toContainText("Acme Coffee");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // The first link lands in the card, with its QR code.
   await expect(heading(page, "Shorten your first link")).toBeVisible();
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(page.getByRole("textbox", { name: "Long link" })).toHaveAttribute(
@@ -49,24 +38,19 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(card(page)).not.toContainText("Shows here once made");
   await expect(card(page)).toContainText("example.org/spring-menu");
-  // Made, it moves on by itself once the card has it.
   await expect(page.getByRole("button", { name: "Link created" })).toBeDisabled();
 
-  // Opening it lands its first click on the card while the flow goes on.
   const open = card(page).getByRole("link", { name: "Open it" });
   const slug = new URL((await open.getAttribute("href"))!).pathname;
   const res = await page.request.get(slug, { maxRedirects: 0 });
   expect(res.status()).toBe(302);
   await expect(card(page)).toContainText("1 click", { timeout: 30_000 });
 
-  // Free: the domain step shows the link on a domain of their own.
   await expect(heading(page, "Use your own domain")).toBeVisible();
   await expect(page.getByText("go.example.org/spring-menu")).toBeVisible();
   await expect(page.getByRole("button", { name: /Hobby, \$4 a month/ })).toBeVisible();
   await page.getByRole("button", { name: "Not now" }).click();
 
-  // The team step takes addresses as chips, and marks a wrong one
-  // instead of sending.
   await expect(heading(page, "Invite your team")).toBeVisible();
   const emails = page.getByRole("textbox", { name: "Emails" });
   await page.getByRole("button", { name: "Send invite" }).click();
@@ -80,13 +64,11 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   await expect(card(page)).toContainText("1 invited");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // Last, email: both lists off until turned on. Offers on, then Continue.
   await expect(heading(page, "What should we email you about?")).toBeVisible();
   await expect(page.getByRole("switch", { name: "Product news" })).not.toBeChecked();
   await page.getByRole("switch", { name: "Offers" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // Into the app, as a dashboard, under the new name.
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(heading(page, "Dashboard")).toBeVisible();
   await expect(page.locator("[data-org-switcher]").first()).toContainText("Acme Coffee");
@@ -103,16 +85,13 @@ test("an email sign-up names its organization, makes a link, and arrives in the 
   );
   expect(consent).toMatchObject({ news: null, source: "onboarding" });
   expect(consent.offers).not.toBeNull();
-  // Answered in onboarding, so the one-time dialog never opens.
   await expect(page.getByRole("dialog", { name: "What should we email you about?" })).toHaveCount(
     0,
   );
 
-  // Link, click and an invite: nothing left, so no setup list.
   await expect(page.getByRole("button", { name: /Account menu/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Finish setting up/ })).toHaveCount(0);
 
-  // Done is done: /welcome moves straight on.
   await page.goto("/welcome");
   await expect(page).toHaveURL(/\/dashboard$/);
 });
@@ -121,7 +100,6 @@ test("skipping the email step answers no to both lists", async ({ page }) => {
   const email = `onboard-email-skip-${Date.now()}@example.org`;
   await page.request.post("/__dev/test-account", { data: { email, password, asked: false } });
   await page.goto("/welcome");
-  // Every step skipped, the email step last (resend.ts).
   await skipSetup(page);
   await expect(heading(page, "Dashboard")).toBeVisible();
   const [row] = await queryRows<{ news: number | null; offers: number | null; asked: number }>(
@@ -147,7 +125,6 @@ test("what is left of the setup waits in the sidebar", async ({ page }) => {
   await page.getByRole("button", { name: "Not now" }).click();
   await expect(heading(page, "Dashboard")).toBeVisible();
 
-  // Free has three steps: the domain step could never be done there.
   const setup = page.getByRole("button", { name: /Finish setting up/ });
   await expect(setup).toContainText("1 of 3");
   await expect(setup).toContainText("Next: Get its first click");
@@ -156,7 +133,6 @@ test("what is left of the setup waits in the sidebar", async ({ page }) => {
   await expect(list.getByRole("listitem")).toHaveCount(3);
   await expect(list).toContainText("within about 10 seconds");
 
-  // Hidden, it stays hidden, and the account menu brings it back.
   await list.getByRole("button", { name: "Hide this list" }).click();
   await expect(setup).toHaveCount(0);
   await page.reload();
@@ -166,7 +142,6 @@ test("what is left of the setup waits in the sidebar", async ({ page }) => {
   await page.getByRole("menuitem", { name: /Setup guide/ }).click();
   await expect(setup).toContainText("1 of 3");
 
-  // An invite is enough for the team step: accepting is up to them.
   const user = await (await page.request.get("/api/user")).json();
   const made = await page.request.post(`/api/orgs/${user.orgs[0].id}/invites`, {
     data: { role: "member" },
@@ -192,7 +167,6 @@ test("a pricing link goes to checkout, and going back still sets the organizatio
 }) => {
   await signUpAndVerify(page, `onboard-cancel-${Date.now()}@example.org`, password);
 
-  // Polar stands in: its back button lands on the URL the worker gave it.
   const asked: unknown[] = [];
   await page.route("**/api/billing/checkout", async (route) => {
     asked.push(route.request().postDataJSON());
@@ -200,11 +174,9 @@ test("a pricing link goes to checkout, and going back still sets the organizatio
   });
 
   await page.goto("/welcome?plan=pro&interval=year");
-  // Two full page loads: to checkout and back.
   await expect(heading(page, "No charge made")).toBeVisible({ timeout: 15_000 });
   expect(asked).toEqual([{ plan: "pro", interval: "year", from: "welcome" }]);
 
-  // The flow follows, and its domain step offers the plan they picked.
   await expect(heading(page, "What should we call your organization?")).toBeVisible();
   await page.getByRole("button", { name: "Skip" }).click();
   await page.getByRole("button", { name: "Skip" }).click();
@@ -218,14 +190,12 @@ test("a domain typed before checkout is added when they come back paid", async (
   const email = `onboard-host-${Date.now()}@example.org`;
   await signUpAndVerify(page, email, password);
 
-  // Polar stands in: by the time it sends them back, the webhook has landed.
   const asked: unknown[] = [];
   await page.route("**/api/billing/checkout", async (route) => {
     asked.push(route.request().postDataJSON());
     await setPlan(page, email, "hobby");
     await route.fulfill({ json: { url: "/welcome?checkout_id=test&plan=hobby" } });
   });
-  // Cloudflare stands in for the domain itself.
   const added = {
     id: "dom-onboard",
     hostname: "go.example.org",
@@ -253,7 +223,6 @@ test("a domain typed before checkout is added when they come back paid", async (
   await page.getByRole("button", { name: "Skip" }).click();
   await page.getByRole("button", { name: "Skip" }).click();
 
-  // A bad domain marks the field; a good one names itself on the button.
   const domain = page.getByRole("textbox", { name: "Domain" });
   await domain.fill("not a domain");
   await page.getByRole("button", { name: /^Hobby, \$4 a month$/ }).click();
@@ -263,7 +232,6 @@ test("a domain typed before checkout is added when they come back paid", async (
   await page.getByRole("button", { name: "Yearly, save 10%" }).click();
   await page.getByRole("button", { name: "Add go.example.org with Hobby" }).click();
 
-  // Back on the step it left, no card of its own in between.
   await expect(heading(page, "go.example.org is yours")).toBeVisible({ timeout: 15_000 });
   expect(asked).toEqual([{ plan: "hobby", interval: "year", from: "welcome" }]);
   await expect(heading(page, "Hobby is on")).toHaveCount(0);
@@ -272,7 +240,6 @@ test("a domain typed before checkout is added when they come back paid", async (
   await expect(card(page)).toContainText("Checking DNS");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(heading(page, "Invite your team")).toBeVisible();
-  // One link anyone can use, copied.
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.getByRole("button", { name: "Copy invite link" }).click();
   await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
@@ -302,7 +269,6 @@ test("the domain step holds until the payment lands, then goes on", async ({ pag
 test("back from a paid checkout, the domain step asks for the domain", async ({ page }) => {
   const email = `onboard-paid-${Date.now()}@example.org`;
   await signUpAndVerify(page, email, password);
-  // The webhook, landed: what Polar's success URL comes back to.
   await setPlan(page, email, "pro");
 
   await page.goto("/welcome?checkout_id=test&plan=pro");
@@ -318,15 +284,11 @@ test("back from a paid checkout, the domain step asks for the domain", async ({ 
 test("back from Google: a new account gets the flow, a returning one goes in", async ({ page }) => {
   await signUpAndVerify(page, `onboard-google-${Date.now()}@gmail.com`, password);
 
-  // Where Google sends a new account (routes/auth.tsx, newUserCallbackURL).
   await page.goto("/welcome?via=google&signup=google&next=%2Fdashboard");
   await expect(heading(page, "Account created")).toBeVisible();
   await expect(heading(page, "What should we call your organization?")).toBeVisible();
-  // A Gmail address names no company: the example domain stays generic.
   await expect(card(page)).toContainText("go.yourbrand.com");
 
-  // A returning sign-in to an org that is set up only says so, and goes on
-  // into the app.
   await page.goto("/dashboard");
   await createQuickLink(page, "https://example.org/set-up");
   await page.keyboard.press("Escape");

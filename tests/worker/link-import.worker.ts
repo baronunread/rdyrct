@@ -1,8 +1,3 @@
-/**
- * Import from another service (#383): the rows the browser read from a
- * Short.io, Bitly, Rebrandly or Dub export become links on the same domain and
- * slug, and each short URL then sends people where it used to.
- */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
@@ -80,9 +75,6 @@ async function call(method: string, path: string, body?: JsonValue, testEnv = au
   );
 }
 
-/** An import the way the page runs one: create it, send the rows, start it,
- * then the workflow's steps until nothing is pending. Returns each row's
- * outcome as the page reads it. */
 async function runImport(rows: Row[]): Promise<ImportVerdict[]> {
   const created = await call("POST", "", { service: "shortio", total: rows.length });
   expect(created.status).toBe(201);
@@ -100,7 +92,6 @@ async function runImport(rows: Row[]): Promise<ImportVerdict[]> {
   );
 }
 
-/** A one-row import with its row sent, not yet started. */
 async function uploaded() {
   const created = await call("POST", "", { service: "dub", total: 1 });
   const { id } = await jsonBody<{ id: string }>(created);
@@ -108,7 +99,6 @@ async function uploaded() {
   return id;
 }
 
-/** What LinkImportWorkflow does, step by step. */
 async function drain(id: string) {
   while ((await importNextChunk(authEnv(), id)) > 0);
   await finishImport(authEnv(), id);
@@ -310,8 +300,6 @@ describe("importing", () => {
   });
 });
 
-/** `count` links with their primary addresses on the shared domain, written
- * straight to D1: the cap counts active primary addresses. */
 async function fillTo(count: number) {
   await env.DB.batch([
     env.DB.prepare(
@@ -354,7 +342,6 @@ describe("an import runs on the server", () => {
     await call("POST", `/${id}/rows`, { rows: [row(2, "a", "https://example.com/a")] });
     const res = await call("POST", `/${id}/start`);
     expect(res.status).toBe(409);
-    // The same file sent again fills the gap without doubling a row.
     await call("POST", `/${id}/rows`, {
       rows: [row(2, "a", "https://example.com/a"), row(3, "b", "https://example.com/b")],
     });
@@ -403,7 +390,6 @@ describe("an import runs on the server", () => {
       await call("GET", "/current"),
     );
     expect(job).toMatchObject({ status: "done", pending: 0, failed: 1 });
-    // Its failed row can go again, and the org is free to start another.
     expect((await call("POST", `/${id}/retry`)).status).toBe(200);
     await drain(id);
     expect((await call("POST", "", { service: "dub", total: 1 })).status).toBe(201);
@@ -425,7 +411,6 @@ describe("an import runs on the server", () => {
     const { import: job } = await jsonBody<{ import: LinkImportDTO }>(
       await call("GET", "/current"),
     );
-    // Another org's import, by id: org-1's routes must not reach it.
     await env.DB.batch([
       env.DB.prepare("insert into orgs (id, name, created_at) values ('org-other', 'Other', 0)"),
       env.DB.prepare("update link_imports set org_id = 'org-other' where id = ?").bind(job.id),
@@ -452,7 +437,6 @@ describe("past imports", () => {
     const { import: first } = await jsonBody<{ import: LinkImportDTO }>(
       await call("GET", "/current"),
     );
-    // Starting another puts the first away: it stays in the history.
     await runImport([row(2, "a", "https://example.com/a")]);
     const { import: second } = await jsonBody<{ import: LinkImportDTO }>(
       await call("GET", "/current"),

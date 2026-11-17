@@ -1,22 +1,6 @@
-/**
- * The last /user answer, kept in localStorage so a reload paints the app
- * shell instead of a skeleton.
- *
- * Without it every reload of /links or /analytics blanked the sidebar, the
- * org switcher and the user footer until a round trip came back, which is a
- * whole second of an app that looks like it is still booting. The shell is
- * the same for this person on every page; only the page under it needs to
- * wait for data.
- *
- * A hint, never the truth: `useCurrentUser` seeds itself from this and
- * refetches straight away (`initialDataUpdatedAt: 0`), so a session that has
- * since expired lands on /login one round trip later. Nothing here is
- * authorization: the server checks every request regardless of what this
- * browser believes about itself.
- *
- * Failures are silent. A browser with storage disabled still works, it just
- * shows the skeleton it always did.
- */
+// A hint, never the truth: `useCurrentUser` seeds itself from this and refetches
+// straight away (`initialDataUpdatedAt: 0`). Nothing here is authorization.
+// Failures are silent: a browser with storage disabled just shows the skeleton.
 import * as v from "valibot";
 import { ORG_PLANS, ORG_ROLES, type CurrentUser } from "@/shared/types";
 
@@ -73,8 +57,7 @@ const orgSchema = v.object({
   qrEyeColor: v.string(),
   qrLogoSize: v.nullable(v.number()),
   // Entitlement state (#158). A cached copy is chrome, same as the rest of
-  // this record: the banner it paints is one page load old, and the query
-  // behind it corrects the moment it lands.
+  // this record: the query behind it corrects the banner the moment it lands.
   locked: v.boolean(),
   over: v.object({
     links: v.optional(v.number()),
@@ -84,8 +67,7 @@ const orgSchema = v.object({
   graceEndsAt: v.nullable(v.number()),
 });
 
-/** Whole-record or nothing: a half-parsed user would render a shell with
- * blanks in it, which is worse than the skeleton this replaces. */
+// Whole-record or nothing: a half-parsed user would render a shell with blanks.
 const cachedUserSchema = v.object({ user: userSchema, orgs: v.array(orgSchema) });
 
 export function readCachedUser(): CurrentUser | undefined {
@@ -103,13 +85,7 @@ export function writeCachedUser(user: CurrentUser | null) {
   try {
     if (user) localStorage.setItem(KEY, JSON.stringify(user));
     else localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }
 
-/**
- * Whether this browser was signed in last time it asked, for the landing
- * header's first paint (Dashboard vs Sign up) before /user resolves.
- */
 export const readAuthHint = () => readCachedUser() !== undefined;

@@ -3,18 +3,9 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 
 /**
- * The analytics read model (#26).
- *
- * Every figure on the stats pages and every per-row count in the links list
- * reads `click_daily`, `click_daily_dims` and `click_hourly` (migration
- * 0042), never raw `clicks`. insertClicks keeps them current through
- * rollupStatements below, in the same batch that writes the raw rows. A query
- * here costs the link-days (or link-hours) in range, not the clicks.
- *
- * Windows are whole UTC days: "the last 7 days" is today and the six before
- * it, the same days the chart draws, so the total always equals the sum of
- * the bars. The last-24-hours view is whole UTC hours, the current one
- * included.
+ * Every stats figure reads `click_daily`, `click_daily_dims` and `click_hourly`
+ * (migration 0042), never raw `clicks` (#26). Windows are whole UTC days, so a
+ * total equals the sum of the chart's bars.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -24,18 +15,10 @@ const daily = schema.clickDaily;
 const dims = schema.clickDailyDims;
 const hourly = schema.clickHourly;
 
-/* ---------------- writing ---------------- */
-
-/** A chunk of clicks as one JSON array of
- * [linkId, orgId, ts, country, referrer, device, dedupeId, addressId]
- * tuples, bound as a single parameter (see writeChunk in clicks.ts). */
 export type ClickPayload = string;
 
-// The clicks in ?1 that are not stored yet, once each. Read before the raw
-// insert that follows these statements in the same batch, so a dedupe id
-// already in `clicks` (a redelivered click) adds nothing here, and neither
-// does the same id twice in one chunk. Exported for the monthly counter
-// (click-caps.ts), which has to count exactly what the rollups count.
+// Read before the raw insert in the same batch, so a redelivered click (or a duplicate id in a chunk) adds nothing.
+// Exported for click-caps.ts, which must count exactly what the rollups count.
 export const FRESH = `incoming as (
     select value ->> 0 as link_id, value ->> 1 as org_id, value ->> 2 as ts,
            value ->> 3 as country, value ->> 4 as referrer, value ->> 5 as device,
@@ -50,12 +33,7 @@ export const FRESH = `incoming as (
 
 const DAY_OF = "date(ts / 1000, 'unixepoch')";
 
-/**
- * Add a chunk of clicks to the three rollups: one upsert each, summed per key
- * first, so a flush costs a row write per link-day (or link-hour, or
- * dimension value), not per click. Must run before the chunk's raw insert,
- * in the same batch: see FRESH.
- */
+/** Must run before the chunk's raw insert, in the same batch: see FRESH. */
 export function rollupStatements(d1: D1Database, payload: ClickPayload): D1PreparedStatement[] {
   // WHERE true is SQLite's disambiguation before ON CONFLICT.
   return [
@@ -81,26 +59,17 @@ export function rollupStatements(d1: D1Database, payload: ClickPayload): D1Prepa
   ].map((query) => d1.prepare(query).bind(payload));
 }
 
-/* ---------------- reading ---------------- */
-
-/** The UTC 'YYYY-MM-DD' a millisecond timestamp falls on. */
 function dayKey(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-/** The day keys (and one instant) each stats query starts from. */
 export type StatsWindows = {
-  /** First day of the selected range. */
   since: string;
-  /** The same instant, for the hourly table. */
   sinceMs: number;
-  /** First day of the equal-length range before it. */
   prevSince: string;
   since7: string;
   prev7Since: string;
-  /** First day of the 30 a link must go without clicks to count as dead. */
   since30: string;
-  /** First hour of the last-24-hours chart. */
   since24h: number;
 };
 
@@ -120,7 +89,6 @@ export function computeWindows(days: number, now = Date.now()): StatsWindows {
 
 const total = sql<number>`coalesce(sum(${daily.clicks}), 0)`;
 
-/** Clicks in a [from, to) range of days, as one column of a single pass. */
 function sumBetween(from: string, to?: string) {
   const inRange = to
     ? sql`${daily.day} >= ${from} and ${daily.day} < ${to}`
@@ -128,10 +96,6 @@ function sumBetween(from: string, to?: string) {
   return sql<number>`coalesce(sum(case when ${inRange} then ${daily.clicks} end), 0)`;
 }
 
-/**
- * The four headline figures (range, the range before it, last 7 days, the 7
- * before those) in one read, where raw clicks needed four counts.
- */
 export async function headlineTotals(db: DB, scope: Scope, w: StatsWindows) {
   const [row] = await db
     .select({
@@ -150,7 +114,6 @@ export async function headlineTotals(db: DB, scope: Scope, w: StatsWindows) {
   return row ?? { totalClicks: 0, totalClicksPrev: 0, clicks7d: 0, clicks7dPrev: 0 };
 }
 
-/** Whose clicks a query counts: a whole org's, or one link's. */
 export type Scope = { orgId: string } | { linkId: string };
 
 function scoped(table: typeof daily | typeof dims, scope: Scope): SQL {
@@ -167,7 +130,6 @@ export function seriesRows(db: DB, scope: Scope, since: string) {
 
 const dimTotal = sql<number>`sum(${dims.clicks})`;
 
-/** One breakdown (countries, referrers or devices) over the range. */
 export function dimensionRows(
   db: DB,
   scope: Scope,
@@ -184,8 +146,7 @@ export function dimensionRows(
   return limit ? query.limit(limit) : query;
 }
 
-/** Distinct countries in the range. The edge sends no country, or "XX",
- * when it cannot place a visitor: neither is a country. */
+/** The edge sends no country, or "XX", when it cannot place a visitor. */
 export async function countryCount(db: DB, scope: Scope, since: string): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(distinct ${dims.value})` })
@@ -201,8 +162,6 @@ export async function countryCount(db: DB, scope: Scope, since: string): Promise
   return row?.n ?? 0;
 }
 
-/** Distinct links with a click in the range, and in the equal range before
- * it, in one read. */
 export async function linksClickedCounts(db: DB, orgId: string, w: StatsWindows) {
   const [row] = await db
     .select({
@@ -214,8 +173,6 @@ export async function linksClickedCounts(db: DB, orgId: string, w: StatsWindows)
   return row ?? { current: 0, previous: 0 };
 }
 
-/** The last 24 hours, one row per UTC hour with clicks, labelled the way
- * the stats route's hour series expects. */
 export function hourSeriesRows(db: DB, orgId: string, since24h: number) {
   return db
     .select({
@@ -227,8 +184,6 @@ export function hourSeriesRows(db: DB, orgId: string, since24h: number) {
     .groupBy(hourly.hour);
 }
 
-/** The last 24 hours and the 24 before them, for the 24-hour view's
- * headline figure and its delta. */
 export async function lastDayByHour(db: DB, orgId: string, since24h: number) {
   const [row] = await db
     .select({
@@ -240,9 +195,7 @@ export async function lastDayByHour(db: DB, orgId: string, since24h: number) {
   return row ?? { totalClicks: 0, totalClicksPrev: 0 };
 }
 
-/** Clicks by weekday (Monday = 0) and UTC hour over the range. Integer
- * arithmetic rather than strftime, which costs more per row than the scan:
- * day 0 of the epoch was a Thursday, weekday 3 counting from Monday. */
+/** Integer arithmetic rather than strftime, which costs more per row: epoch day 0 was a Thursday. */
 export function heatmapRows(db: DB, orgId: string, sinceMs: number) {
   const dayOfWeek = sql<number>`(${hourly.hour} / 86400000 + 3) % 7`;
   const hourOfDay = sql<number>`(${hourly.hour} / 3600000) % 24`;
@@ -253,7 +206,6 @@ export function heatmapRows(db: DB, orgId: string, sinceMs: number) {
     .groupBy(dayOfWeek, hourOfDay);
 }
 
-/** How the stats lists name a link: enough to build its address. */
 const linkRef = {
   id: schema.links.id,
   slug: schema.links.slug,
@@ -261,12 +213,9 @@ const linkRef = {
   domain: schema.domains.hostname,
 };
 
-/** Rows a stats list (top links, referrers, UTM values) sends at most. The
- * cards show seven and "Show all" opens the rest, so the rest has to be
- * here. Countries have no cap: there are only so many. */
+/** The cards show seven and "Show all" opens the rest. Countries have no cap. */
 export const STATS_LIST_LIMIT = 50;
 
-/** The org's most-clicked links in the range. */
 export function topLinkRows(db: DB, orgId: string, since: string) {
   return db
     .select({ ...linkRef, clicks: total })
@@ -279,7 +228,6 @@ export function topLinkRows(db: DB, orgId: string, since: string) {
     .limit(STATS_LIST_LIMIT);
 }
 
-/** Whether the org has a click on record at all: one key lookup. */
 export async function everClicked(db: DB, orgId: string): Promise<boolean> {
   const [row] = await db
     .select({ one: sql<number>`1` })
@@ -289,9 +237,7 @@ export async function everClicked(db: DB, orgId: string): Promise<boolean> {
   return !!row;
 }
 
-/** Each link's clicks per day since `since`, for the links list's
- * sparklines: one read for a whole page of links. The ids travel as one
- * JSON parameter, because D1 binds at most 100 and a page can hold 100. */
+/** The ids travel as one JSON parameter: D1 binds at most 100 and a page can hold 100. */
 export function sparkRows(db: DB, orgId: string, linkIds: string[], since: string) {
   return db
     .select({ linkId: daily.linkId, day: daily.day, clicks: daily.clicks })
@@ -322,7 +268,6 @@ export function deadLinkRows(db: DB, orgId: string, since30: string) {
     .limit(5);
 }
 
-/** Links whose last 7 days fell below half of the 7 before. */
 export function decayingLinkRows(env: Env, orgId: string, w: StatsWindows) {
   return env.DB.prepare(
     `with cur as (select link_id, sum(clicks) as n from click_daily where org_id = ? and day >= ? group by link_id),
@@ -338,8 +283,6 @@ export function decayingLinkRows(env: Env, orgId: string, w: StatsWindows) {
 
 type UtmField = "utmCampaign" | "utmSource" | "utmMedium";
 
-/** Clicks in range per value of one UTM field: across the org's links, or
- * for one link (whose tags are its own, so at most one row). */
 export function utmRows(db: DB, scope: Scope, since: string, field: UtmField) {
   const value = schema.links[field];
   const owner =
@@ -354,55 +297,34 @@ export function utmRows(db: DB, scope: Scope, since: string, field: UtmField) {
     .limit(STATS_LIST_LIMIT);
 }
 
-/** A link's clicks over every day kept, for the links list. Literal
- * `links.id`: an interpolated column renders unqualified, and SQLite resolves
- * it against the subquery's own table. */
+/** Literal `links.id`: an interpolated column renders unqualified and binds to the subquery's own table. */
 export const linkClicksTotal = sql<number>`(
   select coalesce(sum(clicks), 0) from click_daily where click_daily.link_id = links.id
 )`;
 
-/** The same total for one link. */
 export async function clicksForLink(db: DB, linkId: string): Promise<number> {
   const [row] = await db.select({ n: total }).from(daily).where(eq(daily.linkId, linkId));
   return row?.n ?? 0;
 }
 
-/**
- * How long rollups are kept. The same 400 days raw clicks are kept today
- * (the longest analytics window, Pro's 365, plus margin), stated on its own
- * so raw retention can shrink without taking the analytics with it.
- */
+/** Stated on its own so raw retention can shrink without taking the analytics with it. */
 const ROLLUP_RETENTION_DAYS = 400;
 
-/** Rows one sweep statement deletes at most, the same bound as the raw sweep
- * in scheduled(). */
 const ROLLUP_SWEEP_CHUNK = 1000;
 
-/** Sweep statements per D1 batch: a hundred orgs' worth. A batch is one
- * query against the Worker's per-invocation limit (50 on Free, 1,000 on
- * Paid) however many statements it holds, so a cron run that spends one per
- * ten orgs would run out of queries, and take every sweep after this one
- * with it, at a few thousand orgs. D1's 30-second limit covers the whole
- * batch: a daily run deletes about one day of rows per org, far inside it. */
+/**
+ * A batch is one query against the per-invocation limit (50 on Free, 1,000 on Paid)
+ * however many statements it holds, so one per ten orgs would run out of queries
+ * at a few thousand orgs and take every later sweep with it.
+ */
 const ROLLUP_SWEEP_BATCH = 300;
 
-/** Orgs one run sweeps at most: ten batches. A copy on Workers Free has 50
- * queries for the whole cron run, every sweep in it included, so the number
- * this one spends has to stop growing with the org count. */
+/** A copy on Workers Free has 50 queries for the whole cron run, so this must stop growing with the org count. */
 const ROLLUP_SWEEP_ORGS_PER_RUN = 1000;
 
-/** Batches one run sends at most: the ten above, plus room to re-run the
- * statements that filled a chunk. Whatever is left waits for tomorrow. */
 const ROLLUP_SWEEP_MAX_BATCHES = 15;
 
-/**
- * The orgs one UTC day's run sweeps, out of every old enough org, sorted by
- * id. All of them when they fit in `cap`; otherwise they split into
- * ceil(n / cap) slices and the day number picks one, so each org comes
- * round within that many days with nothing stored between runs. Rows past
- * the retention wait a few days at most, and no analytics window reaches
- * them (the longest is 365 days, the retention 400).
- */
+/** Over ceil(n / cap) days each org comes round, with nothing stored between runs. */
 export function orgsForDay(ids: string[], day: number, cap: number): string[] {
   const slices = Math.ceil(ids.length / cap);
   if (slices <= 1) return ids;
@@ -411,11 +333,8 @@ export function orgsForDay(ids: string[], day: number, cap: number): string[] {
 }
 
 /**
- * One org's rows past the cutoff, at most ?3 of them. Every key starts with
- * org_id, so a delete on `day < ?` alone would read every row of the table:
- * these name the org (and, for the dims, every dim) so each reads only the
- * key range it deletes. The tables are WITHOUT ROWID, so the limit goes
- * through the key columns. Binds: org id, cutoff, limit.
+ * Every key starts with org_id, so a delete on `day < ?` alone would read the whole
+ * table. The tables are WITHOUT ROWID, so the limit goes through the key columns.
  */
 export const ROLLUP_SWEEP_SQL = [
   `delete from click_daily where (org_id, day, link_id) in (
@@ -428,21 +347,9 @@ export const ROLLUP_SWEEP_SQL = [
 ] as const;
 
 /**
- * Drop rollup rows older than the retention. Run daily, so each run removes
- * about one day of rows per org.
- *
- * Org by org rather than through a (day) index on each table: an index would
- * add a row write to every new link-day, dimension value and link-hour a
- * flush creates, every day, to save a read of the orgs table once a day. An
- * org with nothing to drop costs a key lookup per table that finds nothing.
- * A statement that deleted a full chunk goes to the back of the queue to run
- * again, until the run's batch budget is spent.
- *
- * Only orgs created before the cutoff's UTC day: every row is dated by the
- * redirect that made it, a link never moves to another org (a claimed
- * anonymous link is a new row in an org that already exists), so a younger
- * org has nothing old enough to drop. Queries per run: one for the orgs, then
- * at most ROLLUP_SWEEP_MAX_BATCHES, however many orgs there are.
+ * Org by org rather than a (day) index per table: an index adds a row write to every
+ * new link-day a flush creates, to save one read a day. Only orgs created before the
+ * cutoff's UTC day: a link never moves orgs, so a younger org has nothing old enough.
  */
 export async function sweepOldRollups(
   env: Env,
@@ -468,9 +375,7 @@ export async function sweepOldRollups(
   const queue = ids.flatMap((id) => statements.map((stmt, i) => stmt.bind(id, cutoffs[i], chunk)));
   for (let budget = ROLLUP_SWEEP_MAX_BATCHES; queue.length > 0 && budget > 0; budget--) {
     const group = queue.splice(0, ROLLUP_SWEEP_BATCH);
-    // Sequential on purpose: D1 runs one write at a time, so batches sent at
-    // once only queue behind each other, and holding the rest back leaves
-    // room for the click flushes this daily job must not delay.
+    // Sequential: D1 runs one write at a time, and holding batches back leaves room for click flushes.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const results = await env.DB.batch(group);
     group.forEach((stmt, j) => {

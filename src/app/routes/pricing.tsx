@@ -1,17 +1,5 @@
-/**
- * Standalone pricing page (#261). "rdyrct pricing" is a real search, and this
- * is where somebody decides to pay, so it answers the question in the order
- * a buyer asks it: what the plans are, which one covers me, every limit, what
- * happens if I stop paying. What the same thing costs elsewhere lives on the
- * /compare pages, where each tool gets a page of its own and a chance to win.
- *
- * The full table still lives in one place (PricingSection in landing.tsx),
- * and so does the downgrade timeline (PlanChangeSection).
- *
- * No self-host section here on purpose: a buying page that leads with "or pay
- * us nothing" argues against itself. Self-hosting stays a homepage trust
- * signal and a GitHub link in the footer.
- */
+/** Standalone pricing page (#261). The full table lives in PricingSection (landing.tsx).
+ * No self-host section: a buying page that argues for paying nothing argues against itself. */
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
@@ -52,7 +40,6 @@ const CARDS = [
   {
     plan: "hobby",
     who: "For creators and small shops",
-    // Without it "API and MCP" reads as a Free-only feature.
     plus: "Everything in Free, plus",
     points: [
       `${PLAN_LIMITS.hobby.links} links`,
@@ -82,9 +69,6 @@ function PlanCards({ match }: { match: StoredPlan | null }) {
   return (
     <div className="flex flex-col gap-4 pt-10">
       <div className="grid gap-4 md:grid-cols-3">
-        {/* One primary button, on the plan the finder picked, so the cards,
-          the finder and the button all point at the same plan. Pro keeps it
-          when nothing fits. */}
         {CARDS.map((card) => (
           <PlanCard
             key={card.plan}
@@ -191,8 +175,6 @@ function PlanCta({ plan, primary }: { plan: StoredPlan; primary: boolean }) {
   );
 }
 
-/** Slider ranges. Links and days run on a log scale, so 12 and 45 are as
- * easy to reach as 3,000 and 365. */
 const RANGES = {
   links: { label: "Links", min: 0, max: 5000, log: true },
   members: { label: "Team members", min: 1, max: 40, log: false },

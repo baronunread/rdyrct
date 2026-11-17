@@ -1,14 +1,6 @@
-/**
- * index.html carries one inline script, the theme bootstrap, and script-src
- * names its sha256 instead of opening up to every inline script. The hash is
- * written by hand in src/worker/security-headers.ts, so it can drift, and the
- * drift is invisible: the dev CSP carries 'unsafe-inline', so locally the
- * script runs either way and only production paints in the wrong theme.
- *
- * Recomputing it here catches that in milliseconds. The browser test in
- * tests/e2e/production/csp.pw.ts is what proves the policy actually works;
- * this is the fast version that says which line to fix.
- */
+// script-src names the theme bootstrap's sha256, written by hand in security-headers.ts.
+// Drift is invisible locally (the dev CSP has 'unsafe-inline') and only production
+// paints the wrong theme. The browser test in e2e/production/csp.pw.ts proves the policy.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";

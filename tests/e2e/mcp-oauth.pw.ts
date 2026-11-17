@@ -5,10 +5,8 @@ import { rawSql } from "./db";
 import { signUpAndVerify } from "./resend";
 
 const E2E_PASSWORD = "test-password-123";
-// A real, resolvable domain, not a documentation-only one (.example/.test):
-// the browser actually navigates here when consent completes, and a
-// non-resolving host would fail that navigation before waitForRequest ever
-// sees it.
+// A resolvable domain, not .example/.test: the browser navigates here on
+// consent, and a non-resolving host fails before waitForRequest sees it.
 const REDIRECT_URI = "https://example.com/callback";
 const RESOURCE = `${appUrl}/api/mcp`;
 
@@ -22,10 +20,9 @@ function pkcePair() {
   return { verifier, challenge };
 }
 
-/** Registers a test MCP client the way Claude or Cursor does: anonymous
- * dynamic client registration, no session cookie. The resource row is
- * written first because mcp() only creates it lazily, on its own first
- * request after the dev server boots. */
+/** Registers a test MCP client like Claude or Cursor: anonymous dynamic
+ * registration, no session. The resource row goes first because mcp() only
+ * creates it lazily. */
 async function registerTestClient(page: Page, request: APIRequestContext): Promise<string> {
   await rawSql(
     page,
@@ -72,20 +69,15 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   await expect(page.getByText("Playwright Client wants access")).toBeVisible();
   await expect(page.getByText("Your answer goes to example.com")).toBeVisible();
 
-  // The consent page's own success handler does a real
-  // window.location.assign to the client's redirect_uri, leaving this app's
-  // origin: wait for that navigation (not its response, which CI's sandbox
-  // may not be able to fetch) rather than a raw network-request listener.
+  // The consent page assigns window.location to the client's redirect_uri: wait
+  // for that navigation, not its response, which CI's sandbox may not fetch.
   await page.getByRole("button", { name: "Allow" }).click();
   await page.waitForURL(`${REDIRECT_URI}*`);
   const code = new URL(page.url()).searchParams.get("code");
   expect(code).toBeTruthy();
 
-  // The `request` fixture, not `page.request`: the page has just navigated
-  // to example.com to get here, and page.request ties its behavior to the
-  // page's current (now cross-origin) browsing context. This one is its own
-  // independent APIRequestContext, the same shape api-keys.pw.ts's `request`
-  // calls already use successfully.
+  // The `request` fixture, not `page.request`: the page is now cross-origin
+  // (example.com) and page.request ties its behavior to that context.
   const tokenRes = await request.post(`${appUrl}/api/auth/oauth2/token`, {
     form: {
       grant_type: "authorization_code",
@@ -108,14 +100,12 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   });
   expect(mcpRes.status()).toBe(200);
 
-  // Connected apps live under the MCP tab, not the default (API keys) one.
   await page.goto(`${appUrl}/api-keys?tab=mcp`);
   await expect(
     page.getByRole("region", { name: "Connected" }).getByText("Playwright Client"),
   ).toBeVisible();
   await page.getByRole("button", { name: "Disconnect Playwright Client" }).click();
   await page.getByRole("button", { name: "Disconnect app" }).click();
-  // Back to zero connections: the Connected list is gone, the guide stays.
   await expect(page.getByText("Playwright Client")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Use rdyrct from your AI assistant" }),
@@ -128,8 +118,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
     },
     data: { jsonrpc: "2.0", id: 1, method: "tools/list" },
   });
-  // The live JWT itself is still valid (stateless, see docs.tsx's OAuth
-  // section): what revoke actually kills is the ability to mint another one.
-  // See tests/worker/mcp-oauth.worker.ts for that half of the contract.
+  // The live JWT is stateless and stays valid: revoke kills minting another.
+  // tests/worker/mcp-oauth.worker.ts covers that half.
   expect(revokedMcpRes.status()).toBe(200);
 });

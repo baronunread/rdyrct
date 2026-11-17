@@ -1,15 +1,8 @@
 import { ChevronDown } from "@/app/ui/icons";
 import { FaqJsonLd, type Faq } from "./faq-json-ld";
 
-/**
- * Questions as a list of disclosures, each opening smoothly (styles.css,
- * `details`), with the same questions as FAQPage data so a search result
- * shows the answers the page shows.
- *
- * w-full matters: a parent that centres its children would otherwise size
- * this column to its content, and every answer that opens would be wider
- * than the question it hangs under.
- */
+// w-full: a centring parent would otherwise size this column to its content,
+// and every open answer would be wider than its question.
 export function FaqList({ faqs, title }: { faqs: readonly Faq[]; title?: string }) {
   return (
     <div className="flex w-full max-w-3xl flex-col gap-3">

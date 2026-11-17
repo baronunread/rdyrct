@@ -39,8 +39,6 @@ import { Pager } from "../../ui/pagination";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/** What an empty table says. It names the filter that matched nothing: with
- * only a status picked there is no search term to quote. */
 function emptyMessage(status: OrgStatus, term: string): string {
   if (term) return `No organizations match “${term}”.`;
   const none = {
@@ -68,7 +66,6 @@ const hasStatus = (o: AdminOrgRow, status: OrgStatus) => STATUS_TEST[status](o);
 const matchesSearch = (o: AdminOrgRow, needle: string) =>
   !needle || [o.name, o.ownerName, o.ownerEmail].some((v) => v?.toLowerCase().includes(needle));
 
-/** The mock's three first, then the two the abuse work still needs. */
 const STATUSES = [
   { id: "all", label: "All" },
   { id: "over", label: "Over plan" },
@@ -81,8 +78,6 @@ type OrgStatus = (typeof STATUSES)[number]["id"];
 
 const DAY_MS = 86_400_000;
 
-/** "Over plan · 10 days left" while the grace period runs, plain "Over plan"
- * when the API has not said when it ends. */
 function overLabel(org: AdminOrgRow): string {
   if (org.graceEndsAt == null) return "Over plan";
   const left = Math.ceil((org.graceEndsAt - Date.now()) / DAY_MS);
@@ -90,9 +85,6 @@ function overLabel(org: AdminOrgRow): string {
   return `Over plan · ${left} ${left === 1 ? "day" : "days"} left`;
 }
 
-/** Every state an admin acts on, worst first. A ban outranks a suspension,
- * since it is the decision; `suspendedLabel` differs because the table is
- * cramped and the dialog has room. */
 function orgStates(org: AdminOrgRow, suspendedLabel: string): { tone: StateTone; text: string }[] {
   const states: { tone: StateTone; text: string }[] = [];
   if (org.disabledAt) states.push({ tone: "bad", text: "disabled" });
@@ -104,21 +96,17 @@ function orgStates(org: AdminOrgRow, suspendedLabel: string): { tone: StateTone;
   return states;
 }
 
-/** What an admin can still do to an org: nothing to a banned owner's but
- * delete it, since only an unban changes it. */
 function orgDecisions(org: AdminOrgRow) {
   const open = !org.disabledAt;
   return { canRestore: open && !!org.linksSuspendedAt, canBan: open && !!org.ownerId };
 }
 
-/** The owner a ban from this row is about. */
 function ownerOf(org: AdminOrgRow) {
   return org.ownerId
     ? { id: org.ownerId, name: org.ownerName ?? org.ownerEmail ?? "the owner" }
     : null;
 }
 
-/** The states as a dot and a word each, or "Active" when there is none. */
 function OrgStates({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
   const states = orgStates(org, suspendedLabel);
   if (states.length === 0) return <StateLabel tone="ok">Active</StateLabel>;
@@ -175,8 +163,6 @@ function OrgMenu({
   );
 }
 
-/** The org's name over its owner's address: the name opens the details, the
- * address is what a report or an email names. */
 function OrgCell({ org, onView }: { org: AdminOrgRow; onView: () => void }) {
   const owner = org.ownerName ? `${org.ownerName} · ${org.ownerEmail ?? ""}` : "No owner";
   return (
@@ -312,7 +298,6 @@ function OrgMembersTable({
               <OverflowTip content={m.email}>
                 <Td className="truncate font-mono text-xs text-muted">{m.email}</Td>
               </OverflowTip>
-              {/* A role is an attribute of the row: text, not a pill. */}
               <Td className="text-muted capitalize">{m.role}</Td>
             </tr>
           ))}
@@ -322,13 +307,6 @@ function OrgMembersTable({
   );
 }
 
-/**
- * A count and a way through, instead of the org's links inline.
- *
- * The dialog listed every link with its destination, which is the Links tab's
- * job and did it worse: no search, no sort, no suspend. This says how many
- * there are and hands the question over.
- */
 function OrgLinksRecap({
   orgId,
   links,
@@ -396,7 +374,6 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
   );
 }
 
-/** The orgs page's first frame (see lib/route-preload.ts): the list. */
 export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminOrgsQuery)]);
 
 export function AdminOrgsPage() {
@@ -423,7 +400,6 @@ export function AdminOrgsPage() {
     onError: withErrorToast(toast),
   });
 
-  // Both actions answer the same flag, so one mutation with a path.
   const act = useMutation({
     mutationFn: (input: { orgId: string; path: string; body?: { reason: string } }) =>
       api(`/admin/links/orgs/${input.orgId}/${input.path}`, { method: "POST", body: input.body }),
@@ -481,8 +457,6 @@ export function AdminOrgsPage() {
           />
         </FilterBar>
       </div>
-      {/* Rows only: the header and search box above are real, so the
-          page-level skeleton would draw a second one of each. */}
       {orgs.isLoading ? (
         <TableSkeleton rows={6} testId="admin-orgs-rows-skeleton" />
       ) : (

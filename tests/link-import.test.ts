@@ -10,8 +10,6 @@ import {
 } from "../src/shared/link-import";
 import { buildDestination, resolveUtm, stripUtmParams } from "../src/shared/utm";
 
-/** Header detection, then every row after it, the way the import page reads
- * a file. */
 function read(csv: string) {
   const [header, ...rows] = parseCsv(csv);
   const map = detectColumns(header);
@@ -160,8 +158,6 @@ test("hostsOf lists each domain once, in file order", () => {
 });
 
 describe("an imported destination comes back out of the redirect unchanged", () => {
-  /** What the redirect sends for a destination stored the way an import
-   * stores it: UTMs in their fields, the rest of the URL as written. */
   const roundTrip = (destination: string) =>
     buildDestination(stripUtmParams(destination), resolveUtm(destination, {}));
 

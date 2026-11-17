@@ -115,8 +115,6 @@ orgRoutes.post("/", requireUser, async (c) => {
   );
 });
 
-/** Who owns this org. Every owned-org decision belongs to them, whoever is
- * making the request. */
 async function orgOwnerId(db: DB, orgId: string): Promise<string | null> {
   const rows = await db
     .select({ userId: schema.orgMembers.userId })
@@ -125,26 +123,17 @@ async function orgOwnerId(db: DB, orgId: string): Promise<string | null> {
   return rows[0]?.userId ?? null;
 }
 
-/**
- * Keeps this org active, and locks whichever other one has to give way (#160).
- *
- * The owner is over their `orgs` cap and picks which one keeps working. The
- * pick is reversible: calling this on the other org swaps them back. Runs on
- * a locked org, which is the whole point, so it opts out of the lock guard.
- */
+// Runs on a locked org, so it opts out of the lock guard (#160).
 orgRoutes.post(
   "/:orgId/keep-active",
   requireOrgRole("owner", { allowWhileLocked: true }),
   async (c) => {
-    // The org's owner, not the caller: a platform admin passes
-    // requireOrgRole("owner") everywhere (see orgRole), and using their id
-    // here would unlock a customer's org against the admin's own plan and
-    // then lock one of the admin's orgs to pay for it.
+    // The org's owner, not the caller: a platform admin passes requireOrgRole("owner") everywhere,
+    // and using their id would unlock a customer's org against the admin's own plan.
     const userId = await orgOwnerId(c.var.db, c.req.param("orgId"));
     if (!userId) throw new HTTPException(404, { message: "Organization not found" });
     const { limits } = await userPlan(c.var.db, userId);
-    // One transaction: two requests picking two different locked orgs could
-    // otherwise leave the owner with every org locked. See keepOrgActive.
+    // One transaction: two requests picking two locked orgs could leave every org locked.
     await keepOrgActive(c.env, {
       orgId: c.req.param("orgId"),
       userId,
@@ -189,9 +178,7 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
   return set;
 }
 
-// Matches the client's own cap (src/app/lib/schemas.ts orgNameSchema): the
-// server enforces it too, so a caller that bypasses the client's form
-// validation can't store an unbounded name (see issue #19).
+// Matches the client's cap (orgNameSchema): the server enforces it too (#19).
 const ORG_NAME_MAX_LENGTH = 100;
 
 function requireOrgName(name: JsonValue): string {
@@ -206,9 +193,6 @@ function requireOrgName(name: JsonValue): string {
   return trimmed;
 }
 
-/** Applies the QR fields onto `set` and returns the logo being replaced (""
- * if none), so a cleared/replaced one can be swept from R2. Throws if QR
- * customization isn't on the org's plan. */
 async function applyQrPatch(
   db: DB,
   orgId: string,
@@ -216,11 +200,7 @@ async function applyQrPatch(
   set: Partial<typeof schema.orgs.$inferInsert>,
 ): Promise<string> {
   validateQrFields(body, orgId);
-  // The same rule the link editor's save follows (#162): what the plan gates
-  // is a *change* to the styling, not the styling arriving back unchanged
-  // alongside an edit to some other field. Org-level and link-level QR behave
-  // the same on a downgrade, which they did not before: one 402'd on any QR
-  // field being present while the other quietly wiped them.
+  // What the plan gates is a *change* to styling, not styling returning unchanged beside another edit (#162).
   const [{ limits }, rows] = await Promise.all([
     orgPlan(db, orgId),
     db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId)),
@@ -236,14 +216,8 @@ async function applyQrPatch(
   return existing?.qrLogo ?? "";
 }
 
-/**
- * The org's default domain for new links (#69).
- *
- * Only a domain this org owns, and only one that is actually serving: an org
- * cannot point new links at somebody else's hostname, and preselecting a
- * domain still waiting on DNS would hand every new link an address that
- * resolves nowhere. Null clears it, back to the shared domain.
- */
+// Only a domain this org owns that is serving: one still waiting on DNS would give every new link
+// an address that resolves nowhere (#69).
 async function resolveDefaultDomain(
   db: DB,
   orgId: string,
@@ -290,27 +264,12 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
   return c.json({ ok: true });
 });
 
-/**
- * Full org teardown, shared with the admin route. Marking the org deleting
- * first closes the gather/d1-delete race: requireOrgRole rejects every
- * org-scoped write from this point on, so nothing can create a link or
- * domain the workflow's gather step never sees. A Cloudflare Workflow then
- * runs the ordered, per-step-retried sequence: capture the org's hostnames
- * and KV keys, delete the org row (D1 cascade), then deprovision Cloudflare
- * hostnames, KV entries, and the R2 logo prefix. Once the instance is
- * created, Workflows runs every step to completion.
- */
+// Marking the org deleting first closes the gather/d1-delete race: requireOrgRole rejects every org
+// write, so nothing can create a link or domain the workflow's gather step never sees.
 const TERMINAL_WORKFLOW_STATUSES = new Set(["errored", "terminated", "complete"]);
 
-/**
- * Is a teardown workflow for this org still doing something?
- *
- * Three answers, not two. `get()` throws both when the instance does not
- * exist and when the lookup itself failed, and Workflows gives no way to tell
- * those apart, so a throw is `null`: we do not know. Reading that as "nothing
- * is running" is what let a lookup failure reopen writes under a teardown
- * that was actually in flight (#52).
- */
+// `get()` throws both when the instance does not exist and when the lookup failed, so a throw is
+// `null`: unknown. Reading it as nothing running reopened writes under a live teardown (#52).
 async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean | null> {
   try {
     const status = await (await env.ORG_DELETE.get(orgId)).status();
@@ -324,38 +283,15 @@ export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> 
   await deleteOrgs(db, env, [orgId]);
 }
 
-/**
- * Tears down several orgs as one act, for the account deletion that owns them
- * all (#119).
- *
- * One flag-write and one workflow start, not two per org. Starting them one
- * at a time meant a failure on the third left the first two torn down and the
- * caller holding an error for a deletion that did not happen, with no way to
- * tell which orgs had already gone.
- */
-/**
- * How long an org may sit flagged `deleting_at` before the sweep treats its
- * teardown as stalled. Long enough that a healthy workflow is never disturbed.
- */
+// One flag-write and one workflow start, not two per org: a failure on the third left the first
+// two torn down with the caller holding an error (#119).
 const STALLED_DELETION_AFTER = 60 * 60 * 1000;
 
-/** How many stalled orgs one sweep restarts. Bounded like every other sweep. */
 const STALLED_DELETION_LIMIT = 50;
 
-/**
- * Restarts teardowns that are flagged and not running (#52, #119).
- *
- * Two ways an org reaches that state, and neither has anyone to fix it.
- * `createBatch` skips an id already in use whatever that instance's state, so
- * an instance that errored or was terminated without finishing is never
- * replaced by a later DELETE: the org answers 200 and nothing runs. And when
- * a start fails ambiguously, the flag is deliberately left set, which is right
- * for an org somebody can DELETE again and wrong for one whose only member is
- * the account that was being deleted at the time.
- *
- * Restart rather than create, because the id is still in use. A running or
- * queued instance is left strictly alone.
- */
+// Two ways an org gets stuck flagged: createBatch skips an id already in use, so an errored or
+// terminated instance is never replaced by a later DELETE; and an ambiguous start failure leaves the
+// flag set. Restart, not create, since the id is in use. A running or queued instance is left alone.
 export async function sweepStalledOrgDeletions(
   db: DB,
   env: Env,
@@ -375,10 +311,9 @@ export async function sweepStalledOrgDeletions(
   if (stalled.length === 0) return 0;
 
   const restarted = await Promise.all(stalled.map((org) => restartIfStalled(env, org.id)));
-  // `deleting_at` is also the durable last-check cursor. Without moving the
-  // selected rows forward, 50 old workflows that are still active (or cannot
-  // be read) occupy every daily pass and a later missing instance is never
-  // reached. The flag stays non-null, so writes remain closed throughout.
+  // `deleting_at` is also the durable last-check cursor: without moving the selected rows forward,
+  // 50 old workflows still active (or unreadable) occupy every daily pass. The flag stays non-null,
+  // so writes remain closed.
   await db
     .update(schema.orgs)
     .set({ deletingAt: now })
@@ -391,25 +326,18 @@ export async function sweepStalledOrgDeletions(
   return restarted.filter(Boolean).length;
 }
 
-/** True if this org's teardown was actually restarted. Never throws: one
- * unreadable instance must not stop the sweep reaching the rest. */
+/** Never throws: one unreadable instance must not stop the sweep reaching the rest. */
 async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
-  // The lookup and the restart are separate try blocks on purpose. Wrapping
-  // both meant a restart that failed on an instance which plainly exists was
-  // read as "no instance", and the fallback then created for an id already in
-  // use: createBatch skipped it and the sweep still reported a restart that
-  // never happened.
+  // Separate try blocks on purpose: wrapping both read a failed restart of an existing instance as
+  // "no instance", and the fallback then created for an id in use.
   let instance;
   let status;
   try {
     instance = await env.ORG_DELETE.get(orgId);
     ({ status } = await instance.status());
   } catch {
-    // The lookup failed, which means either no instance or an unreadable one:
-    // Workflows gives no way to tell those apart. createBatch settles it,
-    // because it skips an id already in use and leaves it out of what it
-    // returns. Without reading that, an unreadable live instance was reported
-    // as a restart that never happened.
+    // No instance or an unreadable one, and Workflows cannot tell which. createBatch settles it: it
+    // skips an id already in use and leaves it out of what it returns.
     try {
       const created = await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
       if (created.length === 0) return false;
@@ -423,8 +351,7 @@ async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
   try {
     await instance.restart();
   } catch {
-    // It exists and is terminal, so creating is not an option. The next sweep
-    // tries again.
+    // It exists and is terminal, so creating is not an option. The next sweep tries again.
     return false;
   }
   captureAlert([{ event: "org_delete_restarted", orgId, status }]);
@@ -447,11 +374,6 @@ export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<vo
   );
 }
 
-/**
- * Starts the teardown workflow for orgs already marked `deleting_at`.
- * `marked` is the ones this caller marked itself, the only flags it may
- * undo if the start fails.
- */
 export async function startOrgTeardown(
   db: DB,
   env: Env,
@@ -460,19 +382,13 @@ export async function startOrgTeardown(
 ): Promise<void> {
   if (orgIds.length === 0) return;
   try {
-    // `createBatch` rather than `create`, because it is documented idempotent:
-    // an id already in use is skipped instead of throwing. That is what makes
-    // this safe to call on a repeat DELETE, which is the repair path for an
-    // org left flagged with nothing driving its teardown.
+    // `createBatch` is documented idempotent (an id in use is skipped), which makes a repeat
+    // DELETE a safe repair path for an org left flagged.
     await env.ORG_DELETE.createBatch(orgIds.map((orgId) => ({ id: orgId, params: { orgId } })));
   } catch (err) {
-    // Only undo a flag when we are certain nothing is running: a terminal
-    // instance is proof, an unreadable one is not. Leaving it set costs a
-    // read-only org until the next DELETE restarts teardown; clearing it on a
-    // guess reopens writes underneath a workflow that has already taken its
-    // snapshot, and those writes survive as public redirects for an org that
-    // is supposed to be gone. Only the flags this call set are candidates:
-    // one it found already set belongs to somebody else's teardown.
+    // Only undo a flag when certain nothing is running: a terminal instance is proof, an unreadable one
+    // is not. Clearing on a guess reopens writes under a workflow that already took its snapshot. Only
+    // flags this call set are candidates.
     const statuses = await Promise.all(
       marked.map(async (id) => ({ id, active: await orgDeleteWorkflowActive(env, id) })),
     );
@@ -486,13 +402,9 @@ export async function startOrgTeardown(
   }
 }
 
-// A locked org can still be deleted: deleting it is one of the two ways out
-// of the lock, and refusing would trap the owner.
-//
-// The only organization somebody belongs to can't be: they would be left
-// with an account and nowhere to use it, and the next sign-in would treat
-// them as new. Deleting the account is the way out for them. A platform
-// admin who is not a member deletes as before.
+// A locked org can still be deleted: it is a way out of the lock. The only org somebody belongs to
+// can't be: they would be left with an account and nowhere to use it. A platform admin who is not a
+// member deletes as before.
 orgRoutes.delete(
   "/:orgId",
   requireOrgRole("owner", { allowWhileDeleting: true, allowWhileLocked: true }),
@@ -509,13 +421,7 @@ orgRoutes.delete(
   },
 );
 
-/* ---------------- members ---------------- */
-
-/** When a member was last here, epoch ms: the newer of their newest session
- * and `user.last_seen_at` (kept to the hour, and still there after they sign
- * out everywhere). Null for somebody never seen. Literal
- * org_members.user_id: an interpolated column renders unqualified and
- * SQLite binds it to the subquery's own table. */
+/** Literal org_members.user_id: an interpolated column renders unqualified and binds to the subquery's own table. */
 export const memberLastActiveAt = sql<number | null>`(
   select max(t) from (
     select session.updated_at as t from session where session.user_id = org_members.user_id
@@ -549,9 +455,7 @@ orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
   );
 });
 
-/** A member's picture, for the rest of the org: `/api/user/avatar` serves
- * only the session's own. Anyone who can see the members list may see the
- * pictures in it, and nobody else's: a user outside this org is a 404. */
+/** Anyone who can see the members list may see its pictures, nobody else's: another org's user is a 404. */
 orgRoutes.get("/:orgId/members/:userId/avatar", requireOrgRole("viewer"), async (c) => {
   const orgId = c.req.param("orgId");
   const userId = c.req.param("userId");
@@ -573,9 +477,8 @@ orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) =>
     c.req.param("orgId"),
     c.req.param("userId"),
   );
-  // Guarded inside the statement, not from a count read first: two admins
-  // promoting two different viewers at once would both find room. Demoting is
-  // always allowed, which is what makes the swap possible.
+  // Guarded inside the statement: two admins promoting two viewers at once would both find room.
+  // Demoting is always allowed, which is what makes the swap possible.
   const { limits } = await orgPlan(c.var.db, orgId);
   const written = await setMemberRoleWithinLimit(c.env, {
     orgId,
@@ -598,13 +501,10 @@ orgRoutes.delete("/:orgId/members/:userId", requireOrgRole("admin"), async (c) =
     c.req.param("userId"),
   );
   await c.var.db.delete(schema.orgMembers).where(memberWhere(orgId, targetId));
-  // One fewer member can bring the org back under its cap, which gives the
-  // demoted ones their roles back (#486).
+  // One fewer member can bring the org under its cap, which gives demoted ones their roles back (#486).
   await reconcileAfterDelete(c.env, c.var.db, orgId, "members");
   return c.json({ ok: true });
 });
-
-/* ---------------- invites ---------------- */
 
 orgRoutes.get("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   const rows = await c.var.db
@@ -622,7 +522,6 @@ orgRoutes.get("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   return c.json(rows.filter((r) => r.expiresAt > ts) satisfies InviteDTO[]);
 });
 
-/** Members + open (unexpired) invites, for the plan member cap. */
 async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Promise<number> {
   const ts = Date.now();
   const [members, pending] = await Promise.all([
@@ -640,18 +539,13 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** The addresses asked for, trimmed, lowercased, valid and once each. */
 function inviteEmails(raw: string[]): string[] {
   const valid = raw.map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_RE.test(e));
   return [...new Set(valid)];
 }
 
-/**
- * The open invites some of these addresses already have, by address. Asking
- * again for one sends that same invite (with the new role and a fresh week)
- * instead of a second row, so a retry after a failed send never duplicates
- * an invite or takes another seat.
- */
+// Asking again for one sends that same invite (new role, fresh week) instead of a second row, so a
+// retry after a failed send never duplicates an invite or takes another seat.
 async function openInviteTokens(
   db: DB,
   orgId: string,
@@ -694,13 +588,8 @@ const inviteDTO = (invite: NewInvite): InviteDTO => ({
   expiresAt: invite.expiresAt,
 });
 
-/**
- * Mails each invite on its own: one bounce must not hide which others went
- * out. Returns the addresses that failed, and the first error for the log.
- *
- * Each send spends the recipient's email budget first (#15); an address over
- * it counts as failed, so the dialog offers it again later.
- */
+// One bounce must not hide which others went out. Each send spends the recipient's email budget
+// first (#15); an address over it counts as failed.
 async function mailInvites(
   env: Env,
   orgName: string,
@@ -755,7 +644,6 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   const emails = inviteEmails(asked);
   const now = Date.now();
   const openToken = await openInviteTokens(db, orgId, emails, now);
-  // No address means one copy-only link, which takes a seat like any invite.
   await assertSeatsFor(
     db,
     orgId,
@@ -800,10 +688,8 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     .select({ name: schema.orgs.name })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
-  // The rows stay whatever the mail does, so the dialog can offer the failed
-  // addresses again and the retry lands on the same invites. An address that
-  // already had an invite is mailed again only when the caller asks (#15):
-  // otherwise repeating one request would mail the same inbox every time.
+  // The rows stay whatever the mail does, so the dialog can offer failed addresses again. An address
+  // that already had an invite is mailed again only when the caller asks (#15).
   const toMail = resend ? created : inserts;
   const reused = resend ? [] : created.flatMap((i) => (openToken.has(i.email) ? [i.email] : []));
   const { failed, error } = await mailInvites(c.env, org?.name ?? "rdyrct", toMail);
@@ -828,17 +714,9 @@ orgRoutes.delete("/:orgId/invites/:token", requireOrgRole("admin"), async (c) =>
   return c.json({ ok: true });
 });
 
-/** How many expired invites one sweep statement retires at a time. */
 const INVITE_SWEEP_CHUNK = 500;
 
-/**
- * Drops invites nobody opened before they expired (#103).
- *
- * An accepted invite is already deleted at accept time, so this is the other
- * half: no token and no invited address outlives the week it was good for.
- * Bounded batches for the same reason the click trim uses them, even though
- * an org's open invites are capped by its member limit.
- */
+// No token or invited address outlives the week it was good for (#103).
 export async function sweepExpiredInvites(env: Env): Promise<number> {
   const stmt = env.DB.prepare(
     `delete from invites where token in (
@@ -853,8 +731,6 @@ export async function sweepExpiredInvites(env: Env): Promise<number> {
   } while (changes > 0);
   return deleted;
 }
-
-/* ---------------- stats helpers ---------------- */
 
 function emptySeries(days: number): Map<string, number> {
   const map = new Map<string, number>();
@@ -892,8 +768,6 @@ function fillHours(rows: { hour: string; clicks: number }[]): SeriesPoint[] {
   return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
 }
 
-/** A figure against the figure before it, and the change between them.
- * `pct` is null when there is no earlier figure to compare against. */
 export interface Delta {
   current: number;
   previous: number;
@@ -914,9 +788,6 @@ function cleanDim(rows: { key: string; clicks: number }[]) {
 
 type DimRows = { key: string; clicks: number }[];
 
-/** The three breakdowns as both stats routes send them: a country the edge
- * could not place is "unknown", a referrer is its host, no referrer is
- * "direct". */
 function breakdowns(countries: DimRows, referrers: DimRows, devices: DimRows) {
   return {
     countries: cleanDim(countries).map((r) => ({
@@ -941,7 +812,6 @@ async function resolveMember(db: DB, orgId: string, targetId: string) {
   return { orgId, targetId };
 }
 
-/** An org's members, or one of them. */
 function memberWhere(orgId: string, targetId?: string) {
   const inOrg = eq(schema.orgMembers.orgId, orgId);
   return targetId === undefined ? inOrg : and(inOrg, eq(schema.orgMembers.userId, targetId));
@@ -1013,16 +883,12 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     linksClicked,
     countriesTotal,
   ] = await Promise.all([
-    // Bounded to the selected range (matching the previous period's
-    // equal-length window), not an all-time count: comparing an ever-growing
-    // total against one period's worth of prior clicks used to produce a
-    // meaningless delta (see issue #24).
+    // Bounded to the selected range, matching the previous period's window: an all-time total against
+    // one period of prior clicks gave a meaningless delta (#24).
     headlineTotals(db, scope, w),
     lastDayByHour(db, orgId, w.since24h),
     seriesRows(db, scope, w.since),
     hourSeriesRows(db, orgId, w.since24h),
-    // The same days as the breakdowns beside it (today's UTC day in the
-    // 24-hour view), so a range's top links and its countries agree.
     topLinkRows(db, orgId, w.since),
     everClicked(db, orgId),
     dimensionRows(db, scope, w.since, "country"),
@@ -1076,8 +942,6 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
   } satisfies OrgStats);
 });
 
-/* ---------------- recent clicks feed (dashboard) ---------------- */
-
 orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
   const raw = parseInt(c.req.query("limit") ?? "", 10);
   const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 8, 1), 50);
@@ -1105,8 +969,6 @@ orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
   );
 });
 
-/* ---------------- what changed (dashboard) ---------------- */
-
 orgRoutes.get("/:orgId/insights", requireOrgRole("viewer"), async (c) => {
   const orgId = c.req.param("orgId");
   const { limits } = await orgPlan(c.var.db, orgId);
@@ -1124,8 +986,6 @@ orgRoutes.get("/:orgId/insights", requireOrgRole("viewer"), async (c) => {
   return c.json(answer satisfies OrgInsights);
 });
 
-/* ---------------- tracked clicks this month (#387) ---------------- */
-
 orgRoutes.get("/:orgId/click-usage", requireOrgRole("viewer"), async (c) => {
   const orgId = c.req.param("orgId");
   const now = Date.now();
@@ -1142,21 +1002,17 @@ orgRoutes.get("/:orgId/click-usage", requireOrgRole("viewer"), async (c) => {
   } satisfies ClickUsage);
 });
 
-/* ---------------- per-link stats ---------------- */
-
 orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
   const slug = c.req.param("slug");
   const domain = c.req.query("domain");
   const { limits } = await orgPlan(db, orgId);
-  // Clamped to the plan the same way the org's stats are.
   const queryDays = c.req.query("days");
   const days = clampDays(queryDays ? parseInt(queryDays, 10) : null, limits.analyticsDays);
 
-  // Matched through link_addresses (any active address, not just the link's
-  // current primary), so a bookmarked or QR'd URL for an address that has
-  // since become a rename alias still lands on the right link (see #38).
+  // Matched through link_addresses (any active address), so a bookmarked or QR'd URL for an address
+  // that became a rename alias still lands on the right link (#38).
   const conditions = [
     eq(schema.linkAddresses.slug, slug),
     eq(schema.linkAddresses.orgId, orgId),
@@ -1197,15 +1053,12 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
     countriesTotal,
     campaignRows,
   ] = await Promise.all([
-    // Bounded to the selected range, same reasoning as the org stats route's
-    // headline figures above (see issue #24).
     headlineTotals(db, scope, w),
     seriesRows(db, scope, w.since),
     dimensionRows(db, scope, w.since, "country"),
     dimensionRows(db, scope, w.since, "referrer", STATS_LIST_LIMIT),
     dimensionRows(db, scope, w.since, "device"),
-    // The one raw read left: a single row off the (link_id, ts) index, for a
-    // timestamp the rollups only know to the hour.
+    // The one raw read left: the rollups only know a timestamp to the hour.
     db
       .select({ ts: schema.clicks.ts })
       .from(schema.clicks)
@@ -1239,8 +1092,6 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
   } satisfies LinkStats);
 });
 
-/* ---------------- invite acceptance (not org-scoped) ---------------- */
-
 export const inviteRoutes = new Hono<AppEnv>();
 inviteRoutes.use("*", jsonBodyLimit());
 
@@ -1272,19 +1123,12 @@ inviteRoutes.get("/:token", async (c) => {
   return c.json({
     orgName: invite.orgName,
     role: invite.role,
-    // An account with no name set reads as nobody in particular.
     invitedBy: invite.invitedBy?.trim() || null,
   } satisfies InvitePreview);
 });
 
-/**
- * Always throws: says why the guarded insert wrote nothing.
- *
- * The statement refuses for three reasons and reports none of them, so each
- * is read back here, in the order that answers the caller honestly. The token
- * comes last because it is the rarest and the only one that needs a second
- * read of a row we already had.
- */
+// The statement refuses for three reasons and reports none, so each is read back in the order that
+// answers honestly. The token comes last: it is the rarest and needs a second read.
 async function explainRefusedInvite(
   db: DB,
   invite: typeof schema.invites.$inferSelect,
@@ -1314,30 +1158,21 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
   const db = c.var.db;
   const invite = await lookupInvite(db, c.req.param("token"));
 
-  // Email invites are bound to the address they were sent to; link invites
-  // (email null) are bearer links anyone signed in can accept.
   if (invite.email && invite.email !== c.var.user!.email.toLowerCase())
     throw new HTTPException(403, {
       message:
         "This invite was sent to a different email address: sign in with the invited account",
     });
-  // ...and to an account that has proved it owns that address. Anyone can
-  // sign up as an address they do not own and sit on it unverified.
-  //
-  // A deployment with no email provider cannot verify any address, so there
-  // the token is the only proof there is: no mail went out, and the admin
-  // handed the link to that person. Requiring a check that cannot happen
-  // would lock every password account out of every email invite.
+  // ...and to an account that proved it owns the address: anyone can sign up as an address they do not own.
+  // With no email provider nothing can be verified and the token is the only proof, so the check is skipped.
   if (invite.email && !c.var.user!.emailVerified && emailConfigured(c.env))
     throw new HTTPException(403, {
       message: "Verify your email address before you accept this invite",
     });
 
-  // The cap may have been reached (or the plan downgraded) since the invite
-  // was created; recheck against actual members at accept time. That recheck,
-  // the "already a member" check and the token itself are all read inside one
-  // atomic statement (see #18 and #154), which spends the invite in the same
-  // transaction: two concurrent accepts of one link cannot both pass.
+  // The cap may have been reached (or the plan downgraded) since the invite was created. The recheck, the
+  // "already a member" check and the token are read inside one atomic statement (#18, #154) that spends
+  // the invite in the same transaction: two concurrent accepts cannot both pass.
   const { limits } = await orgPlan(db, invite.orgId);
   const accepted = await acceptInviteAtomically(c.env, {
     orgId: invite.orgId,

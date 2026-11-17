@@ -1,24 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
- * Every form Turnstile guards (#304) carries a slot for Cloudflare's
- * challenge, directly before its submit button, so a challenge appears in
- * the form rather than pinned to a corner of the screen far from it.
- *
- * This suite runs on Cloudflare's always-pass key, which never shows a
- * challenge, so it also pins the other half of the contract: the slot takes
- * no space and the form does not move, before or after the widget has run.
+ * The always-pass key never shows a challenge, so this also pins that the slot takes no
+ * space and the form does not move (#304).
  */
 
 type GuardedForm = {
   name: string;
   open: (page: Page) => Promise<void>;
-  /** The form (or card) the slot belongs to. */
   container: (page: Page) => Locator;
-  /** Its submit control, which the slot must come straight before. */
   submit: (container: Locator) => Locator;
-  /** Starts the widget by typing. Reset has none: it runs the widget only on
-   * submit, which replaces the form, so only its placement is checked. */
+  /** Reset has none: it runs the widget only on submit, which replaces the form. */
   start?: (page: Page) => Promise<void>;
 };
 
@@ -75,8 +67,6 @@ for (const form of FORMS) {
     const slot = container.locator("[data-turnstile-slot]");
     await expect(slot).toHaveCount(1);
 
-    // Straight before the button (or the row holding it): the next element
-    // after the slot's status line contains the submit control.
     const precedesSubmit = await slot.evaluate(
       (el, label) => {
         let next = el.nextElementSibling;
@@ -90,10 +80,8 @@ for (const form of FORMS) {
     await expect(slot).toHaveJSProperty("offsetHeight", 0);
     if (!form.start) return;
 
-    // Every height the container has, frame by frame, from now until 3s after
-    // the widget's script arrives. The invisible widget solves and is removed
-    // in about a second, so a shift that only lasts while it solves still
-    // shows up here as a second height.
+    // The invisible widget solves and is removed in about a second, so a shift that lasts
+    // only while it solves shows up as a second height.
     const heights = container.evaluate(
       (el) =>
         new Promise<number[]>((resolve) => {
@@ -110,8 +98,7 @@ for (const form of FORMS) {
           tick();
         }),
     );
-    // Prerendered pages ignore typing until they hydrate, so type again until
-    // the widget's script has loaded.
+    // Prerendered pages ignore typing until they hydrate, so retype until the script loads.
     const start = form.start;
     await expect(async () => {
       await start(page);

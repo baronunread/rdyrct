@@ -28,12 +28,6 @@ import {
   unreachableBilling,
 } from "./support";
 
-/**
- * What the redesigned platform-admin screens read: the usage range, the
- * per-row extras on the Users and Organizations lists, the link counts, and
- * Polar's plan changes in the audit log.
- */
-
 const DAY = 86_400_000;
 const dayKey = (daysAgo: number) => new Date(Date.now() - daysAgo * DAY).toISOString().slice(0, 10);
 
@@ -49,7 +43,6 @@ async function admin<T>(path: string, cookie: string): Promise<T> {
   return jsonBody<T>(res);
 }
 
-/** org-1 (owned by free-1, from freeOwnerCookie) with three links. */
 async function seedLinks() {
   const db = testDb();
   await db.insert(schema.links).values([
@@ -97,7 +90,6 @@ async function seedLinks() {
   ]);
 }
 
-/** Clicks on the rollups, which is all the admin figures read. */
 async function seedClicks() {
   const db = testDb();
   await db.insert(schema.clickDaily).values([
@@ -161,7 +153,6 @@ describe("GET /api/admin/usage?days=", () => {
     const cookie = await adminCookie();
     const before = await admin<AdminUsage>("/admin/usage?days=90", cookie);
 
-    // What banUser leaves behind: the person marked, their org disabled.
     await env.DB.prepare(
       "update user set banned = 1 where id = (select user_id from org_members where org_id = 'org-1' and role = 'owner')",
     ).run();
@@ -288,7 +279,6 @@ describe("GET /api/admin/orgs", () => {
         graceEndsAt: now - 10 * DAY,
         reconciledAt: now,
       },
-      // Inside its plan: a row is no verdict on its own.
       { orgId: "org-1", plan: "free", overJson: "{}", graceEndsAt: null, reconciledAt: now },
     ]);
     await db.insert(schema.domains).values([
@@ -320,7 +310,6 @@ describe("GET /api/admin/orgs", () => {
       lockedAt: null,
       domainStoppedAt: null,
     });
-    // Still in its grace period: the locked domain serves until it ends.
     expect(byId.get("org-grace")).toMatchObject({
       overPlan: true,
       graceEndsAt: now + 10 * DAY,
@@ -365,7 +354,6 @@ describe("GET /api/admin/links/counts and the list's filters", () => {
     const ids = async (query: string) =>
       (await admin<AdminLinkRow[]>(`/admin/links?q=${query}`, cookie)).map((l) => l.id);
     expect(await ids("&reported=1")).toEqual(["link-c"]);
-    // A DNS blocklist hit scores the same, and is not Google's.
     expect(await ids("&flagged=1&sort=risk")).toEqual(["link-a"]);
   });
 
@@ -374,8 +362,6 @@ describe("GET /api/admin/links/counts and the list's filters", () => {
     expect((await get("/admin/links/counts", cookie)).status).toBe(404);
   });
 });
-
-/* ─────────── plan changes in the audit log ─────────── */
 
 const auditRows = (cookie: string) => admin<AdminActionRow[]>("/admin/audit", cookie);
 
@@ -415,7 +401,6 @@ describe("plan.change", () => {
       { ...billingEnv(), BILLING: unreachableBilling },
     );
     expect(res.status).toBe(200);
-    // A second pass over the same plan has nothing new to say.
     await reconcileUser(env, testDb(), "free-1");
 
     const [entry, ...rest] = planChanges(await auditRows(await adminCookie()));

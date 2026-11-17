@@ -1,11 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "./cn";
 
-/**
- * Base loading placeholder: a pulsing, surface-colored block. Compose these
- * into skeletons that mirror the layout of the content being loaded, so real
- * data pops into place without the page jumping.
- */
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
@@ -16,7 +11,6 @@ export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>
   );
 }
 
-/** Live-region wrapper so skeletons are announced like the old spinner was. */
 export function SkeletonStatus({
   label = "loading…",
   className,
@@ -36,10 +30,8 @@ export function SkeletonStatus({
   );
 }
 
-/* organic variance for the first column, deterministic across renders */
 const firstColWidths = [22, 30, 18, 26, 34, 24];
 
-/** Placeholder for a data Table: a header row plus `rows` body rows. */
 export function TableSkeleton({ rows = 4, testId }: { rows?: number; testId?: string }) {
   return (
     <div

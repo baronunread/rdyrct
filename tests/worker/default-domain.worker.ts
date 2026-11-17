@@ -12,7 +12,6 @@ import {
   testDb,
 } from "./support";
 
-/** An owner of "org-1" with an active custom domain "go.example.com". */
 const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
 
 function setDefault(cookie: string, defaultDomainId: string | null) {

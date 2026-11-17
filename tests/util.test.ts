@@ -31,12 +31,6 @@ const UTM = {
 
 const readSource = (rel: string) => readFileSync(join(import.meta.dir, "..", rel), "utf8");
 
-/**
- * Pull the top-level path segments a set of route registrations owns. `re`'s
- * last capture group is the path string; `/`, `*`, and `:params` are dropped
- * (nothing can claim those as a slug). Used to derive the reserved set from
- * the actual routers instead of hardcoding a third copy of the list.
- */
 function topSegments(source: string, re: RegExp): string[] {
   const segs = new Set<string>();
   for (const m of source.matchAll(re)) {
@@ -62,7 +56,6 @@ describe("uid / randomSlug", () => {
     const slug = randomSlug();
     expect(slug).toHaveLength(7);
     expect(slug).toMatch(/^[23456789abcdefghjkmnpqrstuvwxyz]+$/);
-    // no lookalike characters ever appear
     expect(slug).not.toMatch(/[01lo]/);
   });
 });
@@ -80,29 +73,20 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
     expect(SLUG_RE.test("x".repeat(65))).toBe(false);
   });
 
-  // A top-level path is owned in two places: the React router (src/app/main.tsx)
-  // and the Worker (src/worker/index.ts, which owns /api on top of the SPA's
-  // routes). `blog` is reserved too, but not derivable from either router:
-  // /blog is a separate Worker (rdyrct-blog) with its own Workers Route, so
-  // this file never sees it. A slug that shadows an owned segment sits a
-  // stranger's redirect on one of our own pages, and both slug guards (the
-  // /:slug redirect and slug creation) only check RESERVED_SLUGS. So derive
-  // the owned segments from both routers and assert every one is reserved: a
-  // new route added without a matching entry fails here instead of becoming
-  // a claimable slug.
+  // Owned segments come from both routers (the Worker also owns /api). `blog`
+  // is reserved too but not derivable: /blog is a separate Worker. A new route
+  // without an entry fails here instead of becoming a claimable slug.
   test("every top-level route is reserved (drift guard)", () => {
-    // Only absolute paths (leading "/"): TanStack Router's code-based routes
-    // also carry relative child paths ("links", "orgs", ...) for routes
-    // nested under an already-reserved parent, and those aren't top-level.
+    // TanStack Router also carries relative child paths ("links", "orgs") under
+    // an already-reserved parent; those aren't top-level.
     const reactRoutes = topSegments(readSource("src/app/main.tsx"), /path:\s*"(\/[^"]*)"/g);
     const workerRoutes = topSegments(
       readSource("src/worker/index.ts"),
       /\bapp\.(?:all|get|post|put|patch|delete|on|route|use)\(\s*(?:\[[^\]]*\]\s*,\s*)?"([^"]+)"/g,
     );
 
-    // Guard against a regex that silently matches nothing after a refactor,
-    // which would make the assertion below vacuously pass. `dashboard` is
-    // only in the React router; `api` is only in the Worker.
+    // Guards against a regex that matches nothing, which would make the
+    // assertion below pass vacuously.
     expect(reactRoutes).toContain("dashboard");
     expect(workerRoutes).toContain("api");
 
@@ -111,10 +95,8 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
     expect(unreserved).toEqual([]);
   });
 
-  // The Worker 404s every path not in APP_ROUTES/SITE_ONLY_PATHS
-  // (src/shared/spa-routes.ts), so a page the router gains without an entry
-  // there would 404 on a reload. Admin's children are the only relative
-  // paths; they hang off /admin.
+  // The Worker 404s every path not in APP_ROUTES/SITE_ONLY_PATHS, so a page
+  // without an entry would 404 on reload. Admin's children hang off /admin.
   test("the Worker's route list is the router's (drift guard)", () => {
     const main = readSource("src/app/main.tsx");
     const absolute = (source: string) =>

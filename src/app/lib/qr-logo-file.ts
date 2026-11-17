@@ -1,14 +1,7 @@
-/**
- * Turning a picked image into the logo a QR code carries: an optimized SVG
- * stays vector, anything else becomes a compressed square WebP, and the
- * result goes to the organization's bucket, or stays in the browser for
- * the free generator (`readPreparedQrLogo`).
- */
 import { QR_LOGO_MAX_BYTES, QR_LOGO_MAX_DIMENSION } from "@/shared/types";
 import { uploadQrLogo } from "./api";
 
-/** Strip source metadata and animation by drawing the image into a fixed
- * square canvas. The transparent padding keeps non-square marks whole. */
+// The transparent padding keeps non-square marks whole.
 async function rasterize(file: File): Promise<File> {
   const image = await createImageBitmap(file);
   try {
@@ -47,7 +40,6 @@ function isSvg(file: File) {
   return file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
 }
 
-/** Keep vector marks scalable while removing executable and linked content. */
 async function optimizeSvg(file: File): Promise<File> {
   const { optimize } = await import("svgo/browser");
   const optimized = optimize(await file.text(), {
@@ -91,15 +83,12 @@ async function prepare(file: File): Promise<File> {
   return compressed;
 }
 
-/** Prepares the picked file and uploads it to the org: the URL to store. */
 export async function uploadPreparedQrLogo(orgId: string, file: File): Promise<string> {
   // Dragged files bypass an input's accept filter, so check the type here.
   if (!file.type.startsWith("image/")) throw new Error("Logo must be an image file");
   return uploadQrLogo(orgId, await prepare(file));
 }
 
-/** Prepares the picked file the same way and keeps it in the browser, as a
- * data URL: for a plan that may try a logo but not store one. */
 export async function readPreparedQrLogo(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("Logo must be an image file");
   const prepared = await prepare(file);

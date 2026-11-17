@@ -4,10 +4,6 @@ import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
-/**
- * Truncated text shows its full value in the app's own tooltip, and only
- * when it is cut off: a destination that fits gets none.
- */
 test("a cut-off destination gets a tooltip, one that fits does not", async ({ page }) => {
   await signUpAndVerify(page, `overflow-tip-${Date.now()}@gmail.com`, password);
 

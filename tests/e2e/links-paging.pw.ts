@@ -5,23 +5,13 @@ import { queryRows } from "./db";
 
 const password = "test-password-123";
 
-/**
- * Paging the links table (#19).
- *
- * The table asks for one page and the server decides what is on it, so the
- * things worth checking in a browser are that the controls walk pages
- * rather than slices, and that a search reaches links no page has shown.
- */
 test("walks pages with a cursor, and searches past the first one", async ({ page }) => {
   const email = `paging-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
 
-  // Thirty links through the API rather than thirty trips through the
-  // dialog: what is under test is reading them back a page at a time.
   await page.goto("/links");
-  // This account's organization, not whichever one is first in the table:
-  // the suite runs in parallel, so "LIMIT 1" is another test's org and the
-  // creates come back 403.
+  // Not "LIMIT 1": the suite runs in parallel, so that is another test's org
+  // and the creates come back 403.
   const [{ id: org }] = await queryRows<{ id: string }>(
     page,
     `SELECT o.id FROM orgs o
@@ -39,7 +29,6 @@ test("walks pages with a cursor, and searches past the first one", async ({ page
 
   await page.reload();
 
-  // A page, not the table: twenty-five rows and a way forward.
   await expect(page.getByText(/^1 to 25( of 30)?$/)).toBeVisible();
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByText(/^26 to 30( of 30)?$/)).toBeVisible();

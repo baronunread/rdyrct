@@ -1,18 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { eccFor, imageOptionsFor, resolveLook } from "../src/app/lib/qr-look";
 
-/**
- * qr-code-styling turns the logo into a data URI by fetching it with
- * XMLHttpRequest (its `saveAsBlob` step). A browser refuses that request for
- * a `data:` or `blob:` URL, the XHR never completes, and the promise the
- * drawing waits on never resolves: the code comes out empty. Measured in a
- * browser at the time: 439 paths with no logo, 0 with a data-URL one, 398
- * with `saveAsBlob: false`.
- *
- * So a logo that is already inline says so, and the library skips the step.
- * A logo that lives at a URL keeps the default, because a downloaded SVG has
- * to carry the image rather than a link to it.
- */
+// qr-code-styling fetches a logo with XHR, which a browser refuses for data:
+// and blob: URLs, leaving the code empty. An inline logo skips that step; a
+// URL logo keeps it so a downloaded SVG carries the image.
 describe("the image options a logo needs", () => {
   test("switches off the fetch step for a data URL", () => {
     const options = imageOptionsFor(resolveLook({ logo: "data:image/webp;base64,AAAA" }));
@@ -40,13 +31,6 @@ describe("the image options a logo needs", () => {
   });
 });
 
-/**
- * A logo covers the middle of the code, so it needs the redundancy that
- * survives losing 30% of the modules. Nothing else does, and paying for it
- * anyway costs size: the same short link is 33 modules a side at "H" against
- * 25 at "M", so a logo-less code was throwing away a third of its module
- * width for damage that cannot happen.
- */
 describe("the error correction a look needs", () => {
   test("asks for H when a logo covers the middle", () => {
     expect(eccFor(resolveLook({ logo: "/api/orgs/o1/qr-logo/a.webp" }))).toBe("H");

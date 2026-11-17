@@ -25,7 +25,6 @@ import { captureStorageQueue } from "./support";
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0]);
 const AVATAR_URL_RE = /^\/api\/user\/avatar(\?v=\d+)?$/;
 
-// A real 1x1 transparent PNG (its IHDR is well-formed, so dimensions() reads it).
 const PNG_1x1 = Uint8Array.from(
   atob(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -33,7 +32,6 @@ const PNG_1x1 = Uint8Array.from(
   (ch) => ch.charCodeAt(0),
 );
 
-/** The same PNG with its IHDR width rewritten to `w`. */
 function pngWithWidth(w: number): Uint8Array {
   const b = PNG_1x1.slice();
   new DataView(b.buffer).setUint32(16, w);
@@ -235,7 +233,6 @@ describe("GET /api/orgs/:orgId/members/:userId/avatar", () => {
   beforeEach(applyTestMigrations);
   afterEach(() => reset());
 
-  /** A second user with a stored picture, in `org`'s members when given. */
   async function seedPictured(org: string | null) {
     const statements = [
       env.DB.prepare(
@@ -296,7 +293,6 @@ describe("GET /api/orgs/:orgId/members/:userId/avatar", () => {
     ).run();
     await seedPictured("org-2");
     expect((await get(cookie, "/api/orgs/org-1/members/pic-1/avatar")).status).toBe(404);
-    // Nor through an org the caller is not in.
     const res = await get(cookie, "/api/orgs/org-2/members/pic-1/avatar");
     expect(res.ok).toBe(false);
   });

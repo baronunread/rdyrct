@@ -153,8 +153,6 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   };
 }
 
-/** The person in two lines beside their picture (rdyrct-design, "Tables
- * earn two lines"): the name in bold over the address in mono. */
 function PersonCell({
   title,
   detail,
@@ -179,8 +177,6 @@ function PersonCell({
   );
 }
 
-/** Somebody who has not joined yet: an empty, dashed place where their
- * picture will be. */
 function PendingAvatar() {
   return (
     <span
@@ -192,14 +188,9 @@ function PendingAvatar() {
   );
 }
 
-/** The look of an inline select: plain text at rest, a lifted field on
- * hover or when open, so a table of roles reads as a list and not a form. */
 const roleFace =
   "flex h-8 max-sm:h-10 min-w-[6.5rem] items-center justify-between gap-1.5 rounded-[7px] pr-2 pl-2.5 text-sm transition-[background-color,box-shadow] duration-150 [@media(hover:hover)]:group-hover/role:bg-surface [@media(hover:hover)]:group-hover/role:smooth-shadow-ring-xs";
 
-/** The role, changed where it is shown. The owner's row has none: the
- * owner is not chosen here. On a phone, with no column for the trash, the
- * same menu is also where a member is removed. */
 function RoleSelect({
   member,
   isSelf,
@@ -248,8 +239,6 @@ function RoleSelect({
   );
 }
 
-/** Row actions that appear on hover where there is hover, and stay put on
- * a touch screen, which has none. */
 const rowActions =
   "flex justify-end gap-0.5 transition-opacity duration-150 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:focus-within:opacity-100";
 
@@ -330,8 +319,6 @@ function LastActive({ ts }: { ts: number | null }) {
   return <>{label}</>;
 }
 
-/** An invite nobody has accepted yet, in the same table as the people it
- * will become: who it went to, the role it gives, and when it runs out. */
 function InviteRow({
   invite,
   columns,
@@ -355,7 +342,6 @@ function InviteRow({
         />
       </Td>
       <Td className="py-2">
-        {/* A phone has no actions column: the role opens them instead. */}
         <span className="hidden pl-2.5 text-sm sm:inline">{ROLE_LABEL[invite.role]}</span>
         <div className="group/role inline-block sm:hidden">
           <Menu
@@ -470,8 +456,6 @@ function MemberTable({
             onRemove={() => management.setRemoving({ userId: m.userId, name: m.name })}
           />
         ))}
-        {/* Not sorted with the people: an invite has no name, no role
-            history and no join date, so it would only scatter them. */}
         {invites.map((inv) => (
           <InviteRow
             key={inv.token}
@@ -486,8 +470,6 @@ function MemberTable({
   );
 }
 
-/** Platform admins act as owner everywhere; otherwise fall back to the
- * caller's actual role in this org, or "member" while org/role is unknown. */
 function resolveMyRole(
   isPlatformAdmin: boolean | undefined,
   orgRole: OrgRole | undefined,
@@ -503,8 +485,7 @@ function canManageOrg(role: OrgRole): boolean {
 type MemberManagement = ReturnType<typeof useMemberManagement>;
 type SeatSummary = { limit: number; taken: number; left: number; invited: ReadonlySet<string> };
 
-/** The people or the open invites failed to load. Either drawn as an empty
- * list reads as people gone, so the table says it failed instead (#487). */
+/** A failed load drawn as an empty list reads as people gone, so the table says it failed (#487). */
 function membersFailed(management: MemberManagement, canManage: boolean): boolean {
   const { members, invites } = management;
   return (members.isError && !members.data) || (canManage && invites.isError && !invites.data);
@@ -523,20 +504,15 @@ function rowCount(rows: readonly object[] | undefined): number {
 
 function seatSummary(org: UserOrg, management: MemberManagement): SeatSummary {
   const limit = org ? org.limits.members : 0;
-  // An org at or over its cap cannot take another member: the server refuses
-  // the invite with a 402, so offering the form is offering an error (#161).
-  // Counted from the same figure the server uses, members plus open invites.
+  // At or over the cap the server refuses an invite with a 402 (#161), so offering the form offers an error.
   const taken = rowCount(management.members.data) + rowCount(management.invites.data);
-  // Addresses with an open invite already hold their seat: asking again
-  // resends the same invite, so the dialog must not count them twice.
+  // Addresses with an open invite already hold a seat: asking again resends, so do not count them twice.
   const invited = new Set(
     (management.invites.data ?? []).flatMap((i) => (i.email ? [i.email.toLowerCase()] : [])),
   );
   return { limit, taken, left: Math.max(0, limit - taken), invited };
 }
 
-/** The seat count under the title. A self-hosted instance has no limit to
- * count against, so it counts people instead. */
 function seatLine(org: UserOrg, canManage: boolean, seats: SeatSummary, members: number): string {
   if (org.plan === "unlimited" || !canManage) {
     return members === 1 ? "1 person" : `${members.toLocaleString("en-US")} people`;
@@ -545,8 +521,6 @@ function seatLine(org: UserOrg, canManage: boolean, seats: SeatSummary, members:
   return seats.taken > seats.limit ? `${line} (over the limit)` : line;
 }
 
-/** "Invite" opens the dialog; the chevron makes a link straight away, for
- * whichever role, without the dialog in between. */
 function InviteButton({
   org,
   seats,
@@ -603,7 +577,7 @@ function MembersHeader({
     <PageHeader
       title="Members"
       sub={
-        // No count from a list that failed: "0 of 3" would be a wrong answer.
+        // No count from a list that failed: "0 of 3" would be wrong.
         membersFailed(management, canManage) ? undefined : (
           <span className="tnum">
             {seatLine(org, canManage, seats, rowCount(management.members.data))}
@@ -684,8 +658,6 @@ function memberCanManage(
   return canManageOrg(myRole) && !org.locked;
 }
 
-/** Everything the members page's first frame reads (see
- * lib/route-preload.ts): the roster, and open invites for whoever manages it. */
 export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
   return settle([
     qc.ensureQueryData(membersQuery(orgId)),
@@ -696,12 +668,10 @@ export function preload(qc: QueryClient, orgId: string, { org, user }: PageConte
 export function MembersPage() {
   const { org } = useCurrentOrg();
   const currentUser = useCurrentUser();
-  // A locked org accepts no writes from anyone, its owner included (#160).
   const canManage = memberCanManage(org, currentUser.data);
   const management = useMemberManagement(org ? org.id : "", canManage);
 
-  // A cached shell is not permission to invite or change a role. Keep the
-  // route's whole shape in place until /user gives the current answer.
+  // A cached shell is not permission to invite or change a role.
   if (currentUser.isLoading) return <MembersSkeleton />;
   if (!org) return <NoOrgState />;
   return (
@@ -715,11 +685,6 @@ export function MembersPage() {
   );
 }
 
-/** Why the Invite button is greyed out once every seat is taken, and the
- * way out. A line under the title, not a card: when the org is over its
- * plan the notice above the page already carries the facts, and one notice
- * is the rule. Says which of the two situations it is, because "full" and
- * "over" need different things done about them. */
 function SeatsFullNotice({
   org,
   memberLimit,
@@ -741,7 +706,6 @@ function SeatsFullNotice({
   );
 }
 
-/** The tooltip on a disabled invite control. */
 function fullSeatsHint(org: UserOrg, memberLimit: number): string {
   return `The ${org.tier} plan allows ${memberLimit} members, counting open invites`;
 }

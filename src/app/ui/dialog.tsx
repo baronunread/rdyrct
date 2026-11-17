@@ -11,7 +11,6 @@ const subscribePhone = (onChange: () => void) => {
   return () => query.removeEventListener("change", onChange);
 };
 
-/** True below the sm breakpoint, where a dialog opens as a bottom sheet. */
 export function usePhone(): boolean {
   return useSyncExternalStore(
     subscribePhone,
@@ -20,7 +19,6 @@ export function usePhone(): boolean {
   );
 }
 
-/** How wide a dialog gets on a desktop. A phone always gets the full width. */
 export type DialogSize = "sm" | "md" | "lg" | "wide" | "xl";
 const WIDTHS = {
   sm: "max-w-[420px]",
@@ -30,7 +28,6 @@ const WIDTHS = {
   xl: "max-w-[860px]",
 } satisfies Record<DialogSize, string>;
 
-/** The title, for a `bare` dialog that lays out its own header. */
 export function DialogTitle({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <BaseDialog.Title className={cn("text-base font-semibold text-balance", className)}>
@@ -39,7 +36,6 @@ export function DialogTitle({ children, className }: { children: ReactNode; clas
   );
 }
 
-/** The close button, for a `bare` dialog that places its own. */
 export function DialogClose({ className }: { className?: string }) {
   return (
     <BaseDialog.Close
@@ -54,9 +50,7 @@ export function DialogClose({ className }: { className?: string }) {
   );
 }
 
-// Animated with motion, matching the billing overlay: backdrop fade + popup
-// fade/scale from 0.95 over 0.2s, on both entry and exit. Base UI's Portal is
-// kept mounted so AnimatePresence can play the exit before unmounting.
+// Base UI's Portal is kept mounted so AnimatePresence can play the exit before unmounting.
 export function Dialog({
   open,
   onOpenChange,
@@ -72,36 +66,18 @@ export function Dialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   children: ReactNode;
-  /** Same as `size="wide"`. */
   wide?: boolean;
   size?: DialogSize;
-  /**
-   * No padding and no header: the children lay the whole dialog out and
-   * place `DialogTitle` and `DialogClose` themselves (the link editor, whose
-   * close button sits in its side column). `title` goes unused.
-   */
   bare?: boolean;
-  /** Where focus goes on open, when not the first control: the typed check
-   * of a confirmation, say, rather than its close button. */
   initialFocus?: RefObject<HTMLElement | null>;
-  /** Bumps this dialog a full stacking level above the default, for one that
-   * can open while another Dialog is still open underneath it (e.g. the
-   * same-destination match, over the link editor). Without this, both
-   * dialogs render at the same z-index, so the top one's own backdrop sits
-   * *below* the bottom one's popup instead of dimming/blurring it — leaving
-   * the bottom dialog fully sharp and undimmed, which reads wrong, and
-   * hiding it outright would just flash the backdrop's blur off and back on
-   * as the two dialogs swap. Nested instead keeps both backdrops: the top
-   * one's now covers the bottom dialog's popup too, same as it covers the
-   * page. */
+  // Without this both dialogs render at the same z-index, so the top one's backdrop sits below
+  // the bottom one's popup and does not dim it. Hiding the bottom one would flash its blur
+  // off and back on.
   nested?: boolean;
 }) {
-  // On a phone the dialog is a sheet from the bottom edge, with a handle,
-  // so the thumb reaches it (rdyrct-design, "On a phone").
   const phone = usePhone();
   return (
     <LazyMotion features={domAnimation}>
-      {/* Under reduced motion the dialog fades but never scales. */}
       <MotionConfig reducedMotion="user">
         <AnimatePresence>
           {open && (
@@ -124,9 +100,6 @@ export function Dialog({
                 <BaseDialog.Popup
                   className={cn(
                     "fixed overscroll-none bg-surface text-text smooth-shadow-ring-2xl",
-                    // A bare dialog scrolls as one (the link editor's footer
-                    // sticks to its bottom); any other scrolls its body only,
-                    // below.
                     bare ? "overflow-y-auto" : "flex flex-col overflow-hidden",
                     phone
                       ? "inset-x-0 bottom-0 max-h-[92dvh] rounded-t-[22px] pt-2"
@@ -152,8 +125,7 @@ export function Dialog({
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         // The way out travels less and ends sooner than the way
-                        // in: the dialog's job is done, so it should not hold
-                        // the page up.
+                        // in: the dialog's job is done, so it should not hold the page up.
                         exit={{
                           opacity: 0,
                           scale: 0.98,
@@ -176,12 +148,7 @@ export function Dialog({
                         <DialogTitle>{title}</DialogTitle>
                         <DialogClose className="-m-1.5" />
                       </div>
-                      {/* The body scrolls under a title that stays. It runs to
-                          the popup's sides, so its scrollbar sits on the edge,
-                          and starts below the title and ends above the bottom
-                          padding, so the bar never runs into the rounded
-                          corners. py-1 keeps a focus ring at its top or bottom
-                          from being cut off. */}
+                      {/* py-1 keeps a focus ring at the top or bottom from being cut off. */}
                       <div
                         className={cn(
                           "-my-1 min-h-0 overflow-y-auto overscroll-contain py-1",

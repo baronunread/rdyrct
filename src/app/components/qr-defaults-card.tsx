@@ -40,8 +40,6 @@ const EMPTY: QrValues = {
   qrLogoSize: "",
 };
 
-/** The org's current QR defaults, as the string-only form the rows edit
- * (reuses orgQrFrom's already-tested `??` defaulting). */
 function initialQrValues(org?: Org): QrValues {
   const qr = orgQrFrom(org);
   return {
@@ -59,8 +57,6 @@ const same = (a: QrValues, b: QrValues) =>
   // SAFETY: both are QrValues, so they share one fixed set of keys.
   (Object.keys(a) as (keyof QrValues)[]).every((k) => a[k] === b[k]);
 
-/** `tried`: a style tried on Free before a checkout that did not finish
- * (lib/pending-qr-style.ts), so coming back shows it again, still unsaved. */
 function useQrDefaultsForm(orgId: string, org: Org, tried: QrValues | null = null) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -107,12 +103,6 @@ function useQrDefaultsForm(orgId: string, org: Org, tried: QrValues | null = nul
   };
 }
 
-/**
- * The organization's QR defaults: the same rows as a link's QR editor, with
- * the preview and whatever `children` add under it in a side column (on a
- * phone, above the rows). `localLogo` keeps a picked logo in the browser,
- * for a plan that may try one but not store it.
- */
 function QrDefaultsEditor({
   form,
   canEdit,
@@ -123,7 +113,6 @@ function QrDefaultsEditor({
   form: ReturnType<typeof useQrDefaultsForm>;
   canEdit: boolean;
   localLogo?: boolean;
-  /** One quiet line under the preview. */
   caption?: string;
   children?: ReactNode;
 }) {
@@ -156,7 +145,6 @@ function QrDefaultsEditor({
   );
 }
 
-/** The code on true white, whatever the theme, as it will be printed. */
 function QrDefaultsPreview({ values }: { values: QrValues }) {
   const linkHost = useLinkHost();
   return (
@@ -170,8 +158,6 @@ function QrDefaultsPreview({ values }: { values: QrValues }) {
   );
 }
 
-/** Under the preview on a plan with `qrCustom`: the contrast check, then
- * Reset and Save for an admin, or who can change these for anyone else. */
 function QrDefaultsActions({
   form,
   canEdit,
@@ -209,11 +195,8 @@ function QrDefaultsActions({
 
 const QR_HINT = "Every new QR code starts like this. Any link can change it.";
 
-/**
- * The words in the save row of a plan without `qrCustom`. "Kept" is an org
- * that set defaults on a paid plan and has since gone to Free (#162): they
- * still apply, so it is told that rather than offered what it already has.
- */
+/** "Kept": an org that set defaults on a paid plan and went to Free (#162). They still
+ * apply, so it is told that rather than offered what it already has. */
 function tryRowCopy({
   kept,
   dirty,
@@ -245,7 +228,6 @@ function tryRowCopy({
 
 const QR_TRY_TITLE = "Every new QR code starts like this";
 
-/** The plan picker, opened with a style tried (Save) or from the row alone. */
 const PICKER_SAVE = {
   title: "Save this QR style",
   why: "Pick a plan. Your style is saved once you've paid.",
@@ -255,13 +237,6 @@ const PICKER_TRY = {
   why: "Your logo, colours and dots on every new QR code.",
 };
 
-/**
- * The card on a plan without `qrCustom`: the real editor, fully usable, to
- * try a style on the live preview (a logo stays in the browser). Its last
- * row says nothing is saved and, for the owner who pays, opens the plan
- * picker; the style waits in sessionStorage through checkout and is saved
- * when the org comes back on a paid plan (lib/pending-qr-style.ts).
- */
 function TryQrDefaults({
   form,
   orgId,
@@ -295,8 +270,6 @@ function TryQrDefaults({
           data-testid="qr-save-row"
           className="flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-3"
         >
-          {/* Keyed, so a change of state fades the new words in where the
-              old ones were: same row, same height, nothing moves. */}
           <div key={`${dirty}`} className="swap-in min-w-0 flex-1 basis-64" aria-live="polite">
             <p className="text-sm font-medium">{copy.title}</p>
             <p className="mt-0.5 text-xs text-pretty text-muted">{copy.line}</p>
@@ -347,7 +320,6 @@ export function QrDefaultsCard() {
   const isPlatformAdmin = currentUser.data?.user.isAdmin;
   const isAdmin = canAdminOrg(isPlatformAdmin, org?.role, org?.locked);
   const hasQrCustom = org ? org.limits.qrCustom : false;
-  // A style tried before checkout lands here once the plan allows it.
   useSavePendingQrStyle();
 
   // SAFETY: Organization renders this card only once the current org has
@@ -359,8 +331,7 @@ export function QrDefaultsCard() {
       <TryQrDefaults
         form={form}
         orgId={orgId}
-        // Defaults the org already set keep applying on a plan that no
-        // longer allows new ones (#162).
+        // Defaults set earlier keep applying on a plan that no longer allows new ones (#162).
         kept={hasAnyQrValue(initialQrValues(org))}
         isOwner={org?.role === "owner"}
       />

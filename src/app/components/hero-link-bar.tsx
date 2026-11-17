@@ -1,11 +1,3 @@
-/**
- * The pieces both hero cards are built from, the anonymous shortener and the
- * signed-in quick create: one field with a prefix that says where the link
- * goes (the shared domain for a stranger, the organization for an account),
- * and, once a link is made, the panel that opens under it with the link to
- * copy, its downloads and its QR code. Shared so signing in swaps the prefix
- * and the footer and nothing else.
- */
 import {
   lazy,
   Suspense,
@@ -27,10 +19,8 @@ import { CHALLENGE_LABEL } from "../lib/turnstile";
 import { cn } from "../ui/cn";
 import { Tooltip } from "@/app/ui/tooltip";
 
-// A QR code is useful only once a link exists. Keeping the renderer behind
-// that state avoids loading its encoder for everyone who only reads the page.
-// A failed load (usually a stale tab after a deploy) shows no QR rather than
-// reaching the error boundary.
+// Loaded only once a link exists, to spare readers the encoder. A failed load (a stale tab
+// after a deploy) shows no QR instead of reaching the error boundary.
 type Qr = typeof import("./qr");
 const loadQr = () => import("./qr").catch(() => null);
 const QRPreview = lazy(
@@ -47,15 +37,9 @@ function NoQr() {
   return null;
 }
 
-/** The card both heroes sit in: a frame around the bar and what follows. */
 export const HERO_CARD =
   "w-full max-w-xl rounded-2xl bg-surface p-2 text-left smooth-shadow-ring-sm";
 
-/**
- * The field, its prefix and the button in one bordered line, like a
- * launcher. The input carries no border of its own: the bar is the field.
- * On a phone the button drops under the field rather than squeezing it.
- */
 export function HeroBar({
   prefix,
   input,
@@ -72,25 +56,16 @@ export function HeroBar({
   inputRef?: Ref<HTMLInputElement>;
   disabled: boolean;
   busy: boolean;
-  /** Why the button is dead, when it is for a reason other than an empty field. */
   title?: string;
-  /** A link has been made already, so the field asks for the next one. */
   again?: boolean;
-  /** A submission waits on the Turnstile challenge above the bar; `busy`
-   * is then false, since the button says so instead of spinning. */
   waiting?: boolean;
-  /** Why the address was refused: the bar turns danger and the reason sits
-   * at the end of the field, so nothing under the bar moves. */
   error?: BarError | null;
 }) {
   const reasonId = useId();
   const invalid = invalidAria(error?.reason, reasonId);
   return (
-    // The marked input turns the bar danger: the state lives on the input.
     <div className="group/bar flex flex-col gap-2 rounded-xl border border-border bg-bg p-1 focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_22%,transparent)] has-[[aria-invalid=true]]:border-danger has-[[aria-invalid=true]]:focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--danger)_18%,transparent)] sm:flex-row sm:items-center sm:gap-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-1">
-        {/* On a phone the prefix steps aside while the field is marked, so
-            the reason and what was typed both keep room. */}
         <span className="contents group-has-[[aria-invalid=true]]/bar:max-sm:hidden">{prefix}</span>
         <input
           ref={inputRef}
@@ -103,14 +78,12 @@ export function HeroBar({
           placeholder={again ? "Paste another…" : "Paste a long link…"}
           {...input}
           {...invalid}
-          // The bar draws the focus ring, so the field drops the global one
-          // (unlayered in styles.css, hence the !).
+          // The bar draws the focus ring; the ! beats the unlayered global one in styles.css.
           className="h-9 min-w-0 flex-1 bg-transparent px-1 text-base text-text outline-none! placeholder:text-placeholder sm:text-sm"
         />
         {error && <BarReason id={reasonId} error={error} />}
       </div>
-      {/* A disabled button takes no pointer events, so the reason sits on
-          a wrapper; grid keeps the button as wide as it was. */}
+      {/* A disabled button takes no pointer events, so the reason sits on a wrapper. */}
       <Tooltip content={title}>
         <span className="grid">
           <Button
@@ -129,8 +102,6 @@ export function HeroBar({
   );
 }
 
-/** What was wrong with the address: a few words, and the server's whole
- * sentence for screen readers and on hover. */
 export type BarError = { reason: string; detail: string };
 
 function BarReason({ id, error }: { id: string; error: BarError }) {
@@ -141,8 +112,6 @@ function BarReason({ id, error }: { id: string; error: BarError }) {
   );
 }
 
-/** "Shorten it" with its Enter hint, or what is left to do while a
- * submission waits on the Turnstile challenge. */
 function ShortenLabel({ waiting }: { waiting: boolean }) {
   if (waiting) return CHALLENGE_LABEL;
   return (
@@ -158,7 +127,6 @@ function ShortenLabel({ waiting }: { waiting: boolean }) {
   );
 }
 
-/** The shared domain as the bar's prefix: what the slug will follow. */
 export function HostPrefix({ host }: { host: string }) {
   return (
     <span className="shrink-0 rounded-md bg-surface-2 px-2 py-1 font-mono text-xs text-muted">
@@ -167,12 +135,7 @@ export function HostPrefix({ host }: { host: string }) {
   );
 }
 
-/**
- * The link just made: the URL in the wide column because that is what gets
- * copied, with where it points and the downloads under it, and the QR beside
- * it at a size a phone can actually read. The host truncates, never the
- * slug: on a narrow screen the slug is the part that identifies the link.
- */
+/** The host truncates, never the slug: on a narrow screen the slug identifies the link. */
 export function MadeLinkPanel({
   url,
   slug,
@@ -181,16 +144,12 @@ export function MadeLinkPanel({
 }: {
   url: string;
   slug: string;
-  /** One quiet line under the link: where it points, or when it expires. */
   detail: ReactNode;
-  /** Extra buttons after the downloads, e.g. Edit for an account. */
   actions?: ReactNode;
 }) {
   const toast = useToast();
   const host = url.replace(/^https?:\/\//, "").slice(0, -slug.length);
   return (
-    // The link arrives rather than appearing: it is the answer to the button
-    // just pressed, and a panel that pops into the layout reads as a jump.
     <div className="anon-link-in grid grid-cols-shortener items-start gap-3 px-2 pt-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 py-1.5 pr-1.5 pl-3">
@@ -218,7 +177,6 @@ export function MadeLinkPanel({
           {actions}
         </div>
       </div>
-      {/* Smaller on a phone so the slug keeps its width. */}
       <Suspense
         fallback={<div className="size-20 shrink-0 sm:size-26" aria-label="Preparing QR code" />}
       >
@@ -228,8 +186,6 @@ export function MadeLinkPanel({
   );
 }
 
-/** The quiet line under the bar: what is true now on the left, the way on
- *  the right. Ruled off when it follows a made link. */
 export function HeroFooter({
   children,
   action,

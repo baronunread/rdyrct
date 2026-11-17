@@ -12,18 +12,8 @@ import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
 import type { InvitesCreated, LinkDTO, LinkInput } from "@/shared/types";
 
-/* The two things ⌘K can do from what you type, rather than from a row:
- * make a link from a pasted URL, and invite a typed email address. */
-
 type Match = { input: LinkInput; matchedLinks: LinkDTO[] };
 
-/**
- * Creating a link from the palette follows the dashboard's quick-create flow
- * exactly: on success the QR-and-short-URL dialog opens; when the
- * destination already has a link the same "add this address to it" dialog
- * offers to alias it or make a separate link (#38). Returns `start(url)` and
- * the two dialogs to render.
- */
 // fallow-ignore-next-line complexity
 export function useLinkCreateFlow() {
   const { orgId, defaultDomainId, orgQr } = useOrgLimits();
@@ -31,9 +21,8 @@ export function useLinkCreateFlow() {
   const { create } = useLinkMutations(orgId);
   const [created, setCreated] = useState<LinkDTO | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
-  // The palette closes on click, so without this the first request runs with
-  // nothing on screen. True only for the opening request; the merge/separate
-  // resubmits show their spinner inside SameDestinationDialog.
+  // The palette closes on click, so the first request would run with nothing on screen.
+  // True only for the opening request.
   const [starting, setStarting] = useState(false);
 
   const submit = (input: LinkInput, extra: Partial<LinkInput>) =>
@@ -93,11 +82,6 @@ export function useLinkCreateFlow() {
   return { start, dialogs };
 }
 
-/**
- * Invite an email to the current org straight from the palette: the same
- * endpoint the members page posts to, role `member`. Roles, resending and
- * revoking stay on the members page; this is just the fast path.
- */
 export function useInviteFlow(close: () => void): (email: string) => void {
   const { org } = useCurrentOrg();
   const toast = useToast();

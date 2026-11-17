@@ -5,22 +5,10 @@ import { signUpAndVerify } from "./resend";
 
 declare global {
   interface Window {
-    /** The jsQR bundle addScriptTag() injects below, so the page can decode
-     * the QR it just drew. */
     jsQR: typeof import("jsqr").default;
   }
 }
 
-/**
- * The standalone QR generator (Direction D of #96).
- *
- * It exists to answer a search with a working tool, so the things worth
- * asserting are that it works without an account and that it does not
- * quietly need one.
- */
-
-/** Records every POST the page makes, so "nothing leaves the browser" can be
- * asserted rather than asserted about. */
 function watchPosts(page: Page): string[] {
   const posted: string[] = [];
   page.on("request", (r) => {
@@ -29,30 +17,20 @@ function watchPosts(page: Page): string[] {
   return posted;
 }
 
-/** POSTs to the app's own origin. */
 function appPosts(page: Page, posted: string[]): string[] {
   const appOrigin = new URL(page.url()).origin;
   return posted.filter((url) => new URL(url).origin === appOrigin);
 }
 
-/**
- * Reads a QR code the way a scanner would: rasterize the SVG, then decode the
- * pixels.
- *
- * jsQR rather than the browser's own `BarcodeDetector`, which exists on
- * Chromium for macOS, Android and ChromeOS and not on Linux, so on CI the
- * check that matters most here never ran at all. The decoder is injected into
- * `about:blank`, out from under the app's CSP, and the whole job stays in the
- * browser: handing a megapixel of raw pixels back to node to decode there
- * costs more than the test.
- */
-/** What a scanner got out of the code: the text, and the version, which is
- * the grid size (4 × version + 17 modules a side). */
 interface ScannedCode {
   data: string;
   version: number;
 }
 
+/**
+ * jsQR, not BarcodeDetector: Chromium on Linux lacks it, so this check never ran on CI.
+ * Injected into about:blank, out from under the app's CSP.
+ */
 async function readCode(page: Page, markup: string): Promise<ScannedCode | null> {
   await page.goto("about:blank");
   await page.addScriptTag({ path: createRequire(import.meta.url).resolve("jsqr") });
@@ -77,7 +55,6 @@ async function readCode(page: Page, markup: string): Promise<ScannedCode | null>
   }, markup);
 }
 
-/** Clicks a download button and hands back the file that arrived. */
 async function downloadCode(page: Page, format: "PNG" | "SVG") {
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -87,9 +64,7 @@ async function downloadCode(page: Page, format: "PNG" | "SVG") {
 }
 
 test("generates a QR code with no account and no network call", async ({ page }) => {
-  // Nothing typed here should leave the browser: the code is drawn locally,
-  // which the page states outright. Anything posted while merely typing
-  // would make that claim false.
+  // Drawn locally, as the page claims: anything posted while typing would make that false.
   const posted = watchPosts(page);
 
   await page.goto("/qr-code-generator");
@@ -98,9 +73,7 @@ test("generates a QR code with no account and no network call", async ({ page })
   const code = page.getByRole("img", { name: /^QR code for/ });
   const upsell = page.getByRole("heading", { name: "Want to know if anyone scans it?" });
 
-  // The downloads sit in the card's footer, which exists before there is
-  // anything to download, so the row cannot appear on the first keystroke and
-  // shove the page down. It used to cost 43px of shift.
+  // The downloads row exists before there is anything to download, so it cannot shift the page.
   await expect(page.getByRole("button", { name: /PNG/ })).toBeDisabled();
 
   await page.getByLabel("Link or text").fill("https://example.com/printed-poster");
@@ -125,10 +98,7 @@ test("downloads a printable PNG", async ({ page }) => {
 });
 
 test("the upsell offers the account rather than making a link", async ({ page }) => {
-  // The offer used to be a button that quietly posted to the anonymous
-  // shortener, on a page whose claim is that nothing you type leaves the
-  // browser. Now it points at the account, and the page still makes no
-  // request of its own with a code on screen and the offer read.
+  // The offer used to post to the anonymous shortener, against the page's claim that nothing leaves the browser.
   const posted = watchPosts(page);
 
   await page.goto("/qr-code-generator");
@@ -155,15 +125,11 @@ test("the page is reachable from the footer of the landing page", async ({ page 
 });
 
 test("styling the code is free here, and stays in the browser", async ({ page }) => {
-  // The paid feature inside the app is the same form, minus the account.
-  // What this pins down is that the controls are all present and none of
-  // them needs a session, because that is the whole offer of the page.
   const posted = watchPosts(page);
 
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/styled");
 
-  // The same rows as the app's QR editor: shapes, the three colours, a logo.
   for (const group of ["Dots", "Corners", "Colours"]) {
     await expect(page.getByRole("group", { name: group, exact: true })).toBeVisible();
   }
@@ -172,7 +138,6 @@ test("styling the code is free here, and stays in the browser", async ({ page })
   }
   await expect(page.getByRole("button", { name: "Upload", exact: true })).toBeVisible();
 
-  // Change one and the code redraws rather than erroring.
   const dots = page.getByRole("group", { name: "Dots", exact: true });
   await dots.getByRole("button", { name: "Square", exact: true }).click();
   await expect(dots.getByRole("button", { name: "Square", exact: true })).toHaveAttribute(
@@ -187,25 +152,21 @@ test("styling the code is free here, and stays in the browser", async ({ page })
 test("the page says what it is built on, and carries its own title", async ({ page }) => {
   await page.goto("/qr-code-generator");
 
-  // Its own title and canonical: sharing the landing page's made two pages
-  // compete for one search result.
+  // Its own title and canonical: sharing the landing page's made two pages compete for one result.
   await expect(page).toHaveTitle(/QR code generator/i);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
     /\/qr-code-generator$/,
   );
 
-  // The libraries doing the work are named and linked.
   await expect(page.getByRole("link", { name: "qr-code-styling" })).toBeVisible();
   await expect(page.getByRole("link", { name: "SVGO" })).toBeVisible();
   await expect(page.getByText(/should be free and open source/i)).toBeVisible();
 });
 
 test("a logo lands in the middle of the code instead of blanking it", async ({ page }) => {
-  // The bug: qr-code-styling fetches the logo with XHR to inline it, which a
-  // browser refuses for the data URL this page produces, so the drawing never
-  // finished and the preview went white. Asserted on the drawing itself
-  // rather than on a screenshot, since "still renders" is the whole claim.
+  // qr-code-styling fetches the logo by XHR, which browsers refuse for a data URL, so the
+  // drawing never finished and the preview went white.
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/with-a-logo");
 
@@ -213,14 +174,11 @@ test("a logo lands in the middle of the code instead of blanking it", async ({ p
   await expect(code.locator("svg image")).toHaveCount(0);
 
   await page.setInputFiles('input[type="file"]', "tests/e2e/fixtures/logo.png");
-  // The logo row names the file and offers to replace it.
   await expect(page.getByText("logo.png")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Replace" })).toBeVisible();
 
-  // The logo is in, and the code is still a code: dots as well as the image.
   await expect(code.locator("svg image")).toHaveCount(1, { timeout: 20_000 });
 
-  // Counted as subpaths of the merged path, since the modules are one shape.
   const modules = await code
     .locator("svg path[d]")
     .evaluateAll((paths) =>
@@ -230,36 +188,27 @@ test("a logo lands in the middle of the code instead of blanking it", async ({ p
 });
 
 test("the downloaded SVG has no seams to show when it is scaled up", async ({ page }) => {
-  // qr-code-styling paints the dots as one solid rect through a clipPath
-  // holding every module. Renderers work that clip out a shape at a time and
-  // combine the coverage, so every shared edge came out short of opaque: a
-  // pale grid over the code, invisible in the PNG (rasterized at its own size)
-  // and plain the moment somebody scaled the vector, which is what a vector is
-  // for. Asserted on the file that leaves the browser.
+  // Renderers combine the clipPath's per-module coverage, leaving a pale grid on shared
+  // edges that only shows when the vector is scaled. Asserted on the exported file.
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/printed-large");
 
   const svg = await readFile(await (await downloadCode(page, "SVG")).path(), "utf8");
 
-  // No clip is left holding a crowd of shapes.
   const crowded = [...svg.matchAll(/<clipPath[^>]*>([\s\S]*?)<\/clipPath>/g)].filter(
     ([, body]) => (body.match(/<(path|rect|circle)/g) ?? []).length > 1,
   );
   expect(crowded).toHaveLength(0);
 
-  // They are one path instead, filled in a single pass, so the edges modules
-  // share are interior to the region and never rasterized. Nothing narrower
-  // works: two abutting shapes antialias against each other however they are
-  // drawn, and a stroke wide enough to cover that at one zoom is invisible at
-  // the next.
+  // One path filled in a single pass leaves no shared edges to antialias; a stroke
+  // cannot cover the seam at every zoom.
   const subpaths = /<path d="(M[^"]*)" fill="[^"]*"/.exec(svg)?.[1] ?? "";
   expect((subpaths.match(/M/g) ?? []).length).toBeGreaterThan(100);
 });
 
 test("the merged code still scans", async ({ page }) => {
-  // Merging bakes each module's rotation into its own path data by hand. Get
-  // that wrong and the code is still a plausible-looking grid of dots that no
-  // phone can read, which no structural assertion would catch.
+  // Merging bakes each module's rotation into the path by hand; a mistake still looks
+  // like dots but no phone can read it.
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/still-scans");
 
@@ -269,17 +218,9 @@ test("the merged code still scans", async ({ page }) => {
 });
 
 /**
- * Error correction is "H" only when a logo covers the middle of the code.
- *
- * The generator draws no logo, so nothing is missing and the 30% redundancy
- * "H" carries buys nothing. It is not free: at "H" this URL needs a version 4
- * grid, 33 modules a side, against version 3 and 29 modules at "M". Same
- * printed square, wider modules, which is the whole of scanning from a
- * distance.
- *
- * Asserted through a decoder rather than by reading our own option back,
- * because the version is what a scanner actually sees, and it is the thing
- * that regresses if the level is ever pinned to "H" again.
+ * Error correction "H" is only worth it under a logo; here it forces a bigger grid
+ * (version 4, 33 modules, against 3 at "M"). Asserted through a decoder, since the
+ * version is what a scanner sees.
  */
 test("a code with no logo is not padded with error correction it cannot use", async ({ page }) => {
   await page.goto("/qr-code-generator");
@@ -289,15 +230,12 @@ test("a code with no logo is not padded with error correction it cannot use", as
   const scanned = await readCode(page, svg);
 
   expect(scanned?.data).toBe("https://example.com/printed-poster");
-  // Version 4 is what "H" produced for this URL. Anything above 3 means the
-  // level went back up, or the payload grew.
+  // Version 4 is what "H" produced; above 3 means the level went back up.
   expect(scanned?.version).toBe(3);
 });
 
 test("a signed-in visitor gets their dashboard link, not a sign-up button", async ({ page }) => {
-  // The header was told "signed out" outright, so somebody with a session
-  // saw Log in and Sign up, clicked one, and landed on the dashboard they
-  // already had.
+  // The header was told "signed out" outright, so a signed-in user saw Log in and Sign up.
   const email = `qrheader-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, "test-password-123");
 

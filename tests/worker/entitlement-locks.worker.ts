@@ -14,14 +14,8 @@ import {
 } from "./support";
 import type { CurrentUser, DomainDTO, JsonValue, LinkInput } from "../../src/shared/types";
 
-/**
- * What a lock does once reconciliation has written it: the redirect path's
- * verdict (#159), the org-wide read-only state (#160), who may still be
- * handed write access (#161), and the QR styling that survives a save (#162).
- *
- * The pass itself is covered in reconcile.worker.ts. These are the places
- * that read what it wrote.
- */
+// What reads a lock once reconciliation has written it (#159, #160, #161, #162).
+// The pass itself is covered in reconcile.worker.ts.
 
 const HOUR = 60 * 60 * 1000;
 
@@ -89,8 +83,7 @@ describe("a locked custom domain (#159)", () => {
     await publish(Date.now() - HOUR);
     const res = await hit();
     expect(res.status).toBe(404);
-    // The root redirect goes with it: the whole host stops answering, not
-    // just the slug.
+    // The root redirect goes too: the whole host stops answering.
     const root = await fetchWorker(
       new Request("http://go.example.com/", { headers: { host: "go.example.com" } }),
     );
@@ -226,8 +219,7 @@ describe("who may write in an over-cap org (#161)", () => {
       ["owner-1", "owner", null],
       ["m1", "viewer", null],
       ["m2", "member", null],
-      // An explicit choice replaces the recorded one, so a later upgrade has
-      // nothing of its own to restore over it.
+      // An explicit choice replaces the recorded role, so an upgrade restores nothing over it.
       ["m3", "member", null],
     ]);
   });
@@ -269,7 +261,6 @@ describe("QR styling on a downgraded plan (#162)", () => {
     });
     expect(res.status).toBe(200);
     const [row] = await testDb().select().from(schema.links).where(eq(schema.links.id, "link-1"));
-    // The wipe this replaced: a title edit used to blank all of these.
     expect([row.title, row.qrStyle, row.qrColor]).toEqual(["Autumn sale", "dots", "#ff0000"]);
   });
 
@@ -304,9 +295,7 @@ describe("QR styling on a downgraded plan (#162)", () => {
           body: JSON.stringify(body),
         }),
       );
-    // Renaming the org while its stored defaults ride along unchanged.
     expect((await patch({ name: "Renamed", qrStyle: "dots" })).status).toBe(200);
-    // An actual change is still refused, on the same plan.
     expect((await patch({ qrStyle: "square" })).status).toBe(402);
     const [row] = await testDb().select().from(schema.orgs).where(eq(schema.orgs.id, "org-1"));
     expect([row.name, row.qrStyle]).toEqual(["Renamed", "dots"]);
@@ -370,9 +359,6 @@ describe("a link already on a locked domain stays editable (#485)", () => {
       .where(eq(schema.linkAddresses.linkId, linkId));
   }
 
-  /** A pro owner's link on go.example.com, renamed once (so it has a temp
-   * alias "first") and given a permanent alias "extra", and then the domain
-   * locked under it, the way a downgrade leaves it. */
   async function linkOnLockedDomain() {
     const cookie = await seedOwner("pro");
     await env.DB.prepare(
@@ -404,7 +390,6 @@ describe("a link already on a locked domain stays editable (#485)", () => {
     const primary = (await addresses(linkId)).find((a) => a.kind === "primary")!;
     expect(primary.slug).toBe("third");
     expect(JSON.parse((await kv("third"))!).url).toBe("https://example.com/b");
-    // The old primary is a temp alias now, and serves the new destination.
     expect(JSON.parse((await kv("second"))!).url).toBe("https://example.com/b");
   });
 

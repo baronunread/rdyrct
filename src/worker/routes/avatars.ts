@@ -7,16 +7,13 @@ import type { AppEnv } from "../env";
 import { AVATAR_PREFIX, avatarUrl, deleteUserAvatar } from "./../storage";
 import { AVATAR_MAX_BYTES, AVATAR_MAX_DIMENSION } from "@/shared/types";
 
-// Mounted at /api/user/avatar. Upload, serving and removal are all keyed by
-// the session user id, so no URL ever carries a user id and an unauthorized
+// Keyed by the session user id, so no URL carries a user id and an unauthorized
 // request gets an empty bucket (404).
 export const avatarRoutes = new Hono<AppEnv>();
 
 avatarRoutes.use(
   "*",
   bodyLimit({
-    // Coarse ceiling so an oversized upload is rejected before the handler
-    // runs; the exact limit is enforced below.
     maxSize: AVATAR_MAX_BYTES + 4096,
     onError: (c) => c.json({ message: "File too large" }, 413),
   }),
@@ -30,7 +27,6 @@ function requireUser(c: { var: AppEnv["Variables"] }) {
 
 type ImageType = "image/jpeg" | "image/png" | "image/webp";
 
-/** JPEG (FF D8 FF), PNG (89 50 4E 47), or WebP (RIFF....WEBP). */
 function sniff(b: Uint8Array): ImageType | null {
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
   if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
@@ -78,7 +74,6 @@ function webpSize(b: Uint8Array, dv: DataView): Size {
   return null;
 }
 
-/** Pixel dimensions from the header, without decoding. Null when unreadable. */
 function dimensions(b: Uint8Array, type: ImageType): Size {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   if (type === "image/png") return pngSize(b, dv);
@@ -141,19 +136,11 @@ avatarRoutes.get("/", async (c) => {
   return serveAvatar(c, user.id);
 });
 
-/**
- * A user's picture from R2. The caller has already decided the session may
- * see it: its own (above), a member of an org it belongs to
- * (`/api/orgs/:orgId/members/:userId/avatar` in orgs.ts), or the platform
- * admin (`/api/admin/users/:userId/avatar`). One function, so all cache alike.
- */
 export async function serveAvatar(c: Context<AppEnv>, userId: string): Promise<Response> {
   const log = c.get("log");
   log.set({ userId });
-  // Served on every page load (sidebar, org switcher, footer). R2 throttles
-  // simultaneous reads of one object (error 10058) and has transient blips
-  // (10001); neither is worth a 500 or a Sentry issue, so degrade to a 503
-  // the client just retries.
+  // R2 throttles simultaneous reads of one object (10058) and has transient blips (10001).
+  // Neither deserves a 500 or a Sentry issue: answer 503 and let the client retry.
   let obj: R2ObjectBody | null;
   try {
     obj = await c.env.MEDIA.get(`${AVATAR_PREFIX}${userId}`);
@@ -166,10 +153,8 @@ export async function serveAvatar(c: Context<AppEnv>, userId: string): Promise<R
 
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
-  // The URL carries a `?v=` upload stamp, so each version is immutable and a
-  // new upload is a new URL: let the browser hold it a few minutes instead of
-  // revalidating on every navigation. A tab that never refreshes shows a
-  // picture at most 5 minutes stale.
+  // The `?v=` upload stamp makes each URL immutable, so the browser may hold it a few
+  // minutes. A tab that never refreshes shows a picture at most 5 minutes stale.
   headers.set("cache-control", "private, max-age=300");
   headers.set("etag", obj.httpEtag);
   headers.set("x-content-type-options", "nosniff");

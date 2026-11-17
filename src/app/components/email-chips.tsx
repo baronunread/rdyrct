@@ -5,22 +5,12 @@ import { NO_AUTOFILL } from "../ui/field";
 import { isEmail, splitEmails } from "../lib/members-data";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 
-/**
- * Several addresses in one box: each one becomes a chip as soon as a comma,
- * a space or Enter ends it, and a pasted list splits into chips at once.
- * Backspace in the empty input takes the last chip back out to edit.
- *
- * Built to sit where a Field would: the label row carries the reason on the
- * right when something is wrong, and nothing below the box moves.
- */
 export const EmailChips = forwardRef<
   HTMLInputElement,
   {
     label: string;
     emails: string[];
     onChange: (emails: string[]) => void;
-    /** The text not yet turned into a chip, owned by the caller so a submit
-     * can count it too. */
     draft: string;
     onDraftChange: (draft: string) => void;
     error?: string;
@@ -44,7 +34,6 @@ export const EmailChips = forwardRef<
       commit(draft);
       return;
     }
-    // Enter with text makes a chip; Enter on an empty input submits the form.
     if (e.key === "Enter" && draft.trim()) {
       e.preventDefault();
       commit(draft);
@@ -77,8 +66,6 @@ export const EmailChips = forwardRef<
           </OverflowTip>
         )}
       </span>
-      {/* Clicking anywhere in the box puts the caret in the input, as a real
-          field would. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions, react-doctor/no-static-element-interactions -- the input inside is the keyboard target; this only forwards pointer clicks to it. */}
       <div
         onClick={(e) => {
@@ -108,7 +95,6 @@ export const EmailChips = forwardRef<
           type="text"
           inputMode="email"
           autoComplete="off"
-          // Teammates' addresses, not the user's own.
           {...NO_AUTOFILL}
           autoCapitalize="none"
           spellCheck={false}

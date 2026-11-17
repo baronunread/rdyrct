@@ -1,16 +1,5 @@
-/**
- * OAuth consent (#139 follow-up): where the mcp() plugin's own authorize
- * endpoint sends a signed-in visitor. better-auth checks the session itself
- * before ever redirecting here (unauthenticated goes to loginPage instead),
- * so this page can assume it is always talking to a signed-in person — it
- * only has to show who is asking and for what, then relay the answer.
- *
- * The query string is a signed, opaque bundle (client_id, scope, resource,
- * a signature, an expiry): read from it, never rebuilt by hand, and handed
- * straight back as `oauth_query` on accept or deny. Tampering with it (or
- * letting it go stale) is the API's problem, not this page's: a bad or
- * expired bundle comes back as a plain error from /oauth2/consent.
- */
+/** better-auth checks the session before redirecting here, so this page can assume a signed-in person.
+ * The query is a signed bundle: read it, never rebuild it, and hand it back as `oauth_query`. */
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { errorMessage } from "@/app/lib/error-message";
 import { lookup } from "@/shared/lookup";
@@ -34,13 +23,8 @@ const SCOPE_LABELS = {
   offline_access: "Stay connected after this session ends",
 } satisfies Record<string, string>;
 
-/**
- * Reads the raw query string, not TanStack Router's `searchStr`: the router
- * parses and re-serializes it, which does not preserve byte-for-byte
- * encoding (`+` vs `%20`, param order). better-auth's signature check does
- * care about that, and a re-encoded bundle fails it with a plain 400 — the
- * exact string the browser navigated to is the only one it will accept back.
- */
+/** Reads the raw query string, not the router's `searchStr`: re-serializing changes `+` vs `%20` and param order,
+ * and better-auth's signature check rejects that. */
 function useOAuthQuery() {
   const search = window.location.search;
   const params = new URLSearchParams(search);
@@ -52,10 +36,7 @@ function useOAuthQuery() {
   };
 }
 
-/** The host a redirect_uri points at. An anonymously registered client
- * chooses its own name, so "Claude wants access" proves nothing; where the
- * answer goes does, and the authorize endpoint already checked it against
- * the client's registered redirect URIs before sending anyone here. */
+/** An anonymously registered client chooses its own name, so "Claude wants access" proves nothing; where the redirect goes does. */
 function hostOf(uri: string | null): string | null {
   if (!uri) return null;
   try {
@@ -79,9 +60,6 @@ async function respond(oauthQuery: string, accept: boolean): Promise<string> {
   return body.url;
 }
 
-/** The request itself: who's asking, what for, and the Allow/Deny pair.
- * Split from ConsentPage so that component only has to decide which of
- * loading/error/this to show. */
 function ConsentDetails({
   clientName,
   email,

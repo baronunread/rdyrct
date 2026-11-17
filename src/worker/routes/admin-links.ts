@@ -1,19 +1,6 @@
-/**
- * Cross-org link moderation (#67).
- *
- * A shortener is phishing and malware infrastructure by default, and until
- * now the only answer to an abuse report was deleting the whole organization.
- * That destroys a possibly-legitimate customer's other links to deal with one
- * bad one, and it cannot be undone.
- *
- * Everything here is admin-only and 404s for everyone else, matching the rest
- * of /api/admin: a 403 confirms the route exists.
- *
- * Suspension itself is enforced in storage.ts's desiredKvValue, not here.
- * These routes set the flag and republish; the republish is what stops the
- * redirect, and because every future republish runs through the same
- * function, a later edit cannot quietly bring a suspended link back.
- */
+// Admin-only, 404 for everyone else (a 403 confirms the route exists) (#67). Suspension is enforced in
+// storage.ts's desiredKvValue: these routes set the flag and republish, so a later republish
+// cannot quietly bring a suspended link back.
 import { Hono, type Context } from "hono";
 import { oneOf } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
@@ -57,17 +44,12 @@ import {
 export const adminLinkRoutes = new Hono<AppEnv>();
 adminLinkRoutes.use("*", jsonBodyLimit());
 
-/** The risk reasons a link row stores, as JSON. Anything else in that column
- * reads as no reasons rather than as a crash. */
 const reasonsSchema = v.fallback(v.array(v.string()), []);
 
-/** The reason a moderation action carries. */
 const reasonBodySchema = v.object({ reason: optionalText });
 
-/** The same, plus which way the state change goes. */
 const suspensionBodySchema = v.object({ reason: optionalText, suspended: optionalFlag });
 
-/** Which way a warning change goes. No reason: it is one click either way. */
 const warningBodySchema = v.object({ warned: optionalFlag });
 
 const MAX_ROWS = 200;
@@ -81,8 +63,7 @@ function parseReasons(raw: string | null): string[] {
   }
 }
 
-/** The columns a suspension writes, or clears. Shared by the single-link and
- * whole-org routes so the two can never set them differently. */
+/** Shared by the single-link and whole-org routes so they never set them differently. */
 function suspensionPatch(suspend: boolean, actorId: string, reason: string | null) {
   return {
     suspendedAt: suspend ? Date.now() : null,
@@ -91,8 +72,6 @@ function suspensionPatch(suspend: boolean, actorId: string, reason: string | nul
   };
 }
 
-/** The reason a moderation action must carry. Suspending without one leaves
- * a decision nobody can account for later. */
 function checkReason(raw: string, required: boolean): string {
   const reason = raw.trim().slice(0, 500);
   if (required && !reason) throw new HTTPException(400, { message: "A reason is required" });
@@ -109,28 +88,17 @@ const reportCount = sql<number>`(
   where link_reports.link_id = links.id and link_reports.status = 'open'
 )`;
 
-/** Open reports, as a test rather than a count. */
 const reported = sql<boolean>`exists (
   select 1 from link_reports
   where link_reports.link_id = links.id and link_reports.status = 'open'
 )`;
 
-/**
- * On a blocklist because Google Web Risk said so: the score that blocks and
- * a `web_risk_*` reason (risk.ts). `like` over the stored JSON rather than
- * json_each, which throws on a malformed row where parseReasons shrugs. (`_`
- * matches any one character in `like`, which only ever widens this to a
- * reason nobody writes.)
- * Literal `links.` columns: this runs inside an aggregate below too.
- */
+// `like` over the stored JSON, not json_each, which throws on a malformed row where parseReasons
+// shrugs. Literal `links.` columns: this runs inside an aggregate too.
 const flagged = sql<boolean>`(links.risk_score >= 100 and links.risk_reasons like '%"web_risk_%')`;
 
-// Read from the rollups (#26), like the org's own links list.
 const clickCount = linkClicksTotal;
 
-/** The link this route is about, or a 404. Every route here starts by
- * reading the row it names, and an id that matches nothing is the same
- * answer in all of them. */
 async function requireLink(db: DB, linkId: string) {
   const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
   const link = rows[0];
@@ -138,7 +106,6 @@ async function requireLink(db: DB, linkId: string) {
   return link;
 }
 
-/** The link named by the route's `:linkId`, logged on the request, or a 404. */
 async function routeLink(c: Context<AppEnv>) {
   const db = c.var.db;
   const linkId = c.req.param("linkId")!;
@@ -146,25 +113,9 @@ async function routeLink(c: Context<AppEnv>) {
   return { db, linkId, link: await requireLink(db, linkId) };
 }
 
-/**
- * The cross-org search. Matches a slug or a destination, which are the two
- * things an abuse report actually contains.
- *
- * `like` on destination rather than a parsed host: a report usually names a
- * domain, and the destination column holds a full URL, so a substring match
- * finds it wherever in the URL it sits. It is a moderation tool used by one
- * person, not a hot path.
- */
-/**
- * What the search narrows to.
- *
- * The organization goes in here rather than in the browser: the page used to
- * narrow the rows this query had already capped at 200, so "show me this
- * organization's links" meant "show me whichever of its links happen to be
- * in the newest 200 across every organization on the instance". For a busy
- * instance, or a big account, that is usually none of them, and answering an
- * abuse report with an empty table is worse than answering it slowly.
- */
+// `like` on destination: a report names a domain, and a substring match finds it anywhere in the URL.
+// The organization narrows here, not in the browser: the browser would narrow rows already capped
+// at 200, which on a busy instance is usually none of that org's links.
 function adminLinkScope(c: Context<AppEnv>) {
   const q = (c.req.query("q") ?? "").trim();
   const org = (c.req.query("org") ?? "").trim();
@@ -174,7 +125,6 @@ function adminLinkScope(c: Context<AppEnv>) {
   ].filter(Boolean);
 }
 
-/** The scope above, narrowed by the filter pills. */
 function adminLinkFilters(c: Context<AppEnv>) {
   return [
     ...adminLinkScope(c),
@@ -186,12 +136,10 @@ function adminLinkFilters(c: Context<AppEnv>) {
   ].filter(Boolean);
 }
 
-/** A count of the rows matching `test`, as one column of a single pass. */
 const countWhere = (test: SQL) =>
   sql<number>`coalesce(sum(case when ${test} then 1 else 0 end), 0)`;
 
-/** Nulls last on risk: unscored is not "safe", and letting it sort above a
- * score of 100 would put the worst links below links nobody has looked at. */
+/** Nulls last on risk: unscored is not "safe", so it must not sort above a score of 100. */
 function adminLinkOrder(sort: AdminLinkSort) {
   if (sort === "clicks") return desc(clickCount);
   if (sort === "risk")
@@ -199,10 +147,7 @@ function adminLinkOrder(sort: AdminLinkSort) {
   return desc(schema.links.createdAt);
 }
 
-/**
- * How many links each filter pill holds, under the list's search and org.
- * The list stops at MAX_ROWS, so its length cannot say this past 200.
- */
+// The list stops at MAX_ROWS, so its length cannot say this past 200.
 adminLinkRoutes.get("/counts", async (c) => {
   const scope = adminLinkScope(c);
   const [row] = await c.var.db
@@ -264,15 +209,9 @@ adminLinkRoutes.get("/", async (c) => {
   );
 });
 
-/**
- * An org whose links were suspended as a whole (the sweep, or an admin) is
- * still write-blocked and still in the sweep's sights after its links are
- * restored one by one. Restoring is a human decision, so mark the org
- * cleared, and lift the block once no suspended link is left.
- *
- * Only for such an org: restoring a single link in an otherwise normal org
- * must not switch off the automatic checks for it.
- */
+// An org suspended as a whole stays write-blocked after its links are restored one by one.
+// Restoring is a human decision: mark the org cleared and lift the block once no suspended
+// link is left. Only for such an org, not for a single restore in a normal one.
 async function clearOrgAfterRestore(db: DB, orgId: string) {
   await db
     .update(schema.orgs)
@@ -285,13 +224,8 @@ async function clearOrgAfterRestore(db: DB, orgId: string) {
     .where(and(eq(schema.orgs.id, orgId), isNotNull(schema.orgs.linksSuspendedAt)));
 }
 
-/**
- * Refuse to restore links in an org whose owner is banned. The org stays
- * disabled whatever its links say, so a restore would change nothing now,
- * and an unban would then bring those links back live without a review,
- * held ones included. Every restore path calls this: one link, several, a
- * whole org. `orgs` picks the org rows to check.
- */
+// Refuse to restore links in an org whose owner is banned: the org stays disabled, so an unban
+// would bring those links back live without review, held ones included. Every restore path calls this.
 async function assertOrgsNotDisabled(db: DB, orgs: SQL): Promise<void> {
   const disabled = await db
     .select({ id: schema.orgs.id })
@@ -330,8 +264,7 @@ async function setSuspended(
     action: suspend ? "link.suspend" : "link.unsuspend",
     targetType: "link",
     targetId: linkId,
-    // The slug and org travel with the entry: the row may be deleted later,
-    // and "suspended some link" is not an audit trail.
+    // The slug and org travel with the entry: the row may be deleted later.
     detail: {
       slug: link.slug,
       orgId: link.orgId,
@@ -343,12 +276,6 @@ async function setSuspended(
   return { addresses };
 }
 
-/**
- * Suspend or restore one link.
- *
- * One state change, so one endpoint (#104): `{ suspended }` says which way,
- * and a reason is required to suspend but meaningless to undo.
- */
 adminLinkRoutes.patch("/:linkId", async (c) => {
   const log = c.get("log");
   log.set({ linkId: c.req.param("linkId") });
@@ -362,11 +289,6 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
   return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
 });
 
-/**
- * Put a warning on one link, or take it off (#344). One click either way and
- * no reason asked: the link keeps working, so this is a lighter call than a
- * suspension, and the row records that an admin made it.
- */
 adminLinkRoutes.patch("/:linkId/warning", async (c) => {
   const body = parseOptionalBody(
     warningBodySchema,
@@ -390,7 +312,6 @@ adminLinkRoutes.patch("/:linkId/warning", async (c) => {
   return c.json({ warned: body.warned });
 });
 
-/** Open public reports, newest first. */
 adminLinkRoutes.get("/reports", async (c) => {
   const rows = await c.var.db
     .select({
@@ -418,8 +339,6 @@ adminLinkRoutes.get("/reports", async (c) => {
   );
 });
 
-/** Close a report without acting on it. Kept, not deleted: the count of
- * dismissed reports on a link is evidence too. */
 adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
   const id = c.req.param("id")!;
   c.get("log").set({ reportId: id });
@@ -455,7 +374,6 @@ async function hasOpenReport(db: DB, linkId: string): Promise<boolean> {
 
 const blockedHostBodySchema = v.object({ host: optionalText, reason: optionalText });
 
-/** Hosts nobody may link to. Listed so a mistaken entry can be removed. */
 adminLinkRoutes.get("/blocked-hosts", async (c) => {
   const rows = await c.var.db
     .select({
@@ -471,7 +389,6 @@ adminLinkRoutes.get("/blocked-hosts", async (c) => {
 
 adminLinkRoutes.post("/blocked-hosts", async (c) => {
   const body = parseBody(blockedHostBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
-  // A pasted URL or a bare host both work; what is stored is the host.
   const host = blockHostOf(body.host.includes("://") ? body.host : `https://${body.host.trim()}`);
   if (!host || !host.includes("."))
     throw new HTTPException(400, { message: "Enter a host such as scam.example.com" });
@@ -511,7 +428,6 @@ adminLinkRoutes.delete("/blocked-hosts/:host", async (c) => {
   return c.json({ ok: true });
 });
 
-/** Clear an org's "needs review" flag: somebody looked and it is fine. */
 adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
   const orgId = c.req.param("orgId")!;
   c.get("log").set({ orgId });
@@ -527,8 +443,7 @@ adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
     .update(schema.linkReports)
     .set({ status: "dismissed" })
     .where(and(eq(schema.linkReports.orgId, orgId), eq(schema.linkReports.status, "open")));
-  // And the warnings the reports and the sweep put on its links: somebody
-  // looked and found nothing. A warning an admin set by hand stays.
+  // And the warnings the reports and sweep put on its links. An admin's own warning stays.
   await clearOrgAutomaticWarnings(c.env, c.var.db, orgId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
@@ -540,14 +455,8 @@ adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
   return c.json({ ok: true });
 });
 
-/**
- * Restore several links at once, for the aftermath of a sweep that suspended
- * a whole org's worth. Restore only: suspending needs a reason per decision.
- * Each link is republished and audited the same as a single restore, but in
- * a fixed number of statements for the whole batch (#14): the single-link
- * path per id was thousands of D1 statements and subrequests at MAX_ROWS,
- * and died partway with some links restored and the rest not.
- */
+// A fixed number of statements for the whole batch (#14): the single-link path per id was
+// thousands of D1 statements at MAX_ROWS and died partway.
 adminLinkRoutes.post("/restore", async (c) => {
   const log = c.get("log");
   const { ids } = parseBody(
@@ -555,10 +464,8 @@ adminLinkRoutes.post("/restore", async (c) => {
     await c.req.json<JsonValue>().catch(() => ({})),
   );
   log.set({ restoreCount: ids.length });
-  // Checked for the whole batch first, so a refusal restores none of them
-  // rather than whichever links happened to finish before it. The ids go in
-  // as one bound parameter: D1 allows 100 a query, and a batch holds up to
-  // MAX_ROWS.
+  // Checked for the whole batch first, so a refusal restores none. The ids go in as one bound
+  // parameter: D1 allows 100 a query and a batch holds up to MAX_ROWS.
   await assertOrgsNotDisabled(
     c.var.db,
     sql`${schema.orgs.id} in (select org_id from links where id in (select value from json_each(${JSON.stringify(ids)})))`,
@@ -606,19 +513,8 @@ adminLinkRoutes.post("/restore", async (c) => {
   return c.json({ count: links.length });
 });
 
-/**
- * Re-run the destination check on demand (#68).
- *
- * Awaited rather than deferred to waitUntil, unlike the checks on create and
- * edit: an admin who asked for this is looking at the row and wants the
- * answer, not a promise that something will happen shortly. One DNS lookup,
- * and one Web Risk lookup when the key is set, each with a three second
- * ceiling. A hit here holds nothing: the admin is the one deciding.
- *
- * Recorded in the audit log because it writes to the row. Reconstructing why
- * a score changed is exactly what that log is for, and "somebody re-checked
- * it at 02:14" is part of the answer.
- */
+// Awaited, not waitUntil: the admin is looking at the row and wants the answer. A hit holds
+// nothing: the admin decides. Audited because it writes to the row.
 adminLinkRoutes.post("/:linkId/rescore", async (c) => {
   const { db, linkId, link } = await routeLink(c);
 
@@ -644,9 +540,7 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
     detail: { slug: link.slug, destination: link.destination, score: verdict?.score ?? null },
   });
 
-  // A null verdict is "still unscored", never "clean": the provider was
-  // unreachable or answered something we do not recognise, and the row keeps
-  // whatever it had.
+  // A null verdict is "still unscored", never "clean": the provider was unreachable or unrecognised.
   return c.json({
     scored: !!verdict,
     score: verdict?.score ?? null,
@@ -654,19 +548,12 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
   });
 });
 
-/**
- * Delete a link outright.
- *
- * Suspension is the usual answer, because it is reversible and keeps the
- * evidence. This exists for the cases where the row itself should not
- * survive, and it is deliberately the second option in the menu rather than
- * the first: clicks cascade with it and nothing here can put it back.
- */
+// Suspension is the usual answer (reversible, keeps the evidence). Clicks cascade with a delete
+// and nothing can put it back.
 adminLinkRoutes.delete("/:linkId", async (c) => {
   const { db, linkId, link } = await routeLink(c);
 
-  // Addresses first: after the row is gone there is nothing to read them
-  // from, and each one is a live KV key until it is swept.
+  // Addresses first: after the row is gone nothing is left to read them from.
   const addresses = await activeAddressesOf(db, linkId);
   await db.delete(schema.links).where(eq(schema.links.id, linkId));
   if (addresses.length > 0)
@@ -690,13 +577,6 @@ adminLinkRoutes.delete("/:linkId", async (c) => {
   return c.json({ ok: true });
 });
 
-/**
- * Suspend or restore every link in one org, without deleting it.
- *
- * For when the whole account is bad but the evidence should survive and an
- * appeal should be possible. Deleting the org is still available and still
- * irreversible; this is the reversible version.
- */
 adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   const log = c.get("log");
   const suspend = c.req.query("suspend") !== "0";
@@ -706,14 +586,11 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
   if (!suspend) await assertOrgsNotDisabled(db, eq(schema.orgs.id, orgId));
-  // Set (or cleared) unconditionally, same as abuse.ts's suspendOrgLinks:
-  // requireOrgRole reads this on every write, so a suspended org cannot mint
-  // a replacement link before its links are individually caught up below.
+  // Set unconditionally, as in abuse.ts's suspendOrgLinks: requireOrgRole reads it on every write,
+  // so a suspended org cannot mint a replacement link.
   await db
     .update(schema.orgs)
-    // A decision either way answers the review flag.
-    // Restoring is a human decision the sweep must not undo; suspending is
-    // the opposite decision and removes any earlier clearance.
+    // Restoring is a human decision the sweep must not undo; suspending removes any earlier clearance.
     .set({
       linksSuspendedAt: suspend ? Date.now() : null,
       reviewFlaggedAt: null,
@@ -721,8 +598,7 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
     })
     .where(eq(schema.orgs.id, orgId));
 
-  // One expression, used to select and then to update: built twice they can
-  // drift, and a drift here means updating rows the count never mentioned.
+  // One expression for select and update: built twice they can drift.
   const affected = and(
     eq(schema.links.orgId, orgId),
     suspend ? isNull(schema.links.suspendedAt) : isNotNull(schema.links.suspendedAt),
@@ -734,8 +610,7 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
       .update(schema.links)
       .set(suspensionPatch(suspend, c.var.user!.id, reason))
       .where(affected);
-    // After the flag is written, so a message consumed early cannot read the
-    // old value.
+    // After the flag is written, so a message consumed early cannot read the old value.
     await republishOrgLinks(c.env, db, orgId);
   }
 
@@ -749,18 +624,8 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   return c.json({ count: links.length });
 });
 
-/**
- * Anonymous links from the landing page (Direction A of #96).
- *
- * They live in their own table with no org and no owner, so they cannot
- * appear in the list above, but an abuse report naming a slug will not know
- * or care which table it came from. Listed here so there is one screen to
- * check. A report that names one is stored with its id (#488) and shows in
- * the reports list.
- *
- * Deleting one is the only action: they expire in 24 hours anyway, and
- * suspending something that is about to vanish is bookkeeping nobody reads.
- */
+// Anonymous links have no org, so they are listed here for one screen of checking (#488).
+// Deleting is the only action: they expire in 24 hours anyway.
 adminLinkRoutes.get("/anonymous", async (c) => {
   const log = c.get("log");
   log.set({ route: "anonymous-links" });
@@ -796,8 +661,7 @@ adminLinkRoutes.delete("/anonymous/:id", async (c) => {
   if (!anon) throw new HTTPException(404, { message: "Link not found" });
 
   await db.delete(schema.anonLinks).where(eq(schema.anonLinks.id, id));
-  // The row is gone, so the KV key would resolve to nothing on its next
-  // sync; this makes that immediate rather than eventual.
+  // The row is gone, so this makes the KV key's removal immediate rather than eventual.
   await enqueueStorage(c.env, [syncLinkMsg(anon.slug, null)]);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,

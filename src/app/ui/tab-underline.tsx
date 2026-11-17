@@ -1,14 +1,8 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { cn } from "./cn";
 
-/**
- * Keeps an absolutely placed element (an underline, a segmented control's
- * pill) over whichever child of `bar` matches `selector`: as wide as it,
- * moved across to it. Measured after every render and whenever the bar
- * changes size (fonts loading, a phone turning). The first placement does
- * not animate (the element starts with `data-still`), so a page opens with
- * it in place, not sliding in from the left.
- */
+// The first placement does not animate (the element starts with `data-still`), so a page
+// opens with it in place, not sliding in from the left.
 export function useSlideTo<T extends HTMLElement>(
   bar: RefObject<HTMLElement | null>,
   selector: string,
@@ -26,7 +20,6 @@ export function useSlideTo<T extends HTMLElement>(
       moving.style.translate = `${current.offsetLeft}px 0`;
     };
     place();
-    // Animate from the second placement on.
     const raf = requestAnimationFrame(() => moving.removeAttribute("data-still"));
     const resized = new ResizeObserver(place);
     resized.observe(el);
@@ -38,17 +31,8 @@ export function useSlideTo<T extends HTMLElement>(
   return slider;
 }
 
-/**
- * The underline of a tab bar whose tabs are links or plain buttons (API,
- * Platform): one bar that slides to the current tab, instead of each tab
- * drawing its own and the line jumping. PanelTabs gets the same from Base
- * UI's Tabs.Indicator.
- *
- * It follows whichever child of `bar` has `aria-current="page"`, measured
- * after every render and whenever the bar changes size (fonts loading, a
- * phone turning). The first placement does not animate: a page opens with
- * its underline in place, not sliding in from the left.
- */
+// PanelTabs gets the same from Base UI's Tabs.Indicator. It follows the child with
+// `aria-current="page"`, remeasured after every render and on resize.
 export function TabUnderline({
   bar,
   className,

@@ -5,11 +5,8 @@ import worker from "../../src/worker";
 import { hashPassword } from "../../src/worker/password";
 import { applyTestMigrations, authEnv, signInCookie, TEST_PASSWORD } from "./support";
 
-/**
- * No Polar settings: nothing is sold, so nothing is capped and billing is
- * not there. Its own file because plan.ts holds the billing switch as module
- * state, set on each request from that request's env.
- */
+// Its own file: plan.ts holds the billing switch as module state, set on each
+// request from that request's env.
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();
@@ -48,7 +45,6 @@ it("has no caps and no billing without Polar", async () => {
   // SAFETY: /api/user answers { user } with the plan string, and the test fails on any other shape.
   expect(((await me.json()) as { user: { plan: string } }).user.plan).toBe("unlimited");
 
-  // A free user owns one org, and sign-in already made it. Two more is Pro-only.
   for (const name of ["Second", "Third"]) {
     const res = await call("/api/orgs", {
       method: "POST",
@@ -59,7 +55,6 @@ it("has no caps and no billing without Polar", async () => {
   }
 
   expect((await call("/api/billing/portal", { method: "POST", headers })).status).toBe(404);
-  // The card and invoices have a true answer here: none.
   const details = await call("/api/billing/details", { headers });
   expect(details.status).toBe(200);
   expect(await details.json()).toEqual({ card: null, invoices: [] });

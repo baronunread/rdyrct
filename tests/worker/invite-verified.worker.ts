@@ -1,14 +1,6 @@
-/**
- * An email invite is bound to the address it was sent to, and an account
- * only owns an address once it has proved it.
- *
- * Without that, an account that signed up as somebody else's address and
- * never verified it could accept that person's invite, at its role. A link
- * invite (no address) stays a bearer link.
- *
- * A deployment with no email provider can prove no address at all, so there
- * the token is all the proof there is: the admin handed it to that person.
- */
+// An email invite is bound to its address, and an account owns an address only
+// once verified. A link invite stays a bearer link. With no email provider no
+// address can be proved, so the token is all the proof there is.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";

@@ -1,11 +1,5 @@
-/**
- * CHANGELOG.md, parsed for the /changelog page.
- *
- * The file stays the one source: a self-hoster reads it on GitHub, the page
- * reads the same text at build time, and nobody keeps a second copy in step.
- * Only the shapes that file uses are understood: `## version`, `### section`,
- * `- bullet` (wrapped lines indented under it) and plain paragraphs.
- */
+// CHANGELOG.md stays the one source: the page reads the same text at build time.
+// Only the shapes that file uses are understood.
 export interface Release {
   version: string;
   intro: string[];
@@ -72,7 +66,6 @@ function* lines(markdown: string) {
   for (const line of markdown.split("\n")) yield classify(line);
 }
 
-/** One line of the file's inline markup, as pieces a component can render. */
 export function inlinePieces(text: string): { kind: "text" | "bold" | "code"; text: string }[] {
   return text
     .split(/(\*\*[^*]+\*\*|`[^`]+`)/)

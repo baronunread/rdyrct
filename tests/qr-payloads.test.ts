@@ -64,7 +64,6 @@ describe("whatsappPayload", () => {
     );
     expect(whatsappPayload("+39 333 1234567", "  ")).toBe("https://wa.me/393331234567");
     expect(whatsappPayload("12", "")).toBe("");
-    // Not international, or carrying more than the number.
     expect(whatsappPayload("07700 900123", "")).toBe("");
     expect(whatsappPayload("+1 212 555 0123 ext 42", "")).toBe("");
   });

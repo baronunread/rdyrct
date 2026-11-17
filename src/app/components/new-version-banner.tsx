@@ -10,9 +10,6 @@ import {
   subscribeNewVersion,
 } from "../lib/new-version";
 
-/** How far to lift this card while the cookie notice is open: its height and
- * a gap. On a phone both cards span the bottom edge, and this one sits above
- * it rather than over its buttons. Measured only while this card is shown. */
 function useConsentLift(shown: boolean): number {
   const consentOpen = useConsentBannerVisible() && POSTHOG_CONFIGURED && shown;
   const [height, setHeight] = useState(0);
@@ -29,22 +26,14 @@ function useConsentLift(shown: boolean): number {
   return height;
 }
 
-/**
- * Shown when a code-split chunk fails to load: almost always a stale tab after
- * a deploy, whose old asset names no longer exist. We point the visitor at a
- * reload instead of crashing or auto-reloading under them; after a blocked
- * click (lib/chunk-guard.ts) the reload opens the page they clicked. Mounted
- * outside the error boundary so it survives the boundary catching the chunk
- * failure.
- */
+/** Shown when a chunk fails to load, almost always a stale tab after a deploy. Mounted outside
+ * the error boundary so it survives the failure. */
 export function NewVersionBanner() {
   const available = useSyncExternalStore(subscribeNewVersion, getNewVersion, () => false);
   const consentLift = useConsentLift(available);
   if (!available) return null;
 
-  // A card in the bottom corner the toasts and the cookie notice leave free,
-  // not a bar across the top: it shows the moment a hover's preload fails,
-  // and a bar there covered the header link the visitor was about to click.
+  // A corner card, not a top bar: a bar covered the header link the visitor was about to click.
   return (
     <div
       role="alert"

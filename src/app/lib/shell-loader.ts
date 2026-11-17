@@ -1,15 +1,8 @@
 import { createElement, lazy, useState, type ComponentProps, type ComponentType } from "react";
 
-/**
- * The app shell's code, loaded once and shared by everything that needs it.
- *
- * main.tsx renders the shell lazily. React.lazy suspends on its first render
- * even when the chunk is already in the browser, so a page change into the
- * app always drew the shell's skeleton for a frame. That frame is what a
- * view transition captures, which turned the sign-in card's hand-over into a
- * card fading over a skeleton (lib/setup-arrive.ts). Once `loadShell` has
- * resolved, the parts below render the shell directly and nothing suspends.
- */
+// React.lazy suspends on its first render even with the chunk in the browser, so a page
+// change into the app drew the shell's skeleton for a frame, which a view transition
+// captured (lib/setup-arrive.ts). Once `loadShell` resolves, nothing suspends.
 
 type Shell = typeof import("../routes/shell");
 
@@ -28,8 +21,7 @@ export function loadShell(): Promise<Shell> {
   return loading;
 }
 
-/** One of the shell's exports: direct once loaded, lazy until then. Chosen
- * once per mount, so a part never swaps component type under itself. */
+// Chosen once per mount, so a part never swaps component type under itself.
 function shellPart<P extends object>(pick: (shell: Shell) => ComponentType<P>) {
   const Lazy = lazy(() => loadShell().then((m) => ({ default: pick(m) })));
   return function ShellPart(props: P) {

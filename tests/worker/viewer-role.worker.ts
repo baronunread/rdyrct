@@ -10,13 +10,8 @@ import {
   TEST_PASSWORD,
 } from "./support";
 
-/**
- * A viewer reads everything the org holds and writes nothing (#157).
- *
- * The split is the whole feature, so it is asserted route by route rather
- * than by spot-check: getting it wrong one way locks a viewer out of the only
- * thing they exist to do, and the other way hands them a write.
- */
+// A viewer reads everything and writes nothing (#157). Asserted route by route:
+// a miss one way locks them out of reading, the other hands them a write.
 async function seedViewer(role = "viewer"): Promise<string> {
   await env.DB.batch([
     env.DB.prepare(
@@ -45,7 +40,6 @@ async function seedLink() {
 
 const url = (path: string) => `http://localhost/api/orgs/org-1${path}`;
 
-/** Every read a member can reach. A viewer must reach all of them. */
 const READS = [
   "/links",
   "/links/quota-usage",
@@ -57,7 +51,6 @@ const READS = [
   "/link-export",
 ];
 
-/** Every write. A viewer must reach none of them. */
 const WRITES: [string, string, unknown][] = [
   ["POST", "/links", { destination: "https://example.com/new" }],
   ["POST", "/links/claim", { slug: "whatever" }],
@@ -118,9 +111,8 @@ describe("the viewer role", () => {
     expect(res.status).toBe(200);
   });
 
-  // The copy-link invite rather than the email one: this is about the role
-  // surviving into the row, and a mail send would only add a dependency on
-  // the email emulator to say so.
+  // The copy-link invite, not the email one: a mail send would only add a
+  // dependency on the email emulator.
   it("can be invited, and the invite stores the role", async () => {
     const owner = await freeOwnerCookie();
     const res = await fetchWorker(

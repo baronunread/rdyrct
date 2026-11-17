@@ -1,11 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-/**
- * /branded-link-shortener: the page for "branded link shortener" searches.
- * It is linked from every footer, states the plans from PLAN_LIMITS and
- * PLAN_PRICES, and ends on one sign-up.
- */
-
 test("the branded link page says what a domain costs and leads to sign-up", async ({ page }) => {
   await page.goto("/branded-link-shortener");
   await expect(

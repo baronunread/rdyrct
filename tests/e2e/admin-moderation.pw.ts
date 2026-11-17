@@ -4,23 +4,10 @@ import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";
 import { createQuickLink, expectRedirect } from "./orgs";
 
-/**
- * Admin link moderation through the screen an admin actually uses (#67).
- *
- * The worker tests cover enforcement. This covers the part only a browser
- * can: that somebody holding an abuse report can find the link by its
- * destination, stop it, and see that it stopped.
- */
-
 const password = "test-password-123";
 
-/**
- * The admin's PATCH to a link, answered. The row's badge is not the moment
- * the request finished: any refetch of the list between the request's D1
- * write and its KV write already shows the new state, and on a loaded dev
- * server that gap was long enough for the redirect check to land in it and
- * read the old KV value (a 403 where a restored link should 302).
- */
+// Wait for the PATCH answer: a list refetch between the D1 write and the KV write
+// already shows the new badge, so it is too early a signal for the redirect check.
 const linkPatch = (page: import("@playwright/test").Page) =>
   page.waitForResponse(
     (response) =>
@@ -28,7 +15,6 @@ const linkPatch = (page: import("@playwright/test").Page) =>
   );
 
 test("an admin can find a link by destination and suspend it", async ({ page }) => {
-  // A normal account with a link to be reported.
   const ownerEmail = `owner-${Date.now()}@gmail.com`;
   const destination = `https://phishy-${Date.now()}.example/login`;
   await signUpAndVerify(page, ownerEmail, password);
@@ -41,8 +27,7 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
     ])
   )[0].slug;
 
-  // The link redirects, which is the thing suspension has to stop. Polled,
-  // because publishing rides the storage queue and is eventual by design.
+  // Polled: publishing rides the storage queue and is eventual by design.
   await expect
     .poll(async () => (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
       timeout: 15_000,
@@ -50,17 +35,11 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
     })
     .toBe(302);
 
-  // Now an admin, holding the report.
   await makePlatformAdmin(page, ownerEmail);
 
-  // Reached the way an admin reaches it: one Platform entry in the sidebar,
-  // then the section tabs. Four sidebar entries put "Links" there twice
-  // meaning two different things.
   await page.goto("/dashboard");
   await page.getByRole("link", { name: "Platform" }).click();
-  // Scoped to the section tabs: the sidebar's own "Links" (the current
-  // organization's) is still on screen, and that ambiguity is why the four
-  // platform entries came out of the sidebar in the first place.
+  // Scoped to the section tabs: the sidebar's own "Links" is also on screen.
   await page
     .getByRole("navigation", { name: "Platform sections" })
     .getByRole("link", { name: "Links" })
@@ -72,18 +51,13 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   const row = page.getByRole("row").filter({ hasText: slug });
   await expect(row).toBeVisible({ timeout: 10_000 });
 
-  // Suspend lives in the row's actions menu, next to restore and delete,
-  // rather than as a button of its own on every row.
   await row.getByRole("button", { name: `Actions for ${slug}` }).click();
   await page.getByRole("menuitem", { name: "Suspend link" }).click();
-  // The title names the link, so nobody suspends the wrong one.
   const dialog = page.getByRole("dialog", { name: new RegExp(`^Suspend .*/${slug}\\?$`) });
   await expect(dialog).toBeVisible();
   // The real promise (#101): KV reaches every location within a minute, not
   // at once.
   await expect(dialog.getByText(/stops within a minute everywhere/)).toBeVisible();
-  // A suspension with no reason is not answerable later, so it is refused:
-  // the button stays pressable and the empty field is marked instead.
   const reason = dialog.getByRole("textbox", { name: "Reason" });
   await dialog.getByRole("button", { name: "Suspend link" }).click();
   await expect(reason).toHaveAttribute("aria-invalid", "true");
@@ -111,7 +85,6 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   );
   expect(Number(rows[0].n)).toBe(1);
 
-  // Restoring writes KV the same way.
   await row.getByRole("button", { name: `Actions for ${slug}` }).click();
   await page.getByRole("menuitem", { name: "Restore link" }).click();
   const restore = page.getByRole("dialog", { name: "Restore this link?" });
@@ -122,14 +95,11 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   await expect(row.getByText("suspended")).toBeHidden({ timeout: 10_000 });
   expect((await page.request.get(`/${slug}`, { maxRedirects: 0 })).status()).toBe(302);
 
-  // And it is answerable. The log is its own section, since it records bans
-  // and org deletions too, not only link actions.
   await page
     .getByRole("navigation", { name: "Platform sections" })
     .getByRole("link", { name: "Audit log" })
     .click();
   await expect(page.getByText("link.suspend").first()).toBeVisible();
-  // The row says who, what and to whom; the reason opens from the row.
   await page
     .getByRole("button", { name: `Open entry: link.suspend, /${slug}` })
     .first()
@@ -153,8 +123,6 @@ test("the Links tab is invisible and unreachable for a normal user", async ({ pa
 test("anonymous links and the audit log are reachable, not buried under the list (#67)", async ({
   page,
 }) => {
-  // They used to sit below up to 200 link rows, which is the same as not
-  // being there at all.
   const email = `admin-nav-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
   await makePlatformAdmin(page, email);
@@ -163,8 +131,7 @@ test("anonymous links and the audit log are reachable, not buried under the list
   await page.getByRole("button", { name: "Anonymous" }).click();
   await expect(page.getByRole("textbox", { name: "Search anonymous links" })).toBeVisible();
 
-  // And the big table is out of the way while it is open. Both searches carry
-  // the same placeholder, so the label is what tells them apart.
+  // Both searches carry the same placeholder, so the label tells them apart.
   await expect(page.getByRole("textbox", { name: "Search links" })).toHaveCount(0);
 
   await page
@@ -175,9 +142,8 @@ test("anonymous links and the audit log are reachable, not buried under the list
 });
 
 test("the platform table fits its card instead of running off the side", async ({ page }) => {
-  // An auto-layout table lets a long destination set the column width and
-  // push the row past the card, and `max-w` on the cell does nothing about
-  // it. Asserted as "the page never scrolls sideways", which is the symptom.
+  // Asserted as "the page never scrolls sideways": a long destination in an auto-layout
+  // table pushes the row past the card, and max-w on the cell does nothing about it.
   const email = `admin-layout-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
 
@@ -212,7 +178,6 @@ test("an admin sees a suspended org and restores its links in bulk", async ({ pa
   });
   expect(suspend.ok()).toBe(true);
 
-  // The org list says so: it used to show nothing.
   await page.goto("/admin/orgs");
   await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
 

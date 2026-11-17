@@ -4,11 +4,8 @@ import { RDYRCT_SITE } from "../../src/shared/site";
 import { notFoundPage } from "../../src/worker/not-found-page";
 import { disabledPage } from "../../src/worker/link-state-page";
 
-/**
- * The "Made with rdyrct" link on the 404 and disabled pages. The worker
- * tests have no built assets, so this hands the pages a stand-in for the
- * prerendered file with the same markers the build writes.
- */
+// The worker tests have no built assets: a stand-in for the prerendered file,
+// with the markers the build writes.
 function assetsServing(name: string): Fetcher {
   const html = `<html><body data-page="${name}"><div id="root"><a href="/">Go home</a><a data-slot="${MADE_WITH_SLOT}" href="/">Made with rdyrct</a></div></body></html>`;
   return {

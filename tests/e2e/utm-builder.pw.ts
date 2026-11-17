@@ -1,11 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-/**
- * The free UTM builder (#281, #326): it tags a link in the browser, catches
- * values that would split in analytics, and hands the result to the
- * anonymous shortener.
- */
-
 test("builds a tagged link, tidies its case, and copies it", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/utm-builder");
@@ -14,12 +8,9 @@ test("builds a tagged link, tidies its case, and copies it", async ({ page, cont
   const output = page.getByRole("status", { name: "Tagged link" });
   await expect(output).toHaveText("Paste a link to start.");
 
-  // Copy is never disabled: with nothing to copy it marks the field.
   await page.getByRole("button", { name: "Copy link" }).click();
   await expect(page.getByText("Paste a link first")).toBeVisible();
 
-  // No scheme is fine, and a pasted link that is already tagged fills the
-  // fields from its own parameters.
   await page
     .getByPlaceholder("https://example.com/spring-sale")
     .fill("example.com/spring?ref=mail&utm_source=Newsletter");
@@ -28,7 +19,6 @@ test("builds a tagged link, tidies its case, and copies it", async ({ page, cont
   );
   await expect(page.getByPlaceholder("newsletter")).toHaveValue("Newsletter");
 
-  // A preset fills source and medium together; editing one lets it go.
   await page.getByRole("button", { name: "LinkedIn" }).click();
   await expect(page.getByPlaceholder("newsletter")).toHaveValue("linkedin");
   await expect(page.getByPlaceholder("email")).toHaveValue("social");
@@ -48,7 +38,6 @@ test("builds a tagged link, tidies its case, and copies it", async ({ page, cont
     "https://example.com/spring?ref=mail&utm_source=Newsletter&utm_medium=Email+Blast&utm_campaign=spring-sale",
   );
 
-  // Capitals and spaces report apart from their lowercase twins.
   const fix = page.getByRole("button", { name: "Use lowercase and hyphens" });
   await expect(fix).toBeVisible();
   await fix.click();
@@ -77,15 +66,12 @@ test("shortens the tagged link, and the short link carries the tags", async ({ p
     "/signup",
   );
 
-  // The short link sends the visitor to the tagged address.
-  // On the shared host (rdyr.cc here), which this suite cannot resolve, so
-  // the slug goes to the app host, as anon-shortener.pw.ts does.
+  // The shared host (rdyr.cc) does not resolve in this suite, so the slug goes to the app host.
   const slug = (await short.getAttribute("href"))!.split("/").pop()!;
   const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(res.status()).toBe(302);
   expect(res.headers().location).toBe(`${destination}?utm_source=linkedin&utm_medium=social`);
 
-  // This browser has spent its one free link: the next one is a sign-up.
   await page.reload();
   await page.getByPlaceholder("https://example.com/spring-sale").fill(destination);
   await expect(page.getByRole("link", { name: "Sign up to shorten it" })).toHaveAttribute(
@@ -102,19 +88,16 @@ test("builds many links at once, copies them all and downloads a CSV", async ({
   await page.goto("/utm-builder");
   await page.getByRole("button", { name: "Many links" }).click();
 
-  // Nothing to copy marks the address field, as the one-link Copy does.
   const urls = page.getByLabel("Website URLs");
   await page.getByRole("button", { name: "Copy all" }).click();
   await expect(page.getByText("Paste a link first")).toBeVisible();
   await expect(urls).toBeFocused();
 
-  // Leaving the mode answers the mark: coming back does not grab focus.
   await page.getByRole("button", { name: "One link" }).click();
   await page.getByRole("button", { name: "Many links" }).click();
   await expect(urls).not.toBeFocused();
   await expect(urls).not.toHaveAttribute("aria-invalid", "true");
 
-  // Text that holds no web address says so, on Download too.
   await urls.fill("not an address");
   await page.getByRole("button", { name: "Download CSV" }).click();
   await expect(page.getByText("Not a web address", { exact: true })).toBeVisible();
@@ -125,7 +108,6 @@ test("builds many links at once, copies them all and downloads a CSV", async ({
   await channels.getByRole("button", { name: "LinkedIn" }).click();
   await channels.getByRole("button", { name: "Newsletter" }).click();
 
-  // Two addresses times two channels; the bad line is named, not dropped silently.
   const list = page.getByRole("list", { name: "Tagged links" });
   await expect(list.getByRole("listitem")).toHaveCount(4);
   await expect(page.getByText("Line 2 is not a web address")).toBeVisible();
@@ -133,7 +115,6 @@ test("builds many links at once, copies them all and downloads a CSV", async ({
   await page.getByRole("button", { name: "Copy all" }).click();
   await expect(page.getByText("Copied 4 links")).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
-  // Channels in the order they are listed, not the order they were picked.
   expect(copied.split("\n")).toEqual([
     "https://example.com/a?utm_source=newsletter&utm_medium=email&utm_campaign=spring-sale",
     "https://example.com/a?utm_source=linkedin&utm_medium=social&utm_campaign=spring-sale",
@@ -177,7 +158,6 @@ test("saves tags as a template that survives a reload", async ({ page }) => {
   await expect(page.getByPlaceholder("spring-sale", { exact: true })).toHaveValue("weekly");
   await expect(template).toHaveAttribute("aria-pressed", "true");
 
-  // A saved template is a channel in Many links too.
   await page.getByRole("button", { name: "Many links" }).click();
   await expect(
     page
@@ -189,7 +169,6 @@ test("saves tags as a template that survives a reload", async ({ page }) => {
   await page.getByRole("button", { name: "Remove template newsletter / email / weekly" }).click();
   await expect(template).toHaveCount(0);
 
-  // Storage that refuses the write says so, rather than "Template saved".
   await page.evaluate(() => {
     Storage.prototype.setItem = () => {
       throw new DOMException("full", "QuotaExceededError");
@@ -213,7 +192,6 @@ test("explains the parameters and answers common questions", async ({ page }) =>
   }
   await page.getByText("Are UTM parameters case sensitive?").click();
   await expect(page.getByText("Use lowercase for every value.")).toBeVisible();
-  // The same questions are FAQPage data for a search result.
   const json = await page.locator('script[type="application/ld+json"]').allTextContents();
   expect(json.join("\n")).toContain("FAQPage");
 });

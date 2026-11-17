@@ -12,11 +12,8 @@ import {
   type Icon,
 } from "@tabler/icons-react";
 
-/**
- * The sidebar's icons: Tabler (MIT), the closest matches to the redesign
- * mock's, drawn at the mock's lighter 1.75 stroke. The mock's own paths are
- * not used: their licence is unknown, and icons here must be MIT.
- */
+// Tabler (MIT). The mock's own paths are not used: their licence is unknown,
+// and icons here must be MIT.
 const light =
   (Tabler: Icon) =>
   ({ size = 16, className }: { size?: number; className?: string }) => (

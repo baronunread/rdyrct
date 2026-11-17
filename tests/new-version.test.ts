@@ -1,16 +1,7 @@
 /**
- * The stale-chunk recovery rule: when a lazy route chunk 404s after a deploy,
- * the error boundary forces a reload onto the current build, counted per
- * failure. A route on `lazyRouteComponent` may already have spent its own
- * single built-in reload before this ever runs, and a first reload can race a
- * deploy that is still landing, so the budget is more than one. If the same
- * chunk is still missing after every attempt (a genuinely broken deploy), it
- * stops reloading so the tab doesn't loop and falls through to the notice;
- * the next deploy, with new chunk names, gets its own budget.
- *
- * `vite dev` masks this in the browser: its own error overlay catches the
- * failed dynamic import before React does, so an e2e can't see the boundary.
- * This tests the guard, which is the whole of the new logic.
+ * `vite dev` masks this in the browser, so an e2e cannot see the boundary: this tests
+ * the guard. The budget is more than one reload because a `lazyRouteComponent` may
+ * have spent its own, and a first reload can race a deploy still landing.
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
@@ -51,8 +42,6 @@ test("reloads a bounded number of times per failure, then refuses so the tab can
   expect(reloadForNewVersion(A)).toBe(true);
   expect(reloads).toBe(2);
 
-  // Same failure, chunk still missing after every attempt: no more reloads,
-  // caller falls back to the notice.
   expect(reloadForNewVersion(A)).toBe(false);
   expect(reloads).toBe(2);
 });

@@ -34,17 +34,13 @@ import {
   rateLimits,
 } from "./support";
 
-/**
- * Google Web Risk as the second destination check (#341), with Google's API
- * stubbed: what a hit holds, and how far, on create, on edit, and in the
- * weekly rescan. How its answers are read is tests/risk.test.ts.
- */
+// Google Web Risk as the second destination check (#341), Google's API stubbed.
+// How its answers are read is tests/risk.test.ts.
 
 const KEY = "test-web-risk-key";
 const LISTED = "https://kit.example/login";
 const realFetch = globalThis.fetch;
 
-/** Google lists any URL on kit.example; the DNS resolver passes everything. */
 function stubGoogle(options: { down?: boolean } = {}) {
   const lookups: string[] = [];
   globalThis.fetch = async (input, init) => {
@@ -98,8 +94,7 @@ const orgRow = () =>
     "select review_flagged_at as flagged, links_suspended_at as suspended from orgs where id = 'org-1'",
   ).first<{ flagged: number | null; suspended: number | null }>();
 
-/** Make every write to `links.suspended_at` throw, the way a hold fails
- * partway: after the Web Risk stamp, before the link is held. */
+// A hold failing partway: after the Web Risk stamp, before the link is held.
 const failHolds = () =>
   env.DB.prepare(
     "create trigger fail_hold before update of suspended_at on links begin select raise(abort, 'hold failed'); end",
@@ -109,22 +104,19 @@ const allowHolds = () => env.DB.prepare("drop trigger fail_hold").run();
 const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
 
-/** Stamped to be asked about again tomorrow: due in a day, not a week, and
- * not null, which would put it ahead of every link never checked. */
+// Not null: that would put it ahead of every link never checked.
 function expectRetryTomorrow(stamp: number | null | undefined) {
   expect(stamp).not.toBeNull();
   expect(stamp!).toBeGreaterThan(Date.now() - WEEK_MS);
   expect(stamp!).toBeLessThanOrEqual(Date.now() - WEEK_MS + DAY_MS);
 }
 
-/** Move every stamp a day into the past, as if the next daily run came. */
 const aDayLater = () =>
   env.DB.prepare("update links set web_risk_checked_at = web_risk_checked_at - ?")
     .bind(DAY_MS)
     .run();
 
-/** The owner got one hold mail, and it carries the attribution and notice
- * Google's terms ask for (Service Specific Terms §47). */
+// The attribution and notice Google's terms ask for (Service Specific Terms §47).
 function expectHoldMail(sent: CapturedEmail[], subject: string) {
   const owner = sent.filter((m) => m.to === "free@example.com");
   expect(owner.map((m) => m.subject)).toEqual([subject]);
@@ -175,13 +167,11 @@ describe("a hit on create", () => {
     expect((await linkRow(listed))?.suspended_at).not.toBeNull();
     expect((await linkRow(clean))?.suspended_at).not.toBeNull();
     expect((await orgRow())?.suspended).not.toBeNull();
-    // Google's verdict names the listed link only; the clean one says why it went too.
     expect((await linkRow(listed))?.suspend_reason).toMatch(/^Google Web Risk lists/);
     expect((await linkRow(clean))?.suspend_reason).toMatch(/^Held with its organization/);
     expectHoldMail(mail.sent, "Your links are on hold");
     mail.restore();
 
-    // The admin list names the cause, not a link swept along with it.
     const orgs = await jsonBody<AdminOrgRow[]>(
       await fetchWorker(
         new Request("http://localhost/api/admin/orgs", {
@@ -213,7 +203,6 @@ describe("a hit on create", () => {
     const row = await linkRow(id);
     expect(row?.suspended_at).toBeNull();
     expect(row?.web_risk_checked_at).toBeNull();
-    // The DNS check still answered.
     expect(row?.risk_score).toBe(0);
   });
 
@@ -263,7 +252,6 @@ describe("a hit on edit", () => {
 });
 
 describe("the weekly rescan", () => {
-  /** `n` live links in org-1, never looked at by Web Risk. */
   async function seedLinks(n: number, destination = "https://example.com/x") {
     await env.DB.prepare(
       `insert into links (id, org_id, slug, destination, created_at)
@@ -286,7 +274,6 @@ describe("the weekly rescan", () => {
     const clean = await linkRow("bulk-2");
     expect(clean?.suspended_at).toBeNull();
     expect(clean?.web_risk_checked_at).toBeGreaterThan(0);
-    // A clean answer does not write a score over the DNS check's.
     expect(clean?.risk_score).toBeNull();
   });
 
@@ -331,8 +318,7 @@ describe("the weekly rescan", () => {
     stubGoogle();
 
     expect(await rescanFreeLinks(withKey())).toBe(WEB_RISK_RESCAN_BATCH);
-    // Counted in rows, not calls: the links share a destination, so the
-    // cache answers most of them.
+    // Rows, not calls: the links share a destination, so the cache answers most.
     const stamped = await env.DB.prepare(
       "select count(*) as n from links where web_risk_checked_at is not null",
     ).first<{ n: number }>();
@@ -351,8 +337,8 @@ describe("the weekly rescan", () => {
   });
 
   it("does not let links Google never answers for take every daily slot", async () => {
-    // Before, a failed lookup left the link null, and nulls go first: a
-    // batch of them took the whole run every day and nothing else was seen.
+    // A failed lookup leaves the link null, and nulls go first: a batch of
+    // them would take the whole run every day.
     await freeOwnerCookie();
     await seedLinks(WEB_RISK_RESCAN_BATCH);
     const lookups = stubGoogle({ down: true });
@@ -401,9 +387,8 @@ describe("what a lookup costs (#341 review)", () => {
       .run();
 
   it("drops the old stamp when an edit over budget moves a checked link", async () => {
-    // Over budget, the edit to a listed site is never looked up. The stamp
-    // from the clean destination used to stay, so the rescan skipped the
-    // link for a week while it pointed at the listed site.
+    // Over budget, the edit is never looked up. A stale clean stamp would make
+    // the rescan skip the link for a week while it points at a listed site.
     stubGoogle();
     const cookie = await freeOwnerCookie();
     const id = await createLink(cookie, "https://example.com/clean");
@@ -439,7 +424,6 @@ describe("what a lookup costs (#341 review)", () => {
     expect(lookups).toHaveLength(0);
     expect((await linkRow(id))?.web_risk_checked_at).toBeNull();
 
-    // Yesterday's count is no limit today.
     await env.DB.prepare(
       "update orgs set web_risk_day = web_risk_day - 1 where id = 'org-1'",
     ).run();
@@ -447,7 +431,7 @@ describe("what a lookup costs (#341 review)", () => {
     expect(lookups).toEqual(["https://kit.example/other"]);
     expect((await linkRow(next))?.suspended_at).not.toBeNull();
 
-    // And the rescan, which has no budget, picks up the one that was skipped.
+    // The rescan has no budget, so it picks up the skipped one.
     await rescanFreeLinks(withKey());
     expect((await linkRow(id))?.suspended_at).not.toBeNull();
   });
@@ -468,7 +452,7 @@ describe("an anonymous link (#341 review)", () => {
     stubGoogle();
     const res = await shorten(LISTED);
     expect(res.status).toBe(422);
-    // A warning based on Web Risk names it (Google's terms, §47).
+    // Google's terms (§47) require a Web Risk warning to name it.
     const { message } = await jsonBody<{ message: string }>(res);
     expect(message).toContain("Google Web Risk");
     expect(message).toContain("cannot guarantee");
@@ -486,7 +470,7 @@ describe("an anonymous link (#341 review)", () => {
 
   it("spends at most its caller's daily share of the site-wide lookups (security #7)", async () => {
     const lookups = stubGoogle();
-    // Open, so the per-minute limit does not decide it: this is the day's.
+    // Open, so the per-minute limit does not decide it.
     const testEnv = { ...withKey(), ...rateLimits({ anon_link: openLimit() }) };
     const from = (ip: string, destination: string) =>
       fetchWorker(
@@ -503,7 +487,6 @@ describe("an anonymous link (#341 review)", () => {
           ?.lookups ?? 0,
       );
 
-    // A listed site first, so its answer is cached.
     expect((await from("203.0.113.1", LISTED)).status).toBe(422);
     for (let i = 1; i < WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY; i++)
       expect((await from("203.0.113.1", `https://example.com/p/${i}`)).status).toBe(201);
@@ -517,17 +500,14 @@ describe("an anonymous link (#341 review)", () => {
     expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY);
     expect(await globalSpent()).toBe(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY);
 
-    // A cached answer costs nothing, so a listed site is still refused.
     expect((await from("203.0.113.1", LISTED)).status).toBe(422);
 
-    // Another caller has its own share, and so does tomorrow.
     expect((await from("198.51.100.7", "https://example.com/other")).status).toBe(201);
     expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY + 1);
     await env.DB.prepare("update web_risk_anon_usage set day = day - 1").run();
     expect((await from("203.0.113.1", "https://example.com/tomorrow")).status).toBe(201);
     expect(lookups).toHaveLength(WEB_RISK_ANON_LOOKUPS_PER_CLIENT_PER_DAY + 2);
 
-    // And the daily sweep drops yesterday's counts.
     await forgetOldAnonWebRiskUsage(env.DB);
     const left = await env.DB.prepare("select count(*) as n from web_risk_anon_usage").first<{
       n: number;
@@ -548,9 +528,8 @@ describe("an anonymous link (#341 review)", () => {
 });
 
 describe("a second look on a traffic spike (#390)", () => {
-  /** A link in a new free org, checked clean today, with 301 redirects two
-   * hours ago: past NEW_LINK_REDIRECTS, and outside the last hour, so only
-   * the new-link signal fires. `at` moves the redirects. */
+  // 301 redirects two hours ago: past NEW_LINK_REDIRECTS and outside the last
+  // hour, so only the new-link signal fires. `at` moves the redirects.
   async function spikingLink(
     id: string,
     destination: string,
@@ -571,7 +550,6 @@ describe("a second look on a traffic spike (#390)", () => {
       .run();
   }
 
-  /** The cache key askWebRisk would use, holding a clean answer. */
   async function cacheClean(destination: string) {
     const uri = webRiskUri(destination) ?? "";
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uri));
@@ -612,14 +590,12 @@ describe("a second look on a traffic spike (#390)", () => {
     await sweepAbuse(withKey());
     await sweepAbuse(withKey());
     expect(lookups).toEqual(["https://example.com/launch"]);
-    // Still only warned: a clean answer changes nothing.
     const row = await linkRow("launch");
     expect(row?.suspended_at).toBeNull();
   });
 
   it("asks about the busiest link of a burst, however old the link is", async () => {
-    // Two days old, so not the new-link signal: 201 redirects in the last
-    // hour make it the burst, and it is the org's busiest link.
+    // Two days old, so not the new-link signal: 201 redirects in the last hour make it the burst.
     await spikingLink("old", LISTED, 201, Date.now());
     await env.DB.prepare("update links set created_at = ? where id = 'old'")
       .bind(Date.now() - 2 * DAY_MS)
@@ -692,8 +668,7 @@ describe("a second look on a traffic spike (#390)", () => {
   });
 
   it("asks again on the next run when Google did not answer", async () => {
-    // The day's mark used to go in before the lookup, so one failure turned
-    // the recheck off for that link until tomorrow.
+    // The day's mark must not go in before the lookup, or one failure turns the recheck off until tomorrow.
     await spikingLink("flaky", LISTED);
     stubGoogle({ down: true });
     expect(await recheckSpikingLinks(withKey(), ["flaky"])).toMatchObject({ asked: 1, failed: 1 });
@@ -736,8 +711,7 @@ describe("the site-wide daily cap", () => {
     const lookups = stubGoogle();
     const cookie = await freeOwnerCookie();
     const id = await createLink(cookie, "https://example.com/a");
-    // The same page again comes from the cache (the lookup drops the
-    // fragment): no call, nothing counted.
+    // The lookup drops the fragment, so this comes from the cache: no call, nothing counted.
     await createLink(cookie, "https://example.com/a#again");
     // The spike recheck skips the cache, and is counted all the same.
     await recheckSpikingLinks(withKey(), [id]);
@@ -767,7 +741,6 @@ describe("the site-wide daily cap", () => {
     // Nobody asked, so nothing is stamped: the link stays first in line.
     expect((await linkRow(id))?.web_risk_checked_at).toBeNull();
 
-    // Tomorrow: yesterday's count is no limit.
     await env.DB.prepare("update web_risk_usage set day = day - 1").run();
     await aDayLater();
     await rescanFreeLinks(withKey());
@@ -789,7 +762,6 @@ describe("the site-wide daily cap", () => {
     await spendTheSite();
     const missed = await createLink(cookie, LISTED);
     const checked = await createLink(cookie, "https://example.com/checked");
-    // Google answered for this one a month ago: paid, so not due again.
     await env.DB.prepare("update links set web_risk_checked_at = ? where id = ?")
       .bind(Date.now() - 30 * DAY_MS, checked)
       .run();

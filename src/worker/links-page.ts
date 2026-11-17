@@ -1,27 +1,6 @@
-/**
- * Cursor pagination for an organization's links.
- *
- * The list used to return every row an org owned and let the browser slice
- * it. At the Pro cap that is 3,000 rows, each carrying two correlated
- * subqueries, fetched again on every visit to /links, so the page got slower
- * for exactly the customers who used the product most.
- *
- * Offset would have been the easy replacement and the wrong one. `limit ?
- * offset ?` still walks and discards every row before the one it wants, so
- * page 40 costs forty pages of work, and the walk is over a moving table: a
- * link created while somebody reads page 2 pushes a row from page 2 onto
- * page 3, where it is read twice, and a deleted one hides a row entirely.
- *
- * So the cursor is a value from the last row of the page rather than a count
- * of rows skipped: "the next 25 after this one" instead of "the 25 after the
- * first 500". The database seeks straight to it, and rows arriving above the
- * cursor cannot shift what comes below it.
- *
- * Every sort carries the row's id as a tiebreaker. Two links created in the
- * same millisecond, or sharing a slug across domains, would otherwise order
- * differently between two queries, and a page boundary landing between them
- * would drop one and repeat the other.
- */
+// Cursor, not offset: offset walks and discards every row before the page, and a link created while someone reads page 2 shifts a row
+// onto page 3 (read twice) or hides one. Every sort carries the row id as a tiebreaker, or a page boundary between two equal
+// values drops one and repeats the other.
 import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
 import { oneOf } from "../shared/lookup";
 import { LINK_FILTERS, type LinkFacets, type LinkFilter } from "../shared/types";
@@ -36,30 +15,21 @@ type LinkSort = (typeof LINK_SORTS)[number];
 export const LINKS_PAGE_SIZE = 25;
 const LINKS_MAX_PAGE_SIZE = 100;
 
-/** The value a cursor carries, alongside the id that breaks its ties. */
 type CursorValue = string | number;
 
 export interface LinkPageParams {
   limit: number;
   sort: LinkSort;
-  /** -1 for descending, which is what every column here defaults to. */
   dir: -1 | 1;
   cursor: { value: CursorValue; id: string } | null;
   q: string;
-  /** "" for every domain, "shared" for the default host, else a hostname. */
   domain: string;
-  /** Which chip is picked above the table. */
   filter: LinkFilter;
 }
 
-/**
- * Reads the paging parameters off a request, clamping anything a caller can
- * set. The limit is capped because it is the one parameter that decides how
- * much work a single request can ask for.
- */
+// The limit is capped: it decides how much work one request can ask for.
 export function readLinkPageParams(url: URL): LinkPageParams {
-  // Not `Number(get(...))`: a missing parameter reads as 0, which clamps to
-  // a page of one link rather than to the default.
+  // Not Number(get(...)): a missing parameter reads as 0, which clamps to a page of one.
   const raw = url.searchParams.get("limit");
   const asked = raw ? Number(raw) : NaN;
   const sort = url.searchParams.get("sort") ?? "";
@@ -76,27 +46,15 @@ export function readLinkPageParams(url: URL): LinkPageParams {
   };
 }
 
-/* ---------------- the chips: one definition for count and filter ---------------- */
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** A link with a drop in clicks worth saying needs this many clicks in the
- * week before, so that half of them going is not noise. */
 const DROP_FLOOR = 10;
 
-// Literal `links.` and `click_daily.` columns throughout: these run as
-// correlated subqueries, where an interpolated drizzle column renders
-// unqualified and SQLite binds it to the subquery's own table.
+// Literal links. and click_daily. columns: in a correlated subquery an interpolated drizzle column renders unqualified and SQLite binds it to the subquery own table.
 
 const customDomainSql = sql`(links.domain_id is not null)`;
 
-/**
- * A link needs attention when it is paused, shows a warning, has gone a week
- * without a click after its first week, or its last 7 days fell under half
- * of the 7 before (from at least DROP_FLOOR). The "Needs attention" count and
- * filter both read this, and `attentionNote` below says the same thing in
- * words for one row. Weeks are whole UTC days, as on the stats pages.
- */
+// attentionNote says the same in words for one row. Weeks are whole UTC days, as on the stats pages.
 function attentionSql(now: number): SQL {
   const { since7, prev7Since } = computeWindows(7, now);
   const before = sql`coalesce(sum(case when click_daily.day < ${since7} then click_daily.clicks end), 0)`;
@@ -119,7 +77,6 @@ function chipSql(filter: LinkFilter, now: number): SQL | undefined {
 const countWhere = (cond: SQL) =>
   sql<number>`coalesce(sum(case when ${cond} then 1 else 0 end), 0)`;
 
-/** The count beside each chip, over the org's whole list. */
 export async function linkFacets(db: DB, orgId: string, now = Date.now()): Promise<LinkFacets> {
   const [row] = await db
     .select({
@@ -132,22 +89,13 @@ export async function linkFacets(db: DB, orgId: string, now = Date.now()): Promi
   return row ?? { all: 0, attention: 0, customDomain: 0 };
 }
 
-/** Days read per row: two weeks, so "needs attention" can compare this week
- * with the one before. */
 const SPARK_DAYS = 14;
 
-/** Days a row's sparkline shows: one week, on every plan. The free plan's
- * analytics window is 7 days, and the table must not show more than the
- * plan's own charts do. */
+// One week on every plan: the free analytics window is 7 days, and the table must not show more than the plan charts do.
 export const SPARK_SHOWN = 7;
 
-/** The first UTC day a sparkline covers. */
 export const sparkSince = (now = Date.now()) => computeWindows(SPARK_DAYS, now).since;
 
-/**
- * Each link's 14 daily counts, oldest first and zero-filled, out of the
- * rollup rows `sparkRows` read for the page.
- */
 export function sparkLines(
   rows: { linkId: string; day: string; clicks: number }[],
   now = Date.now(),
@@ -165,12 +113,7 @@ export function sparkLines(
   return (linkId) => byLink.get(linkId) ?? empty();
 }
 
-/**
- * Why one listed link needs attention, in words, or null when it does not:
- * the rule in `attentionSql`, read off the row and its 14-day series. A
- * paused link says nothing here, because the table's "paused" badge already
- * says it.
- */
+// A paused link says nothing here, because the table paused badge already does.
 export function attentionNote(
   link: { warnedAt: number | null; createdAt: number },
   spark: number[],
@@ -187,15 +130,7 @@ export function attentionNote(
   return null;
 }
 
-/**
- * Opaque on purpose: base64 of the sort value and the id.
- *
- * Opaque because it is ours to change. A caller that takes it apart and
- * rebuilds it is a caller that breaks when the sort gains a column, and one
- * that can ask for a page from the middle of somebody else's ordering.
- */
-/** A cursor as it travels: the sort value it stopped at, and the row id
- * that breaks ties. */
+// Opaque on purpose: it is ours to change, and a caller that rebuilds it breaks when the sort gains a column.
 const cursorSchema = v.tuple([v.union([v.string(), v.number()]), v.string()]);
 
 export function encodeCursor(value: CursorValue, id: string): string {
@@ -210,15 +145,11 @@ function decodeCursor(raw: string | null): { value: CursorValue; id: string } | 
     const [value, id] = parsed.output;
     return { value, id };
   } catch {
-    // A cursor we cannot read is a first page, not an error: it is a URL
-    // somebody may have kept, and the honest answer to a stale one is the
-    // top of the list rather than a 400 about a parameter they never typed.
+    // A cursor we cannot read is a first page, not a 400: it may be a URL somebody kept.
     return null;
   }
 }
 
-/** Clicks are counted per link, from the rollups (#26), so the sort and its
- * cursor share one expression with the count each row shows. */
 const clicksExpr = linkClicksTotal;
 
 function sortExpr(sort: LinkSort): SQL<unknown> {
@@ -227,13 +158,7 @@ function sortExpr(sort: LinkSort): SQL<unknown> {
   return sql`${schema.links.createdAt}`;
 }
 
-/**
- * The row this page starts after.
- *
- * `(value, id) < (cursorValue, cursorId)` written out, because SQLite has no
- * row-value comparison. Equal values fall through to the id, which is what
- * keeps a page boundary from splitting two rows that sort the same.
- */
+// (value, id) < (cursorValue, cursorId) written out, because SQLite has no row-value comparison here.
 function afterCursor(params: LinkPageParams): SQL | undefined {
   if (!params.cursor) return undefined;
   const value = sortExpr(params.sort);
@@ -244,8 +169,6 @@ function afterCursor(params: LinkPageParams): SQL | undefined {
   );
 }
 
-/** Search and domain, which have to run in the query now that the browser
- * only ever holds one page to filter. */
 function filters(params: LinkPageParams): (SQL | undefined)[] {
   const like = `%${params.q.toLowerCase()}%`;
   return [
@@ -263,8 +186,6 @@ function filters(params: LinkPageParams): (SQL | undefined)[] {
   ];
 }
 
-/** Everything the list query needs beyond its columns: what to keep, where to
- * resume, and in what order. */
 export function linkPageQuery(orgId: string, params: LinkPageParams, now = Date.now()) {
   const value = sortExpr(params.sort);
   const direction = params.dir === -1 ? sql`desc` : sql`asc`;
@@ -275,17 +196,14 @@ export function linkPageQuery(orgId: string, params: LinkPageParams, now = Date.
       chipSql(params.filter, now),
       afterCursor(params),
     ),
-    // The id repeats the direction so the tiebreaker matches the comparison
-    // the cursor makes.
+    // The id repeats the direction so the tiebreaker matches the comparison the cursor makes.
     orderBy: sql`${value} ${direction}, ${schema.links.id} ${direction}`,
-    // One more than asked for: whether the extra row exists is how we know
-    // there is a next page, without a second count query over the table.
+    // One more than asked for: the extra row tells us there is a next page without a count query.
     limit: params.limit + 1,
   };
 }
 
-/** The value a row contributes to the cursor under a given sort. Beside the
- * sort expression it mirrors, so the two cannot drift. */
+// Beside the sort expression it mirrors, so the two cannot drift.
 export function cursorValueOf(
   sort: LinkSort,
 ): (row: { slug: string; clicks: number; createdAt: number }) => CursorValue {
@@ -294,13 +212,6 @@ export function cursorValueOf(
   return (row) => row.createdAt;
 }
 
-/**
- * Splits the extra row off the end and turns it into the next cursor.
- *
- * Returns the page the caller asked for plus the cursor that continues it,
- * or null when this was the last page.
- */
-/** One page of rows, and the cursor that continues it. */
 export interface Page<T> {
   items: T[];
   nextCursor: string | null;

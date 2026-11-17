@@ -1,14 +1,5 @@
-/**
- * One-click install links for editors that have them. The server is remote
- * over streamable HTTP with OAuth, so its whole config is the URL.
- *
- * Cursor: https://cursor.com/docs/context/mcp/install-links
- *   cursor://anysphere.cursor-deeplink/mcp/install?name=NAME&config=BASE64
- *   where config is the base64 of the JSON.stringify'd mcp.json entry.
- * VS Code: https://code.visualstudio.com/api/extension-guides/ai/mcp
- *   vscode:mcp/install?ENCODED where ENCODED is encodeURIComponent of the
- *   JSON.stringify'd {"name", ...server config}.
- */
+// Cursor: https://cursor.com/docs/context/mcp/install-links (base64 of the mcp.json entry)
+// VS Code: https://code.visualstudio.com/api/extension-guides/ai/mcp (encodeURIComponent of the entry)
 const MCP_SERVER_NAME = "rdyrct";
 
 function base64(text: string): string {
@@ -27,12 +18,10 @@ export function vscodeInstallLink(url: string): string {
   )}`;
 }
 
-/** The fallback for Cursor (.cursor/mcp.json). */
 export function cursorConfig(url: string): string {
   return JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: { url } } }, null, 2);
 }
 
-/** The fallback for VS Code (.vscode/mcp.json). */
 export function vscodeConfig(url: string): string {
   return JSON.stringify({ servers: { [MCP_SERVER_NAME]: { type: "http", url } } }, null, 2);
 }

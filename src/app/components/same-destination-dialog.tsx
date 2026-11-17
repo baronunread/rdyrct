@@ -7,15 +7,7 @@ import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import type { LinkDTO } from "@/shared/types";
 
-/**
- * Shown when creating a link whose destination (and UTM set) exactly matches
- * one or more already in the org (#38): offers to add the new address to one
- * of those links instead of silently forking a duplicate, or to create a
- * separate link anyway. With several matches, nothing is picked by default:
- * the caller must choose which one, so "Add" starts disabled.
- */
-/** One match reads as a statement, several as a question. Both say the same
- * thing, so they live together rather than as ternaries down the dialog. */
+/** Offers to add the new address to a matching link instead of forking a duplicate (#38). */
 const COPY = {
   one: {
     title: "This destination already has a link",
@@ -27,8 +19,6 @@ const COPY = {
   },
 };
 
-/** With one match the dialog names it; with several the caller must pick, so
- * nothing is selected by default and "Add" stays disabled until they do. */
 function MatchChoice({
   matchedLinks,
   selectedId,
@@ -79,8 +69,7 @@ export function SameDestinationDialog({
     setSelectedId(matchedLinks?.length === 1 ? matchedLinks[0].id : "");
   }, [matchedLinks]);
 
-  // Stays mounted while closing so the Dialog can play its exit, which is why
-  // this reads the count rather than returning null.
+  // Stays mounted while closing so the Dialog can play its exit.
   const matches = matchedLinks ?? [];
   const copy = matches.length > 1 ? COPY.many : COPY.one;
   const selected = matches.find((l) => l.id === selectedId) ?? null;
@@ -90,8 +79,6 @@ export function SameDestinationDialog({
       open={matches.length > 0}
       onOpenChange={(o) => !o && onClose()}
       title={copy.title}
-      // Can open while the link editor (dashboard's quick-create or the
-      // Links page's New/Edit link dialog) is still open behind it.
       nested
     >
       <div className="flex flex-col gap-4">

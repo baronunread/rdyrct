@@ -1,11 +1,3 @@
-/**
- * The admin audit log (#67), on a tab of its own.
- *
- * It answers "who did this, and why" about the whole platform, not only about
- * links, so it does not belong inside the Links screen: bans, comps and org
- * deletions are recorded here too. A row says who, what and to whom; the rest
- * of the entry (the reason, the counts, the ids) opens from the row.
- */
 import { settle } from "../../lib/route-preload";
 import { useMemo, useState } from "react";
 import { useHeld } from "@/app/lib/use-held";
@@ -34,9 +26,7 @@ import { lookup } from "@/shared/lookup";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/** The kinds of action somebody looks for after an incident. Each matches
- * the action names the Worker records (src/worker/audit.ts). A plan change
- * an admin makes is a comp; one Polar makes is `plan.change`. */
+/** Each matches the action names the Worker records (src/worker/audit.ts). An admin's plan change is a comp; Polar's is `plan.change`. */
 const KINDS = [
   { id: "all", label: "All", test: () => true },
   { id: "bans", label: "Bans", test: (a) => a === "user.ban" || a === "user.unban" },
@@ -71,7 +61,6 @@ const WHEN_FULL = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-/** `detail` is the JSON the Worker wrote with the entry (recordAdminAction). */
 const jsonValue: v.GenericSchema<JsonValue> = v.lazy(() =>
   v.union([
     v.string(),
@@ -91,7 +80,6 @@ function parseDetail(raw: string | null): Detail {
     const parsed = v.safeParse(detailSchema, JSON.parse(raw));
     return parsed.success ? parsed.output : { detail: raw };
   } catch {
-    // Not JSON: an entry from before the column held JSON. Shown as written.
     return { detail: raw };
   }
 }
@@ -103,15 +91,12 @@ const text = (value: JsonValue | undefined): string | null =>
       ? JSON.stringify(value)
       : String(value);
 
-/** An entry with the names the page could find for its ids. */
 interface Entry extends AdminActionRow {
   who: string;
   target: string;
   fields: Detail;
 }
 
-/** Ids to names, from the users and orgs lists the other tabs load. A user
- * or org deleted since keeps what the entry itself recorded. */
 function useNames() {
   const users = useAdminUsersData();
   const orgs = useAdminOrgsData();
@@ -128,14 +113,12 @@ type Names = ReturnType<typeof useNames>;
 
 function who(entry: AdminActionRow, names: Names): string {
   if (entry.actorUserId === "system") return "System";
-  // A webhook from Polar, the billing provider, rather than a person.
   if (entry.actorUserId === "polar") return "Polar";
   return names.user.get(entry.actorUserId)?.name || entry.actorEmail || "Deleted account";
 }
 
 const capitalized = (word: string) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
-/** What the action was done to, in words: the link, the address, the org. */
 function target(entry: AdminActionRow, fields: Detail, names: Names): string {
   const slug = text(fields.slug);
   const base = (() => {
@@ -155,13 +138,11 @@ function target(entry: AdminActionRow, fields: Detail, names: Names): string {
   })();
   const plan = text(fields.plan);
   if (plan) return `${base} · ${capitalized(plan)}`;
-  // plan.change: "Pro to Free".
   const from = text(fields.from);
   const to = text(fields.to);
   return from && to ? `${base} · ${capitalized(from)} to ${capitalized(to)}` : base;
 }
 
-/** What happened, in words, for the entry's title. */
 const ACTION_WORDS = {
   "link.suspend": "Link suspended",
   "link.unsuspend": "Link restored",
@@ -186,17 +167,14 @@ const ACTION_WORDS = {
   "anon_link.delete": "Anonymous link deleted",
 } as const;
 
-/** Identifiers are set in mono (rdyrct-design, "The two type rules"). */
 const MONO_FIELD = /(^id$|Id$|_id$|slug|destination|email|host|url)/i;
 
-/** "orgsDeleted" reads "Orgs deleted". */
 const fieldLabel = (key: string) => {
   const words = key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
 };
 
 function EntryDialog({ entry: current, onClose }: { entry: Entry | null; onClose: () => void }) {
-  // The last entry stays while the dialog fades out, so it does not empty.
   const entry = useHeld(current);
   const facts: [string, string, boolean][] = entry
     ? [
@@ -263,16 +241,12 @@ function AuditTable({
       </thead>
       <tbody className={PHONE.body}>
         {rows.map((entry) => (
-          // The whole row opens the entry for a pointer; the arrow button is
-          // the same thing for a keyboard and a screen reader.
           // react-doctor-disable-next-line react-doctor/click-events-have-key-events -- the row's arrow button is the keyboard path.
           <tr
             key={entry.id}
             onClick={() => onOpen(entry)}
             className={`cursor-pointer ${PHONE.row}`}
           >
-            {/* Two lines: how long ago, which is what a person reads, over the
-                exact time, which is what they quote. */}
             <Td className={PHONE.main}>
               <span className="flex flex-col gap-0.5 leading-tight whitespace-nowrap">
                 <span className="text-sm first-letter:uppercase">
@@ -310,8 +284,6 @@ function AuditTable({
   );
 }
 
-/** An entry matches if the term appears in what somebody would search by:
- * who, the action, what it was done to, or what it recorded. */
 function matchesTerm(entry: Entry, term: string): boolean {
   if (!term) return true;
   const haystack = [
@@ -326,8 +298,6 @@ function matchesTerm(entry: Entry, term: string): boolean {
   return haystack.includes(term);
 }
 
-/** The audit log's first frame (see lib/route-preload.ts): the entries, and
- * the users and orgs that name their ids. */
 export const preload = (qc: QueryClient) =>
   settle([
     qc.ensureQueryData(adminAuditQuery),
@@ -363,8 +333,6 @@ export function AdminAuditPage() {
     [entries],
   );
 
-  // Filtered here, not on the server: the endpoint is capped, so the rows
-  // are already in hand.
   const term = query.trim().toLowerCase();
   const pass = kindTest(kind);
   const all = sortRows(

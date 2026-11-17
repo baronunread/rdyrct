@@ -5,13 +5,6 @@ import { AnimatePresence, domAnimation, LazyMotion, m, MotionConfig } from "moti
 import { Search, X } from "@/app/ui/icons";
 import { cn } from "./cn";
 
-/**
- * Command palette primitives: cmdk wearing the app's tokens. Same split as
- * shadcn's command.tsx, but the dialog shell is our own base-ui + motion one,
- * so the backdrop, blur, fade and z-index match every other Dialog rather
- * than pulling in a second dialog implementation.
- */
-
 export function CommandDialog({
   open,
   onOpenChange,
@@ -21,9 +14,7 @@ export function CommandDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Accessible name for the palette; not shown. */
   label: string;
-  /** Pass false when results are already filtered (e.g. a server search). */
   shouldFilter?: boolean;
   children: ReactNode;
 }) {
@@ -51,8 +42,6 @@ export function CommandDialog({
                     <m.div
                       initial={{ opacity: 0, scale: 0.97 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      // Opened many times a session, so it leaves by fading
-                      // alone, faster than it came.
                       exit={{ opacity: 0, transition: { duration: 0.1 } }}
                       transition={{ duration: 0.15 }}
                     />
@@ -76,8 +65,6 @@ export function CommandDialog({
   );
 }
 
-/** A scope chip shown before the input, cleared by its × or by Backspace on
- * an empty field. */
 export function CommandPill({ label, onClear }: { label: string; onClear: () => void }) {
   return (
     <span className="flex shrink-0 items-center gap-1 rounded bg-surface-2 py-0.5 pr-1 pl-1.5 text-xs text-text">
@@ -105,8 +92,7 @@ export function CommandInput({
       <CommandPrimitive.Input
         {...props}
         // The global :focus-visible rule (styles.css) is unlayered, so it
-        // beats an `outline-none` utility. The palette's own frame is the
-        // focus indicator here; the input needs no ring of its own.
+        // beats an `outline-none` utility. The palette's own frame is the focus indicator.
         style={{ outline: "none" }}
         className="h-12 min-w-0 flex-1 bg-transparent text-sm text-text placeholder:text-placeholder"
       />

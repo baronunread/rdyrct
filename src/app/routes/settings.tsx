@@ -35,9 +35,7 @@ import posthog from "../lib/posthog";
 
 type AccountNameForm = { name: string };
 
-/** The picture staged in the form: a cropped blob to upload, or a removal.
- * Nothing reaches the server until Save. `url` is a data URL (the CSP's
- * img-src allows `data:` but not `blob:`) for the live preview. */
+/** `url` is a data URL: the CSP's img-src allows `data:` but not `blob:`. */
 function usePendingPicture() {
   const [blob, setBlob] = useState<Blob | null>(null);
   const [remove, setRemove] = useState(false);
@@ -78,7 +76,6 @@ function usePendingPicture() {
 
 type SaveOutcome = "name" | "picture-set" | "picture-clear";
 
-/** Push whatever changed. Throws on failure with a message to toast. */
 async function persistAccount(
   user: User | undefined,
   name: string,
@@ -105,8 +102,6 @@ const SAVE_TOAST = {
   "picture-clear": "Picture removed",
 } satisfies Record<SaveOutcome, string>;
 
-/** The account form: the name field plus the staged picture, and one Save
- * that applies whichever of them changed. */
 function useAccountForm(user: User | undefined) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -155,8 +150,6 @@ const THEMES = [
   { id: "dark", label: "Dark" },
 ] as const;
 
-/** Name and picture save together, from the Save beside the name: the
- * picture is part of how you are named to your teammates. */
 function AccountGroup({ user }: { user: User | undefined }) {
   const [theme, toggleTheme] = useTheme();
   const { register, currentName, pic, save, isSubmitting, dirty } = useAccountForm(user);
@@ -174,7 +167,6 @@ function AccountGroup({ user }: { user: User | undefined }) {
           {user && (
             <AvatarInput
               size={32}
-              // Blobatar tracks the name being typed; the image wins over it.
               user={{ ...user, name: currentName.trim() || user.name }}
               pendingUrl={pic.url}
               pendingRemove={pic.remove}
@@ -217,8 +209,6 @@ const LIST_ROWS = {
   offers: { hint: "Deals on paid plans.", on: "Offers are on", off: "Offers are off" },
 } satisfies Record<MarketingList, { hint: string; on: string; off: string }>;
 
-/** One list's switch. Its own request, so toggling both rows at once shows
- * each one's pending answer. */
 function ListRow({ list, user }: { list: MarketingList; user: User | undefined }) {
   const toast = useToast();
   const set = useSetMarketing();
@@ -235,16 +225,13 @@ function ListRow({ list, user }: { list: MarketingList; user: User | undefined }
     );
   return (
     <SettingsRow label={label} hint={row.hint}>
-      {/* Off and unanswerable until /user answers: an account that failed
-          to load is not one that said no. */}
+      {/* Off and unanswerable until /user answers: a failed load is not a no. */}
       <Switch label={label} checked={optedIn} onCheckedChange={change} disabled={!user} />
     </SettingsRow>
   );
 }
 
-/** Marketing email, one switch per list: the same consent the sign-up boxes
- * and the one-time dialog record, changeable any time. Waits for the server's
- * answer before it shows a state, since the cached user is a page load old. */
+/** Waits for the server's answer: the cached user is a page load old. */
 function EmailGroup({ user }: { user: User | undefined }) {
   return (
     <SettingsGroup title="Updates">
@@ -255,7 +242,6 @@ function EmailGroup({ user }: { user: User | undefined }) {
   );
 }
 
-/** The delete-account confirm dialog and its request. */
 function useDeleteAccountFlow() {
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -281,8 +267,6 @@ function useDeleteAccountFlow() {
   return { open, setOpen, pending, deleteAccount };
 }
 
-/** "Also deletes Copper Kettle Kitchen, which you own." Named while
- * there are few enough to name. */
 function deleteAccountHint(owned: UserOrg[]): string {
   if (owned.length === 0) return "Organizations you only belong to are left alone.";
   if (owned.length === 1) return `Also deletes ${owned[0].name}, which you own.`;
@@ -311,15 +295,7 @@ function DeleteAccountGroup({
   );
 }
 
-/**
- * What deleting the account takes with it, named.
- *
- * An organization has no plan of its own: `orgPlan` reads its owner's. One
- * kept alive without an owner would have no plan, no billing and nobody who
- * could delete it, so the account cannot go without them. That is a large
- * thing to do quietly, so every organization is listed before the question is
- * asked (#119).
- */
+/** An org has no plan of its own, so one kept without its owner would have nobody to bill or delete it (#119). */
 function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
   if (orgs.length === 0)
     return <p className="text-sm">This permanently deletes your account. This cannot be undone.</p>;
@@ -344,10 +320,6 @@ function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
   );
 }
 
-/** Everything Settings' first frame reads beyond the user (see
- * lib/route-preload.ts): the "Signing in" group's two lists. */
-/** Settings reads only the account, never an org, so all of it preloads
- * through preloadAccount, which also runs for somebody with no org left. */
 export function preloadAccount(qc: QueryClient) {
   return settle([qc.ensureQueryData(linkedAccountsQuery), qc.ensureQueryData(otherSessionsQuery)]);
 }
@@ -358,9 +330,7 @@ export function SettingsPage() {
   const currentUser = useCurrentUser();
   const deleteAccountFlow = useDeleteAccountFlow();
   const ownedOrgs = (currentUser.data?.orgs ?? []).filter((o) => o.role === "owner");
-  // The shell may paint Settings from its cache before this fresh /user
-  // answer arrives. The cache is chrome, never permission to submit a
-  // destructive action, and an empty fallback would hide the org names.
+  // The shell cache is chrome, never permission to submit a destructive action.
   const accountDeleteDisabled = currentUser.isLoading || !currentUser.data;
 
   if (currentUser.isLoading) return <SettingsSkeleton />;

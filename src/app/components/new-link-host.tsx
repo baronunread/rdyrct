@@ -24,19 +24,9 @@ import { linkFeatures } from "../lib/links-data";
 import { Kbd } from "../ui/kbd";
 import { linkFieldError } from "../lib/link-field-errors";
 
-/**
- * "New link" is one dialog, opened from anywhere (rdyrct-design, "Creating is
- * a dialog"): the header button on the dashboard and the links page, the `C`
- * key, and ⌘K's "Create link" (which lands with `?new=1`). It used to live
- * twice, as a field parked on the dashboard and as the links page's own
- * editor, and each copy handled a duplicate destination its own way.
- */
 const NewLinkContext = createContext<{
   openNewLink: () => void;
   canCreate: boolean;
-  /** A link is on its way: the form, its duplicate question or its "Link
-   * created" dialog is open, or the save is in flight. The dashboard holds
-   * its first-run panel until this settles. */
   busy: boolean;
 }>({
   openNewLink: () => {},
@@ -48,8 +38,6 @@ export function useNewLink() {
   return useContext(NewLinkContext);
 }
 
-/** The header button, the same on every page that has one: the one primary
- * action, with its key shown. */
 export function NewLinkButton({ onClick }: { onClick: () => void }) {
   return (
     <Button variant="primary" onClick={onClick}>
@@ -61,8 +49,6 @@ export function NewLinkButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** `C` opens the dialog, unless the key is for a field, carries a modifier,
- * or another dialog is already on screen. */
 function useNewLinkShortcut(open: () => void, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
@@ -76,14 +62,11 @@ function useNewLinkShortcut(open: () => void, enabled: boolean) {
   }, [open, enabled]);
 }
 
-/** ⌘K's "Create link" sends people to `?new=1`: open once, then drop the
- * flag so a reload does not reopen it. */
 function useOpenFromUrl(open: () => void, ready: boolean) {
   const [params, setParams] = useSearchParams();
   const wanted = params.has("new");
   useEffect(() => {
-    // On a fresh load the org arrives after the first render, and open()
-    // does nothing until it has. Wait for it rather than spend the flag.
+    // On a fresh load the org arrives after the first render: wait for it rather than spend the flag.
     if (!wanted || !ready) return;
     open();
     const next = new URLSearchParams(params);
@@ -100,7 +83,6 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
-  // The last failed save, for the editor to pin on its field.
   const [saveError, setSaveError] = useState<Error | null>(null);
   const [created, setCreated] = useState<{ link: LinkDTO; merged: boolean } | null>(null);
   const [match, setMatch] = useState<{ input: LinkInput; matchedLinks: LinkDTO[] } | null>(null);
@@ -136,8 +118,6 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
           setMatch({ input, matchedLinks });
           return;
         }
-        // A refusal about the destination or the slug marks that field
-        // (rdyrct-design, form errors); only the rest is a toast.
         setSaveError(e);
         if (!linkFieldError(e)) toast(e.message, "error");
         setShakeKey((k) => k + 1);

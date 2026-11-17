@@ -1,11 +1,6 @@
-/**
- * The small pictures in a links row: the letter tile beside the destination
- * and the 7-day sparkline, both drawn from data the row already has. The
- * CSP forbids remote images, so a site's favicon is a letter tile.
- */
 import { cn } from "../ui/cn";
 
-/** The site's first letter in a small tile, standing in for its favicon. */
+// The CSP forbids remote images, so a site gets a letter tile, not a favicon.
 export function SiteLetter({ host, className }: { host: string; className?: string }) {
   const letter =
     host
@@ -28,8 +23,7 @@ export function SiteLetter({ host, className }: { host: string; className?: stri
 const W = 72;
 const H = 24;
 
-/** A monotone cubic through the points (never overshoots, so it never dips
- * below zero between two quiet days), as rdyrct-design asks of charts. */
+// Monotone cubic: never overshoots, so never dips below zero.
 function smoothPath(points: [number, number][]): string {
   const n = points.length;
   if (n < 2) return "";
@@ -51,12 +45,6 @@ function smoothPath(points: [number, number][]): string {
   return d;
 }
 
-/**
- * Fourteen days of clicks in 72 by 24. A dashed baseline when there were
- * none; dimmed when the link is quiet (under 20 in the fortnight) so the
- * busy ones stand out down the column. Decoration beside a number that says
- * the same thing, so hidden from assistive tech.
- */
 export function Sparkline({ series }: { series: number[] }) {
   const total = series.reduce((a, b) => a + b, 0);
   if (total === 0)

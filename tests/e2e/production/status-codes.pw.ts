@@ -1,13 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-/**
- * What status a crawler reads for an address, from the built Worker and the
- * real asset bundle. The worker tests stub ASSETS, so this is where the
- * shell's real headers meet the 404 (src/shared/spa-routes.ts).
- *
- * A path the SPA has no page for used to come back 200 with the landing
- * page's title and canonical: a soft 404 Google counted against the site.
- */
+// The worker tests stub ASSETS: here the shell's real headers meet the 404.
+// A path with no page used to return 200 with the landing title and canonical,
+// a soft 404 Google counted against the site.
 
 test("an address with no page is a 404 that still shows the NotFound screen", async ({
   page,
@@ -53,20 +48,14 @@ test("a trailing slash still moves to the slash-free page", async ({ request }) 
   expect(new URL(res.headers()["location"], res.url()).pathname).toBe("/pricing");
 });
 
-/**
- * The dev-only account scenarios (src/worker/dev-scenarios.ts) are not in a
- * built Worker at all: index.ts mounts them under import.meta.env.DEV, a
- * build-time constant. If that fence ever slipped, this address would sign
- * strangers in as seeded accounts on a real deployment.
- */
+/** Dev scenarios are mounted under import.meta.env.DEV, so a built Worker must
+ * not have them: a slipped fence would sign strangers in as seeded accounts. */
 test("the dev scenario switcher does not exist in a built Worker", async ({ request }) => {
   // Not only unrouted: the code itself must be gone. A static import once
   // kept the whole module (seed password included) in the bundle while the
   // route still answered 404.
   const { readdirSync, readFileSync } = await import("node:fs");
   const dir = "dist/rdyrct";
-  // Recursive: the Worker build also writes chunks under assets/, which is
-  // where a dynamically imported module lands if the fence ever slips.
   const files = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) =>
     f.endsWith(".js"),
   );
@@ -79,8 +68,6 @@ test("the dev scenario switcher does not exist in a built Worker", async ({ requ
     expect(res.status(), path).toBe(404);
     expect(res.headers()["set-cookie"] ?? "", path).not.toContain("session");
   }
-  // The test-account route makes a signed-in account from nothing; it must
-  // not answer in a built Worker either.
   const made = await request.post("/__dev/test-account", {
     data: { email: `prod-${Date.now()}@gmail.com`, password: "test-password-123" },
     maxRedirects: 0,

@@ -66,9 +66,8 @@ describe("hasAnyQrValue", () => {
   };
 
   test("nothing set is nothing set", () => {
-    // An org with no defaults used to answer true here, because the old test
-    // compared qrLogoSize against null and it is "" when unset. That org was
-    // then shown a read-only grid and told its defaults were locked.
+    // qrLogoSize is "" when unset, not null: comparing against null made an
+    // org with no defaults look locked.
     expect(hasAnyQrValue(empty)).toBe(false);
   });
 

@@ -25,12 +25,6 @@ import {
   testEnv,
 } from "./support";
 
-/**
- * The click rollups (#26): what the stats pages and the links list read.
- * These tests hold them to the raw clicks they are built from, through every
- * way a click gets written, and hold the stats routes to reading them.
- */
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -76,8 +70,6 @@ async function seedOrgWithLinks() {
   return cookie;
 }
 
-/** A spread of clicks across links, 60 days, every hour of the day and every
- * dimension value, deterministic so a failure reproduces. */
 function spreadClicks(count: number, now = Date.now()): ClickMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     dedupeId: `spread-${i}`,
@@ -97,8 +89,6 @@ async function grouped(sql: string): Promise<Grouped> {
   return (await env.DB.prepare(sql).all<{ key: string; n: number }>()).results;
 }
 
-/** Raw clicks and the three rollups, grouped the same way, so a test can say
- * "they agree" in one line. */
 async function rawVsRollups() {
   const day = "date(ts / 1000, 'unixepoch')";
   return {
@@ -161,7 +151,6 @@ afterEach(reset);
 describe("click rollups reconcile with raw clicks", () => {
   it("match raw clicks exactly, per link, day, dimension and hour", async () => {
     await seedOrgWithLinks();
-    // 500 clicks through the real write path, in flush-sized batches.
     const rows = spreadClicks(500);
     for (let i = 0; i < rows.length; i += 100) {
       expect(await insertClicks(testEnv, rows.slice(i, i + 100))).toEqual({
@@ -201,12 +190,10 @@ describe("click rollups reconcile with raw clicks", () => {
       ...rows.slice(0, 5),
       { ...rows[0]!, dedupeId: "gone", linkId: "no-such-link" },
     ]);
-    // And through the buffer's own alarm.
     const stub = clicksStub();
     await stub.add(rows[0]!);
     await runDurableObjectAlarm(stub);
 
-    // The same id twice in one flush, in one chunk and across two.
     const twice = { ...rows[0]!, dedupeId: "twice" };
     await insertClicks(testEnv, [twice, twice]);
     await insertClicks(testEnv, [twice, ...spreadClicks(400).slice(30), twice]);
@@ -248,7 +235,6 @@ describe("the backfill in migration 0042", () => {
   it("rebuilds the rollups from raw clicks, and running it again changes nothing", async () => {
     await seedOrgWithLinks();
     await insertClicks(testEnv, spreadClicks(200));
-    // Clicks from before the migration: written while no rollup existed.
     await env.DB.batch([
       env.DB.prepare("delete from click_daily"),
       env.DB.prepare("delete from click_daily_dims"),
@@ -322,7 +308,6 @@ describe("the stats routes read the rollups", () => {
     expect(after.campaigns).toEqual([{ campaign: "launch", clicks: 100 }]);
     expect(after.sources).toEqual([{ source: "newsletter", clicks: 200 }]);
     expect(after.mediums).toEqual([{ medium: "email", clicks: 300 }]);
-    // The 24-hour chart holds exactly the clicks of the last 24 UTC hours.
     const since24h = computeWindows(1, now).since24h;
     const last24 = spreadClicks(300, now).filter((c) => c.ts >= since24h).length;
     expect(after.hourSeries.reduce((n, p) => n + p.clicks, 0)).toBe(last24);
@@ -375,18 +360,16 @@ describe("the stats routes read the rollups", () => {
       ts,
     });
     await insertClicks(testEnv, [
-      at(today + 1, 0), // today
+      at(today + 1, 0),
       at(today - 6 * DAY_MS, 1), // the first of the 7 days
       at(today - 6 * DAY_MS - 1, 2), // the last moment before them
       at(today - 13 * DAY_MS, 3), // the first of the 7 before
     ]);
 
-    // Free shows 7 days whatever is asked for.
     const stats = await orgStats(cookie, 365);
     expect(stats.rangeDays).toBe(7);
     expect(stats.totalClicks).toBe(2);
     expect(stats.series.reduce((n, p) => n + p.clicks, 0)).toBe(2);
-    // The heatmap reads the hourly table from the same first day.
     expect(stats.heatmap.reduce((n, p) => n + p.clicks, 0)).toBe(2);
     expect(stats.totalClicksDelta).toEqual({ current: 2, previous: 2, pct: 0 });
   });
@@ -395,7 +378,6 @@ describe("the stats routes read the rollups", () => {
 describe("rollup retention", () => {
   const now = Date.now();
 
-  /** An org created at `createdAt` with one link, for the sweep to find. */
   async function addOrgWithLink(orgId: string, linkId: string, createdAt: number) {
     const db = drizzle(env.DB, { schema });
     await env.DB.prepare("insert into orgs (id, name, created_at) values (?, ?, ?)")
@@ -424,7 +406,6 @@ describe("rollup retention", () => {
     ]);
   }
 
-  /** One click on `linkId`, `ageDays` before `at`. */
   function clickOn(
     dedupeId: string,
     linkId: string,
@@ -442,7 +423,6 @@ describe("rollup retention", () => {
     };
   }
 
-  /** Each org's clicks left in click_daily. */
   async function dailyByOrg() {
     return grouped(
       "select org_id as key, sum(clicks) as n from click_daily group by org_id order by key",
@@ -481,7 +461,6 @@ describe("rollup retention", () => {
        union all select 'hourly|' || org_id, sum(clicks) from click_hourly group by org_id
        order by key`,
     );
-    // Three dimension rows per click.
     expect(left).toEqual([
       { key: "daily|org-1", n: 1 },
       { key: "daily|org-2", n: 1 },
@@ -534,7 +513,6 @@ describe("rollup retention", () => {
     await seedOrgWithLinks();
     await addOrgWithLink("org-2", "link-z", 0);
     await addOrgWithLink("org-3", "link-y", 0);
-    // Old enough for both runs' cutoffs.
     await insertClicks(testEnv, [
       clickOn("old-1", "link-a", "org-1", 402),
       clickOn("old-2", "link-z", "org-2", 402),
@@ -561,7 +539,6 @@ describe("rollup retention", () => {
       for (const id of slice) seen.add(id);
     }
     expect(seen.size).toBe(2500);
-    // Under the cap, every org every day.
     expect(orgsForDay(ids.slice(0, 10), day, 1000)).toHaveLength(10);
   });
 

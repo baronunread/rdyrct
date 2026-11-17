@@ -14,8 +14,6 @@ test("setup points the real wrangler.jsonc at the copy and drops rdyrct.com's ow
   });
   const config = parse(out);
 
-  // Every other top-level var is rdyrct.com's: its mail sender, Polar
-  // products, zone and Sentry project.
   expect(config.vars).toEqual({
     APP_URL: "https://links.example.com",
     APP_HOST: "links.example.com",
@@ -68,14 +66,12 @@ test("a copy named links gets resources of its own, never rdyrct.com's", () => {
     "links-link-import",
     "links-newsletter-send",
   ]);
-  // Nothing at the top level still names an rdyrct resource.
   const { env: _playwright, ...top } = config;
   expect(JSON.stringify(top)).not.toMatch(/"rdyrct-/);
   expect(config.env.playwright.d1_databases[0].database_name).toBe("rdyrct-playwright");
 });
 
 test("the address setup reads from wrangler is the worker's, not the placeholder var", () => {
-  // Trimmed from a real `wrangler deploy`: the vars come first.
   const output = `env.APP_URL ("https://pending.workers.dev")     Environment Variable
 env.APP_HOST ("pending.workers.dev")           Environment Variable
 Uploaded rdyrct-livetest (14.16 sec)

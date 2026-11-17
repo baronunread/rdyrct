@@ -2,7 +2,6 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import type { DeltaValue, LinkStats, OrgInsights, OrgStats } from "@/shared/types";
 
-/** The org's stats for a range, with the crossfade between ranges. */
 export const useInsightStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
   useQuery(insightStatsQuery(orgId, days, bucket));
 
@@ -17,15 +16,12 @@ export const insightStatsQuery = (orgId: string, days?: number, bucket?: "day" |
       return api<OrgStats>(`/orgs/${orgId}/stats${qs}`);
     },
     enabled: !!orgId,
-    // A new range keeps the last one on screen until it arrives, so the
-    // chart crossfades instead of the page dropping to a skeleton. Never
-    // across orgs: another org's numbers are not a placeholder for this one's.
+    // A new range keeps the last one on screen so the chart crossfades.
+    // Never across orgs: another org's numbers are not a placeholder for this one's.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === orgId ? previous : undefined,
   });
 
-/** What moved in a range against the one before it: the dashboard's
- * "What changed". Keeps the last answer up while the next range loads. */
 export const useOrgInsights = (orgId: string, days: number) =>
   useQuery(orgInsightsQuery(orgId, days));
 
@@ -39,11 +35,8 @@ export const orgInsightsQuery = (orgId: string, days: number) =>
       previousQuery?.queryKey[1] === orgId ? previous : undefined,
   });
 
-/**
- * One link's stats for a range, clamped by the API to the plan's window
- * (`rangeDays` says which it answered). Keyed under ["linkStats", orgId] so
- * every mutation that refreshes a link's stats refreshes this too.
- */
+// Keyed under ["linkStats", orgId] so every mutation that refreshes a link's
+// stats refreshes this too.
 export const useLinkInsightStats = (
   orgId: string,
   slug: string | null,
@@ -68,14 +61,12 @@ export const linkInsightStatsQuery = (
       return api<LinkStats>(`/orgs/${orgId}/links/stats/${encodeURIComponent(slug!)}${qs}`);
     },
     enabled: !!orgId && !!slug,
-    // Same link, new range: keep the last answer up while the next loads.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[2] === slug && previousQuery?.queryKey[3] === domain
         ? previous
         : undefined,
   });
 
-/** One preset on a range control: "24h" is the only hourly one. */
 export interface RangePreset {
   label: string;
   days: number;
@@ -87,11 +78,9 @@ export const PRESET_7D: RangePreset = { label: "7d", days: 7 };
 export const PRESET_30D: RangePreset = { label: "30d", days: 30 };
 export const PRESET_365D: RangePreset = { label: "365d", days: 365 };
 
-/** "1-hour" or "30-day": one id per preset, for the segmented control. */
 export const presetId = (p: { days: number; bucket?: "day" | "hour" }) =>
   `${p.days}-${p.bucket ?? "day"}`;
 
-/** A figure against the one before it, the way the API words it. */
 function deltaOf(current: number, previous: number): DeltaValue {
   return {
     current,
@@ -100,7 +89,6 @@ function deltaOf(current: number, previous: number): DeltaValue {
   };
 }
 
-/** Clicks per clicked link, and its change against the period before. */
 export function clicksPerLink(s: OrgStats): { value: number; delta: DeltaValue | null } | null {
   if (!s.linksClicked) return null;
   const value = Math.round(s.totalClicks / s.linksClicked);
@@ -110,25 +98,17 @@ export function clicksPerLink(s: OrgStats): { value: number; delta: DeltaValue |
   return { value, delta };
 }
 
-/** "mobile" as "Mobile": the API's device keys are lower case. */
 export const deviceLabel = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
 
-/** A referrer as people say it: the API's "direct" is "Direct". */
 export const sourceLabel = (key: string) => (key === "direct" ? "Direct" : key);
 
-/**
- * The first letter of a site, for the tile that stands in for its favicon
- * (the CSP allows no remote images). "www." and "m." do not count: they
- * would make half the list a W.
- */
+// "www." and "m." do not count: they would make half the list a W.
 export function siteLetter(host: string): string {
   const bare = host.replace(/^(www|m)\./i, "");
   const letter = bare.match(/[a-z0-9]/i)?.[0];
   return (letter ?? "?").toUpperCase();
 }
 
-/** "now", "2m", "14m", "1h", "3d": a time a narrow column can hold. Past a
- * month it says the date ("Oct 5"). */
 export function shortAgo(ts: number, now = Date.now()): string {
   const diff = Math.max(0, now - ts);
   const min = Math.floor(diff / 60_000);

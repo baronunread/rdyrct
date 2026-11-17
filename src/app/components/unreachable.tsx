@@ -1,12 +1,7 @@
 import { Button } from "../ui/button";
 import { BusyContent } from "../ui/spinner";
 
-/**
- * The app could not ask who is signed in: a 5xx or a dropped connection on
- * `/user`. Not a sign-out, which only a 401 means (#487), so nobody is sent
- * to the login page for an outage. Full page, because without the account
- * there is no sidebar or org to draw.
- */
+/** A 5xx or dropped connection on `/user` is not a sign-out; only a 401 is (#487). */
 export function Unreachable({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
   return (
     <main className="grid min-h-dvh place-items-center bg-bg px-6 text-center">

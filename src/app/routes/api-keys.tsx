@@ -29,22 +29,14 @@ import { NoOrgState } from "../components/no-org";
 import { ApiKeysSkeleton } from "../components/skeletons";
 import { StableLabel } from "../ui/stable-label";
 
-/**
- * A key as the API may send it: who made it, once the worker says so. Keys
- * belong to the account that made them (session.ts), so until the API sends
- * a name there is nobody to name but the reader.
- */
 type ApiKeyRowData = ApiKeyDTO & { createdByName?: string | null };
 
-/** "Oct 2, 2026 by Franco", or just the date until the API names the maker. */
 function createdLabel(key: ApiKeyRowData): string {
   const date = shortDate(key.createdAt);
   const first = key.createdByName?.trim().split(/\s+/)[0];
   return first ? `${date} by ${first}` : date;
 }
 
-/** One key: its name, its prefix in mono, when and by whom it was made, and
- * when it last called. The trash shows on hover where there is hover. */
 function ApiKeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyRowData; onRevoke: () => void }) {
   return (
     <tr className="group/row">
@@ -121,8 +113,6 @@ function ApiKeysTable({
   );
 }
 
-/** State and mutations for the API keys tab: the create dialog, the key
- * shown once after it, and the revoke confirmation. */
 function useApiKeysSection(orgId: string) {
   const toast = useToast();
   const mutations = useApiKeyMutations(orgId);
@@ -152,8 +142,7 @@ function useApiKeysSection(orgId: string) {
 
   return {
     createOpen,
-    // The shown-once key is cleared on the next open, not on close, so the
-    // dialog does not swap back to the form while it animates out.
+    // The shown-once key is cleared on the next open, not on close, so the dialog does not swap back to the form while it animates out.
     openCreate: () => {
       setJustCreated(null);
       setCreateOpen(true);
@@ -202,24 +191,15 @@ function ApiKeysSection({ orgId, section }: { orgId: string; section: ApiKeysSta
   );
 }
 
-/** API (#131/#134/#139 follow-up): its own nav tab, not a card buried
- * in Settings. OAuth connections are per-user and open to every member; API
- * keys stay owner-only, since minting a standing credential is the same
- * trust level as changing who has one (see api-keys.ts). */
+/** API keys stay owner-only: minting a standing credential is the same trust as changing who has one (api-keys.ts). */
 type ApiTab = "keys" | "mcp";
 const TABS: { id: ApiTab; label: string }[] = [
   { id: "keys", label: "API keys" },
   { id: "mcp", label: "MCP" },
 ];
 
-/** The API reference. rdyrct.com serves it at /docs; a self-hosted copy has
- * no marketing pages, so it points at rdyrct.com's. */
 const DOCS_URL = RDYRCT_SITE ? "/docs" : "https://rdyrct.com/docs";
 
-/** The tab param, read and written through the URL rather than local state,
- * so a shell reload lands back on whichever tab was open instead of always
- * resetting to "keys". "keys" has no ?tab= of its own (the default), so a
- * plain /api-keys link never needs one. */
 const tabFrom = (params: URLSearchParams): ApiTab => (params.get("tab") === "mcp" ? "mcp" : "keys");
 
 function useApiTab(): [ApiTab, (tab: ApiTab) => void] {
@@ -234,9 +214,6 @@ function useApiTab(): [ApiTab, (tab: ApiTab) => void] {
   return [tab, setTab];
 }
 
-/** Underline tabs, as in the panels (rdyrct-design, "Panels hold lists
- * behind tabs"). Plain buttons rather than PanelTabs: the tab lives in the
- * URL, so a reload lands back on it. */
 function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTab) => void }) {
   const bar = useRef<HTMLElement>(null);
   return (
@@ -284,8 +261,6 @@ function OwnerOnlyNotice() {
   );
 }
 
-/** Header, tabs and the open tab. "Create key" is the screen's one primary
- * button, and only on the keys tab, for the owner. */
 function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
   const [tab, setTab] = useApiTab();
   const section = useApiKeysSection(orgId);
@@ -316,16 +291,6 @@ function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
   );
 }
 
-/** API (#131/#134/#139 follow-up): its own nav tab, not a card buried in
- * Settings. The MCP tab (OAuth connections) is per-user and open to every
- * member; the API keys tab stays owner-only, since minting a standing
- * credential is the same trust level as changing who has one (see
- * api-keys.ts). Both tabs render eagerly alongside the header and tab bar:
- * only their own content area shows a skeleton while its query loads,
- * matching every other page here, so switching or reloading on either tab
- * never blanks the chrome around it. */
-/** Everything the API page's first frame reads (see lib/route-preload.ts):
- * the open tab's list. */
 export function preload(qc: QueryClient, orgId: string, { org, searchStr }: PageContext) {
   if (tabFrom(new URLSearchParams(searchStr)) === "mcp")
     return settle([qc.ensureQueryData(connectedAppsQuery())]);
@@ -338,8 +303,7 @@ export function ApiKeysPage() {
   const { org } = useCurrentOrg();
   const currentUser = useCurrentUser();
 
-  // The cached shell may know the organization before /user confirms the
-  // current role and plan. Do not briefly offer a stale create control.
+  // The cached shell may know the org before /user confirms role and plan: do not offer a stale create control.
   if (currentUser.isLoading) return <ApiKeysSkeleton />;
   if (!org) return <NoOrgState />;
   return <ApiView orgId={org.id} isOwner={org.role === "owner"} />;

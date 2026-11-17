@@ -127,15 +127,8 @@ describe("click ingestion stores a hostname, not a URL (#20)", () => {
 });
 
 describe("migration 0016 leaves nothing ingestion would now refuse (#20)", () => {
-  /**
-   * Runs the real 0016 statements over `raw`, one seeded click each, and
-   * returns what the column holds afterwards.
-   *
-   * The migration already ran in beforeEach, so this is a second pass over
-   * rows inserted after it: fine, and worth asserting on. Every statement
-   * is a no-op on a value without its delimiter, so the file is safe to
-   * re-run, which is what makes this test possible at all.
-   */
+  // The migration already ran in beforeEach; its statements are no-ops on a
+  // value without the delimiter, so a second pass over new rows is safe.
   async function afterMigration(raw: string[]): Promise<string[]> {
     await seedLink();
     await env.DB.batch(
@@ -192,8 +185,6 @@ describe("migration 0016 leaves nothing ingestion would now refuse (#20)", () =>
   });
 
   it("agrees with normalizeReferrer on every case it is given", async () => {
-    // The point of the whole exercise: one rule, two implementations, no
-    // row left behind that the worker would not write today.
     const raw = [
       "https://forum.example.com/threads/42?token=secret",
       "http://EXAMPLE.com:8080/",

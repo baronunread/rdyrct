@@ -1,13 +1,3 @@
-/**
- * /google-url-shortener: for people whose goo.gl links stopped working.
- *
- * "goo gl" gets about 450,000 US searches a month, most of them people
- * following a maps.app.goo.gl link, which is not ours to win. The part that
- * is: "google url shortener" (6,600), "goo gl link shortener" and "google
- * link shortener" (2,900 each). Those people want to know what happened and
- * where to go. Every date here is from Google's own posts, linked at the
- * foot of the page; recheck them before changing a word.
- */
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
 import { EndBand, FrameSection, FramedSections } from "../components/marketing-kit";

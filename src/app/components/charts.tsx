@@ -25,17 +25,13 @@ import { countryName } from "../lib/places";
 import { linkPagePath } from "../lib/link-display";
 import { formatNumber } from "../lib/numbers";
 
-// Monotone rather than a cubic that overshoots: it never draws a peak or a
-// trough the data doesn't have, so the smoothing stays a reading aid.
+// Monotone: never draws a peak or trough the data does not have.
 const smoothCurve = d3Curve(curveMonotoneX);
 
-// One motion renderer per chart type: it holds no per-instance state, so a
-// module-level instance avoids reallocating it on every render.
 const areaChartMotion = motion<SeriesPoint, string, number>(chartMotion);
 
 const defaultTickFormat = (day: string) => day.slice(5);
 
-/** Every value up to eight; past that, five evenly spaced, ends included. */
 function evenTicks<T>(values: T[]): T[] {
   if (values.length <= 8) return values;
   const last = values.length - 1;
@@ -45,19 +41,12 @@ function evenTicks<T>(values: T[]): T[] {
   });
 }
 
-/** The top of the y scale: the max rounded up to a nice even number, so the
- * half-way hairline lands on a whole click count too. */
 function yTop(max: number): number {
   const nice = scaleLinear().domain([0, max]).nice(4).domain()[1];
   const top = Math.max(2, Math.ceil(nice));
   return top % 2 === 0 ? top : top + 1;
 }
 
-/**
- * Single-series area chart (clicks over time). One hue (--chart), recessive
- * grid, crosshair + tooltip on hover. No legend: the card title names the
- * series.
- */
 export function AreaChart({
   data,
   height = 180,
@@ -67,9 +56,7 @@ export function AreaChart({
   height?: number;
   tickFormat?: (day: string) => string;
 }) {
-  // Definition identity is the update boundary: recreate it only when the
-  // data or formatter actually change, so hover-driven re-renders don't
-  // read as a changed chart to the runtime.
+  // Definition identity is the update boundary: recreate only when data or formatter change.
   const definition = useMemo(() => {
     const top = yTop(Math.max(1, ...data.map((d) => d.clicks)));
     return defineChart({
@@ -90,43 +77,27 @@ export function AreaChart({
           strokeWidth: 2,
           curve: smoothCurve,
         }),
-        // A dashed vertical guide on the focused day, no marker: the line
-        // already says where the point is, and the guide ties the tooltip
-        // that follows the cursor to the day it describes.
         crosshair({
           x: true,
           y: false,
           strokeDasharray: "3 3",
-          // No animation at all. Any spring here, however stiff, is chasing a
-          // target that moves every frame, so it renders behind the cursor:
-          // a smooth-looking dot and a dot that keeps up are the same thing
-          // only when the position is continuous rather than animated.
+          // No animation: a spring chases a target that moves every frame, so the dot lags the cursor.
           motion: false,
           stroke: "var(--placeholder)",
           strokeWidth: 1,
         }),
       ],
-      // Charts 0.18 (Alpha) moved the Cartesian scales under `scales`.
       scales: {
         x: {
           scale: scalePoint<string>().domain(data.map((d) => d.day)),
           grid: false,
-          // Charts 0.8 moved the tick formatter under `axis.ticks`. It stayed
-          // assignable at the axis root, where nothing reads it, so the axis
-          // quietly went back to printing whole ISO strings ("2026-07-17"
-          // instead of "07-17", and every timestamp in full on the hourly
-          // range).
-          // Stubs off. A week labels every day; anything longer labels five
-          // evenly spaced days, first and last included, rather than letting
-          // the renderer thin a crowd of labels into an uneven row.
+          // Charts 0.8: the tick formatter lives under `axis.ticks`. At the axis root it is ignored
+          // and the axis prints whole ISO strings.
           axis: {
             line: false,
             ticks: { format: tickFormat, size: 0, values: evenTicks(data.map((d) => d.day)) },
           },
         },
-        // Three hairlines (zero, half, top) labelled on the right, where the
-        // line ends and the eye already is. No axis line: the zero hairline
-        // is the baseline.
         y: {
           scale: scaleLinear().domain([0, top]),
           side: "right",
@@ -138,11 +109,8 @@ export function AreaChart({
         },
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
-      // Nearest-x, unbounded distance: the slice shows anywhere over the
-      // chart, not only within a few px of the line itself.
       focus: focusNearestX,
       maxFocusDistance: Infinity,
-      // No ring on the focused point either.
       focusRing: false,
       tooltip: seriesTooltip,
     });
@@ -165,31 +133,17 @@ export function AreaChart({
   );
 }
 
-/** A bar list's rows, its column heads and how it labels and leads each row:
- * everything a list needs, wherever it is drawn (a card or the Show all
- * dialog). */
 interface BarListProps {
   items: { key: string; clicks: number }[];
   formatKey?: (key: string) => string | ReactNode;
-  /** A flag or a site's letter tile ahead of each label. */
   lead?: (key: string) => ReactNode;
-  /** What will appear here, said in the caller's own words. "No data" tells
-   *  somebody nothing; naming the thing that fills the list explains the
-   *  feature and points at the next step in the same sentence. */
   empty?: string;
-  /** Column headings, e.g. ["Country", "Clicks"]. */
   head?: [string, string];
-  /** What Show all's search matches a row by, when that is not its key (a
-   * country's name rather than its code, a link's slug and title rather
-   * than its id). */
   searchBy?: (key: string) => string;
 }
 
-/** One row's height plus the gap under it, in px: what `limit` rows take. */
 const ROW_PX = 32;
 
-/** Which edges of a scrolling box have rows past them: "above", "below",
- * "both", or "none". Kept by the box's onScroll; it opens at the top. */
 type ScrollEdge = "above" | "below" | "both" | "none";
 
 function useScrollEdge() {
@@ -203,8 +157,6 @@ function useScrollEdge() {
   return { edge, onScroll };
 }
 
-/** The fade on each edge with rows past it: 24px at the bottom, 16px at the
- * top so the column heads above it never look washed out. */
 const EDGE_FADE = {
   below: "sm:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
   above: "sm:[mask-image:linear-gradient(to_bottom,transparent,black_16px)]",
@@ -212,24 +164,10 @@ const EDGE_FADE = {
   none: "",
 } satisfies Record<ScrollEdge, string>;
 
-/** A list that scrolls past its limit (not on a phone), faded on whichever
- * edge has more rows past it. */
 function scrollBox(edge: ScrollEdge): string {
   return cn("overscroll-contain sm:overflow-y-auto sm:pb-3", EDGE_FADE[edge]);
 }
 
-/**
- * Ranked bars with the label inside: each row is a tinted bar sized to its
- * value, the label sits on it, and the count lines up in its own column
- * (rdyrct-design, "The app's surfaces"). No percentage: the bar already says
- * the share. One scale per list, so a bar's length still encodes its value;
- * identity is in the label, so one hue does the work.
- *
- * With `limit`, the card stays `limit` rows tall and the rest scroll under
- * the column heads; on a phone, where a box that scrolls inside a page that
- * scrolls is a trap, it shows the first `limit` and no more. Show all
- * (listTab, below) opens every row with a search.
- */
 export function BarList({
   items,
   formatKey = (k) => k,
@@ -238,7 +176,6 @@ export function BarList({
   head,
   limit,
 }: Omit<BarListProps, "searchBy"> & {
-  /** Rows before the list scrolls. Unset shows every row. */
   limit?: number;
 }) {
   const { edge, onScroll } = useScrollEdge();
@@ -270,7 +207,6 @@ export function BarList({
               <span
                 aria-hidden
                 className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors duration-150 ease-out [@media(hover:hover)]:group-hover:bg-chart/20"
-                // No sliver for no clicks: a link at zero has nothing to draw.
                 style={{ width: item.clicks ? `${Math.max(2, (item.clicks / max) * 100)}%` : 0 }}
               />
               {lead && <span className="relative flex shrink-0">{lead(item.key)}</span>}
@@ -284,12 +220,10 @@ export function BarList({
   );
 }
 
-/** The text a row is searched by: searchBy's, else its key. */
 function searchText(key: string, list: BarListProps): string {
   return list.searchBy?.(key) ?? key;
 }
 
-/** Every row of a list, in a dialog with a search (a sheet on a phone). */
 function BarListDialog({
   title,
   open,
@@ -297,8 +231,7 @@ function BarListDialog({
   ...list
 }: BarListProps & { title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [query, setQuery] = useState("");
-  // Open on the search, typing being why somebody opens every row; not on a
-  // phone, where focus would put the keyboard over the sheet.
+  // Open on the search, but not on a phone, where focus would put the keyboard over the sheet.
   const search = useRef<HTMLInputElement>(null);
   const phone = usePhone();
   const typed = useDeferredValue(query.trim().toLowerCase());
@@ -313,7 +246,6 @@ function BarListDialog({
       initialFocus={phone ? undefined : search}
     >
       <div className="flex flex-col">
-        {/* The search stays put while the rows scroll under it. */}
         <span className="sticky -top-1 z-10 -mt-1 block bg-surface pt-1 pb-3">
           <IconSearch
             size={15}
@@ -336,7 +268,6 @@ function BarListDialog({
   );
 }
 
-/** "Show all 9", in the card's top-right corner: opens BarListDialog. */
 function ShowAll({ title, ...list }: BarListProps & { title: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -353,11 +284,6 @@ function ShowAll({ title, ...list }: BarListProps & { title: string }) {
   );
 }
 
-/**
- * A PanelTabs tab holding a BarList: the list scrolls past `limit` rows, and
- * once it does, Show all sits in the card's corner. The dialog is titled with
- * the tab's own label.
- */
 export function listTab({
   value,
   label,
@@ -372,10 +298,6 @@ export function listTab({
     end: more ? <ShowAll title={label} {...list} /> : undefined,
   };
 }
-
-/** A link in a bar list: its slug, which is what people search for and
- * type, then its title in the muted voice (rdyrct-design, mono only on the
- * identifier). */
 
 export function LinkBarLabel({
   slug,
@@ -398,20 +320,12 @@ export function LinkBarLabel({
   );
 }
 
-/** One figure in a StatsChart strip. */
 export interface ChartFigure {
   label: string;
   value: ReactNode;
   delta?: DeltaValue | null;
 }
 
-/**
- * The figures and the chart in one card (rdyrct-design, "Stats and the chart
- * share a card"): a strip of figures above the chart, clicks first,
- * right above the line that plots them, each with its change beside it. No
- * figure is marked: only clicks has a series, so a marker would look like a
- * tab that never switches.
- */
 export function StatsChart({ figures, children }: { figures: ChartFigure[]; children: ReactNode }) {
   return (
     <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
@@ -434,8 +348,6 @@ export function StatsChart({ figures, children }: { figures: ChartFigure[]; chil
   );
 }
 
-/** The change beside a figure: an arrow and the size of the move. The arrow
- * carries the direction, so the colour never has to on its own. */
 function DeltaBadge({ pct }: { pct: number }) {
   const up = pct > 0;
   const flat = pct === 0;
@@ -450,21 +362,12 @@ function DeltaBadge({ pct }: { pct: number }) {
   );
 }
 
-/** "Italy" from "IT"; a click the edge could not place says so. */
 const placeName = (code: string) => (code === "unknown" ? "Unknown" : countryName(code));
 
-/** The map's height beside the list, and the rows that fill it: nine rows of
- * ROW_PX run as tall as the map and its footnote. A phone stacks the two, so
- * the map gets a shorter box and the list its usual seven. */
+// Nine rows of ROW_PX run as tall as the map and its footnote.
 const MAP_HEIGHT = { desk: 270, phone: 220 };
 const MAP_ROWS = { desk: 9, phone: 7 };
 
-/**
- * Countries, a full-width card: the map on the left, the ranked list on its
- * right, under one Countries tab with Show all in the corner. The list needs
- * no column heads; the tab already says what it lists. On a phone the map
- * sits over the list.
- */
 export function PlacesPanel({
   countries,
   period,

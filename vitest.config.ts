@@ -24,8 +24,7 @@ export default defineConfig({
       },
     })),
   ],
-  // rdyrct.com unless VITE_RDYRCT_SITE=0 says otherwise: `bun run
-  // test:worker:self-host` runs tests/worker/self-host.worker.ts that way.
+  // rdyrct.com unless VITE_RDYRCT_SITE=0 (`bun run test:worker:self-host`).
   define: {
     "import.meta.env.VITE_RDYRCT_SITE": JSON.stringify(
       process.env.VITE_RDYRCT_SITE === "0" ? "0" : "1",
@@ -34,7 +33,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
-      // See vite.config.ts: qrcode's "browser" field has no toBuffer.
       qrcode: fileURLToPath(new URL("./node_modules/qrcode/lib/server.js", import.meta.url)),
     },
   },

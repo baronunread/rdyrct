@@ -1,20 +1,5 @@
-/**
- * A default name for somebody's first organization (#65).
- *
- * The empty state used to ask for this before anything else could happen,
- * which is the activation cliff that issue is about: a person who came to
- * shorten a link was asked to name a company first. Naming it for them is
- * only defensible because it is trivially renameable in Settings, and the
- * state says so.
- *
- * Derived from the email domain when that domain looks like an organization,
- * because "acme.com" is a much better guess than anything else available.
- * Consumer providers say nothing about who somebody works for, so those fall
- * back to the account name.
- */
+/** A default name for somebody's first organization (#65), so nobody is asked for one first. */
 
-/** Domains that identify a person, not an organization. Deliberately short:
- * a miss only costs a slightly worse default name that is one edit away. */
 const CONSUMER_EMAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
@@ -40,8 +25,6 @@ const CONSUMER_EMAIL_DOMAINS = new Set([
   "duck.com",
 ]);
 
-/** The organization domain an address belongs to, or null for a consumer
- * provider (or no domain at all), which says nothing about who they work for. */
 export function workDomain(email: string): string | null {
   const domain = email
     .slice(email.lastIndexOf("@") + 1)
@@ -54,7 +37,6 @@ export function workDomain(email: string): string | null {
 
 const MAX_LENGTH = 100;
 
-/** "acme-supply" and "acme_supply" read as one word; a name should not. */
 function titleCase(value: string): string {
   return value
     .split(/[.\-_+]+/)
@@ -74,17 +56,13 @@ export function defaultOrgName(email: string, accountName?: string): string {
           .toLowerCase();
   const local = at === -1 ? email.trim() : email.slice(0, at).trim();
 
-  // A work domain names the organization. Strip only the public suffix's last
-  // label: "acme.co.uk" should read "Acme Co", not "Acme", and guessing at
-  // multi-part suffixes is not worth the table it would need.
+  // Strip only the last label: "acme.co.uk" reads "Acme Co". Multi-part suffixes would need a table.
   if (domain && !CONSUMER_EMAIL_DOMAINS.has(domain)) {
     const withoutTld = domain.split(".").slice(0, -1).join(".");
     const named = titleCase(withoutTld || domain);
     if (named) return named.slice(0, MAX_LENGTH);
   }
 
-  // A consumer address says nothing about an employer, so use whoever they
-  // are, and fall back to the address's local part when there is no name.
   const person = (accountName ?? "").trim() || titleCase(local);
   return (person ? `${person}'s links` : "My links").slice(0, MAX_LENGTH);
 }

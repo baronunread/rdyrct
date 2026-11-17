@@ -53,8 +53,7 @@ import { cn } from "../ui/cn";
 import { hasWebGpu } from "../lib/webgpu";
 import { ProductShowcase } from "../components/product-showcase";
 
-// Decoration: if its chunk fails to load (a deploy swapped it, a flaky
-// network), the page goes on without it instead of falling to the error screen.
+// Decoration: if its chunk fails to load, the page goes on without it instead of the error screen.
 const HeroBackdrop = lazy<ComponentType>(() =>
   import("../components/hero-gpu-effects")
     .then((module) => ({ default: module.HeroBackdrop }))
@@ -125,8 +124,6 @@ function Section({
   children: ReactNode;
   className?: string;
   id?: string;
-  /** Fires once when the section scrolls into view. Used for the funnel's
-   *  "pricing viewed" step, which is a scroll, not a click. */
   onEnter?: () => void;
 }) {
   return (
@@ -168,19 +165,9 @@ function NoCell({ tier }: { tier?: Tier }) {
   );
 }
 
-/**
- * Where a paid-plan CTA sends people: logged-in users go straight to checkout
- * (/billing?plan=…). Everyone else signs up first, with /welcome?plan=… as
- * `next` so the intent survives OTP verification: /welcome opens checkout
- * before the app ever draws, and Polar sends them back there either way.
- */
+/** Paid CTA: signed-in users go to /billing?plan=…; others sign up with /welcome?plan=… as `next`, so the intent survives the code. */
 export function usePaidPlanTo() {
-  // Through useAudience rather than useCurrentUser directly: this asks the
-  // same question the header does ("is this a stranger?"), and asking it
-  // twice meant asking the server twice, once through the gate that skips the
-  // round trip for a browser that has never been signed in and once around
-  // it. It also reads better while the query is in flight, where `authed`
-  // falls back to what this browser was last time instead of "no".
+  // Through useAudience, as the header does: asking the server twice cost a round trip, and `authed` falls back to last time while in flight.
   const { authed } = useAudience();
   return (plan: "hobby" | "pro", interval: "month" | "year" = "month") => {
     const query = `plan=${plan}${interval === "year" ? "&interval=year" : ""}`;
@@ -188,12 +175,7 @@ export function usePaidPlanTo() {
   };
 }
 
-/** Monthly / yearly switch for the pricing sections. Yearly shows the saving
- * so it is visible before a plan is picked. */
-/** Same measured-pill approach as billing.tsx's `BillingCycleToggle`:
- * `layoutId` alone does not animate a plain conditional swap (no exit phase
- * for Framer to measure a "from" rect), so one persistent pill tweens to the
- * active button's own rect instead. */
+/** `layoutId` alone does not animate a plain conditional swap (no exit phase to measure), so one persistent pill tweens to the active button's rect. */
 function BillingCycleToggle({
   interval,
   onChange,
@@ -218,11 +200,7 @@ function BillingCycleToggle({
     const btn = buttonRefs.current[interval];
     const container = containerRef.current;
     if (!btn || !container) return;
-    // offset* are layout boxes from the container's padding box, which is where
-    // an absolute child is placed, and they ignore any transform on the way in.
-    // Measured once, the pill stayed at its old size when the buttons changed:
-    // the min-h-11 touch height switching on below sm, or the web font arriving.
-    // So measure again whenever the buttons change size.
+    // Measure again whenever the buttons change size: offsets measured once went stale (min-h-11 below sm, the web font arriving).
     const measure = () =>
       setPillRect({
         left: btn.offsetLeft,
@@ -273,15 +251,10 @@ function BillingCycleToggle({
   );
 }
 
-/** The price line for a paid plan at the chosen interval: "$4/mo", or
- * "$3.60/mo" with a "billed yearly" sub-line the caller renders. */
 function planPrice(plan: "hobby" | "pro", interval: "month" | "year") {
   return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
 }
 
-/** A tier's name, with the "Best value" pill on the highlighted one. Never
- * "Most popular": nothing backs that, and per link Pro costs about a third of
- * Hobby, which the limits do. */
 function PlanName({ name, highlight }: { name: string; highlight?: boolean }) {
   return (
     <p className="font-bold">
@@ -295,9 +268,6 @@ function PlanName({ name, highlight }: { name: string; highlight?: boolean }) {
   );
 }
 
-/** One tier in the mobile plan stack. Its own component (not an inline
- * `.map` callback) so the price/sub-line/feature-list render logic has a
- * name and isn't retyped as a 7-prop JSX closure on every tier. */
 function MobilePlanCard({
   name,
   tagline,
@@ -340,7 +310,6 @@ function MobilePlanCard({
   );
 }
 
-/** Stacked plan cards for phones, where the comparison table can't breathe. */
 function MobilePlans({
   paidTo,
   interval,
@@ -443,18 +412,6 @@ function MobilePlans({
   );
 }
 
-/**
- * Four-tier comparison table (self-hosted / Free / Hobby / Pro). Exported
- * for the standalone /pricing page, which reuses it rather than forking a
- * second table that could drift from this one.
- *
- * No heading of its own: the page that renders this owns the page-level
- * h1 and subtitle immediately above it (see PricingPage),
- * and this used to repeat both, word for word, right under them.
- */
-/** The full plan table. On a phone it is stacked cards, unless the page
- * already shows the plans as cards above it (`/pricing`), where the table
- * scrolls sideways instead of repeating them. */
 export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) {
   const paidTo = usePaidPlanTo();
   const [interval, setInterval] = useState<"month" | "year">("month");
@@ -473,8 +430,6 @@ export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) 
   );
 }
 
-/** The full plan table, shown from the `sm` breakpoint up (always, when there
- * are no phone cards to stand in for it on a narrow screen). */
 function PricingTable({
   phoneCards,
   paidTo,
@@ -511,8 +466,6 @@ function PricingTable({
               </span>
             </Th>
             <Th className="border-x border-x-accent/25 bg-accent/10">
-              {/* "Best value", not "Most popular": per link Pro costs about a
-                third of Hobby, which the limits table backs. */}
               <span className="inline-flex items-center gap-2 text-accent">
                 Pro
                 <span className="rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
@@ -641,18 +594,7 @@ function PricingTable({
   );
 }
 
-/**
- * Self-hosting used to be the pricing table's first column, so a buyer read
- * "free, unlimited, your infra" before reaching a price. Every open-source
- * SaaS worth copying keeps it off the buying surface: Dub does not mention it
- * on /pricing at all, Cal.com and Ghost give it a footer link.
- *
- * So it gets a band of its own, after the prices, and it makes one claim
- * rather than a table of them. No card around it: the claim carries itself.
- */
-
-/** The GitHub mark, inline. The icon set has no brand icons, and the CSP
- *  forbids fetching one, so the path lives here. */
+/** The icon set has no brand icons and the CSP forbids fetching one, so the path lives here. */
 function GithubMark({ size = 17 }: { size?: number }) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor" aria-hidden="true">
@@ -661,8 +603,6 @@ function GithubMark({ size = 17 }: { size?: number }) {
   );
 }
 
-/** The self-host steps as they are in the README, not a tidied version:
- *  somebody deciding whether to trust the open-source claim checks this. */
 const SELF_HOST_STEPS = [
   ["git clone", "https://github.com/baronunread/rdyrct"],
   ["cd rdyrct && bun install", ""],
@@ -677,8 +617,6 @@ const SELF_HOST_FACTS = [
 
 function SelfHostSection() {
   return (
-    // Its own section after pricing, never a column inside it: it answers
-    // "will this still be here next year", and the answer is the code.
     <Section id="self-host" className="py-16 md:py-24">
       <div className="lit grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-3xl border border-border bg-surface md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="flex flex-col gap-6 p-6 sm:p-10">
@@ -691,8 +629,6 @@ function SelfHostSection() {
               </li>
             ))}
           </ul>
-          {/* No star count: a low number reads as a weekend project to the
-              exact reader this section is for. */}
           <a
             href={GITHUB_URL}
             target="_blank"
@@ -720,7 +656,6 @@ function SelfHostTerminal() {
         <span className="size-2.5 rounded-full bg-border" />
         <span className="size-2.5 rounded-full bg-border" />
       </div>
-      {/* On a phone the clone URL wraps under itself (hanging past the "$ ") rather than scrolling off the card. */}
       <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-7 sm:p-6 sm:text-sm">
         {SELF_HOST_STEPS.map(([command, arg]) => (
           <code
@@ -749,24 +684,8 @@ function SelfHostTerminal() {
   );
 }
 
-/**
- * The hero: one line on what you get, the words people search for under it,
- * then the working shortener. No picture behind it: a globe sat there until
- * a phone test showed it blocking input for over two seconds in a third of
- * loads, for decoration the shortener already says better.
- * "Free" stays out of the heading: it lives by the button, where it helps
- * the click instead of cheapening the pitch.
- *
- * The layout came out of an earlier test (headline and CTA beside the
- * shortener, against shortener first): 4 signups each from about 70
- * visitors, so it ended and kept the second arm's idea, the demo centre
- * stage, straight under the pitch.
- *
- * Everything a crawler or a link preview reads (the heading, the copy, the
- * links) is plain prerendered HTML.
- */
-/** One landing view per page load, once consent and the session have both
- *  answered. */
+/** No hero picture: a globe blocked input for over two seconds in a third of phone loads.
+ * Everything a crawler or link preview reads is plain prerendered HTML. */
 function useLandingViewCapture(ready: boolean, authed: boolean) {
   const captured = useRef(false);
   const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
@@ -785,11 +704,9 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
   return (
     <section
       data-hero
-      // Until the session resolves, a cached customer's browser hides the
-      // anonymous pitch (styles.css) instead of flashing it.
+      // Until the session resolves, a cached customer's browser hides the anonymous pitch (styles.css) instead of flashing it.
       data-ssr={settled ? undefined : ""}
-      // isolate: the backdrop's -z-10 stays behind this section's text but
-      // in front of the page.
+      // isolate: the backdrop's -z-10 stays behind this section's text but in front of the page.
       className="relative isolate flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
     >
       {hydrated && hasWebGpu() && (
@@ -812,12 +729,6 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
   );
 }
 
-/**
- * The anonymous shortener is an argument aimed at a stranger. A signed-in
- * visitor has already been convinced, and offering them a link that expires
- * in 24 hours and can be "kept" by signing up for the account they are in
- * reads as nobody having tried it.
- */
 function HeroCard({ authed, name }: { authed: boolean; name: string }) {
   return (
     <div
@@ -872,12 +783,9 @@ type HeroProps = {
   ctaLabel: string;
   authed: boolean;
   ready: boolean;
-  /** Empty until the session resolves; the card handles that itself. */
   name: string;
 };
 
-/** The one ask in the long stretch between the hero and pricing, where the
- *  visitor has just been shown the payoff. */
 function AnalyticsAsk() {
   const { authed } = useAudience();
   return (
@@ -891,9 +799,6 @@ function AnalyticsAsk() {
   );
 }
 
-/** The QR pillar sells codes you can edit after printing, which only a
- *  signed-in link has; the free generator makes fixed ones, so it is not
- *  where this button goes. */
 function QrAsk() {
   const { authed } = useAudience();
   return (
@@ -907,11 +812,6 @@ function QrAsk() {
   );
 }
 
-/**
- * What happens when somebody stops paying, said as a sequence because it is
- * one (#29, #159). QR tools that switch printed codes off when a trial ends
- * are the reason this earns a section: nobody else says it on their homepage.
- */
 const PLAN_CHANGE_STEPS = [
   ["Day 0", "You downgrade", "Nothing is deleted. We email you what is over the new plan."],
   ["Day 23", "A second email", "A reminder a week before anything changes."],
@@ -927,9 +827,6 @@ const PLAN_CHANGE_STEPS = [
   ],
 ] as const;
 
-/** The page's one dark band: the promise that matters most to somebody
- *  about to print a code. The last step, the one that never changes, is the
- *  lit one. */
 export function PlanChangeSection() {
   return (
     <Section className="ink-band flex flex-col gap-10 rounded-3xl px-6 py-14 sm:px-10 md:py-20">
@@ -958,8 +855,6 @@ export function PlanChangeSection() {
 
 function FaqSection() {
   return (
-    // Left, not centred. Reading is one column, and centring a list of
-    // questions starts every line in a different place.
     <Section
       id="faq"
       className="grid scroll-mt-24 gap-8 py-16 md:grid-cols-[1fr_1.6fr] md:gap-12 md:py-24"
@@ -985,8 +880,6 @@ function FaqSection() {
   );
 }
 
-/** The page's last word: a dark band as wide as the column, so the page
- *  ends on something, not on a gap. */
 function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
     <Section className="ink-band relative isolate mt-8 overflow-hidden rounded-3xl border border-border px-6 py-20 md:py-32">
@@ -1017,19 +910,6 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
   );
 }
 
-/**
- * Three price points and a link to the full comparison, in place of the full
- * table this section used to carry.
- *
- * The homepage's job is "worth a click"; a full four-column table with a
- * self-host row and a feature-by-feature breakdown is the down-funnel page's
- * job, and having both meant the same table twice, word for word, competing
- * with itself for "rdyrct pricing" in search. Stripe, Linear and Vercel all
- * draw this line the same place: a light teaser on the homepage, the detail
- * on its own page.
- */
-/** One tier in the homepage pricing teaser. Its own component for the same
- * reason as MobilePlanCard above: a named unit beats a 9-prop `.map` closure. */
 function PricingTierCard({
   name,
   price,
@@ -1060,9 +940,6 @@ function PricingTierCard({
       )}
     >
       <div>
-        {/* Same pill as the full table and the mobile plan cards. The
-            homepage is where the steering is worth most, and it was the
-            one of the three missing it. */}
         <PlanName name={name} highlight={highlight} />
         <p className="tnum mt-2 text-4xl font-bold tracking-tight">
           {price}
@@ -1090,10 +967,6 @@ function PricingTeaser() {
       name: "Free",
       price: "$0",
       sub: "",
-      // Says the generous part and the catch in one line. The free members
-      // are the strongest free thing here and were missing; the random slugs
-      // are the fact most likely to feel like a bait if somebody only meets
-      // it after signing up, and it was buried in a collapsed FAQ.
       pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} members, QR codes, and ${PLAN_LIMITS.free.analyticsDays}-day click analytics. Slugs on our domain are always random.`,
       to: "/signup",
       cta: "Sign up free",
@@ -1158,9 +1031,6 @@ function PricingTeaser() {
 export function LandingPage() {
   const { authed, ready, name, ctaTo, ctaLabel } = useAudience();
 
-  // The words people type when they are looking for this, in the title and
-  // the description a result actually shows: "url shortener" and "qr code
-  // generator" rather than only the brand and the tagline.
   useSeo("/");
 
   useMarketingScroll();
@@ -1172,8 +1042,6 @@ export function LandingPage() {
           <FaqJsonLd faqs={faqs} />
           <WebMcpMarketingTools />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
-          {/* First focusable thing on the page, so a keyboard user can jump
-              past the header nav. Hidden until it takes focus. */}
           <a
             href="#main"
             className="sr-only rounded-md bg-surface px-3 py-2 text-sm focus:not-sr-only focus:absolute focus:top-3 focus:left-6 focus:z-50 focus:outline-2 focus:outline-accent"
@@ -1190,8 +1058,6 @@ export function LandingPage() {
               name={name}
             />
             <ProductShowcase />
-            {/* Below the hero, everything sits in one hairline frame
-                (rdyrct-design, "Light on the marketing pages"). */}
             <div className="mb-16 border-x border-border/70">
               <Manifesto />
               <LinksPillar />

@@ -1,10 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-// The SPA answers for every path the worker doesn't recognise, so an API call
-// with the wrong verb, or to a path that never existed, used to come back as
-// an HTML page under a 200. Both now answer as an API does, and the pages the
-// SPA really owns are untouched.
-
 test("an API path called with the wrong method says which methods it takes", async ({
   request,
 }) => {

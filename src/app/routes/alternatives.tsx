@@ -1,21 +1,5 @@
-/**
- * The "alternative" pages: /bitly-alternative, /rebrandly-alternative,
- * /dub-alternative, /short-io-alternative and /tinyurl-alternative.
- *
- * "X alternative" is how people search once they have outgrown, or been
- * priced out of, X, so each page answers that one question and nothing wider:
- * what it costs at each, where the other tool is the better choice (every page
- * says so, with a reason a reader can check), and where rdyrct is.
- *
- * Every competitor figure is what the vendor's own pricing page stated on
- * CHECKED. Pages disagree with third-party review sites, and with each other
- * from month to month, so recheck before changing a number. Where a page was
- * unclear the row says so rather than guessing. rdyrct's own figures come from
- * PLAN_LIMITS and PLAN_PRICES so they cannot drift from the plans.
- *
- * Three pages sharing one component, not a route with a parameter: each is
- * prerendered at its own path, and a parameterised route cannot be.
- */
+/** Every competitor figure is what the vendor's pricing page stated on CHECKED: recheck before changing a number.
+ * Each page is prerendered at its own path, so three pages share a component, not a parameterised route. */
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { MarketingPage } from "../components/marketing-page";
@@ -29,7 +13,6 @@ import { buttonClass } from "../ui/button-class";
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { Table, Th, Td } from "../ui/misc";
 
-/** The comparison tables, lit like every product panel on these pages. */
 const LIT_TABLE = "lit rounded-3xl border border-border";
 import { ArrowRight } from "../ui/icons";
 
@@ -48,17 +31,13 @@ const RDYRCT_ROWS = {
 interface Alternative {
   name: string;
   path: string;
-  /** Where the vendor's pricing page lives, for the footnote. */
   pricingUrl: string;
-  /** When the figures were read, if not CHECKED. */
   checked?: string;
-  /** What the tool is, in a line, and what it costs: the /compare card. */
   blurb: string;
   theirPrice: string;
   title: string;
   intro: string;
   answer: string;
-  /** What the vendor states for the same five rows as RDYRCT_ROWS. */
   theirs: typeof RDYRCT_ROWS;
   theyWin: string[];
   weWin: string[];
@@ -189,7 +168,7 @@ const ALTERNATIVES = {
         `Each plan covers one organization, and only its owner pays. For several organizations, email us about Enterprise.`,
       ],
     ],
-    // Not /blog/rebrandly-alternatives: that post now redirects back to this page.
+    // Not /blog/rebrandly-alternatives: that post redirects back to this page.
     blog: { href: "/blog/rebrandly-vs-bitly", label: "Rebrandly vs Bitly, compared" },
   },
   dub: {
@@ -299,7 +278,7 @@ const ALTERNATIVES = {
         `Yes. Short.io includes domains on its free plan. rdyrct includes ${PLAN_LIMITS.hobby.domains} from Hobby and ${PLAN_LIMITS.pro.domains} on Pro.`,
       ],
     ],
-    // No blog link: /blog/short-io-alternatives now redirects back to this page.
+    // No blog link: /blog/short-io-alternatives redirects back to this page.
   },
   tinyurl: {
     name: "TinyURL",
@@ -444,8 +423,6 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-/** A vendor's plans: the first column bold, the price in tabular figures,
- *  what it includes muted, then the note on how the page read. */
 function PlansSection({
   heading,
   headers,
@@ -552,7 +529,6 @@ function AlternativePage({ data }: { data: Alternative }) {
         </FrameSection>
 
         <FrameSection title={`rdyrct and ${data.name}`}>
-          {/* Two products side by side fit a phone; only wider screens hold a minimum width. */}
           <Table minWidth="sm:min-w-xl" className={LIT_TABLE}>
             <thead>
               <tr>
@@ -604,15 +580,6 @@ function AlternativePage({ data }: { data: Alternative }) {
   );
 }
 
-/**
- * /qr-code-monkey-alternative: the QR generators, on one page.
- *
- * Nobody searches "qr.io alternative" or "qrcode monkey alternative" (ten a
- * month at most), but "qr code monkey" and "qrcode monkey" get about 72,000
- * US searches a month, "qr.io" about 7,000 and "qr code generator pro" 1,600.
- * One page named for the biggest, comparing all three, rather than three
- * thin ones. Figures from each vendor's own page on CHECKED.
- */
 const QR_TOOLS = ["QR Code Monkey", "QR.io", "QR Code Generator Pro"] as const;
 
 const QR_ROWS: [label: string, rdyrct: string, theirs: [string, string, string]][] = [
@@ -788,7 +755,6 @@ function QrAlternativePage() {
   );
 }
 
-/** What /compare shows for each page. */
 const COMPARE_CARDS = [
   ...Object.values(ALTERNATIVES).map(({ name, path, blurb, theirPrice }) => ({
     name,
@@ -806,8 +772,6 @@ const COMPARE_CARDS = [
   },
 ];
 
-/** The index the footer's "All comparisons" link opens: one card per tool, so
- * somebody who does not know which tool they are leaving can see them all. */
 function CompareIndex() {
   return (
     <MarketingPage

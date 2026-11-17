@@ -1,23 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { defaultOrgName, workDomain } from "../src/shared/org-name";
 
-/**
- * Naming somebody's first organization for them (#65).
- *
- * Only defensible because the name is shown before it is used and renameable
- * afterwards, so the bar is "a reasonable guess", not "correct". What it must
- * never do is produce something empty or absurd, since that is what the person
- * sees on their first screen.
- */
-
 describe("a work address names the organization", () => {
   test("uses the domain, without its top-level part", () => {
     expect(defaultOrgName("andrea@acme.com")).toBe("Acme");
   });
 
   test("keeps the rest of a multi-part domain", () => {
-    // "Acme" alone would be a guess about public suffixes that needs a table
-    // to get right, and getting it wrong reads worse than keeping the label.
+    // "Acme" alone would need a public suffix table to get right, and wrong reads worse than the label.
     expect(defaultOrgName("andrea@acme.co.uk")).toBe("Acme Co");
   });
 

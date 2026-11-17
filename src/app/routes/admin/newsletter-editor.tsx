@@ -1,14 +1,5 @@
-/**
- * The newsletter's body: Resend's email editor (@react-email/editor), cut
- * down to what the email layout renders (worker/newsletter-doc.ts parses the
- * same list). Nothing else may be typed, pasted or picked from a menu: no
- * columns, tables, code, images, quotes, strike, alignment or inline styles.
- *
- * The package's own <EmailEditor> always mounts its full bubble and slash
- * menus, which would offer blocks this editor does not have, so this
- * composes the same parts with only the allowed items. Its stylesheet is
- * imported here, so only the admin page's chunk carries it.
- */
+/** Nothing outside the email layout's list (worker/newsletter-doc.ts) may be typed or pasted.
+ * The package's <EmailEditor> mounts full menus, so this composes the parts with only the allowed items. */
 import "@react-email/editor/themes/default.css";
 import "./newsletter-editor.css";
 import { useEffect, useState, type RefObject } from "react";
@@ -28,7 +19,6 @@ import {
 } from "@react-email/editor/ui";
 import { cn } from "../../ui/cn";
 
-/** http(s) only, the same rule the worker applies. A bare domain gets https. */
 function httpUrl(value: string): string | null {
   const text = value.trim();
   const candidate = /^[a-z][a-z\d+.-]*:/i.test(text) ? text : `https://${text}`;
@@ -92,12 +82,9 @@ const extensions = [
 
 const SLASH_ITEMS = [TEXT, H2, H3, BULLET_LIST, NUMBERED_LIST, BUTTON, DIVIDER];
 
-/** The node selector's names for the blocks this editor does not have. */
 const NOT_OFFERED = ["Title", "Quote", "Code"];
 
-/** Selected text: block type, link, bold, italic, underline. */
 function TextMenu() {
-  // One popover at a time, as in the package's own menu.
   const [open, setOpen] = useState<"node" | "link" | null>(null);
   const toggle = (which: "node" | "link") => (next: boolean) =>
     setOpen((now) => (next ? which : now === which ? null : now));
@@ -126,7 +113,6 @@ function TextMenu() {
   );
 }
 
-/** Hands the editor to the composer, and carries the field's ARIA. */
 function Bridge({
   editorRef,
   labelId,
@@ -178,7 +164,6 @@ export function NewsletterEditor({
   return (
     <div
       data-invalid={invalid || undefined}
-      // The same rings as an Input (ui/field.tsx), keyed on data-invalid.
       className={cn(
         "newsletter-editor rounded-lg bg-surface smooth-shadow-ring-xs transition-[box-shadow] duration-150",
         "focus-within:shadow-[0_0_0_1.5px_var(--accent),0_0_0_4px_color-mix(in_oklab,var(--accent)_25%,transparent)]",

@@ -1,21 +1,7 @@
 /**
- * Renders the pages a short link answers with when it does not redirect into
- * the built index.html once, at build time:
- *
- *   dist/client/404-short.html   the app's 404 (NotFoundView), for a dead link
- *   dist/client/link-held.html   "under review" (HeldView), for a held link
- *   dist/client/link-disabled.html  "disabled" (DisabledView), for a banned owner's link
- *   dist/client/link-warn.html   the warning before a redirect (WarnView)
- *
- * rdyr.cc and custom domains answer with them (src/worker/not-found-page.ts,
- * src/worker/link-state-page.ts), and the app host does for all but the 404.
- *
- * Done here rather than in the Worker so React's server renderer stays out
- * of the Worker bundle and no page renders anything at request time. Each
- * keeps the shell's stylesheet, font preloads and theme script, and loses
- * the app's scripts: the app must not boot on a redirect-only host.
- *
- *   bun scripts/prerender-404.tsx   (run by `bun run build`)
+ * Renders the pages a short link answers with when it does not redirect (404-short, link-held,
+ * link-disabled, link-warn) into the built index.html once. Done here, not in the Worker, so
+ * React's server renderer stays out of the bundle and the app does not boot on a redirect-only host.
  */
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

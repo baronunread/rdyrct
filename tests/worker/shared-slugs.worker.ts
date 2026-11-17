@@ -17,15 +17,9 @@ import { insertLinkWithinLimit } from "../../src/worker/plan";
 import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 import type { JsonValue } from "../../src/shared/types";
 
-/**
- * A shared-domain slug is handed out once, ever.
- *
- * A deleted link's slug lives on in old posts, emails and printed QR codes.
- * Handing it to somebody else points all of those wherever they choose,
- * which is how dead bit.ly links in old brand tweets came to preview pages
- * their owners never linked. Each test below frees a slug the way the app
- * does, then forces the allocator to draw it again.
- */
+// A shared-domain slug is handed out once, ever: a deleted link's slug lives on
+// in old posts and printed QR codes. Each test frees a slug the way the app
+// does, then forces the allocator to draw it again.
 
 const HOUR = 60 * 60 * 1000;
 
@@ -34,7 +28,6 @@ beforeEach(async () => {
   await applyTestMigrations();
 });
 
-/** Draws the given slugs in order, then fails the test if asked again. */
 function drawing(...slugs: string[]) {
   const queue = [...slugs];
   return () => {
@@ -87,8 +80,6 @@ describe("allocateSharedSlug", () => {
 });
 
 describe("a link made without an account", () => {
-  // Temporary, slug included: the landing page says so. An account's links,
-  // free plan too, keep theirs for good.
   const expire = (slug: string) =>
     env.DB.prepare("update anon_links set expires_at = ? where slug = ?")
       .bind(Date.now() - HOUR, slug)
@@ -174,7 +165,6 @@ describe("a link made without an account", () => {
     const anonId = await anonIdOf(slug);
     await expire(slug);
     await sweepExpiredAnonLinks(authEnv());
-    // The freed slug comes back to a new link before the claim resumes.
     expect(await allocateSharedSlug(testDb(), drawing(slug))).toBe(slug);
     await env.DB.prepare(
       `insert into anon_links (id, slug, destination, claim_token, created_at, expires_at)
@@ -189,8 +179,6 @@ describe("a link made without an account", () => {
   });
 
   it("never frees a slug an account's link holds, even if the sweep races a claim", async () => {
-    // Staged: the sweep's anonymous row is still there, expired, while an
-    // organization link already answers on the same slug.
     await freeOwnerCookie();
     const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/race"));
     await env.DB.batch([
@@ -260,7 +248,6 @@ describe("a slug never comes back", () => {
     );
     const added = await orgApi(cookie, "POST", `/links/${id}/addresses`, {});
     expect(added.status).toBe(201);
-    // The route answers with the link; the new address is its alias row.
     const alias = (await env.DB.prepare(
       "select id, slug from link_addresses where link_id = ? and kind = 'permanent_alias'",
     )
@@ -273,8 +260,6 @@ describe("a slug never comes back", () => {
   });
 
   it("while an anonymous link still holds it, for an org link too", async () => {
-    // The old org-link check read only link_addresses, so a draw that hit a
-    // live anonymous slug was accepted and overwrote its redirect.
     const { slug } = await jsonBody<{ slug: string }>(await shorten("https://example.com/live"));
     expect(await allocateSharedSlug(testDb(), drawing(slug, "fresh05"))).toBe("fresh05");
   });

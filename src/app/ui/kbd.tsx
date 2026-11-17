@@ -1,14 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
 
-/**
- * A key, as shadcn/ui draws one (ui.shadcn.com/docs/components/kbd): its own
- * small filled box, in the sans, so a shortcut reads as keys on a keyboard
- * rather than a code fragment. Each key of a chord gets a box (`Shortcut`).
- *
- * `tone` follows what it sits on: the page and menus, a tooltip (already on
- * surface-2), or a primary button (on the accent).
- */
 export function Kbd({
   children,
   tone = "default",
@@ -33,8 +25,6 @@ export function Kbd({
   );
 }
 
-/** A chord as separate keys: `<Shortcut keys={[MOD_KEY, "K"]} />`. Hidden
- * from screen readers; the control it sits in carries the name. */
 export function Shortcut({
   keys,
   tone,

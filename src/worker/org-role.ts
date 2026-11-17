@@ -5,15 +5,8 @@ import * as schema from "./db/schema";
 import type { AppEnv, DB, SessionUser } from "./env";
 import type { OrgRole } from "@/shared/types";
 
-/** Least to most powerful. `requireOrgRole(min)` compares against this, so a
- * route's minimum is the whole of its authorization: a GET every member may
- * read asks for "viewer", a write asks for "member". */
 const ROLE_RANK = { viewer: 0, member: 1, admin: 2, owner: 3 } satisfies Record<OrgRole, number>;
 
-/**
- * Resolves the caller's role in the :orgId route param. Platform admins pass
- * every check (they act as owner everywhere, like a cloud super admin).
- */
 export async function orgRole(db: DB, user: SessionUser, orgId: string): Promise<OrgRole | null> {
   if (user.isAdmin) return "owner";
   const rows = await db
@@ -41,22 +34,9 @@ export function requireOrgRole(
 }
 
 /**
- * The three states that stop an org accepting writes while leaving its reads
- * open. All are checked here rather than in each route, for the same
- * reason: no route has to remember.
- *
- * Teardown: a link or domain created in that window would be missed by the
- * workflow's gather step. The delete route itself opts out, because
- * deleteOrg already makes a repeat DELETE a no-op and blocking it here would
- * surface that as a 409 instead.
- *
- * Locked: the org is beyond its owner's plan (#160), so it keeps serving its
- * links and accepts no changes, its owner included.
- *
- * Suspended: abuse.ts's sweep or an admin suspended every link in the org
- * (#224). No opt-out: a link-creation route without this check is exactly
- * how an org whose links were just suspended could mint a replacement before
- * the next pass caught it.
+ * Teardown: a link or domain created in that window would be missed by the workflow's gather
+ * step. The delete route opts out (deleteOrg is idempotent). Suspended (#224) has no opt-out,
+ * or a link-creation route could mint a replacement before the next sweep.
  */
 async function assertOrgWritable(
   db: DB,
@@ -71,8 +51,7 @@ async function assertOrgWritable(
       message: "This organization is locked: upgrade to Pro to use it again",
       cause: { code: "org_locked" },
     });
-  // Before the suspension check: a banned owner's org may be both, and the
-  // ban is the reason nothing will change.
+  // A banned owner's org may be both, and the ban is the reason nothing changes.
   if (state.disabledAt != null)
     throw new HTTPException(403, {
       message: "This organization is disabled: its owner is banned.",
@@ -106,16 +85,12 @@ async function orgState(
   return rows[0] ?? { deletingAt: null, lockedAt: null, linksSuspendedAt: null, disabledAt: null };
 }
 
-/** The statement-level link guards need to distinguish teardown from a cap
- * refusal after the insert writes nothing. Reuse the same state read as the
- * route middleware so locked and deleting behavior cannot drift. */
+/** Same state read as the route middleware, so locked and deleting cannot drift. */
 export async function orgDeleting(db: DB, orgId: string): Promise<boolean> {
   return (await orgState(db, orgId)).deletingAt != null;
 }
 
-/** An upload can outlive the route middleware's state read. Re-check after
- * the R2 write so teardown cannot leave an object behind after deleting the
- * org's prefix. A missing org is no longer writable either. */
+/** An upload can outlive the middleware's state read: re-check so teardown leaves no object behind. */
 export async function orgPresentAndNotDeleting(db: DB, orgId: string): Promise<boolean> {
   const rows = await db
     .select({ deletingAt: schema.orgs.deletingAt })

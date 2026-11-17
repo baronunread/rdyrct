@@ -2,10 +2,8 @@ import * as Sentry from "@sentry/cloudflare";
 import type { JsonValue } from "../shared/types";
 
 /**
- * Structured alert. No-ops when SENTRY_DSN is unset (withSentry in index.ts
- * leaves the SDK uninitialized), and never throws: a monitoring hiccup must
- * never block acking a queue message or anything else on the call site's
- * path.
+ * No-ops when SENTRY_DSN is unset, and never throws: a monitoring hiccup must
+ * not block acking a queue message or anything else on the caller's path.
  */
 export function captureAlert(events: Array<{ event: string } & Record<string, JsonValue>>): void {
   for (const { event, ...extra } of events) {

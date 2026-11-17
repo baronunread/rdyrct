@@ -12,15 +12,6 @@ import {
   overriding,
 } from "./support";
 
-/**
- * A link works the moment its create request returns.
- *
- * In production a new link used to 404 for its first seconds, while the
- * storage queue waited out its batch window, and a click in that window made
- * KV cache the miss for up to a minute. Now the KV write happens in the
- * request, and a KV miss falls back to D1.
- */
-
 // SAFETY: vitest.config.ts sets SHARED_LINK_HOST for the worker tests.
 const SHARED_HOST = env.SHARED_LINK_HOST!;
 
@@ -61,8 +52,6 @@ describe("a new link", () => {
   });
 });
 
-// The KV write failed and went to the queue (stubbed here, so it never
-// lands): the link still answers, from D1.
 describe("a link KV does not have", () => {
   const createWithoutKv = (destination: string) =>
     createLink(destination, overrideEnv({ ...authEnv(), LINKS: failingKv() }));
@@ -100,8 +89,6 @@ describe("a miss", () => {
     expect((await follow("http://localhost/nobodys1")).status).toBe(404);
   });
 
-  // D1 down must not turn every unknown slug into a 500: the redirect path
-  // answered from KV alone before the fallback existed.
   it("is a 404, not a 500, when D1 fails", async () => {
     const DB = overriding(env.DB, {
       prepare: () => {
@@ -112,8 +99,8 @@ describe("a miss", () => {
     expect(res.status).toBe(404);
   });
 
-  // Scanners ask for these by the thousand. None can be a slug, so none
-  // costs a D1 read: a database that throws on use proves it was not asked.
+  // None can be a slug, so none may cost a D1 read: a database that throws
+  // on use proves it was not asked.
   it("never reads D1 for a path that cannot be a slug", async () => {
     const DB = overriding(env.DB, {
       prepare: () => {
@@ -128,8 +115,6 @@ describe("a miss", () => {
   });
 });
 
-// rdyr.cc and custom domains never boot the app, so their miss is a small
-// page of its own rather than the plain text it used to be.
 describe("the page a short-link host 404s with", () => {
   it("is styled HTML on the shared host, with a way back to rdyrct", async () => {
     const res = await follow(`http://${SHARED_HOST}/nobodys3`);

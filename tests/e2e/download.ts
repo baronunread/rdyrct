@@ -1,8 +1,5 @@
 import type { Page } from "@playwright/test";
 
-/** Opens `path`, clicks its export button and returns the file it
- * downloads, as a user would get it. /analytics names it "Export CSV"; the
- * links page's header calls it "Export". */
 export async function exportCsvFrom(page: Page, path: string, buttonName = "Export CSV") {
   await page.goto(path);
   const button = page.getByRole("button", { name: buttonName, exact: true });

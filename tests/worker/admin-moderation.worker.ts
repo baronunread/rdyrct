@@ -17,15 +17,9 @@ import {
 } from "./support";
 import type { ApiInit } from "./support";
 
-/**
- * Admin link moderation (#67).
- *
- * The assertion that matters most is that a suspended link stays suspended
- * after a later edit. Suspension is enforced in desiredKvValue, which every
- * republish runs through; a check in the suspend route alone would be undone
- * by the next save, silently, and the link would be live again with nobody
- * having asked for it.
- */
+// A suspended link must stay suspended after a later edit: suspension is
+// enforced in desiredKvValue, which every republish runs through, so a check in
+// the suspend route alone would be undone by the next save.
 
 async function createLink(cookie: string, destination = "https://example.com/one") {
   const res = await fetchWorker(
@@ -46,29 +40,21 @@ const admin = (path: string, cookie: string, init: ApiInit = {}) =>
     }),
   );
 
-/**
- * Storage messages ride a queue that nothing consumes in these tests, so a
- * publish only reaches KV when it is applied by hand. Applying it is also
- * exactly what proves the point: the route enqueues, and desiredKvValue is
- * what decides whether the key survives.
- */
+// Storage messages ride a queue nothing consumes here, so a publish reaches KV
+// only when applied by hand.
 async function syncKv(...slugs: string[]) {
   for (const slug of slugs)
     await applyStorageMessage(testEnv, drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
 }
 
-/** What the redirect path would find: KV is the only thing that decides. */
 const kvFor = (slug: string) => env.LINKS.get(`slug:${slug}`);
-/** The key redirects: it carries a destination. */
 const liveKey = async (slug: string) => (await kvFor(slug))?.includes('"url"') ?? false;
-/** The key is held (#344): it answers "under review" and carries no
- * destination, so nothing on the redirect path can send anyone there. */
+// Held (#344): answers "under review" and carries no destination.
 const heldKey = async (slug: string) => {
   const raw = await kvFor(slug);
   return raw !== null && raw.includes('"held":true') && !raw.includes('"url"');
 };
 
-/** Every live slug a link answers on. */
 async function slugsOf(linkId: string): Promise<string[]> {
   const { results } = await env.DB.prepare(
     "select slug from link_addresses where link_id = ? and retired_at is null",
@@ -83,9 +69,8 @@ const realFetch = globalThis.fetch;
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();
-  // The destination scorer (#68) runs on create through waitUntil and would
-  // otherwise reach the real resolver and write real scores, which the risk
-  // sort test then has to fight.
+  // The destination scorer (#68) runs through waitUntil on create and would
+  // reach the real resolver and write real scores.
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.startsWith("https://security.cloudflare-dns.com")) throw new Error("offline");
@@ -97,14 +82,12 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-/** Create a link and publish its keys, so KV reflects a live link. */
 async function createLiveLink(cookie: string, destination?: string) {
   const link = await createLink(cookie, destination);
   await syncKv(...(await slugsOf(link.id)));
   return link;
 }
 
-/** Call a moderation route, then apply the republishes it enqueued. */
 async function moderate(
   path: string,
   cookie: string,
@@ -120,7 +103,6 @@ async function moderate(
   return res;
 }
 
-/** Suspend or restore one link, and apply the republishes it enqueued. */
 async function setSuspended(linkId: string, cookie: string, suspended: boolean, reason = "") {
   return moderate(`/links/${linkId}`, cookie, { suspended, reason }, [linkId], "PATCH");
 }
@@ -188,8 +170,7 @@ describe("suspending one link", () => {
 
 describe("suspension survives what would undo it", () => {
   it("stays dark after the owner edits the link", async () => {
-    // The whole reason the check lives in desiredKvValue. An edit republishes
-    // the key, and a suspension enforced anywhere else would be lifted by it.
+    // An edit republishes the key, so a suspension enforced anywhere else would be lifted.
     const owner = await freeOwnerCookie();
     const link = await createLiveLink(owner);
     await setSuspended(link.id, await adminCookie(), true, "malware");
@@ -202,7 +183,6 @@ describe("suspension survives what would undo it", () => {
       }),
     );
     expect(res.status).toBe(200);
-    // The edit republished the key. It is still dark.
     await syncKv(...(await slugsOf(link.id)));
     expect(await heldKey(link.slug)).toBe(true);
   });
@@ -233,8 +213,7 @@ describe("suspension survives what would undo it", () => {
 });
 
 describe("suspension does not wait on the queue (#101)", () => {
-  /** A link answering on twelve slugs: past the ten keys a request writes
-   * itself before handing a batch to the queue. */
+  // Past the ten keys a request writes itself before handing a batch to the queue.
   async function linkWithTwelveSlugs(owner: string) {
     const link = await createLiveLink(owner);
     for (let i = 0; i < 11; i++)
@@ -250,8 +229,7 @@ describe("suspension does not wait on the queue (#101)", () => {
     return { link, slugs };
   }
 
-  /** Suspend or restore through a queue that delivers nothing, and return
-   * what it was handed. KV is never synced by hand here. */
+  // KV is never synced by hand here.
   async function patchWithDeadQueue(cookie: string, linkId: string, body: JsonValue) {
     const sent: StorageMessage[] = [];
     const res = await fetchWorker(
@@ -283,12 +261,10 @@ describe("suspension does not wait on the queue (#101)", () => {
     const live = await kvFor(slugs[0]!);
 
     const sent = await patchWithDeadQueue(cookie, link.id, { suspended: true, reason: "phishing" });
-    // An owner's edit that read D1 before the suspension committed, landing
-    // its KV write after ours.
+    // An owner's edit that read D1 before the suspension committed, landing its KV write after ours.
     await env.LINKS.put(`slug:${slugs[0]}`, live!);
     expect(await liveKey(slugs[0]!)).toBe(true);
 
-    // The delayed recheck the route queued reads D1 again.
     expect(
       sent.flatMap((m) => (m.op === "kv_sync" ? [m.key] : [])).sort((x, y) => x.localeCompare(y)),
     ).toEqual(slugs.map((s) => `slug:${s}`).sort((x, y) => x.localeCompare(y)));
@@ -321,16 +297,9 @@ describe("suspending a whole org", () => {
   });
 
   it("suspends a big org in a fixed number of round trips", async () => {
-    // One address query and one queue send per link is fine for two links
-    // and fatal for three thousand: it asked D1 for 3,002 statements and
-    // made 3,000 sends, past both D1's 1,000-query invocation limit and the
-    // subrequest ceiling. The request died after the suspension flag was
-    // committed, so the links read as suspended and the ones whose messages
-    // never went out kept redirecting.
-    //
-    // Counted rather than sized: running 3,000 links here would test the
-    // fixture, not the route. What matters is that the cost stops growing
-    // with the number of links.
+    // One address query and one queue send per link blew past D1's 1,000-query invocation limit
+    // and the subrequest ceiling after the suspension flag committed. Counted, not sized: the cost
+    // must stop growing with the number of links.
     const owner = await freeOwnerCookie();
     const ids: string[] = [];
     for (let i = 0; i < 12; i++)
@@ -355,7 +324,6 @@ describe("suspending a whole org", () => {
       env.STORAGE_QUEUE.sendBatch = realSendBatch;
     }
 
-    // Twelve links, one send. Per link it would have been twelve.
     expect(sends).toBe(1);
   });
 
@@ -371,11 +339,9 @@ describe("suspending a whole org", () => {
 
 describe("the cross-org search", () => {
   it("filters by organization in the query, not in the browser", async () => {
-    // The page used to narrow the rows this endpoint had already capped at
-    // 200. "Show me this organization's links" therefore meant "show me
-    // whichever of its links are in the newest 200 across the whole
-    // instance", which for a busy instance is usually none of them: an abuse
-    // report naming an org was answered with an empty table.
+    // The page narrowed rows the endpoint had already capped at 200, so an abuse
+    // report naming an org was answered with an empty table when its links were
+    // not in the instance's newest 200.
     const owner = await freeOwnerCookie();
     await createLink(owner, "https://example.com/mine");
 
@@ -385,7 +351,6 @@ describe("the cross-org search", () => {
     );
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((r) => r.orgId === "org-1")).toBe(true);
-    // A shared link shows its host, not a bare "/slug".
     expect(mine[0]!.url).toBe(`https://${env.SHARED_LINK_HOST}/${mine[0]!.slug}`);
 
     const other = await jsonBody<unknown[]>(await admin("/links?org=org-nobody", cookie));
@@ -412,8 +377,6 @@ describe("the cross-org search", () => {
     await createLink(owner, "https://unknown.example/c");
     await env.DB.prepare("update links set risk_score = 0 where id = ?").bind(clean.id).run();
     await env.DB.prepare("update links set risk_score = 100 where id = ?").bind(bad.id).run();
-    // Explicitly unscored, so the assertion is about ordering rather than
-    // about whatever the scorer happened to do.
     await env.DB.prepare("update links set risk_score = null where id not in (?, ?)")
       .bind(clean.id, bad.id)
       .run();
@@ -573,7 +536,6 @@ describe("who may reach any of this", () => {
       const res = await admin(path, owner, init);
       expect(res.status, `${path} should 404 for a non-admin`).toBe(404);
     }
-    // And nothing happened to the link.
     expect(await liveKey(link.slug)).toBe(true);
   });
 

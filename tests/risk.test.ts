@@ -14,13 +14,9 @@ import {
 } from "../src/worker/risk";
 
 /**
- * Reading the resolver's answers (#68).
- *
- * The distinction every test here turns on is unscored (null) versus clean
- * (score 0). They are not the same thing, and conflating them is the way
- * this feature fails quietly: a provider outage would mark the whole table
- * clean and nobody would notice, because a clean table is what you expect to
- * see. So a shape we do not recognise stays null and gets looked at again.
+ * Reading the resolver's answers (#68). Every test turns on unscored (null)
+ * versus clean (score 0): conflating them would let an outage mark the whole
+ * table clean unnoticed, so a shape we do not recognise stays null.
  */
 
 const realFetch = globalThis.fetch;
@@ -28,7 +24,6 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-/** Answers every lookup with one canned DNS-over-HTTPS body. */
 function resolverReturns(body: JsonValue, ok = true) {
   globalThis.fetch = async () => new Response(JSON.stringify(body), { status: ok ? 200 : 502 });
 }
@@ -54,8 +49,7 @@ describe("reading the resolver", () => {
   });
 
   test("treats a name that does not exist as clean, not dangerous", async () => {
-    // NXDOMAIN. A dead link is a dead link; scoring every typo as malware
-    // would bury the real findings.
+    // NXDOMAIN: scoring every typo as malware would bury the real findings.
     resolverReturns({ Status: 3 });
     expect((await scoreDestination("https://nothing.invalid"))?.score).toBe(0);
   });
@@ -75,9 +69,8 @@ describe("staying unscored rather than guessing", () => {
   });
 
   test("leaves an unrecognised answer shape unscored", async () => {
-    // The resolver is a public service, not a documented threat feed. If it
-    // ever answers something new, that must read as "we do not know", never
-    // as "clean".
+    // The resolver is a public service, not a documented threat feed: a new
+    // answer must read as "we do not know", never as "clean".
     resolverReturns({ something: "else" });
     expect(await scoreDestination("https://example.com")).toBeNull();
   });
@@ -100,16 +93,10 @@ describe("destinations it will not look up", () => {
   });
 });
 
-/**
- * Google Web Risk (#341), with Google's API stubbed. The Lookup API answers
- * `{}` for a URL on no list and `{ threat: { threatTypes } }` for one on a
- * list.
- */
+// Google Web Risk (#341), API stubbed. The Lookup API answers `{}` for a URL on no list.
 describe("Google Web Risk", () => {
   const KEY = "test-web-risk-key";
 
-  /** Web Risk answers `webRisk`, or fails when it is the string "fail"; the
-   * DNS resolver answers clean, or fails. */
   function providers(webRisk: JsonValue, options: { dnsFails?: boolean } = {}) {
     const calls: { url: string; key: string | null }[] = [];
     globalThis.fetch = async (input, init) => {
@@ -137,7 +124,6 @@ describe("Google Web Risk", () => {
     const [call] = calls;
     expect(call?.key).toBe(KEY);
     expect(call?.url).not.toContain(KEY);
-    // The full URL is what is looked up, not just the host.
     expect(new URL(call?.url ?? "").searchParams.get("uri")).toBe("https://kit.example/login?x=1");
     expect(new URL(call?.url ?? "").searchParams.getAll("threatTypes")).toEqual([
       "MALWARE",
@@ -213,15 +199,11 @@ describe("Google Web Risk", () => {
   });
 });
 
-/**
- * What Google is asked, and how often (#341 review). A destination has no
- * length cap, so the URI has to have one; and each lookup counts against a
- * monthly quota, so a repeated URI must not cost a second call.
- */
+// A destination has no length cap, so the URI needs one; each lookup counts
+// against a monthly quota, so a repeated URI must not cost a second call.
 describe("asking Web Risk", () => {
   const KEY = "test-web-risk-key";
 
-  /** Google answers `answer` and records each URI it was asked about. */
   function google(answer: JsonValue) {
     const asked: string[] = [];
     globalThis.fetch = async (input) => {
@@ -233,7 +215,6 @@ describe("asking Web Risk", () => {
     return asked;
   }
 
-  /** A KV namespace in a Map, recording each TTL it was given. */
   function memoryKv() {
     const store = new Map<string, string>();
     const ttls: number[] = [];
@@ -285,8 +266,7 @@ describe("asking Web Risk", () => {
   });
 
   test("keeps a padded listed path's leading segments, never just the host", async () => {
-    // Padding a listed path past the cap used to fall back to the host, which
-    // Google answers clean while the path is what it lists.
+    // Falling back to the host would read clean: Google lists the path.
     const pad = "a".repeat(WEB_RISK_MAX_URI);
     expect(webRiskUri(`https://hacked.example/wp-content/phish/${pad}`)).toBe(
       "https://hacked.example/wp-content/phish/",
@@ -295,7 +275,6 @@ describe("asking Web Risk", () => {
     expect(webRiskUri(`https://hacked.example/a/b/c/d/${pad}?q=1`)).toBe(
       "https://hacked.example/a/b/c/",
     );
-    // A query up to the cap is still sent whole.
     const query = `https://kit.example/login?${"q".repeat(6000)}`;
     expect(webRiskUri(query)).toBe(query);
   });
@@ -371,7 +350,6 @@ describe("asking Web Risk", () => {
     let spent = 0;
     const spend = async () => ++spent <= 1;
     expect((await askWebRisk(env, "https://example.com/a", spend)).outcome).toBe("clean");
-    // Cached: no spend, no call.
     expect((await askWebRisk(env, "https://example.com/a", spend)).outcome).toBe("clean");
     expect(spent).toBe(1);
     expect((await askWebRisk(env, "https://example.com/b", spend)).outcome).toBe("over_budget");

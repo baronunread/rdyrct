@@ -1,9 +1,4 @@
-/**
- * UTM tagging, shared because two sides build the same URL: the Worker, which
- * stores a link's UTM columns and applies them on redirect, and the free UTM
- * builder at /utm-builder, which tags a URL in the browser with no account.
- * Both have to produce the address the redirect would send.
- */
+/** Shared: the Worker and the free /utm-builder must produce the same address the redirect sends. */
 
 export const UTM_KEYS = [
   ["utm_source", "utmSource"],
@@ -29,12 +24,7 @@ export const EMPTY_UTM: UtmFields = {
   utmContent: "",
 };
 
-/**
- * Resolve the UTM fields to store on a link. Params already present in the
- * destination URL win (they are what the redirect sends), then explicit
- * fields (an empty string clears), then the base (existing values on update).
- * Keeps the stored columns in sync with what buildDestination emits.
- */
+/** Params already in the destination win (the redirect sends them), then explicit fields (an empty string clears), then the base. */
 export function resolveUtm(
   destination: string,
   fields: Partial<UtmFields>,
@@ -43,9 +33,7 @@ export function resolveUtm(
   let url: URL | null = null;
   try {
     url = new URL(destination);
-  } catch {
-    // invalid destination: fields and base decide
-  }
+  } catch {}
   const out = { ...base };
   for (const [param, field] of UTM_KEYS) {
     const fromUrl = url?.searchParams.get(param)?.trim();
@@ -65,12 +53,10 @@ export function resolveUtm(
 
 const UTM_PARAMS: ReadonlySet<string> = new Set(UTM_KEYS.map(([param]) => param));
 
-/** A query's pairs exactly as written: split on `&`, nothing decoded. */
 function rawPairs(search: string): string[] {
   return search.replace(/^\?/, "").split("&").filter(Boolean);
 }
 
-/** The decoded name of one raw `name=value` pair. */
 function pairName(pair: string): string {
   const name = pair.split("=", 1)[0].replaceAll("+", " ");
   try {
@@ -80,23 +66,15 @@ function pairName(pair: string): string {
   }
 }
 
-/** `url` with its query replaced by `pairs`, joined as they are. Setting
- * `search` only escapes what a query may not hold, so every pair keeps its
- * own encoding: `a=b+c` stays `a=b+c`, where URLSearchParams would
- * rewrite the whole query in its own style. */
+/** Setting `search` escapes only what a query may not hold, so each pair keeps its own encoding:
+ * `a=b+c` stays `a=b+c`, where URLSearchParams would rewrite the whole query. */
 function withPairs(url: URL, pairs: string[]): string {
   url.search = pairs.length ? `?${pairs.join("&")}` : "";
   return url.toString();
 }
 
-/**
- * Strip utm_* params out of a destination, leaving every other query param
- * exactly as written. Called right after resolveUtm has already pulled any of
- * them into the UTM columns, so nothing is lost: `destination` stays the bare
- * link, buildDestination re-applies the stored columns at redirect time. An
- * imported link (#383) has to land where it did on the old service, so the
- * other params are not even re-encoded.
- */
+/** Called after resolveUtm moved utm_* into the UTM columns; buildDestination re-applies them at
+ * redirect time. Other params stay unencoded so an imported link (#383) lands where it did before. */
 export function stripUtmParams(destination: string): string {
   try {
     const url = new URL(destination);
@@ -109,8 +87,6 @@ export function stripUtmParams(destination: string): string {
   }
 }
 
-/** Destination with the link's UTM params appended (existing params win, and
- * keep their own encoding). */
 export function buildDestination(destination: string, utm: UtmFields): string {
   try {
     const url = new URL(destination);

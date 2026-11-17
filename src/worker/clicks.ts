@@ -13,24 +13,12 @@ import { clickAnalyticsAllowed, clickVisitorKey } from "./rate-limit";
 import { captureAlert } from "./sentry";
 import { logFailure } from "./log-failure";
 
-/**
- * Click ingestion. The redirect hot path never inserts into D1 itself: it
- * hands a compact event to the ClickBuffer Durable Object (click-buffer.ts)
- * and returns, so a traffic spike never competes with the redirect for D1
- * write capacity. The buffer turns each ~10 s window of clicks into one
- * multi-row insert, so a spike costs one D1 write per window instead of one
- * per click.
- *
- * A click is best-effort analytics, not a correctness-critical follow-up:
- * `enqueueClick` swallows its own failures instead of propagating them, so a
- * failed hand-off never fails the redirect itself. Losing clicks under
- * overload is the accepted tradeoff (issue #16); losing a KV/R2 sync is not,
- * which is why that path keeps its queue (storage.ts).
- */
+// The redirect never inserts into D1: it hands the event to the ClickBuffer Durable Object, which writes one multi-row insert per ~10 s window.
+// Clicks are best-effort: enqueueClick swallows its failures so a failed hand-off never fails the redirect (#16).
+// Losing a KV/R2 sync is not acceptable, which is why storage.ts keeps its queue.
 
 export type ClickMessage = {
-  // Assigned at the redirect, so a row written twice (an alarm that re-ran
-  // after a partial flush) cannot double-count.
+  // Assigned at the redirect, so a row written twice (an alarm that re-ran) cannot double-count.
   dedupeId: string;
   linkId: string;
   addressId: string;
@@ -41,13 +29,9 @@ export type ClickMessage = {
   device: string;
 };
 
-/** The single ClickBuffer instance every redirect writes to. */
 const BUFFER_NAME = "clicks";
 
-// Rows per chunk of a flush. Each chunk binds its rows as one JSON array, so
-// D1's cap of 100 bound parameters per statement does not limit it; this
-// keeps each statement's parameter well under D1's size limits (~150 bytes a
-// row) and the batch to a handful of statements.
+// Each chunk binds its rows as one JSON array, so D1 cap of 100 bound parameters does not apply; this keeps statements small.
 const CLICK_CHUNK_SIZE = 200;
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -56,17 +40,9 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return chunks;
 }
 
-/* ---------------- producing ---------------- */
-
-/**
- * Record one click. Best-effort: a rate limit or a failed hand-off to the
- * buffer is logged and swallowed here, never thrown, so the caller's redirect
- * always ships regardless of analytics health.
- */
 export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<void> {
   try {
-    // Per visitor, so a flood spends only its own budget. The digest lives in
-    // the limiter's counter and nowhere else: a click never stores an IP.
+    // Per visitor, so a flood spends only its own budget. The digest lives in the limiter counter only: a click never stores an IP.
     const visitor = await clickVisitorKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
     if (!(await clickAnalyticsAllowed(c.env, hit.orgId, c.req.method, visitor))) return;
     const message: ClickMessage = {
@@ -79,8 +55,7 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
       // is the broad IncomingRequestCfProperties value. Unknown on a local
       // request, where the ?? below makes it empty.
       country: (c.req.raw.cf?.country as string) ?? "",
-      // Hostname only, never the full URL the header carries: see
-      // normalizeReferrer in util.ts and issue #20.
+      // Hostname only (normalizeReferrer in util.ts, #20).
       referrer: normalizeReferrer(c.req.header("referer") ?? ""),
       device: deviceFromUA(c.req.header("user-agent") ?? ""),
     };
@@ -91,20 +66,8 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
   }
 }
 
-/* ---------------- writing (called by the buffer's flush) ---------------- */
-
-/**
- * The statements that write one chunk of clicks: the rollup upserts and the
- * monthly counter (#387) first, then the raw insert, all bound to the same
- * JSON array.
- *
- * The order is the dedupe guard. The raw insert skips a row whose dedupe id is
- * already stored (ON CONFLICT DO NOTHING), and the rollups count only rows
- * whose dedupe id is not stored yet, read before the insert in the same
- * transaction. So a click is counted exactly when its raw row is written, and
- * a redelivered one (an alarm that re-ran after a write it did not hear back
- * from) is neither stored nor counted twice.
- */
+// The order is the dedupe guard: the raw insert skips a stored dedupe id (ON CONFLICT DO NOTHING), and the rollups count only rows whose id is not stored yet,
+// read before the insert in the same transaction. A redelivered click is neither stored nor counted twice.
 function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[] {
   const payload: ClickPayload = JSON.stringify(
     rows.map((m) => [
@@ -121,11 +84,8 @@ function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[]
   return [
     ...rollupStatements(d1, payload),
     usageStatement(d1, payload),
-    // The dedupe constraint is a partial unique index (swept NULL ids are
-    // absent from it). SQLite cannot match a column-only conflict target to
-    // that index, so let it handle the one applicable unique conflict without
-    // naming a target. WHERE true is SQLite's disambiguation before ON
-    // CONFLICT.
+    // The dedupe constraint is a partial unique index, which SQLite cannot match to a column-only conflict target, so name none.
+    // WHERE true is SQLite disambiguation before ON CONFLICT.
     d1
       .prepare(
         `insert into clicks (link_id, org_id, ts, country, referrer, device, dedupe_id, address_id)
@@ -137,49 +97,23 @@ function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[]
   ];
 }
 
-/** What one insertClicks pass leaves for the caller to do next. `hadFailure`
- * is true only when a row was actually attempted and did not write (a real D1
- * problem) -- never for a row this pass chose not to attempt, so a big but
- * otherwise healthy backlog never reads as a string of failures. */
+// hadFailure is true only when a row was attempted and failed, so a big healthy backlog never reads as failures.
 export type InsertResult = { retry: ClickMessage[]; hadFailure: boolean };
 
-// The Workers Free plan allows 50 subrequests per invocation, and the cap
-// read (withinClickCaps), the failed db.batch() attempt and the overflow count
-// written on its own after it already spend three. insertClicksPerRow spends one more
-// per row it attempts, so a flush of thousands of rows falling back to
-// per-row writes would blow well past that on its own. Bounding it here means
-// a big backlog is drained over several flushes ~10 s apart instead of in one
-// invocation that errors out; the rows this pass skips come back as retry,
-// unattempted, and the next flush (or the one after) gets its own budget.
+// Workers Free allows 50 subrequests per invocation; the cap read, the failed batch and the overflow write spend three,
+// and the per-row fallback spends one per row. Bound it so a big backlog drains over several flushes,
+// and the skipped rows come back as retry.
 const MAX_PER_ROW_FALLBACK = 40;
 
-/**
- * Write a batch of buffered clicks.
- *
- * First the plan caps (#387): an org's clicks past this month's allowance are
- * dropped here, unwritten (see withinClickCaps). The redirect already went
- * out, so this only decides what is recorded. What is dropped is still
- * counted per link-minute for the abuse sweep, in the same batch
- * (click-overflow.ts).
- *
- * The happy path is one `batch()`: per chunk of rows, the rollup upserts
- * (#26), the monthly counter and the raw insert, deduped on `dedupeId` so a
- * re-run after a partial flush never double-counts any of them (see
- * writeChunk).
- *
- * A link deleted between the redirect and the flush turns its row into a
- * foreign-key violation that aborts the whole `db.batch`. Rather than lose a
- * whole window of clicks because one link went away (#102), the fallback
- * inserts row by row: the ones that land are kept, a row whose link is gone is
- * dropped and counted, and anything else is returned for retry.
- */
+// Clicks past the monthly cap are dropped here (#387) but still counted per link-minute for the abuse sweep (click-overflow.ts).
+// A link deleted before the flush makes a foreign-key violation that aborts the whole batch: the fallback inserts row by row,
+// drops and counts rows whose link is gone, and returns the rest for retry (#102).
 export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<InsertResult> {
   let split: Awaited<ReturnType<typeof withinClickCaps>>;
   try {
     split = await withinClickCaps(env, rows);
   } catch (error) {
-    // D1 is what failed, so every row comes back for the next flush, and the
-    // pass counts toward the buffer's give-up threshold like a failed write.
+    // D1 failed, so every row comes back and counts toward the buffer give-up threshold.
     logFailure("click_cap_read_failed", error);
     return { retry: rows, hadFailure: rows.length > 0 };
   }
@@ -192,8 +126,7 @@ export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<Inse
     await env.DB.batch(writes);
     return { retry: [], hadFailure: false };
   } catch {
-    // The batch rolled back the overflow count with everything else. Write
-    // it on its own: nobody retries a dropped click, so this is its one try.
+    // The batch rolled back the overflow count too. Nobody retries a dropped click, so this is its one try.
     if (overflow) await overflow.run().catch((error) => logFailure("click_overflow_failed", error));
     return insertClicksPerRow(env.DB, counted);
   }
@@ -202,19 +135,14 @@ export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<Inse
 async function insertClicksPerRow(d1: D1Database, rows: ClickMessage[]): Promise<InsertResult> {
   const attempt = rows.slice(0, MAX_PER_ROW_FALLBACK);
   const deferred = rows.slice(MAX_PER_ROW_FALLBACK);
-  // Together, not one after another: the rows are independent and order does
-  // not matter, because dedupe is an index, not a sequence.
   const outcomes = await Promise.all(
     attempt.map(async (row) => {
       try {
         await d1.batch(writeChunk(d1, [row]));
         return { row, state: "ok" as const };
       } catch (error) {
-        // Narrowed here: only an Error carries a message worth classifying,
-        // and anything else is treated as transient.
         const gone = error instanceof Error && isDeletedLink(error);
-        // Sentry is off wherever SENTRY_DSN is unset (every e2e run), so
-        // this is the only trace a row kept back for retry leaves there.
+        // Sentry is off wherever SENTRY_DSN is unset (every e2e run), so this is the only trace a retried row leaves.
         if (!gone) logFailure("click_insert_failed", error);
         return { row, state: gone ? ("gone" as const) : ("retry" as const) };
       }
@@ -231,8 +159,6 @@ async function insertClicksPerRow(d1: D1Database, rows: ClickMessage[]): Promise
     }
   }
   if (gone.length > 0) {
-    // Counted, so the accepted loss has a size rather than being a sentence in
-    // a comment.
     captureAlert([
       {
         event: "click_dropped_unwritable",
@@ -244,18 +170,9 @@ async function insertClicksPerRow(d1: D1Database, rows: ClickMessage[]): Promise
   return { retry, hadFailure };
 }
 
-/**
- * Is this insert failure a link that no longer exists?
- *
- * The two causes want opposite answers: a deleted link will never accept this
- * click however often it comes back, while a database that was briefly
- * unavailable will. Treating both as "drop it" reported a transient blip as a
- * permanent loss.
- */
+// A deleted link never accepts the click; a briefly unavailable database will. Treating both as drop reported a blip as permanent loss.
 export function isDeletedLink(error: Error): boolean {
-  // `cause` as well as the message: drizzle wraps a D1 failure in its own
-  // error whose message is the query text, and the constraint that actually
-  // failed is only named on the cause.
+  // Check cause too: drizzle wraps a D1 failure in an error whose message is the query text; the constraint is named only on the cause.
   return (
     hasForeignKeyFailure(error) ||
     (error.cause instanceof Error && hasForeignKeyFailure(error.cause))
@@ -265,41 +182,19 @@ export function isDeletedLink(error: Error): boolean {
 const hasForeignKeyFailure = (error: Error): boolean =>
   error.message.includes("FOREIGN KEY constraint failed");
 
-/* ---------------- sweeping ---------------- */
-
-/**
- * How long a dedupe id stays useful (#70).
- *
- * A dedupe id exists so a re-run of the buffer's flush can discard a row it
- * already wrote, and a flush retries for at most a few minutes. A day is that
- * with wide margin.
- */
+// A flush retries for a few minutes at most, so a day is wide margin (#70).
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// Same bound as the retention delete in scheduled(): one unbounded UPDATE on
-// this table can exceed D1's statement limits once it is large.
+// Same bound as the retention delete: one unbounded UPDATE can exceed D1 statement limits.
 const DEDUPE_SWEEP_CHUNK = 1000;
 
-/**
- * One chunk of the sweep. `idx_clicks_live_dedupe_ts` (migration 0058) covers
- * exactly the rows the inner select asks for, about a day of clicks, so each
- * loop reads what it clears and the last, empty loop reads nothing. Through
- * `idx_clicks_ts` it walked every click older than the cutoff (#489).
- */
+// idx_clicks_live_dedupe_ts (migration 0058) covers exactly the rows selected; idx_clicks_ts walked every old click (#489).
 export const DEDUPE_SWEEP_SQL = `update clicks set dedupe_id = null where id in (
   select id from clicks where dedupe_id is not null and ts < ? limit ?
 )`;
 
-/**
- * Clear dedupe ids old enough that no flush retry can still reference them.
- *
- * `clicks` is the only unbounded table here and keeps 400 days, so a unique
- * index over every dedupe id ever issued was paying permanent cost for a
- * guarantee that lasts minutes (#70). The column and its index stay, because
- * the dedupe still has to work; what goes is the 36-character value on rows
- * old enough that no retry can reach them. SQLite's unique index allows any
- * number of NULLs, so the freed rows never collide with each other.
- */
+// The column and index stay for dedupe; what goes is the 36-character value on rows no retry can reach (#70).
+// A unique index allows any number of NULLs.
 export async function sweepDedupeIds(env: Env): Promise<number> {
   const cutoff = Date.now() - DEDUPE_WINDOW_MS;
   const stmt = env.DB.prepare(DEDUPE_SWEEP_SQL);
@@ -312,11 +207,7 @@ export async function sweepDedupeIds(env: Env): Promise<number> {
   return cleared;
 }
 
-/**
- * Adds one to an anonymous link's total. Best-effort, after the redirect is
- * sent, and through the same per-key limiter real clicks pass, so somebody
- * reloading their own link in a loop costs a bounded number of writes.
- */
+// Through the same per-key limiter as real clicks, so reloading a link in a loop costs a bounded number of writes.
 export async function countAnonClick(env: Env, id: string, method: string): Promise<void> {
   try {
     if (!(await clickAnalyticsAllowed(env, `anon:${id}`, method))) return;
@@ -325,7 +216,6 @@ export async function countAnonClick(env: Env, id: string, method: string): Prom
       .set({ clicks: sql`${schema.anonLinks.clicks} + 1` })
       .where(eq(schema.anonLinks.id, id));
   } catch (error) {
-    // A lost count on a 24-hour link is not worth failing anything over.
     logFailure("anon_click_count_failed", error);
   }
 }

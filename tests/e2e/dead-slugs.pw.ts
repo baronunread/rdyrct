@@ -2,14 +2,6 @@ import { expect, test } from "@playwright/test";
 import { queryRows } from "./db";
 import { signUpWithLiveLink } from "./orgs";
 
-/**
- * A deleted link's slug is never handed out again.
- *
- * Old posts, emails and printed QR codes keep pointing at it. Dead bit.ly
- * links in old brand tweets were claimed by strangers and now preview pages
- * their owners never linked; on the shared domain, the slug stays retired
- * and answers 404 for good.
- */
 test("a deleted link answers 404 and its slug stays retired", async ({ page }) => {
   const { slug } = await signUpWithLiveLink(page, "dead-slug");
 

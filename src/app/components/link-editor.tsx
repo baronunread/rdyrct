@@ -66,8 +66,7 @@ const defaultForm: LinkInput = {
 
 type UtmKey = "utmSource" | "utmMedium" | "utmCampaign" | "utmTerm" | "utmContent";
 
-/** The link's own QR look, as opposed to the organization's defaults. The
- * server refuses these outright on a plan without qrCustom. */
+/** The link's own QR look. The server refuses these on a plan without qrCustom. */
 const QR_OVERRIDE_FIELDS = [
   "qrStyle",
   "qrColor",
@@ -78,24 +77,18 @@ const QR_OVERRIDE_FIELDS = [
   "qrLogoSize",
 ] as const;
 
-/** Whether this link already carries a QR look of its own, so the editor can
- * say it is kept and locked rather than showing an upsell for a feature the
- * link is visibly using (#162). */
+/** Whether the link carries its own QR look, so the editor says it is kept and locked, not an upsell (#162). */
 function hasQrOverrides(data: LinkInput): boolean {
   return QR_OVERRIDE_FIELDS.some((field) =>
     field === "qrLogoSize" ? data.qrLogoSize != null : !!data[field],
   );
 }
 
-/** The three tags people set on almost every link, shown at once; term and
- * content sit behind one line until somebody wants them. */
 const UTM_MAIN: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmSource", label: "Source", placeholder: "newsletter" },
   { key: "utmMedium", label: "Medium", placeholder: "email" },
   { key: "utmCampaign", label: "Campaign", placeholder: "spring-sale" },
 ];
-/** The QR preview, the same on the link and in Customize QR, so moving
- * between them does not resize it. */
 const QR_PREVIEW_SIZE = 160;
 
 const UTM_MORE: { key: UtmKey; label: string; placeholder: string }[] = [
@@ -118,11 +111,8 @@ const UTM_PARAM_BY_KEY = Object.fromEntries(
   UTM_PARAMS.map(({ param, key }) => [key, param] as const),
 ) as Record<UtmKey, string>;
 
-/** UTM params already in the pasted/typed URL, mirroring the server's
- * resolveUtm: params present in the destination win over whatever is in
- * the form fields. A param that's present but empty still wins (so
- * backspacing its value out clears the field instead of leaving a stale
- * one behind); a param that's absent leaves the field alone. */
+/** Mirrors the server's resolveUtm: a param in the destination wins, even empty (so
+ * backspacing clears the field); an absent one leaves the field alone. */
 function utmFromDestination(destination: string) {
   let url: URL;
   try {
@@ -137,9 +127,6 @@ function utmFromDestination(destination: string) {
   return out;
 }
 
-/** Drop a UTM param from the destination's query string, if present. Used
- * when a UTM field is edited by hand, so the field's value (not a stale
- * copy baked into the destination) is what wins on submit. */
 function withoutUtmParam(destination: string, param: string): string {
   let url: URL;
   try {
@@ -152,8 +139,7 @@ function withoutUtmParam(destination: string, param: string): string {
   return url.toString();
 }
 
-/** Same normalization the server applies on save (see stripUtmParams in
- * src/worker/util.ts): drop every utm_* param, leave the rest alone. */
+/** The server's normalization (stripUtmParams in src/worker/util.ts): drop every utm_* param. */
 function stripUtmFromDestination(destination: string): string {
   let url: URL;
   try {
@@ -165,18 +151,12 @@ function stripUtmFromDestination(destination: string): string {
   return url.toString();
 }
 
-/** Splice pasted text into an input's current selection, the way the
- * browser's own paste would, so a partial selection is respected instead of
- * always replacing the whole field. */
 function mergePastedText(input: HTMLInputElement, pasted: string): string {
   const start = input.selectionStart ?? input.value.length;
   const end = input.selectionEnd ?? input.value.length;
   return input.value.slice(0, start) + pasted + input.value.slice(end);
 }
 
-/** Where the link will send people, split so the tags it adds can be told
- * from the address that was typed. Mirrors the save: the destination with
- * its own utm_* params dropped, then the fields' values added. */
 function openedUrl(form: LinkInput): { base: string; tags: string } | null {
   const raw = form.destination.trim();
   if (!raw) return null;
@@ -235,8 +215,6 @@ function UtmInput({
   );
 }
 
-/** UTM tags inline, all five, because people change them more than
- * anything else on a link. */
 function UtmFields({ form, setForm }: { form: LinkInput; setForm: SetForm }) {
   return (
     <fieldset className="flex min-w-0 flex-col gap-2">
@@ -256,12 +234,8 @@ function UtmFields({ form, setForm }: { form: LinkInput; setForm: SetForm }) {
 }
 
 /**
- * What sits under the QR on a plan without `qrCustom`.
- *
- * Two different sentences, because they are two different situations. A link
- * with no styling is being offered a feature. A link that already has some,
- * on an org that downgraded, is keeping it: saying "add your logo on a paid
- * plan" to somebody whose logo is right there in the preview reads as a bug.
+ * A link that already has styling, on an org that downgraded, is keeping it: "add your
+ * logo on a paid plan" beside a visible logo reads as a bug.
  */
 function QrCustomizationUpsell({ locked }: { locked: boolean }) {
   return (
@@ -281,8 +255,6 @@ function QrCustomizationUpsell({ locked }: { locked: boolean }) {
   );
 }
 
-/** The short link as a domain and a slug joined by a slash. Chosen slugs
- * only exist on custom domains, so on the shared one the slug is locked. */
 // react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one field with its domain, slug and lock states; split tracked in #422.
 function ShortLinkField({
   form,
@@ -339,7 +311,6 @@ function ShortLinkField({
         Short link
         {error && <FieldReason id={reasonId} reason={error.reason} detail={error.detail} />}
       </span>
-      {/* One ring around the three parts, the way one field reads as one. */}
       <div
         className={cn(
           "flex h-10 min-w-0 items-stretch rounded-lg smooth-shadow-ring-xs",
@@ -404,8 +375,6 @@ function ShortLinkField({
   );
 }
 
-/** The host a destination points at, for its letter tile, or "" while it is
- * not an address yet. */
 function destinationHost(raw: string): string {
   const value = raw.trim();
   if (!value || /\s/.test(value)) return "";
@@ -445,11 +414,8 @@ function LinkFormFields({
     setForm({ ...form, destination, ...utmFromDestination(destination) });
   };
 
-  // Pasting a link with utm_* params already on it shows the cleaned link
-  // right away, not the raw paste: extract into the UTM fields below and
-  // strip them from what lands in this field. Typing a URL out by hand
-  // still shows exactly what's typed (see onDestinationChange) until it's
-  // stripped on save.
+  // A paste with utm_* params shows the cleaned link at once: they move into the UTM
+  // fields. A typed URL shows as typed (onDestinationChange) until it is stripped on save.
   const onDestinationPaste = (e: ClipboardEvent<HTMLInputElement>) => {
     const pasted = e.clipboardData.getData("text");
     if (!pasted) return;
@@ -469,8 +435,7 @@ function LinkFormFields({
         errorDetail={destinationError?.detail}
       >
         <span className="relative block">
-          {/* The site's letter stands in for its favicon: the CSP allows no
-              remote images. A globe until there is a site to name. */}
+          {/* The CSP allows no remote images, so the site's letter stands in for its favicon. */}
           <span className="pointer-events-none absolute top-1/2 left-2.5 z-10 -translate-y-1/2">
             {host ? (
               <SiteLetter host={host} className="size-[22px] rounded-md text-[11px]" />
@@ -523,8 +488,6 @@ function LinkFormFields({
   );
 }
 
-/** What the code is drawn with: the link's own look over the org's, every
- * value concrete. */
 function lookOf(form: LinkInput, orgQr: OrgQr): QrLookValue {
   const look = resolveQrLook(form, orgQr);
   const ink = look.color || QR_DEFAULT_COLOR;
@@ -539,7 +502,6 @@ function lookOf(form: LinkInput, orgQr: OrgQr): QrLookValue {
   };
 }
 
-/** The code on a white card, the way it prints. */
 function LinkQrPreview({
   form,
   orgQr,
@@ -569,7 +531,6 @@ function LinkQrPreview({
   );
 }
 
-/** The side column's text: the short link, and where it opens. */
 function LinkSummary({
   form,
   host,
@@ -584,18 +545,13 @@ function LinkSummary({
     <dl className="flex min-w-0 flex-col gap-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-xs text-muted">Short link</dt>
-        {/* Clamped, and as tall as the clamp from the start (min-h in lh):
-            a long slug or URL would otherwise grow the column, and the
-            centred dialog with it, a line per keystroke. The fields show
-            the whole value. */}
+        {/* A fixed min-h, so a long value does not grow the dialog a line per keystroke. */}
         <dd className="line-clamp-2 min-h-[2lh] font-mono text-[13px] font-bold [overflow-wrap:anywhere]">
           {host}/{slug || <span className="font-sans font-normal text-muted">(random)</span>}
         </dd>
       </div>
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-xs text-muted">Opens</dt>
-        {/* The address and its tags clamp apart, so a long address never
-            hides the tags just typed. */}
         <dd className="flex min-h-[4lh] flex-col font-mono text-[11.5px] leading-relaxed text-muted [overflow-wrap:anywhere]">
           {opened ? (
             <>
@@ -611,7 +567,6 @@ function LinkSummary({
   );
 }
 
-/** The link's own QR fields, to put back on Cancel. */
 function qrOverridesOf(form: LinkInput): Pick<LinkInput, (typeof QR_OVERRIDE_FIELDS)[number]> {
   return {
     qrStyle: form.qrStyle,
@@ -624,7 +579,6 @@ function qrOverridesOf(form: LinkInput): Pick<LinkInput, (typeof QR_OVERRIDE_FIE
   };
 }
 
-/** The link with every QR override cleared: back to the org's look. */
 function withoutQrOverrides(form: LinkInput): LinkInput {
   return {
     ...form,
@@ -638,17 +592,13 @@ function withoutQrOverrides(form: LinkInput): LinkInput {
   };
 }
 
-/** The buttons along the bottom: on a desktop the foot of the side column,
- * on a phone pinned to the sheet's bottom edge. */
 function Footer({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("flex items-center justify-end gap-1.5", className)}>{children}</div>;
 }
 
-// A phone sheet scrolls as one; this keeps its buttons on its bottom edge.
 const PHONE_FOOTER =
   "sticky bottom-0 z-10 bg-surface px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:hidden";
 
-// The side column: the paper colour, split from the form by a hairline.
 const ASIDE =
   "flex min-w-0 flex-col gap-4 bg-bg px-5 pt-4 pb-6 max-sm:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent)]";
 
@@ -673,21 +623,13 @@ export function LinkEditor({
   editingLink: LinkInput | null;
   busy: boolean;
   onSave: (data: LinkInput) => void;
-  /** Shows Delete at the left of the footer, when editing. The caller opens
-   * its own confirmation. */
   onDelete?: () => void;
-  /**
-   * The last save's failure. One the server pins on a field (a destination
-   * it refuses, a slug that is taken) marks that field instead of a toast:
-   * check `linkFieldError(e)` before toasting it yourself.
-   */
+  /** A failure the server pins on a field marks it, not a toast: check `linkFieldError(e)`. */
   saveError?: Error | null;
   activeDomains: DomainDTO[];
-  /** The org's default domain for new links (#69), or null for the shared
-   * one. Ignored when editing: that link already has an address. */
+  /** Ignored when editing: that link already has an address. */
   defaultDomainId: string | null;
-  /** Whether the org's plan allows a custom domain at all (regardless of
-   * whether one is connected yet): governs the shared-domain slug hint. */
+  /** Governs the shared-domain slug hint. */
   domainsAllowed: boolean;
   qrCustomEnabled: boolean;
   orgQr: OrgQr;
@@ -703,12 +645,8 @@ export function LinkEditor({
   // The form's height as the QR view opened: the QR view is shorter, and a
   // centred dialog that shrank would jump up the screen under the pointer.
   const [formHeight, setFormHeight] = useState<number | undefined>();
-  // The QR editor replaces the form in the same dialog, with a way back.
   const [view, setView] = useState<"form" | "qr">("form");
-  // A refusal pinned on a field: by the server, or by the same address test
-  // run here first. Cleared as soon as that field changes.
   const [fieldError, setFieldError] = useState<LinkFieldError | null>(null);
-  // The QR look as it was when the QR view opened, for its Cancel.
   const qrBefore = useRef<ReturnType<typeof qrOverridesOf> | null>(null);
   // The logo's file name, known only for one picked in this session: the
   // API stores the uploaded file under an id. TODO(lead): store the name.
@@ -726,9 +664,6 @@ export function LinkEditor({
     defaultValues: defaultForm,
   });
 
-  // A new link starts on the org's default domain, which also unlocks the
-  // slug field: chosen slugs only exist on custom domains, so the customer
-  // who set a default is exactly the one who wants to name their links.
   const newDomainId = resolveDefaultDomainId(defaultDomainId, activeDomains);
 
   // Deliberately not a dependency: the default is read when the dialog opens
@@ -747,17 +682,12 @@ export function LinkEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingLink, reset]);
 
-  // The org's domains can arrive after the dialog opened (New link pressed
-  // straight after a reload). Until somebody picks a domain, follow the
-  // default as it resolves; once they pick, leave their choice alone.
   useEffect(() => {
     if (!open || editingLink || getFieldState("domainId").isDirty) return;
     setValue("domainId", newDomainId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newDomainId]);
 
-  // Focus follows the view switch: into the QR editor's back button, and
-  // home to the button that opened it on the way back.
   const switched = useRef(false);
   useEffect(() => {
     if (!switched.current) return;
@@ -769,12 +699,10 @@ export function LinkEditor({
     setView(next);
   };
 
-  /** Marks one field, says why in its label row, and puts focus on it. */
   const markField = (error: LinkFieldError) => {
     setFieldError(error);
     shake.start();
     setView("form");
-    // After the view has rendered, so the field exists to take focus.
     requestAnimationFrame(() => {
       const el = (error.field === "slug" ? slugRef : destinationRef).current;
       el?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -782,9 +710,6 @@ export function LinkEditor({
     });
   };
 
-  // shakeKey bumps on every save failure (client validation or server
-  // error): the button shakes either way, without the parent needing to
-  // know shake is button-level, not whole-dialog.
   const lastShakeKey = useRef(shakeKey);
   useEffect(() => {
     if (shakeKey !== lastShakeKey.current) {
@@ -794,7 +719,6 @@ export function LinkEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shakeKey]);
 
-  // A refusal the server pinned on a field lands on that field.
   useEffect(() => {
     if (!saveError) return;
     const pinned = linkFieldError(saveError);
@@ -803,16 +727,8 @@ export function LinkEditor({
   }, [saveError]);
 
   const form = watch();
-  // Every call site passes the full next LinkInput (spreading the current
-  // `form` and overriding one or a few keys), which made reset(next) look
-  // like the obvious fit — but reset() re-registers and revalidates every
-  // field in the form, not just the one that changed. On a destination
-  // field it's cheap enough per keystroke to be invisible; it's still the
-  // wrong tool, so a fast typist hitting it 5+ times a second (typing
-  // "https://" is exactly that, back-to-back identical characters) can
-  // outrun it and land a keystroke against a stale re-render. setValue
-  // updates just the fields that actually changed. After a failed submit it
-  // also re-checks them, so a fixed field drops its mark as it is fixed.
+  // setValue, not reset(next): reset re-registers and revalidates every field, and a
+  // fast typist ("https://") can outrun it and land a keystroke on a stale render.
   const setForm = (next: LinkInput) => {
     // SAFETY: `next` is typed LinkInput, a fully-defined object type, so
     // Object.keys(next) can only return its own declared keys.
@@ -820,15 +736,12 @@ export function LinkEditor({
       if (next[key] === form[key]) return;
       setValue(key, next[key], { shouldDirty: true, shouldValidate: isSubmitted });
       if (fieldError?.field === key) setFieldError(null);
-      // A new domain is a new namespace: a slug taken on the old one says
-      // nothing about this one.
       if (key === "domainId" && fieldError?.field === "slug") setFieldError(null);
     });
   };
 
-  // Sends what it loaded. Clearing the QR fields on a plan without qrCustom
-  // was how a title edit silently destroyed a link's logo and colours (#162);
-  // the server now only refuses a save that *changes* them.
+  // Sends what it loaded: clearing QR fields on a plan without qrCustom silently
+  // destroyed a link's logo and colours (#162).
   const save = (data: LinkInput) => {
     if (!isWebAddress(data.destination.trim())) {
       markField({
@@ -841,10 +754,7 @@ export function LinkEditor({
     onSave(data);
   };
 
-  // A form error marks its field (rdyrct-design): the reason in the label
-  // row, focus on the field, and the button shakes. No toast.
   const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
-    // destination is the only field this schema can reject.
     if (!errors.destination) return shake.start();
     markField({
       field: "destination",
@@ -894,13 +804,7 @@ export function LinkEditor({
   const formActions = (
     <>
       {editing && onDelete && (
-        <Button
-          variant="danger"
-          onClick={onDelete}
-          // Narrower padding, so three buttons fit the 240px the side
-          // column leaves them.
-          className="mr-auto px-2.5"
-        >
+        <Button variant="danger" onClick={onDelete} className="mr-auto px-2.5">
           Delete
         </Button>
       )}
@@ -1001,8 +905,6 @@ export function LinkEditor({
         ) : (
           <>
             <div className="flex min-w-0 flex-col gap-1.5 px-5 pt-3 pb-4 sm:px-6 sm:pt-5">
-              {/* The dialog keeps its name (New link) for assistive tech;
-                  what shows is where you are inside it. */}
               <DialogTitle className="sr-only">{title}</DialogTitle>
               <div className="mb-1 flex min-h-8 items-center gap-1.5">
                 <button

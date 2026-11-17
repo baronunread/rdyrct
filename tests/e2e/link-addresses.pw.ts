@@ -14,42 +14,32 @@ import {
 const password = "test-password-123";
 const authFile = join(mkdtempSync(join(tmpdir(), "rdyrct-e2e-")), "auth.json");
 
-// Every test below needs its own empty org, but a fresh sign-up per test
-// trips the email-send rate limit (3/60s, shared across the whole e2e run).
-// So this file signs up once here and every test reuses that session.
+// A sign-up per test would trip the email-send rate limit (3/60s, shared by
+// the whole e2e run), so this file signs up once and reuses the session.
 test.describe.configure({ mode: "serial" });
 test.use({ storageState: authFile });
 
 test.beforeAll(async ({ browser }) => {
-  // `test.use({ storageState: authFile })` below also applies to
-  // browser.newContext() defaults, so override it back to none here: this
-  // context is what *creates* that file, it can't start from it.
+  // `test.use({ storageState })` below also applies to newContext(); reset it,
+  // since this context creates that file.
   const context = await browser.newContext({ storageState: undefined });
   const page = await context.newPage();
   const email = `playwright-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  // No plan covers more than one org: that is an allowance an admin sets by
-  // hand (Enterprise). Every test here needs it, since each wants a fresh,
-  // empty org. Pro is for the custom domain the alias tests add.
+  // More than one org is an admin-set Enterprise allowance; each test wants
+  // a fresh, empty org. Pro is for the custom domain the alias tests add.
   await setPlan(page, email, "pro");
   await setOrgsOverride(page, email, 3);
   await context.storageState({ path: authFile });
   await context.close();
 });
 
-/** The organization every account is given on its first session. The first
- * test to ask for a fresh org gets that one, since it is empty and nobody
- * has touched it; the rest make their own. Reliable module state because
- * this file runs serially, in one worker. */
+// The first test to ask for a fresh org gets the sign-up org; the rest make
+// their own. Module state is safe because this file runs serially.
 let defaultOrgSpent = false;
 
-/** A fresh, empty org under the shared signed-in user. The allowance is three, and
- * three is what this file uses: the one that came with the account, plus one
- * per remaining test. */
 async function freshOrg(page: Page, name: string): Promise<void> {
   await page.goto("/dashboard");
-  // The switcher lives in the shell, so it is a reliable signal that the
-  // shell (and whatever it is paired with) has rendered.
   await expect(page.locator("[data-org-switcher]").first()).toBeVisible();
   if (defaultOrgSpent) {
     await createAdditionalOrg(page, name);
@@ -61,8 +51,6 @@ async function freshOrg(page: Page, name: string): Promise<void> {
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 }
 
-/** Fills the "New link" dialog with `destination` and submits it, for tests
- * that expect the same-destination conflict dialog to show up. */
 async function createLinkExpectingConflict(page: Page, destination: string) {
   await page.goto("/links");
   await page.getByRole("button", { name: "New link" }).first().click();
@@ -83,26 +71,22 @@ test("renaming a custom-domain link leaves a temporary alias, which can be made 
   test.slow();
   await freshOrg(page, "Alias Org");
 
-  // A custom domain is required: renaming only leaves an alias on a
-  // custom-domain address, never on the shared, always-random domain.
+  // Renaming leaves an alias only on a custom domain, never the shared one.
   const hostname = await addActiveCustomDomain(page, `alias-${Date.now()}.example.com`);
 
   const editor = await openNewLinkDialog(page);
   await editor.getByPlaceholder("https://example.com/launch").fill("https://example.com/original");
-  // exact: the Slug field's hint text ("Use a custom domain for custom
-  // slugs.") also matches "Domain" as a substring once a domain is added.
+  // exact: the Slug hint ("Use a custom domain...") also matches "Domain".
   await editor.getByLabel("Domain", { exact: true }).click();
   await page.getByRole("menuitem", { name: hostname }).click();
   await editor.getByPlaceholder("launch-2026").fill("old-slug");
   await editor.getByRole("button", { name: "Create link" }).click();
-  // Creating answers with the "Link created" dialog; close it to reach the table.
   const created = page.getByRole("dialog", { name: "Link created" });
   await expect(created).toContainText(`${hostname}/old-slug`);
   await page.keyboard.press("Escape");
   await expect(created).toBeHidden();
   await expect(page.getByText(`${hostname}/old-slug`)).toBeVisible();
 
-  // Rename the slug from the row's actions menu.
   await page
     .getByRole("row", { name: /old-slug/ })
     .getByRole("button", { name: "Actions for old-slug" })
@@ -113,8 +97,6 @@ test("renaming a custom-domain link leaves a temporary alias, which can be made 
   await renameEditor.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(`${hostname}/new-slug`)).toBeVisible();
 
-  // A permanent alias too, made after the rename: newer, but the temporary
-  // one still comes first because it asks for a decision.
   await page
     .getByRole("row", { name: /new-slug/ })
     .getByRole("button", { name: "Actions for new-slug" })
@@ -125,8 +107,6 @@ test("renaming a custom-domain link leaves a temporary alias, which can be made 
   await aliasDialog.getByRole("button", { name: "Create alias" }).click();
   await expect(aliasDialog).toBeHidden();
 
-  // "+2" next to the title opens the aliases as tree rows: slug only (the
-  // host is the link's), temporary first with its time left in hours.
   const toggle = page.getByRole("button", { name: "Show 2 aliases" });
   await expect(toggle).toContainText("+2");
   await toggle.click();
@@ -137,12 +117,10 @@ test("renaming a custom-domain link leaves a temporary alias, which can be made 
   await expect(aliasRows.nth(0)).not.toContainText(hostname);
   await expect(aliasRows.nth(1)).toContainText("/kept-slug");
   await expect(aliasRows.nth(1)).not.toContainText(/left|Keep/);
-  // None of the old repeated labels.
   await expect(page.getByText(/Permanent alias|Same destination|Alias clicks count/)).toHaveCount(
     0,
   );
 
-  // Keep it, inline, by keyboard: the button is a tab stop in the row.
   const keep = aliasRows.nth(0).getByRole("button", { name: "Keep old-slug for good" });
   await keep.focus();
   await page.keyboard.press("Enter");
@@ -151,7 +129,6 @@ test("renaming a custom-domain link leaves a temporary alias, which can be made 
     /left|Keep/,
   );
 
-  // The row menu opens from the keyboard and gives focus back on Escape.
   const menu = page
     .locator("tr.alias-row", { hasText: "/old-slug" })
     .getByRole("button", { name: "Actions for old-slug" });
@@ -172,10 +149,8 @@ test("creating a link to an already-shortened destination offers to reuse it (#3
   await conflict.getByRole("button", { name: "Create separate link" }).click();
   await expect(page.getByText("Link created")).toBeVisible();
 
-  // Two distinct links now exist (the dashboard quick-create plus this one),
-  // not a single link with a merged address. (Not a "links" count check: a
-  // kept alias also counts toward that limit, so it can't tell fork from
-  // merge apart on its own — see the next test.)
+  // Two distinct links, not one with a merged address. A "links" count cannot
+  // tell fork from merge: a kept alias also counts toward it.
   await page.goto("/links");
   await expect(page.locator("tbody tr")).toHaveCount(2);
 });
@@ -188,10 +163,8 @@ test("choosing to add to the existing link merges the address instead of forking
 
   const conflict = await createLinkExpectingConflict(page, "https://example.com/merge-page");
   await conflict.getByRole("button", { name: "Add" }).click();
-  // A merge is not a new link, and the dialog says so.
   await expect(page.getByRole("dialog", { name: "Address added" })).toBeVisible();
 
-  // Still one link: the second address became an alias on it, not a fork.
   await page.goto("/links");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Show 1 alias" })).toBeVisible();

@@ -5,8 +5,7 @@ import { asWideEvent } from "../../src/worker/evlog";
 import { logFailure } from "../../src/worker/log-failure";
 import { applyTestMigrations, fetchWorker, freeOwnerCookie } from "./support";
 
-/** Everything printed to the console while `run` ran, colours stripped. Outside
- * production evlog pretty-prints each wide event there. */
+// Outside production evlog pretty-prints each wide event to the console.
 async function printedDuring(run: () => Promise<Response>): Promise<string> {
   const spies = (["log", "info", "warn", "error"] as const).map((m) =>
     vi.spyOn(console, m).mockImplementation(() => {}),

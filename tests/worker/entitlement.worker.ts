@@ -82,7 +82,6 @@ const grantComp = (cookie: string, body: JsonValue, userId = "user-1") =>
 const revokeComp = (cookie: string, userId = "user-1") =>
   adminFetch(cookie, `/api/admin/users/${userId}/comp`, { method: "DELETE" });
 
-/** A live pro subscription, as `subscription.active` would have left it. */
 const paying = {
   plan: "pro" as const,
   subscriptionPlan: "pro" as const,
@@ -172,7 +171,7 @@ describe("comps (#81)", () => {
   });
 
   it("a revoked subscription cannot strip access an admin granted", async () => {
-    // The whole point of #81: these two writes used to be the same column.
+    // #81: a comp and a subscription used to write the same column.
     const cookie = await adminCookie();
     await seedUser(paying);
     await grantComp(cookie, { plan: "pro", reason: "Comped after a support issue" });
@@ -185,7 +184,6 @@ describe("comps (#81)", () => {
     const user = await getUser();
     expect(user.plan).toBe("pro");
     expect(user.compPlan).toBe("pro");
-    // The subscription really is gone; only the comp keeps the access.
     expect(user.subscriptionPlan).toBeNull();
     expect(user.polarSubscriptionId).toBeNull();
   });
@@ -226,8 +224,7 @@ describe("subscription statuses (#84)", () => {
 
     const user = await getUser();
     expect(user.plan).toBe("free");
-    // The subscription is still on the row: it exists, it just entitles
-    // nothing, which is what admin needs to be able to see.
+    // The subscription stays on the row, entitling nothing: admin needs to see it.
     expect(user.subscriptionPlan).toBe("pro");
     expect(user.subscriptionStatus).toBe("unpaid");
   });
@@ -287,8 +284,6 @@ describe("subscription statuses (#84)", () => {
   });
 
   it("keeps the most recently changed subscription when a user has two", async () => {
-    // One row holds one subscription: the later change wins, and the earlier
-    // subscription cannot write back over it.
     await seedUser();
     await postWebhook({
       type: "subscription.active",

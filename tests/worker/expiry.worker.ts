@@ -108,8 +108,6 @@ describe("redirect hot path: lazy expiry", () => {
     );
 
     const res = await fetchWorker(new Request("http://localhost/old-slug", { redirect: "manual" }));
-    // Serves the SPA under a 404, same as an unknown slug: an address past its
-    // deadline is not a page, and it is certainly not still a redirect.
     expect(res.status).toBe(404);
   });
 
@@ -146,8 +144,7 @@ describe("sweepExpiredAliases", () => {
     const primary = await addressById("addr-primary");
     expect(primary.retiredAt).toBeNull();
 
-    // The sweep only retires the D1 row; syncing the queue message is what
-    // actually clears KV (mirrors how storage.ts's own tests exercise sync).
+    // The sweep only retires the D1 row; the queue message is what clears KV.
     await applyStorageMessage(testEnv, db(), syncLinkMsg("old-slug", null));
     expect(await env.LINKS.get("slug:old-slug")).toBeNull();
     expect(await env.LINKS.get("slug:new-slug")).not.toBeNull();

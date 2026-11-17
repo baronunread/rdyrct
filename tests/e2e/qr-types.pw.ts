@@ -1,11 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * /wifi-qr-code, /vcard-qr-code and /whatsapp-qr-code: the main generator's
- * card with fields for one job. Each must draw a code holding the text a
- * phone expects, and offer it for download, without an account.
- */
-
 async function expectCode(page: Page, holds: RegExp) {
   const code = page.getByRole("img", { name: /^QR code (for|to join)/ });
   await expect(code.locator("svg")).toBeVisible({ timeout: 10_000 });

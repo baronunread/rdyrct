@@ -1,13 +1,4 @@
-/**
- * Newsletter composer (platform admin). One issue at a time, to one list
- * (product news or offers) narrowed by stage and plan (worker/marketing.ts
- * decides who): a subject and a body written in the email editor. A test
- * goes to the admin alone, at once; Preview shows it here first; a send goes
- * now or at a scheduled time, through a Cloudflare Workflow
- * (worker/newsletter-send.ts). Duplicate loads a past send back in. The page is the
- * composer first; who has answered sits in two quiet lines under the
- * history.
- */
+/** Newsletter composer (platform admin). Sends run as a Cloudflare Workflow (worker/newsletter-send.ts). */
 import { useId, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
@@ -48,7 +39,6 @@ import {
   type NewsletterStatus,
 } from "@/shared/types";
 
-/** Asked again every few seconds while a send is going out, or due to. */
 const newsletterQuery = queryOptions<NewsletterStatus>({
   queryKey: ["admin", "newsletter"],
   queryFn: () => api("/admin/newsletter"),
@@ -62,8 +52,6 @@ const newsletterQuery = queryOptions<NewsletterStatus>({
       : false,
 });
 
-/** How many people a send to `list` with `filter` reaches, asked again as
- * either changes. The last answer stays up while the next one loads. */
 const audienceQuery = (list: MarketingList, filter: AudienceFilter) =>
   queryOptions<NewsletterAudienceCount>({
     queryKey: ["admin", "newsletter", "audience", list, filter.stage, filter.plan],
@@ -80,8 +68,6 @@ export const preload = (qc: QueryClient) =>
 
 type Problems = { subject?: string; body?: string };
 
-/** Whether a button in the body still has no http(s) link (the editor's
- * new button starts with none). */
 function buttonWithoutLink(editor: Editor | null): boolean {
   let missing = false;
   editor?.state.doc.descendants((node) => {
@@ -93,11 +79,8 @@ function buttonWithoutLink(editor: Editor | null): boolean {
   return missing;
 }
 
-/** All the text a body may hold; the server refuses more (newsletter-doc.ts). */
 const MAX_TEXT = 20_000;
 
-/** The draft, its field errors, and the three ways to send it. The body
- * lives in the editor; it is read from there when a send needs it. */
 function useComposer(list: MarketingList, audience: AudienceFilter) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -106,13 +89,10 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
   const [busy, setBusy] = useState<"test" | "preview" | "send" | "schedule" | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const editorRef = useRef<Editor | null>(null);
-  // One per composed issue, and the id of the send's workflow: sending the
-  // same id twice (a double click, a retry) starts nothing new. A ref:
-  // nothing shows it. Made on the first send and cleared after a success.
+  // One id per composed issue, the send's workflow id: a double click or retry starts nothing new. A ref, nothing shows it.
   const sendId = useRef<string | null>(null);
-  // What the last try sent. A try with anything else (subject, body,
-  // audience, time) gets a new id: the server answers an old id with the
-  // first try's state, so a retry after an edit would never send the edit.
+  // Any other change (subject, body, audience, time) gets a new id: the server answers an old id with the first try's state,
+  // so a retry after an edit would never send the edit.
   const lastTry = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
 
@@ -122,8 +102,6 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
   };
   const bodyChanged = () => setProblems((p) => (p.body ? { ...p, body: undefined } : p));
   const payload = () => ({ list, subject, doc: editorRef.current?.getJSON() });
-  /** Marks what is wrong, field by field, and focuses the first. The server
-   * checks again. */
   const check = () => {
     const found: Problems = {};
     if (!subject.trim()) found.subject = "Add a subject";
@@ -136,7 +114,6 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
     else if (found.body) editorRef.current?.commands.focus();
     return Object.keys(found).length === 0;
   };
-  /** Runs one request; true when it went. A failure is a toast. */
   const run = async (
     kind: "test" | "preview" | "send" | "schedule",
     send: () => Promise<string | null>,
@@ -172,7 +149,6 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
       return null;
     });
   };
-  /** Send now (no time) or Schedule. */
   const send = (scheduledFor?: number) =>
     run(scheduledFor ? "schedule" : "send", async () => {
       const issue = { ...payload(), audience, ...(scheduledFor && { scheduledFor }) };
@@ -191,7 +167,6 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
       return state.scheduledFor ? `Scheduled for ${whenWords(state.scheduledFor)}` : "Sending";
     });
 
-  /** Duplicate: a past send's subject and body, as a new send. */
   const load = (draft: NewsletterDraft) => {
     setSubjectValue(draft.subject);
     editorRef.current?.commands.setContent(draft.doc);
@@ -200,7 +175,6 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
     lastTry.current = null;
     formRef.current?.querySelector<HTMLElement>('[name="subject"]')?.focus();
   };
-  /** Whether anything has been written yet. */
   const isEmpty = () => !subject.trim() && !(editorRef.current?.getText() ?? "").trim();
 
   return {
@@ -222,7 +196,6 @@ function useComposer(list: MarketingList, audience: AudienceFilter) {
   };
 }
 
-/** One list's answers as a line: yes (and where from), no, not asked. */
 function answersLine(answers: NewsletterAnswers): string {
   const { onboarding, prompt, settings } = answers.yes;
   const yes = onboarding + prompt + settings;
@@ -233,7 +206,6 @@ function answersLine(answers: NewsletterAnswers): string {
   ].join(", ");
 }
 
-/** Who has answered, per list: two quiet lines, not a dashboard. */
 function Answers({ status }: { status: NewsletterStatus }) {
   const headingId = useId();
   return (
@@ -261,7 +233,6 @@ const STATUS = {
   failed: { tone: "bad", label: "Failed" },
 } satisfies Record<NewsletterSendStatus, { tone: StateTone; label: string }>;
 
-/** When a send went or goes, and how far it got, in words. */
 function sendLine(send: NewsletterSendRow): string {
   const who = [MARKETING_LIST_LABELS[send.list], ...filterLabels(send.audience)].join(" · ");
   const when = send.scheduledFor ?? send.createdAt;
@@ -278,12 +249,9 @@ function sendLine(send: NewsletterSendRow): string {
   }
 }
 
-/** A send that is over (sent, failed or cancelled) can be sent again as a
- * copy. */
 const isOver = (status: NewsletterSendStatus) =>
   status === "sent" || status === "failed" || status === "cancelled";
 
-/** Scheduled sends first, soonest first, then the rest, newest first. */
 function SendHistory({
   sends,
   onDuplicate,
@@ -291,7 +259,6 @@ function SendHistory({
 }: {
   sends: NewsletterSendRow[];
   onDuplicate: (send: NewsletterSendRow) => void;
-  /** The send whose copy is loading. */
   duplicating: string | null;
 }) {
   const qc = useQueryClient();
@@ -316,7 +283,6 @@ function SendHistory({
         <ol className="rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
           {sends.map((send) => (
             <li key={send.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3">
-              {/* On a phone the state and Cancel take a line of their own. */}
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 max-sm:basis-full">
                 <span className="truncate text-sm font-medium" title={send.subject}>
                   {send.subject}
@@ -382,8 +348,7 @@ function IssueFields({ composer }: { composer: ReturnType<typeof useComposer> })
           maxLength={150}
         />
       </Field>
-      {/* Not a Field: that is a <label>, and a label around an editor with
-          menus inside it forwards their clicks. The same label row. */}
+      {/* Not a Field: that is a <label>, and a label around an editor with menus forwards their clicks. */}
       <div className="min-w-0">
         <span className="mb-1.5 flex min-h-4 items-center gap-1.5 text-xs text-muted">
           <span id={labelId} className="shrink-0">
@@ -406,11 +371,8 @@ function IssueFields({ composer }: { composer: ReturnType<typeof useComposer> })
   );
 }
 
-/** Duplicate in the history: fetches a send's issue and hands it to
- * `load`, or holds it for a yes when something is already written. */
 function useDuplicate(load: (draft: NewsletterDraft) => void, isEmpty: () => boolean) {
   const toast = useToast();
-  // The send being fetched, and a fetched copy waiting to replace the draft.
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [replacing, setReplacing] = useState<NewsletterDraft | null>(null);
   const apply = (draft: NewsletterDraft) => {
@@ -439,7 +401,6 @@ function useDuplicate(load: (draft: NewsletterDraft) => void, isEmpty: () => boo
   };
 }
 
-/** Asks before a copy replaces what is already written. */
 function ReplaceDraftDialog({ copy }: { copy: ReturnType<typeof useDuplicate> }) {
   return (
     <ConfirmDialog
@@ -456,7 +417,6 @@ function ReplaceDraftDialog({ copy }: { copy: ReturnType<typeof useDuplicate> })
   );
 }
 
-/** Why sending is off, naming what to set. */
 function SendingOff() {
   return (
     <p className="text-sm text-muted">
@@ -500,8 +460,7 @@ export function AdminNewsletterPage() {
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          // The editor's link and button forms sit inside this one, and
-          // React bubbles their submit here. Only this form's own counts.
+          // The editor's link and button forms sit inside this one, and React bubbles their submit here. Only this form's own counts.
           if (event.target !== event.currentTarget) return;
           if (check()) setConfirming(true);
         }}

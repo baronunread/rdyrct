@@ -31,12 +31,6 @@ import {
 } from "./support";
 import type { ApiInit } from "./support";
 
-/**
- * A ban: the user is out, every org they own answers "disabled" on every
- * link and custom domain, and 90 days on the daily cron deletes those orgs.
- * An unban before then brings back exactly what was there.
- */
-
 const db = () => drizzle(env.DB, { schema });
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -56,7 +50,6 @@ const createLink = async (cookie: string, destination: string) =>
     }),
   );
 
-/** What the ban dialog sends, less the flag itself. */
 const ban = (cookie: string, body: { reason?: string; blockHosts?: string[] }) =>
   api("/admin/users/free-1", cookie, {
     method: "PATCH",
@@ -71,7 +64,6 @@ const row = (sql: string, ...binds: (string | number)[]) =>
     .bind(...binds)
     .first<Record<string, number | string | null>>();
 
-/** A GET as a browser sends it, Host header included. */
 const visit = (host: string, path: string) =>
   fetchWorker(
     new Request(`http://${host}/${path}`, { redirect: "manual", headers: { host } }),
@@ -82,14 +74,11 @@ async function syncKv(slug: string, hostname: string | null = null) {
   await applyStorageMessage(testEnv, db(), syncLinkMsg(slug, hostname));
 }
 
-/** Makes every insert into `table` fail, the way a D1 error would. */
 const failInserts = (table: string) =>
   env.DB.prepare(
     `create trigger fail_${table} before insert on ${table} begin select raise(abort, 'insert failed'); end`,
   ).run();
 
-/** The ban as it was before migration 0046: owner banned, each link
- * suspended "Owner banned", and KV holding what that published. */
 async function oldStyleBan(slugs: string[]) {
   await env.DB.batch([
     env.DB.prepare("update user set banned = 1 where id = 'free-1'"),
@@ -100,7 +89,6 @@ async function oldStyleBan(slugs: string[]) {
   for (const slug of slugs) await syncKv(slug);
 }
 
-/** The orgs with an `org_sync` waiting in the outbox. */
 const queuedOrgSyncs = async () =>
   (
     await env.DB.prepare(
@@ -108,7 +96,6 @@ const queuedOrgSyncs = async () =>
     ).all<{ target: string }>()
   ).results.map((r) => r.target);
 
-/** Runs migration 0046 again, less the column it adds. */
 async function replay0046() {
   const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0046"));
   expect(migration, "migration 0046 is missing from the test bundle").toBeTruthy();
@@ -174,7 +161,6 @@ describe("banning a user", () => {
       expect(html).toContain("This link has been disabled.");
       expect(html).not.toContain("example.com");
     }
-    // The link rows stay: the ban decides nothing about them on its own.
     expect((await row("select count(*) as n from links"))?.n).toBe(2);
 
     await unban(cookie);
@@ -209,8 +195,6 @@ describe("banning a user", () => {
 
   it("still bans when the subscription cannot be ended, and says so", async () => {
     await freeOwnerCookie();
-    // A subscription on record, and a Polar that refuses to end it (the
-    // test env's BILLING stub).
     await env.DB.prepare(
       "update user set polar_subscription_id = 'sub_1' where id = 'free-1'",
     ).run();
@@ -369,7 +353,6 @@ describe("the daily pass after migration 0046", () => {
     const link = await createLink(owner, "https://example.com/a");
     await oldStyleBan([link.slug]);
     await replay0046();
-    // The old unban: owner unbanned, suspensions cleared, disabled_at unknown.
     await env.DB.batch([
       env.DB.prepare("update user set banned = 0 where id = 'free-1'"),
       env.DB.prepare(
@@ -504,7 +487,6 @@ describe("blocking hosts with a ban", () => {
     await createLink(owner, "https://kit.up.railway.app/");
     const cookie = await adminCookie();
     await failInserts("blocked_hosts");
-    // Polar is the test env's BILLING stub: record what it was asked to end.
     const ended = vi.spyOn(unreachableBilling.subscriptions, "revoke");
     await env.DB.prepare(
       "update user set polar_subscription_id = 'sub_1' where id = 'free-1'",

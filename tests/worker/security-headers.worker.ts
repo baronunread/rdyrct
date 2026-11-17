@@ -48,7 +48,7 @@ describe("security headers (#21)", () => {
     const res = await fetchWorker(
       new Request("http://localhost/api/billing/portal", { method: "POST" }),
     );
-    expect(res.status).toBe(401); // requireUser, no session cookie
+    expect(res.status).toBe(401);
     expectSecurityHeaders(res);
   });
 
@@ -57,18 +57,9 @@ describe("security headers (#21)", () => {
     expectSecurityHeaders(res);
   });
 
-  // Regression: applySecurityHeaders used to write straight onto the
-  // response it was handed, which throws "Can't modify immutable headers"
-  // for anything the ASSETS binding returns (every static file, so the whole
-  // SPA) and for Response.redirect.
-  //
-  // The SPA-fallback test above cannot catch this: there is no built asset
-  // bundle in this environment, so app.all("*") never reaches a real
-  // env.ASSETS.fetch response and the fallback it does return has mutable
-  // headers. Only the e2e smoke test exercises the real binding, which is
-  // where this first showed up. Response.redirect gives us the same
-  // immutable Headers guard here, deterministically and with no bundle.
-  // These tests run as rdyrct.com; self-host.worker.ts checks a fork.
+  // Regression: applySecurityHeaders wrote onto immutable headers (ASSETS responses,
+  // Response.redirect). The SPA-fallback test cannot catch it. These run as rdyrct.com;
+  // self-host.worker.ts checks a fork.
   it("rdyrct.com allows its own analytics script", () => {
     const csp = applySecurityHeaders(new Response("ok")).headers.get("content-security-policy");
 

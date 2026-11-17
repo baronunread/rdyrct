@@ -14,8 +14,6 @@ import { cn } from "../ui/cn";
 import posthog from "../lib/posthog";
 import { useToast } from "../ui/toast";
 
-/** The corner style, which both option bags take: every value in
- * QR_CORNER_STYLES is in each of their unions. */
 const cornerStyle = (style: string): CornerSquareType & CornerDotType =>
   oneOf(QR_CORNER_STYLES, style, QR_DEFAULT_CORNER);
 
@@ -28,20 +26,11 @@ function looksOptions(look: QrLook) {
   };
 }
 
-/** Pixel size of a downloaded code, independent of how big the preview is
- * on screen. A PNG is a bitmap: exported at preview size (~208px) it is
- * about 17mm wide at print resolution, which is unusable on anything
- * physical. SVG is vector and would scale either way. */
+/** A PNG is a bitmap: exported at preview size (~208px) it prints about 17mm wide.
+ * SVG scales either way. */
 const DOWNLOAD_SIZE = 1024;
 
-/**
- * Renders the QR as an image data URL (PNG or SVG) at download resolution.
- *
- * For agent consumers (WebMCP): a browser file download lands on the person's
- * disk where a model cannot read it, so it falls back to a screenshot of the
- * page. Returning the bytes inline is what lets the agent show or attach the
- * actual code.
- */
+/** Returns the bytes inline: a browser download lands where an agent (WebMCP) cannot read it. */
 export async function qrDataUrl(
   url: string,
   look: QrLook,
@@ -56,18 +45,8 @@ export async function qrDataUrl(
   return `data:image/${media};base64,${btoa(binary)}`;
 }
 
-/**
- * PNG and SVG download controls for a QR.
- *
- * Its own component so a caller can put them somewhere other than directly
- * under the code. The hero's link stack does exactly that: the QR column
- * with buttons attached is more than twice the height of the link beside it,
- * which leaves a hole no content wants to fill.
- *
- * Exported from a throwaway instance at DOWNLOAD_SIZE, not from whatever is
- * on screen: qr-code-styling rasterizes to a canvas at its own width and
- * height, so downloading from a 104px preview yields a 104px file.
- */
+/** Exports from a throwaway instance at DOWNLOAD_SIZE: qr-code-styling rasterizes at its own
+ * width and height, so exporting the 104px preview would give a 104px file. */
 export function QrDownloadButtons({
   url,
   name,
@@ -78,14 +57,9 @@ export function QrDownloadButtons({
 }: {
   url: string;
   name: string;
-  /** Omitted means the built-in defaults, which is what an unstyled QR uses. */
   look?: QrLook;
   className?: string;
-  /** For callers that keep the row in place while there is nothing to
-   * download yet, rather than letting it appear and shove the page down. */
   disabled?: boolean;
-  /** The page's one primary action (the free generator): PNG in the
-   * accent and named in full, SVG beside it in outline. */
   prominent?: boolean;
 }) {
   const resolved = look ?? resolveLook({});
@@ -95,18 +69,13 @@ export function QrDownloadButtons({
       await makeQR(url, DOWNLOAD_SIZE, resolved).download({ name, extension });
       posthog.capture("qr_code_downloaded", { format: extension });
     } catch {
-      // Drawing at 1024px can fail on a browser short of memory, and the
-      // save itself can be refused. Both used to leave the button looking
-      // like it had worked and no file anywhere.
+      // Drawing at 1024px can fail on a low-memory browser, and the save can be refused.
       toast("Could not make the file. Try again.", "error");
     }
   };
   const style = prominent ? PROMINENT : PLAIN;
   return (
     <div className={cn("flex gap-2", className)}>
-      {/* Named in full for assistive tech: these can sit beside a link
-          rather than under the code, where "PNG" alone says nothing about
-          what is being downloaded. */}
       <Button
         size={style.size}
         variant={style.png}
@@ -138,36 +107,18 @@ const PROMINENT = {
   pngLabel: "Download PNG",
 } as const;
 
-// qr-code-styling takes margin in pixels, so a fixed value would shrink the
-// quiet zone to nothing relative to a 1024px code. Held as a ratio of the
-// code's size instead, chosen to give exactly the previous 8px at the 208px
-// default so the preview is unchanged.
+// qr-code-styling takes margin in pixels, so a ratio keeps the quiet zone in proportion at 1024px
+// (8px at the 208px default).
 const MARGIN_RATIO = 8 / 208;
 
-/**
- * Previews are drawn at this size and scaled down by CSS, never generated at
- * their display size.
- *
- * qr-code-styling gives every module a whole number of pixels, and whatever
- * does not divide evenly becomes white space around the code. At small
- * display sizes that remainder is most of the box: a 33-module code in a
- * 104px preview got 2px a module, so 66px of code sat inside 104px with 19px
- * of padding a side, over a third of the width. Generated at 1024 and scaled,
- * the same remainder is under 2% and the code fills its frame.
- *
- * It costs nothing: the output is SVG, so the browser scales it losslessly
- * and the extra "resolution" is a handful of larger path coordinates.
- */
+/** Previews draw at this size and CSS scales them down: modules get whole pixels, and the
+ * remainder becomes white space (a 33-module code in 104px lost over a third of its width). */
 const PREVIEW_RENDER_SIZE = 1024;
 
-/** The error correction a drawing needs: the logo's, or room for one. */
 const levelFor = (look: QrLook, roomForLogo = false) => (roomForLogo ? "H" : eccFor(look));
 
-/** Everything a preview redraws with. Fixed size, unlike the container: the
- *  drawing is always PREVIEW_RENDER_SIZE and CSS decides how big it looks,
- *  so a resize cannot strand it at a stale scale. The correction level comes
- *  along, so a logo added after the first draw gets the level the download
- *  uses, or the preview is a different code from the file. */
+/** Fixed size, so a resize cannot strand a stale scale. Carries the correction level so a logo
+ * added after the first draw gives the same code as the download. */
 function previewUpdate(url: string, look: QrLook, roomForLogo?: boolean): Partial<Options> {
   return {
     width: PREVIEW_RENDER_SIZE,
@@ -193,18 +144,11 @@ function makeQR(url: string, size: number, look: QrLook, roomForLogo = false) {
     imageOptions: imageOptionsFor(look),
     ...looksOptions(look),
   });
-  // Runs after every draw, on the same element the preview shows and the SVG
-  // download serializes, so neither can ship the seams.
+  // Runs after every draw, on the element the preview shows and the SVG download serializes.
   qr.applyExtension(fillSeams);
   return qr;
 }
 
-/**
- * Live QR preview. Renders independent of the app theme so the code scans
- * reliably when downloaded. Every appearance prop is an override: empty /
- * undefined falls back to the built-in look, and callers pass the link's
- * overrides already resolved over the org's defaults.
- */
 export function QRPreview({
   url,
   logo,
@@ -221,29 +165,18 @@ export function QRPreview({
   label,
 }: {
   url: string;
-  /** The image's accessible name; "QR code for" its text by default. */
   label?: string;
-  /** Draw the code at the error correction a logo needs even with no logo,
-   * for a caller that lays its own logo over the middle. The modules come out
-   * the same as the code with a logo, so the two can crossfade. */
+  /** Draws at a logo's error correction with no logo, so a caller's own logo can crossfade. */
   roomForLogo?: boolean;
   logo?: string;
   size?: number;
-  /** QrDotStyle; empty/undefined = rounded */
   dotStyle?: string;
-  /** hex ink color; empty/undefined = QR_DEFAULT_COLOR */
   color?: string;
-  /** Corner style for the finder 'eyes'; empty/undefined = QR_DEFAULT_CORNER */
   corner?: string;
-  /** hex accent color for the eyes; empty/undefined = follows `color` */
   eyeColor?: string;
-  /** hex background or "transparent"; empty/undefined = QR_DEFAULT_BG */
   bg?: string;
-  /** logo footprint ratio; empty/undefined = QR_DEFAULT_LOGO_SIZE */
   logoSize?: number;
   downloadName?: string;
-  /** Tailwind sizing for the frame, when the box needs to change with the
-   * viewport. Wins over `size`, which can only ever be one number. */
   sizeClass?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -262,20 +195,14 @@ export function QRPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
-  // A class that sets the box wins; without one, the box is `size`.
   const box = sizeClass ? undefined : size;
 
   return (
     <div className="flex flex-col items-center gap-3">
       <div
         ref={holder}
-        // Labelled, because otherwise a QR is an unnamed blob of SVG to a
-        // screen reader. The code encodes the URL, which is the useful thing
-        // to announce.
         role="img"
         aria-label={label ?? `QR code for ${url}`}
-        // The drawing is PREVIEW_RENDER_SIZE regardless; these make it fill
-        // whatever box `size` asks for.
         className={cn(
           "overflow-hidden rounded-lg border border-border [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
           sizeClass,
@@ -283,7 +210,6 @@ export function QRPreview({
         style={{
           width: box,
           height: box,
-          // A checkerboard shows through where the QR is transparent.
           backgroundColor: "#ffffff",
           backgroundImage: hasTransparency(look.bg)
             ? "conic-gradient(from 90deg, #e7e7ea 90deg, #f7f7f9 0 180deg, #e7e7ea 0 270deg, #f7f7f9 0)"

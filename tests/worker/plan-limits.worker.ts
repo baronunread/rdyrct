@@ -34,9 +34,8 @@ async function seedFreeUser(id: string, email: string): Promise<string> {
     ).bind(`acct-${id}`, id, id, await hashPassword(TEST_PASSWORD)),
   ]);
   const cookie = await signInCookie(email, TEST_PASSWORD);
-  // Signing in hands every account an organization, which on the free plan is
-  // the entire allowance. These tests are about the cap with room left, so
-  // start them where they started before it existed: at zero owned.
+  // Signing in gives every account an org, the free plan's whole allowance;
+  // these tests need room left, so start at zero owned.
   await env.DB.batch([
     env.DB.prepare("delete from org_members where user_id = ?").bind(id),
     env.DB.prepare(
@@ -151,10 +150,6 @@ describe("org creation: owned-org cap under concurrency (#18)", () => {
 });
 
 describe("invite acceptance: member cap and duplicate accept under concurrency (#18)", () => {
-  // Seeds the owner plus enough additional members to leave exactly one open
-  // seat under the free plan's real member cap (PLAN_LIMITS.free.members),
-  // so this test tracks the actual limit instead of a number that can drift
-  // out of sync with it.
   async function seedOrgWithOneSlotLeft(tokens: string[] = ["bearer-invite"]) {
     const db = drizzle(env.DB, { schema });
     const extraMembers = PLAN_LIMITS.free.members - 2; // -1 for the owner, -1 for the open seat
@@ -233,13 +228,11 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
     expect(members?.n).toBe(PLAN_LIMITS.free.members);
   });
 
-  // #154: the link is advertised as single-use, so the token has to be what
-  // admits exactly one person. Two users racing one token used to both get in
-  // whenever the org had two seats free, because each read the row before
-  // either spent it.
+  // #154: the link is advertised as single-use, so the token must admit exactly
+  // one person. Two users racing one token both got in because each read the row
+  // before either spent it.
   it("lets exactly one of two racing users through a single-use token", async () => {
     await seedOrgWithOneSlotLeft(["bearer-invite"]);
-    // Room for both, so the seat cannot be what refuses the loser.
     await env.DB.prepare("delete from org_members where user_id like 'member-%'").run();
     const cookieA = await seedFreeUser("racer-d", "racerd@example.com");
     const cookieB = await seedFreeUser("racer-e", "racere@example.com");
@@ -312,8 +305,6 @@ describe("link creation: links cap under concurrency (#18)", () => {
       createdAt: 0,
     });
 
-    // Seed enough active addresses to leave exactly one slot under the free
-    // plan's real links cap (PLAN_LIMITS.free.links).
     await seedFillerLinks(db, "org-links", PLAN_LIMITS.free.links - 1, "seed");
 
     const [a, b] = await Promise.all([
@@ -342,10 +333,8 @@ describe("link creation: links cap under concurrency (#18)", () => {
 
 describe("alias creation: the per-link cap under concurrency", () => {
   it("lets exactly one of two concurrent aliases through the last slot", async () => {
-    // assertAliasQuota reads the count and the insert follows, so two
-    // requests arriving together both found room for the fifth alias and
-    // both took it: a link came away with six, and the sixth counted against
-    // the org's quota for good.
+    // assertAliasQuota reads the count and the insert follows, so two concurrent
+    // requests both found room for the fifth alias and the link came away with six.
     const cookie = await seedPaidUser("alias-owner", "aliasowner@example.com", "pro");
     const db = drizzle(env.DB, { schema });
     await db.insert(schema.orgs).values({ id: "org-alias", name: "Alias org", createdAt: 0 });
@@ -359,7 +348,6 @@ describe("alias creation: the per-link cap under concurrency", () => {
     const made = await postLink(cookie, "org-alias");
     const { id: linkId } = await jsonBody<{ id: string }>(made);
 
-    // Four aliases plus the primary: one slot left of the five.
     for (let i = 0; i < 4; i++) {
       const res = await postAddress(cookie, "org-alias", linkId);
       expect(res.status).toBe(201);
@@ -391,8 +379,6 @@ describe("domain creation: domains cap under concurrency (#18)", () => {
       role: "owner",
       createdAt: 0,
     });
-    // hobby plan's domains cap is 1: no existing domains, so both requests
-    // race for the single available slot.
     expect(PLAN_LIMITS.hobby.domains).toBe(1);
 
     const [a, b] = await Promise.all([
@@ -453,9 +439,6 @@ describe("keep-forever: links cap under concurrency, and no false upgrade prompt
     const cookie = await seedFreeUser("keep-owner-1", "keepowner1@example.com");
     await seedOrgWithLinkAndTempAlias("org-keep-1", "keep-owner-1");
     const db = drizzle(env.DB, { schema });
-    // Fill every remaining slot except the temp_alias's own primary, which
-    // is already counted: the org is now exactly at the free plan's links
-    // cap, so promoting the temp_alias would push it over.
     await seedFillerLinks(db, "org-keep-1", PLAN_LIMITS.free.links - 1, "filler");
 
     const res = await postKeepForever(cookie, "org-keep-1", "link-1", "addr-temp");
@@ -471,10 +454,9 @@ describe("keep-forever: links cap under concurrency, and no false upgrade prompt
     const cookie = await seedFreeUser("keep-owner-2", "keepowner2@example.com");
     await seedOrgWithLinkAndTempAlias("org-keep-2", "keep-owner-2");
 
-    // Two concurrent keep-forever requests for the *same* address: D1
-    // serializes them, so one wins the guarded UPDATE and the other's
-    // re-query must see the already-promoted kind and treat it as success,
-    // not report a false "upgrade your plan" 402 (see issue #18 review).
+    // D1 serializes two concurrent keep-forever requests for the same address: the
+    // loser's re-query must see the promoted kind and succeed, not report a false
+    // "upgrade your plan" 402 (issue #18 review).
     const [a, b] = await Promise.all([
       postKeepForever(cookie, "org-keep-2", "link-1", "addr-temp"),
       postKeepForever(cookie, "org-keep-2", "link-1", "addr-temp"),

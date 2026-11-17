@@ -48,25 +48,18 @@ import {
 
 const RANGE_PRESETS = [PRESET_24H, PRESET_7D, PRESET_30D, PRESET_365D] as const;
 
-/** The newest link, for "Copy your newest link". */
 const NEWEST_LINK = { limit: 1 };
 
-/** Everything Analytics' first frame reads (see lib/route-preload.ts). No
- * range: the API answers with the plan's default, as the page asks it to. */
 export function preload(qc: QueryClient, orgId: string) {
   const stats = qc.ensureQueryData(insightStatsQuery(orgId)).then(async (s) => {
-    // The empty state offers the newest link, when there is one.
     if (!s.everClicked && s.totalLinks > 0)
       await qc.ensureQueryData(linksQuery(orgId, NEWEST_LINK));
   });
   return settle([stats, qc.ensureQueryData(clickUsageQuery(orgId))]);
 }
 
-/** Rows a breakdown card shows before "Show all N". */
 const CARD_ROWS = 7;
 
-/** Where clicks came from: referrers, then whichever UTM lists have rows. A
- * UTM tab with nothing in it is noise to an org that does not tag links. */
 function SourcesPanel({ s, period }: { s: OrgStats; period?: string }) {
   const utm = [
     {
@@ -171,16 +164,11 @@ function LinksPanel({ s }: { s: OrgStats }) {
   );
 }
 
-/** The period the breakdown cards name, when it differs from the heading's.
- * The 24-hour view's chart and totals cover the last 24 hours, but its
- * breakdowns read the daily rollups, so they cover today's UTC day. The
- * heatmap is hidden in that view. */
+/** Breakdowns read daily rollups, so in the 24-hour view they cover today's UTC day, not the last 24 hours. */
 function breakdownPeriod(bucket: "day" | "hour"): string | undefined {
   return bucket === "hour" ? "Today (UTC)" : undefined;
 }
 
-/** The figures over the chart. "Clicks per link" stays out of a range with
- * no clicked link: there is nothing to divide by. */
 function analyticsFigures(s: OrgStats): ChartFigure[] {
   const perLink = clicksPerLink(s);
   return [
@@ -208,7 +196,6 @@ function AnalyticsReport({
   maxDays: number;
   range: RangePreset | null;
   onRangeChange: (range: RangePreset) => void;
-  /** The figures below are the last range's, while the new one loads. */
   updating: boolean;
 }) {
   const period = breakdownPeriod(s.bucket);
@@ -249,8 +236,6 @@ function AnalyticsReport({
           </div>
         </StatsChart>
 
-        {/* Countries spans the grid, map and list side by side; Devices then
-            pairs with the timing card, or spans the row when there is none. */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LinksPanel s={s} />
           <SourcesPanel s={s} period={period} />
@@ -272,8 +257,6 @@ function AnalyticsReport({
               },
             ]}
           />
-          {/* Only for daily buckets: an hourly range is too short for a
-              day-by-hour grid to mean anything. The rollups bucket by UTC. */}
           {timing && (
             <PanelTabs
               end="UTC"
@@ -286,8 +269,6 @@ function AnalyticsReport({
   );
 }
 
-/** A faint line where the chart will be: the shape of what is coming, drawn
- * in the border colour so nobody mistakes it for data. */
 function GhostChart() {
   return (
     <svg
@@ -309,8 +290,6 @@ function GhostChart() {
   );
 }
 
-/** The one action for an org that has links but no clicks: the newest link,
- * on the clipboard, ready to share. */
 function CopyNewestLink({ orgId }: { orgId: string }) {
   const toast = useToast();
   const newest = useLinks(orgId, NEWEST_LINK).data?.items[0];
@@ -329,12 +308,6 @@ function CopyNewestLink({ orgId }: { orgId: string }) {
   );
 }
 
-/**
- * Nothing has been clicked yet: one card that says what will appear and
- * offers one action, rather than ten panels each saying "nothing yet" in
- * its own words. With links, the action is sharing the newest; without,
- * making one.
- */
 function NoClicksYet({
   org,
   stats: s,
@@ -388,10 +361,8 @@ function NoClicksYet({
 }
 
 function AnalyticsForOrg({ org }: { org: UserOrg }) {
-  // Null until somebody picks: the API answers with the plan's default.
   const [range, setRange] = useState<RangePreset | null>(null);
   const stats = useInsightStats(org.id, range?.days, range?.bucket);
-  // Fetched with the stats so the cap banner is there when the page draws.
   useClickUsage(org.id);
 
   if (stats.isLoading) return <AnalyticsSkeleton />;

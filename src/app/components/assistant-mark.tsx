@@ -1,14 +1,6 @@
 /**
- * An AI assistant's own mark, for the MCP tab's tiles and its Connected
- * list. The marks come from lobe-icons (@lobehub/icons-static-svg, MIT) and
- * VS Code's from Tabler (MIT), never drawn by hand. Each SVG is its own
- * file under /assets (`no-inline`), fetched only on this tab; the strict CSP
- * allows same-origin images.
- *
- * Claude's and Claude Code's marks carry their own colour, so they are
- * plain images. OpenAI's, Cursor's and MCP's are one-colour marks drawn in
- * `currentColor`: they paint as a mask over the text colour, so they read
- * in light and dark alike.
+ * Marks come from lobe-icons (@lobehub/icons-static-svg, MIT); VS Code's from Tabler
+ * (MIT), never drawn by hand. One-colour marks paint as a mask over the text colour.
  */
 import type { CSSProperties } from "react";
 import { IconBrandVscode } from "@tabler/icons-react";
@@ -24,7 +16,6 @@ export type AssistantMarkId = "claude" | "chatgpt" | "cursor" | "vscode" | "clau
 const COLOUR = { claude, "claude-code": claudeCode } as const;
 const ONE_COLOUR = { chatgpt: openai, cursor, other: mcp } as const;
 
-/** A one-colour SVG painted in the text colour. */
 function maskStyle(src: string): CSSProperties {
   const url = `url("${src}")`;
   return {
@@ -48,8 +39,6 @@ export function AssistantMark({ id, className }: { id: AssistantMarkId; classNam
   );
 }
 
-/** Which mark an OAuth client's own name stands for, if any: the Connected
- * list shows what the client called itself at sign-in. */
 export function markForClient(name: string): AssistantMarkId | null {
   const n = name.toLowerCase();
   return CLIENT_NAMES.find(([, words]) => words.some((w) => n.includes(w)))?.[0] ?? null;

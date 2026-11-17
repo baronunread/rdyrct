@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { encodeCursor, readLinkPageParams, takePage, LINKS_PAGE_SIZE } from "@/worker/links-page";
 
-/**
- * The paging rules on their own, away from a database.
- *
- * What these pin down is the part that decides correctness rather than
- * speed: what a caller is allowed to ask for, and how a page hands over the
- * cursor that continues it.
- */
-
 const read = (query: string) => readLinkPageParams(new URL(`https://x/links?${query}`));
 
 describe("what a caller may ask for", () => {
@@ -58,8 +50,6 @@ describe("handing over the next page", () => {
   ];
 
   test("keeps the extra row back and turns it into a cursor", () => {
-    // The query asks for one more than the page. Whether that row exists is
-    // how the last page is recognized, without counting the table.
     const page = takePage(rows, params, (r) => r.createdAt);
     expect(page.items.map((r) => r.id)).toEqual(["a", "b"]);
     expect(page.nextCursor).toBe(encodeCursor(200, "b"));

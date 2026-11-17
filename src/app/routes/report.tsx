@@ -24,7 +24,6 @@ const REASON_LABELS = {
 const reasonFrom = (value: string): ReportReason =>
   REPORT_REASONS.find((r) => r === value) ?? "phishing";
 
-/** The one field the report needs. Empty on submit, it is marked. */
 function ShortLinkField({
   value,
   missing,
@@ -57,8 +56,6 @@ function ShortLinkField({
   );
 }
 
-/** The short link's value, and whether it was missing at the last submit.
- * `filled()` marks and focuses the field when it is empty. */
 function useShortLink(initial: string | null) {
   const [value, setValue] = useState(initial ?? "");
   const [missing, setMissing] = useState(false);
@@ -102,7 +99,6 @@ export function ReportPage() {
           },
         }),
       ),
-    // An admin with the Reports tab open sees the new report on its next read.
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "reports"] }),
     onError: withErrorToast(toast),
   });

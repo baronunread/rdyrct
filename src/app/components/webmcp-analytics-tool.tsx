@@ -67,7 +67,6 @@ function statsQuery(days: number | undefined): string {
   return days ? `?days=${days}` : "";
 }
 
-/** Read-only organization analytics for browser agents, scoped by the existing API. */
 export function WebMcpAnalyticsTool() {
   const currentUser = useCurrentUser();
   const { org } = useCurrentOrg();

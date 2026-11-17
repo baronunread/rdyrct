@@ -1,10 +1,3 @@
-/**
- * Who a newsletter goes to, as one line the composer can read at a glance
- * ("Offers · Free accounts with no link yet"), with the list and filters
- * behind it in a small popover. The words for each filter live here too, so
- * the summary, the count sentence, the confirm dialog and the history all
- * say the same thing.
- */
 import { useId } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { buttonClass } from "../../ui/button-class";
@@ -32,7 +25,6 @@ const STAGE_LABELS = {
   slipping: "Slipping away",
 } satisfies Record<AudienceStage, string>;
 
-/** The stage picker's options, each with what it means. */
 const STAGE_OPTIONS = {
   any: "Everyone",
   new: "New: no link yet",
@@ -45,7 +37,6 @@ const PLAN_LABELS = { any: "Any plan", free: "Free", paid: "Paid" } satisfies Re
   string
 >;
 
-/** What each filter keeps, as the end of "people on Offers who …". */
 const STAGE_WORDS = {
   any: null,
   new: "have not made a link yet",
@@ -58,7 +49,6 @@ const PLAN_WORDS = {
   paid: "are on a paid plan",
 } satisfies Record<AudiencePlan, string | null>;
 
-/** The summary's words for each filter. */
 const PLAN_NOUN = {
   any: "accounts",
   free: "Free accounts",
@@ -71,22 +61,18 @@ const STAGE_SUFFIX = {
   slipping: ` not back for ${ACTIVE_WITHIN_DAYS} days`,
 } satisfies Record<AudienceStage, string>;
 
-/** "Offers · everyone", "Offers · Free accounts with no link yet". */
 function audienceSummary(list: MarketingList, filter: AudienceFilter): string {
   const everyone = filter.stage === "any" && filter.plan === "any";
   const who = everyone ? "everyone" : `${PLAN_NOUN[filter.plan]}${STAGE_SUFFIX[filter.stage]}`;
   return `${MARKETING_LIST_LABELS[list]} · ${who}`;
 }
 
-/** "people on Offers who are on Free and have not made a link yet", after
- * a count of `n`. */
 export function audienceTail(n: number, list: MarketingList, filter: AudienceFilter): string {
   const clauses = [PLAN_WORDS[filter.plan], STAGE_WORDS[filter.stage]].filter(Boolean);
   const who = clauses.length > 0 ? ` who ${clauses.join(" and ")}` : "";
   return `${n === 1 ? "person" : "people"} on ${MARKETING_LIST_LABELS[list]}${who}`;
 }
 
-/** The filters a past send used, for its history line; nothing for none. */
 export function filterLabels(filter: AudienceFilter): string[] {
   return [
     filter.stage === "any" ? null : STAGE_LABELS[filter.stage],
@@ -94,7 +80,6 @@ export function filterLabels(filter: AudienceFilter): string[] {
   ].filter((label) => label !== null);
 }
 
-/** The audience as a field: its summary, Edit, and how many people that is. */
 export function AudienceField({
   list,
   filter,
@@ -106,9 +91,7 @@ export function AudienceField({
 }: {
   list: MarketingList;
   filter: AudienceFilter;
-  /** The last count and what it counted; worded from its own list and filter. */
   counted: NewsletterAudienceCount | undefined;
-  /** A newer count is on its way: the one shown is for the previous choice. */
   stale: boolean;
   disabled: boolean;
   onList: (list: MarketingList) => void;
@@ -194,7 +177,6 @@ export function AudienceField({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
-      {/* One line kept whatever the filters say, so nothing below jumps. */}
       <div aria-live="polite" className="mt-1.5 flex min-h-5 items-center text-xs text-muted">
         {counted === undefined ? (
           <Skeleton className="h-3.5 w-56 max-w-full" />

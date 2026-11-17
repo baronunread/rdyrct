@@ -26,14 +26,8 @@ import {
   testEnv,
 } from "./support";
 
-/**
- * Held and warned links (#344): both states ride in the KV value, so the
- * redirect path answers them with no D1 read, and neither page says why.
- */
-
 const db = () => drizzle(env.DB, { schema });
 
-/** Apply the sync a write enqueued, so KV holds what D1 now says. */
 async function syncKv(slug = sampleLink.slug, hostname: string | null = null) {
   await applyStorageMessage(testEnv, db(), syncLinkMsg(slug, hostname));
 }
@@ -41,8 +35,7 @@ async function syncKv(slug = sampleLink.slug, hostname: string | null = null) {
 const setLink = (sql: string) =>
   env.DB.prepare(`update links set ${sql} where id = ?`).bind(sampleLink.id).run();
 
-/** A GET as a browser sends it: the Host header is what picks the host's
- * path in the Worker, and a bare Request does not set one. */
+// The Host header picks the host's path in the Worker, and a bare Request sets none.
 const get = (url: string) =>
   fetchWorker(
     new Request(url, { redirect: "manual", headers: { host: new URL(url).host } }),
@@ -112,7 +105,6 @@ describe("what a visitor sees", () => {
       expect(res.headers.get("cache-control")).toBe("no-store");
       const html = await res.text();
       expect(html).toContain("This link is under review.");
-      // It names neither the destination nor the rule that held it.
       expect(html).not.toContain("scam.example");
       expect(html).not.toMatch(/report|traffic|Google/i);
     }
@@ -197,7 +189,6 @@ describe("reports put a warning on the link", () => {
         }),
       );
   };
-  /** Enough distinct reporters to cross the warning threshold. */
   const reportEnough = async () => {
     for (let i = 0; i < REPORTERS_TO_WARN; i++) await report();
   };
@@ -207,7 +198,6 @@ describe("reports put a warning on the link", () => {
       .bind(sampleLink.id)
       .first<{ warned_at: number | null; warn_reason: string | null }>();
 
-  /** Give org-1 an owner on `plan`: an org's plan is its owner's. */
   const ownedBy = (plan: "free" | "hobby" | "pro") =>
     env.DB.batch([
       env.DB.prepare(
@@ -223,7 +213,6 @@ describe("reports put a warning on the link", () => {
     await ownedBy("free");
     await syncKv();
     expect((await report("203.0.113.9")).status).toBe(201);
-    // The same reporter again is still one reporter.
     expect((await report("203.0.113.9")).status).toBe(201);
     expect((await warnRow())?.warned_at).toBeNull();
     expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).not.toHaveProperty("warn");
@@ -243,7 +232,6 @@ describe("reports put a warning on the link", () => {
     await reportEnough();
     expect((await warnRow())?.warned_at).not.toBeNull();
 
-    // Not yet: a fresh warning stays.
     await sweepStaleReportWarnings(testEnv);
     expect((await warnRow())?.warned_at).not.toBeNull();
 
@@ -252,7 +240,6 @@ describe("reports put a warning on the link", () => {
     expect((await warnRow())?.warned_at).toBeNull();
     expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).not.toHaveProperty("warn");
 
-    // An admin's own warning is never the sweep's to lift.
     await setLink(`warned_at = 1, warn_reason = 'Set by an admin'`);
     await sweepStaleReportWarnings(testEnv);
     expect((await warnRow())?.warn_reason).toBe("Set by an admin");
@@ -305,7 +292,6 @@ describe("reports put a warning on the link", () => {
     );
     expect((await warnRow())?.warned_at).not.toBeNull();
 
-    // An admin's own warning survives every report being dismissed.
     await setLink("warn_reason = 'Set by an admin'");
     await fetchWorker(
       new Request(`http://localhost/api/admin/links/orgs/org-1/reviewed`, {
@@ -326,7 +312,6 @@ describe("reports put a warning on the link", () => {
   });
 
   it("makes a report's warning the admin's when they warn it too", async () => {
-    // Warn, then dismiss: a common triage order, and the warning must stay.
     await seedLink();
     await reportEnough();
     const cookie = await adminCookie();
@@ -442,7 +427,6 @@ describe("an org the sweep warned (#344 review)", () => {
     const owner = await freeOwnerCookie();
     await warnOrgLinks(testEnv, db(), "org-1", WARN_REASON.traffic);
 
-    // A fresh link is no way round the warning page.
     const born = await createLink(owner, "https://example.com/fresh");
     expect(born?.warned_at).not.toBeNull();
     expect(born?.warn_reason).toBe(WARN_REASON.traffic);

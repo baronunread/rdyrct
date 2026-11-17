@@ -78,15 +78,11 @@ describe("PATCH /orgs/:orgId/links/:linkId", () => {
     expect(updated.destination).toBe("https://example.com/original");
   });
 
-  // What the landing page promises ("Edit after printing"): a QR code holds
-  // the short link, so changing the link's destination moves every code
-  // already printed, on the free plan too.
   it("a new destination is where the same short link sends people next", async () => {
     const cookie = await freeOwnerCookie();
     const created = await postLink(cookie, { destination: "https://example.com/winter" });
     const { id, slug } = await jsonBody<{ id: string; slug: string }>(created);
     const follow = async () => {
-      // The edit's KV sync goes through the storage queue; apply it here.
       await applyStorageMessage(authEnv(), drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
       const ctx = createExecutionContext();
       const res = await worker.fetch(
@@ -149,9 +145,7 @@ describe("link quota usage returned by mutations (#100)", () => {
     const patched = await patchLink(cookie, link.id, { title: "Renamed" });
     const updated = await jsonBody<{ quotaUsage: number; quotaUsageAt: number }>(patched);
     expect(updated.quotaUsage).toBe(1);
-    // Each read is a fresh Date.now(), so a later mutation's response never
-    // carries an earlier timestamp: the client uses this to drop a stale,
-    // out-of-order response instead of clobbering a fresher one.
+    // The client uses this to drop a stale, out-of-order response instead of clobbering a fresher one.
     expect(updated.quotaUsageAt).toBeGreaterThanOrEqual(link.quotaUsageAt);
 
     const ctx = createExecutionContext();

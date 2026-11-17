@@ -15,15 +15,6 @@ import {
 import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 import { publishLink } from "../../src/worker/kv";
 
-/**
- * Claiming an anonymous link, and letting go of one (Direction A of #96).
- *
- * The browser test covers making one, because that path runs the
- * Turnstile challenge. These cover the rules a browser cannot show: what a stale,
- * spent or expired claim token does, and that the sweep only ever touches
- * anonymous rows.
- */
-
 const HOUR = 60 * 60 * 1000;
 
 async function seedAnon(overrides: Partial<{ slug: string; expiresAt: number }> = {}) {
@@ -71,10 +62,8 @@ describe("claiming", () => {
   });
 
   it("scores a link whose anonymous scan never finished", async () => {
-    // Scoring an anonymous link runs after its response, in waitUntil. A
-    // claim landing first used to copy four nulls and then delete the only
-    // row that background task knows how to update, so the link stayed
-    // unscored for good on the table moderation actually reads.
+    // Scoring runs after the response, in waitUntil. A claim landing first
+    // deleted the only row that task can update, leaving the link unscored for good.
     await freeOwnerCookie();
     const anon = await seedAnon();
     expect(
@@ -130,8 +119,6 @@ describe("claiming", () => {
   });
 
   it("refuses a member of another org", async () => {
-    // The claim runs behind requireOrgRole, so somebody signed in cannot
-    // spend a token into an organization they do not belong to.
     const cookie = await freeOwnerCookie();
     const anon = await seedAnon();
     await env.DB.prepare(
@@ -152,17 +139,14 @@ describe("claiming", () => {
 
 describe("the plan's link cap", () => {
   it("refuses a claim that would push the org past its limit", async () => {
-    // Claiming is still creating a link in somebody's organization, so it
-    // goes through the same guarded insert as every other one. Without that
-    // an org one link under its cap could take ten from the landing page.
+    // Claiming goes through the same guarded insert as any link. Without it an
+    // org one link under its cap could take ten from the landing page.
     await freeOwnerCookie();
     const anon = await seedAnon();
 
     await fillFreePlanLinks();
 
     expect(await claimAnonLink(authEnv(), "org-1", "free-1", anon.claimToken)).toBeNull();
-    // And the anonymous row survives, so the link keeps working until it
-    // expires rather than vanishing into a refused claim.
     expect(await countIn("anon_links", anon.slug)).toBe(1);
     expect(await countIn("links", anon.slug)).toBe(0);
   });
@@ -179,16 +163,9 @@ describe("the sweep", () => {
   });
 
   it("leaves the redirect alone when a claim took the slug over first", async () => {
-    // The race the compare-and-delete is for: the sweep selects an expired
-    // row, a claim lands before the sweep reaches it and republishes the
-    // same slug under the organization link's id, and the sweep then
-    // deletes that key. The link would sit in D1 resolving to nothing, and
-    // the anonymous row that tells the next sweep to retry is gone too, so
-    // nothing repairs it.
-    //
-    // Staged rather than raced: the row is left in place and its key
-    // rewritten to another link's id, which is the state a mid-flight claim
-    // produces.
+    // The race compare-and-delete is for: a claim republishes the slug under the
+    // org link's id after the sweep selected the row, and the sweep then deletes
+    // that key, leaving the link resolving to nothing. Staged by rewriting the key.
     const anon = await seedAnon({ expiresAt: Date.now() - HOUR });
     await env.LINKS.put(
       `slug:${anon.slug}`,
@@ -203,8 +180,6 @@ describe("the sweep", () => {
 
     await sweepExpiredAnonLinks(authEnv());
 
-    // The row goes, because it is spent. The redirect stays, because it is
-    // no longer this row's.
     expect(await countIn("anon_links", anon.slug)).toBe(0);
     const still = await env.LINKS.get(`slug:${anon.slug}`);
     expect(still).not.toBeNull();
@@ -231,8 +206,7 @@ describe("the sweep", () => {
   });
 
   it("never touches a real link", async () => {
-    // The whole reason these live in their own table: a delete job that can
-    // only see anonymous rows cannot reach anybody's actual links.
+    // Why these live in their own table: the delete job cannot see real links.
     const cookie = await freeOwnerCookie();
     const created = await fetchWorker(
       new Request("http://localhost/api/orgs/org-1/links", {
@@ -249,9 +223,7 @@ describe("the sweep", () => {
   });
 });
 
-// The landing page shows "3 clicks so far" on the link a visitor made, so
-// they have a reason to come back and keep it. A total only: there is no
-// org, so nothing may land in the clicks table.
+// A total only: there is no org, so nothing may land in the clicks table.
 describe("the click total", () => {
   async function publishAnon(anon: Awaited<ReturnType<typeof seedAnon>>) {
     await publishLink(
@@ -314,7 +286,6 @@ describe("the click total", () => {
     const keys: string[] = [];
     let left = 1;
     let reads = 0;
-    // Every statement the route sends to D1, counted.
     const real = env.DB;
     const DB: D1Database = {
       prepare: (query) => {
@@ -344,19 +315,16 @@ describe("the click total", () => {
     const ask = (headers: HeadersInit = {}) =>
       fetchWorker(new Request("http://localhost/api/shorten/clicks", { headers }), testEnv);
 
-    // No token: the same 404, with no limiter call and no read.
     const none = await ask();
     expect(none.status).toBe(404);
     expect(keys).toHaveLength(0);
     expect(reads).toBe(0);
 
-    // Within the limit, the maker still gets the count.
     const first = await ask({ "x-claim-token": anon.claimToken });
     expect(first.status).toBe(200);
     expect(await jsonBody<{ clicks: number }>(first)).toEqual({ clicks: 0 });
     const readsBefore = reads;
 
-    // Past it: a 429, and D1 is never asked.
     expect((await ask({ "x-claim-token": anon.claimToken })).status).toBe(429);
     expect((await ask({ "x-claim-token": "tok-nobody" })).status).toBe(429);
     expect(reads).toBe(readsBefore);

@@ -1,10 +1,3 @@
-/**
- * What changed, release by release.
- *
- * Rendered from CHANGELOG.md (see lib/changelog.ts) so the file a self-hoster
- * reads on GitHub and this page cannot disagree. Identifiers in the text
- * (environment variables, paths) take the mono face, per the type rule.
- */
 import { MarketingPage } from "../components/marketing-page";
 import { GITHUB_URL } from "../ui/footer";
 import { inlinePieces, parseChangelog } from "../lib/changelog";

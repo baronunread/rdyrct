@@ -1,16 +1,5 @@
-/**
- * Import from another service (#383), on one page: pick where the links are
- * now, drop the file, say which domain they land on, import. Somebody moving
- * from Short.io, Bitly, Rebrandly or Dub ends with every short URL they ever
- * printed answering from rdyrct.
- *
- * The file is read here, and the rows go to the Worker in chunks: first to
- * be checked (nothing written, as soon as the file and its domains are
- * ready), then to be stored for a workflow that writes them on the server.
- * Once they are all sent, closing the page changes nothing; coming back
- * shows how far it got. A domain the file uses and the org lacks is set up
- * on the page, with TXT validation, so it is ready before its CNAME moves.
- */
+/** Import from another service (#383). Rows go to the Worker in chunks, first checked, then stored for a workflow.
+ * Closing the page changes nothing: coming back shows how far it got. */
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Link } from "@tanstack/react-router";
 import { IconUpload } from "@tabler/icons-react";
@@ -62,8 +51,6 @@ import { copyToClipboard } from "../lib/clipboard";
 const TITLE = "Import links";
 const SUB = "Bring links from another shortener. Each one keeps its slug.";
 
-/** The picker's order and names: the mock's, with "CSV" for any other
- * service's export (IMPORT_SERVICES calls it "Another service"). */
 const SERVICE_TABS = [
   { id: "bitly", label: "Bitly" },
   { id: "shortio", label: "Short.io" },
@@ -72,12 +59,9 @@ const SERVICE_TABS = [
   { id: "csv", label: "CSV" },
 ] as const satisfies readonly { id: ImportServiceId; label: string }[];
 
-/** The most rows one import takes (the Worker's MAX_IMPORT_ROWS). */
 const MAX_ROWS = 20_000;
 
-/** Short domains that belong to the service itself. A link on one of them
- * cannot keep its domain (nobody but the service can point it here), so it
- * has to land on one of the org's own. */
+/** A link on the service's own short domain (bit.ly) cannot keep it, so it lands on one of the org's own. */
 const SERVICE_HOSTS = new Set([
   "bit.ly",
   "bitly.com",
@@ -91,7 +75,6 @@ const SERVICE_HOSTS = new Set([
   "dub.link",
 ]);
 
-/** "Keep each link's own domain" in the Into domain select. */
 const KEEP = "keep";
 
 export function LinkImportPage() {
@@ -124,7 +107,6 @@ export function LinkImportPage() {
   return <ImportPage orgId={org.id} role={org.role} />;
 }
 
-/** Everything the page knows about the chosen file. */
 interface FileState {
   name: string;
   table: string[][];
@@ -132,17 +114,11 @@ interface FileState {
   hasHeader: boolean;
 }
 
-/** An import the server already has (running, or finished and not put away)
- * takes the form's place: it is what somebody returning here wants to see. */
 function ImportPage({ orgId, role }: { orgId: string; role: OrgRole }) {
   const current = useLinkImport(orgId);
   const [switching, setSwitching] = useState(false);
-  // One still uploading was cut off before its rows were all sent, and its
-  // file is gone with that page: the next import replaces it.
   const job = current.data?.import;
   const live = job && job.status !== "uploading" ? job : null;
-  // A domain verified over HTTP is one whose CNAME already reaches us: links
-  // imported onto it answer at once, and there is no DNS left to switch.
   const domains = useDomains(orgId, role === "owner" || role === "admin");
   const servedHere = new Set(
     (domains.data ?? [])
@@ -187,14 +163,9 @@ function readFile(file: FileState | null): ReadResult {
   return readRows(body, file.map, file.hasHeader ? 2 : 1);
 }
 
-/* ---------------- layout ---------------- */
-
-/** One raised card holding a list, its rows split by inset hairlines
- * (rdyrct-design: shadows, not borders). */
 const LIST_CARD =
   "flex flex-col overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]";
 
-/** A titled card with no footer strip: the page's two sections. */
 function Section({
   title,
   children,
@@ -221,29 +192,16 @@ function Nav({ next }: { next: ReactNode }) {
   return <div className="flex flex-wrap items-center justify-end gap-3 pt-1">{next}</div>;
 }
 
-/* ---------------- the form ---------------- */
-
-/** Where the rows stand: still to be checked, being checked, or checked with
- * a verdict per row and the room the plan has left. */
 type CheckState =
   | { kind: "idle" }
   | { kind: "checking"; done: number; total: number }
   | { kind: "checked"; verdicts: ImportVerdict[]; room: number | null }
   | { kind: "failed"; message: string };
 
-/** What the form says is wrong after Import, in the place it is wrong. */
 type FormError = { at: "file" | "rows"; message: string } | null;
 
-/**
- * What happens to one host's links when they keep their domain, decided here
- * before anything is sent. Rows on a domain the org has go to the check
- * whatever state the domain is in: they are saved now and answer once it is
- * live. Rows on the old service's own short domain (bit.ly) move to the
- * org's default domain, the one place they can go. Rows on a host it lacks,
- * or one left out, stay out with the reason on their row, so no host holds
- * the rest back. Members cannot list the org's
- * domains, so theirs all go and the check says which hosts the org lacks.
- */
+/** Rows on the service's own domain move to the org's default. Rows on a host the org lacks stay out with the reason.
+ * Members cannot list domains, so all of theirs go and the check names the missing hosts. */
 type HostPlan =
   | { kind: "domain"; domain: DomainDTO }
   | { kind: "unknown" }
@@ -259,27 +217,21 @@ function planHost(
   fallback: string | null,
 ): HostPlan {
   if (skipped.has(host)) return { kind: "skipped" };
-  // Left out, the default domain takes nothing, bit.ly rows included.
   if (SERVICE_HOSTS.has(host))
     return { kind: "service", onto: fallback && !skipped.has(fallback) ? fallback : null };
   if (!byHost) return { kind: "unknown" };
   const domain = byHost.get(host);
   if (!domain) return { kind: "missing" };
-  // Beyond the plan after a downgrade: it takes no new links (the check
-  // would refuse every row), so they stay out with the reason on the row.
+  // Beyond the plan after a downgrade: no new links, so rows stay out with the reason.
   return domain.lockedAt ? { kind: "locked" } : { kind: "domain", domain };
 }
 
 const sends = (plan: HostPlan | undefined) =>
   plan?.kind === "domain" || plan?.kind === "unknown" || (plan?.kind === "service" && !!plan.onto);
 
-/** A domain still waiting on its TXT records, which the page can show: one
- * whose check gave up too, so they can be added before trying again. */
 const needsRecords = (plan: HostPlan | undefined) =>
   plan?.kind === "domain" && plan.domain.validation === "txt" && plan.domain.status !== "active";
 
-/** Checks `rows` as soon as there are any: nothing is written, and the answer
- * is what the counts and the Import button say. */
 function useCheck(orgId: string, rows: ImportRow[]): CheckState {
   const [check, setCheck] = useState<CheckState>({ kind: "idle" });
   useEffect(() => {
@@ -309,18 +261,12 @@ function useCheck(orgId: string, rows: ImportRow[]): CheckState {
   return check;
 }
 
-/** What one Import will do, counted from the check. */
 interface Tally {
-  /** Saved and answering at once. */
   now: number;
-  /** Saved now, answering once their domain is live. */
   following: number;
   exists: number;
-  /** On a host left out or not on rdyrct, never sent. */
   leftOut: number;
-  /** Unreadable, or refused by the check. */
   refused: number;
-  /** Ready, past the plan's room. */
   over: number;
 }
 
@@ -481,18 +427,11 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
 const defaultHostOf = (domains: DomainDTO[], defaultId: string | null | undefined) =>
   domains.find((d) => d.id === defaultId)?.hostname ?? domains[0]?.hostname ?? null;
 
-/** The Into select's starting point: a file only on the service's own short
- * domains has to land somewhere of ours; one with the person's own domains
- * keeps them, and its bit.ly rows move to the default. Their own pick wins
- * once they make one. */
 function startingTarget(fileHosts: string[], defaultHost: string | null): string {
   const onlyService = fileHosts.length > 0 && fileHosts.every((h) => SERVICE_HOSTS.has(h));
   return onlyService && defaultHost ? defaultHost : KEEP;
 }
 
-/** The rows as they go to the check: all moved onto `target`, or, keeping
- * their domains, those on the hosts in `sendKey`, with bit.ly ones moved to
- * the default domain. */
 function rowsToSend(
   rows: ImportRow[],
   target: string,
@@ -506,7 +445,6 @@ function rowsToSend(
   return rows.filter((row) => send.has(row.host)).map(moved);
 }
 
-/** The host plans and the rows they send, for the form. */
 function useHostPlans(
   orgId: string,
   role: OrgRole,
@@ -521,7 +459,6 @@ function useHostPlans(
   const keep = target === KEEP;
 
   const canManage = role === "owner" || role === "admin";
-  // Every 3 seconds while a domain checks: somebody here is waiting on it.
   const domains = useDomains(orgId, canManage, 3_000);
   const byHost = canManage ? new Map((domains.data ?? []).map((d) => [d.hostname, d])) : null;
   const skippedSet = new Set(skipped);
@@ -529,8 +466,6 @@ function useHostPlans(
     fileHosts.map((host) => [host, planHost(host, skippedSet, byHost, defaultHost)]),
   );
 
-  // Keyed on which hosts send, not on the domains themselves: one going live
-  // changes what the counts say, not what the check answers.
   const sendKey = keep ? fileHosts.filter((host) => sends(plans.get(host))).join(" ") : "";
   const rows = useMemo(
     () => rowsToSend(read.rows, target, sendKey, defaultHost),
@@ -539,9 +474,6 @@ function useHostPlans(
   return { target, keep, fileHosts, plans, rows };
 }
 
-/** What one Import press does, from the check: the rows it sends (ready, up
- * to the plan's room) and the counts beside the button. `waits` says
- * whether a host's links answer only once its domain is live. */
 function tallyOf(
   read: ReadResult,
   rows: ImportRow[],
@@ -567,7 +499,6 @@ function tallyOf(
   return { tally, ready, fits, room, problems };
 }
 
-/** A chosen file's table, or why it cannot be used. */
 function openTable(name: string, table: string[][]): FileState | { error: string } {
   if (!table.length) return { error: "That file has no rows" };
   if (table.length - 1 > MAX_ROWS)
@@ -575,7 +506,6 @@ function openTable(name: string, table: string[][]): FileState | { error: string
   return { name, table, map: detectColumns(table[0]), hasHeader: true };
 }
 
-/** What stops an Import press, said where it is wrong; null when nothing. */
 function blockedBy(
   file: FileState | null,
   read: ReadResult,
@@ -591,9 +521,6 @@ function blockedBy(
   return null;
 }
 
-/** The file's hosts, one row each. Only one set of records is open at a
- * time: the first host that needs them, until the person opens another or
- * closes it. */
 function FileDomains({
   orgId,
   rows,
@@ -605,7 +532,6 @@ function FileDomains({
   plans: Map<string, HostPlan>;
   onSkip: (host: string, skip: boolean) => void;
 }) {
-  // null: the first that needs records. "": none.
   const [open, setOpen] = useState<string | null>(null);
   const hosts = [...plans.keys()];
   const shown = open ?? hosts.find((host) => needsRecords(plans.get(host)));
@@ -631,8 +557,6 @@ function FileDomains({
   );
 }
 
-/** A disclosure in the page's own style: a muted line with a chevron, opening
- * smoothly (styles.css, `details`). */
 function Disclosure({
   summary,
   children,
@@ -657,8 +581,6 @@ function Disclosure({
   );
 }
 
-/** The line beside Import: the plan's room before a file, the check's
- * progress while it runs, then what one press does, as counts. */
 function Counts({
   check,
   tally,
@@ -723,7 +645,6 @@ function Counts({
   );
 }
 
-/** The dashed box: drop the export on it, or click to choose. */
 function DropZone({
   ref,
   serviceName,
@@ -800,10 +721,6 @@ function DropZone({
   );
 }
 
-/* ---------------- past imports ---------------- */
-
-/** Imports this org finished, less the one the page shows above (`shown`).
- * Hidden when there are none. */
 function PastImports({ orgId, shown }: { orgId: string; shown?: string }) {
   const history = useImportHistory(orgId);
   const imports = (history.data?.imports ?? []).filter((item) => item.id !== shown);
@@ -844,9 +761,6 @@ function PastImports({ orgId, shown }: { orgId: string; shown?: string }) {
 
 const serviceTabName = (id: string) => SERVICE_TABS.find((s) => s.id === id)?.label ?? "CSV";
 
-/* ---------------- kept from the step-by-step page ---------------- */
-
-/** For a header we do not know: the person says which column is which. */
 function ColumnPicker({
   file,
   onChange,
@@ -921,13 +835,6 @@ function ColumnPicker({
   );
 }
 
-/**
- * One host in the file, laid out like a row on Domains: the hostname, how
- * many links it carries and what happens to them, and the one thing to do
- * about it. A domain still waiting on its TXT records shows them under the
- * row, one at a time across the list, so a file on nine domains is not nine
- * open sets of records.
- */
 function HostRow({
   orgId,
   host,
@@ -1003,7 +910,6 @@ function HostRow({
   );
 }
 
-/** What happens to a host's links, after their count. */
 const HOST_NOTES = {
   missing: "left out until you add the domain",
   locked: "left out, this domain is beyond your plan",
@@ -1026,7 +932,6 @@ function hostNote(plan: HostPlan): string {
 const shortDate = (ms: number) =>
   new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-/** The right side of a host's row: its domain's state, or what to do. */
 function HostAction({
   orgId,
   host,
@@ -1068,9 +973,6 @@ function HostAction({
   }
 }
 
-/** A domain's state while it moves over: the live dot while it checks and
- * once it is live, but a failed check is still, says why on hover, and can
- * be asked again, rather than pinging "Checking" for ever. */
 function HostStatus({ orgId, domain }: { orgId: string; domain: DomainDTO }) {
   const toast = useToast();
   const { retry } = useDomainMutations(orgId);
@@ -1102,7 +1004,6 @@ function HostStatus({ orgId, domain }: { orgId: string; domain: DomainDTO }) {
   return <ImportDomainStatus domain={domain} label={domainState(domain)} />;
 }
 
-/** A domain's live dot, shared with the DNS step. */
 function ImportDomainStatus({ domain, label }: { domain: DomainDTO; label: string }) {
   return <LiveStatus done={domain.status === "active"} label={label} className="shrink-0" />;
 }
@@ -1112,8 +1013,6 @@ function domainState(domain: DomainDTO) {
   return domain.validation === "txt" ? "Checking TXT records" : "Checking DNS";
 }
 
-/** Adds a host the org lacks, with TXT validation, so it is ready before
- * its CNAME moves. */
 function AddHost({ orgId, host }: { orgId: string; host: string }) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -1141,7 +1040,6 @@ function AddHost({ orgId, host }: { orgId: string; host: string }) {
   );
 }
 
-/** Sends `rows` to `path` one chunk at a time, reporting progress. */
 async function sendChunks(
   path: string,
   rows: ImportRow[],
@@ -1150,8 +1048,6 @@ async function sendChunks(
   const verdicts: ImportVerdict[] = [];
   let room: number | null = null;
   let done = 0;
-  // One after another, so the progress bar means something and a slow
-  // connection is not asked to hold the whole file at once.
   await chunkRows(rows, CHECK_CHUNK_ROWS).reduce(
     (previous, chunk) =>
       previous.then(async () => {
@@ -1221,13 +1117,11 @@ function Totals({ items }: { items: { label: string; value: number }[] }) {
 
 const shortOf = (row: ImportRow) => `${row.host}/${row.slug}`;
 
-/** Rows that will not import, with why. Long lists show their first 50. */
 function Problems({
   rows,
   total = rows.length,
 }: {
   rows: { line: number; address: string; reason: string }[];
-  /** How many there are, when `rows` is only the first of them. */
   total?: number;
 }) {
   if (!rows.length) return null;
@@ -1288,8 +1182,6 @@ function problemsOf(rows: ImportRow[], verdicts: ImportVerdict[], unreadable: Un
   ].sort((a, b) => a.line - b.line);
 }
 
-/** Creates the import, sends its rows and starts it. A second try starts a
- * new import, which replaces the one cut off. */
 async function upload(
   orgId: string,
   service: ImportServiceId,
@@ -1305,8 +1197,6 @@ async function upload(
   await api(`${base}/${id}/start`, { method: "POST" });
 }
 
-/** An import the server is running or has finished, read from the server, so
- * it looks the same after a reload or on another device. */
 function JobView({
   orgId,
   job,
@@ -1314,7 +1204,6 @@ function JobView({
 }: {
   orgId: string;
   job: LinkImportDTO;
-  /** To the DNS step; undefined when every domain already points here. */
   onNext?: () => void;
 }) {
   const toast = useToast();
@@ -1332,7 +1221,6 @@ function JobView({
     api(`/orgs/${orgId}/link-import/${job.id}/${kind === "new" ? "dismiss" : "retry"}`, {
       method: "POST",
     })
-      // Put away, it drops out of /current and the page offers a new import.
       .then(() => qc.invalidateQueries({ queryKey: ["link-import", orgId] }))
       .catch((error: Error) =>
         toast(error instanceof ApiError ? error.message : "Something went wrong", "error"),
@@ -1425,7 +1313,6 @@ function SwitchStep({
       <ul className={LIST_CARD}>
         {hosts.map((host) => {
           const domain = byHost.get(host);
-          // Verified over HTTP: its CNAME already reaches us, nothing to switch.
           if (!domain || (domain.status === "active" && domain.validation !== "txt")) return null;
           const ready = domain.status === "active";
           return (

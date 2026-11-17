@@ -6,17 +6,9 @@ import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 
 /**
- * The welcome email: one message, sent once, when an address is verified.
- *
- * It is a service message about the account the person just made, so it
- * carries no promotion and needs no unsubscribe link or consent. Keep it that
- * way: an upgrade pitch or a second email in a sequence is marketing, which
- * goes through the newsletter to people who opted in (rdyrct-email skill).
- *
- * "Once" is a claim on `welcome_sent_at`: the UPDATE only matches while the
- * column is null, so of two racing calls (a retried hook, a re-verification)
- * exactly one gets a row back and sends. A failed send is alerted and not
- * retried: the person missing a welcome is the smaller loss.
+ * A service message: no promotion, unsubscribe link or consent. A pitch is marketing and
+ * goes through the newsletter (rdyrct-email skill). "Once" is a claim on `welcome_sent_at`:
+ * the UPDATE matches only while null. A failed send is not retried.
  */
 export async function sendWelcomeOnce(
   env: Env,

@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-// Under the hero, the app itself: three screenshots behind tabs, in the
-// visitor's theme. The WebGPU background and edge light are decoration that
-// only mounts where WebGPU exists, so nothing here depends on them.
-
 test("the showcase switches views and shows only the current theme's screenshot", async ({
   page,
 }) => {
@@ -22,15 +18,12 @@ test("the showcase switches views and shows only the current theme's screenshot"
     "true",
   );
   await expect(showcase).toContainText("See where every click came from");
-  // Picked by hand, so it stays: no advancing past the visitor's choice.
   await page.waitForTimeout(7500);
   await expect(showcase.getByRole("tab", { name: "Analytics" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
 
-  // Dark theme: the dark screenshot shows and loads, the light one stays
-  // hidden and is never fetched.
   const panel = showcase.getByRole("tabpanel");
   const dark = panel.locator('img[src="/showcase/analytics-dark.webp"]');
   await expect(dark).toBeVisible();

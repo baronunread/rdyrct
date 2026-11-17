@@ -3,20 +3,15 @@ import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
 
-/** The Members page's chunk: its source module on the dev server, its hashed
- * file in a build. */
 const membersChunk = (url: URL) =>
   url.pathname.includes("routes/members") || /\/assets\/members-[\w-]+\.js$/.test(url.pathname);
 
-/** What a tab older than the last deploy meets: the chunk's old name is gone. */
 async function deleteMembersChunk(page: Page) {
   await page.route(membersChunk, (route) => route.fulfill({ status: 404, body: "" }));
 }
 
-// A click into a page whose code is gone used to commit the navigation, find
-// out while rendering, and leave a blank screen. lib/chunk-guard.ts loads the
-// code first: the click goes nowhere, the page stays, and the banner's reload
-// opens the page that was clicked.
+// lib/chunk-guard.ts loads a page's code before navigating: the click goes nowhere,
+// and the banner's reload opens the clicked page.
 test("a click into a page whose chunk is gone keeps the page and offers a reload", async ({
   page,
 }) => {
@@ -34,7 +29,6 @@ test("a click into a page whose chunk is gone keeps the page and offers a reload
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(sheet.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
 
-  // The new deploy is in place: the reload opens the page that was clicked.
   await page.unroute(membersChunk);
   await banner.getByRole("button", { name: "Reload" }).click();
   await expect(page).toHaveURL(/\/members/);
@@ -45,11 +39,8 @@ test("a click into a page whose chunk is gone keeps the page and offers a reload
   await expect(banner).toBeHidden();
 });
 
-// In a build, hovering a link preloads its chunk, so a deleted one raises the
-// notice before the click (Vite's preloadError; the dev server has no such
-// helper, so here the first click raises it). The notice must not cover the
-// link: it used to be a bar across the top, over the header, and the next
-// click never landed.
+// In a build, hover preloads the chunk and raises the notice before the click (dev has
+// no such helper). The notice must not cover the link, or the next click never lands.
 test("the notice leaves the header link clickable", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.route(
@@ -68,19 +59,14 @@ test("the notice leaves the header link clickable", async ({ page }) => {
   await expect(banner).toBeVisible();
 });
 
-// Back and Forward change the URL before the guard hears of them, so a page
-// whose code is gone fails while rendering. The router used to catch that
-// itself and show "Something went wrong!" with the raw import error. Its
-// error component is now RouteError, which handles it as ErrorBoundary does:
-// it reloads, and once reloading cannot help (the chunk is still gone here)
-// shows the app's own notice.
+// Back and Forward change the URL before the guard hears of them, so a missing chunk
+// fails while rendering; RouteError then reloads, and once that cannot help shows the notice.
 test("Back onto a page whose chunk is gone never shows the router's error", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await signUpAndVerify(page, `stale-back-${Date.now()}@gmail.com`, password);
   await expect(page).toHaveURL(/\/dashboard/);
 
   await deleteMembersChunk(page);
-  // A history entry for Members that this tab never loaded the code for.
   await page.evaluate(() => {
     history.pushState(history.state, "", "/members");
     history.pushState(history.state, "", "/dashboard");

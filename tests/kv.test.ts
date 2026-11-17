@@ -11,7 +11,6 @@ import {
 } from "../src/worker/kv";
 import type { Env } from "../src/worker/env";
 
-/** Minimal in-memory stand-in for the LINKS KV namespace. */
 function mockKV() {
   const store = new Map<string, string>();
   return {

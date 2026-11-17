@@ -10,28 +10,17 @@ import { getAuth } from "./better-auth";
 import { API_KEY_PREFIX, hashApiKey } from "./api-keys";
 import { mcpResource } from "./mcp-oauth";
 
-/**
- * The subscription period end as stored: an integer column, or nothing.
- *
- * The null check has to come first. `Number(null)` is 0, not NaN, and a user
- * with no subscription reads the column as null, so without it every free
- * account would report a period ending on 1 January 1970.
- */
+// Check null first: Number(null) is 0, so every free account would report a period ending in 1970.
 function periodEndOf(value: number | string | null | undefined): number | null {
   if (value == null) return null;
   const ms = Number(value);
   return Number.isFinite(ms) ? ms : null;
 }
 
-/** The stored billing cycle, or null for anything that is not one. */
 function intervalOf(value: string | null | undefined): "month" | "year" | null {
   return value === "month" || value === "year" ? value : null;
 }
 
-/** A `user` row (as Drizzle reads it back, real Date columns) to the shape
- * every auth path ends up with. Shared by the API-key and OAuth-token
- * branches below; the cookie branch reads a differently-shaped object
- * (better-auth's own loosely-typed session.user) and keeps its own mapping. */
 function sessionUserOfRow(row: typeof schema.user.$inferSelect): SessionUser {
   return {
     id: row.id,
@@ -47,16 +36,11 @@ function sessionUserOfRow(row: typeof schema.user.$inferSelect): SessionUser {
   };
 }
 
-/** Who a request is from, and when they were last marked here, so the caller
- * can tell whether this request needs to mark them again. */
 interface Caller {
   user: SessionUser;
   lastSeenAt: number | null;
 }
 
-/** A bearer key's owner, resolved to the same shape a session cookie
- * produces, plus the key row's id and last-used mark so the caller can bump
- * it. */
 async function userFromApiKey(
   db: DB,
   authorization: string | undefined,
@@ -75,9 +59,7 @@ async function userFromApiKey(
     .innerJoin(schema.user, eq(schema.apiKeys.userId, schema.user.id))
     .where(and(eq(schema.apiKeys.keyHash, hash), isNull(schema.apiKeys.revokedAt)));
   const row = rows[0];
-  // A banned account's session is refused at the cookie layer (better-auth's
-  // databaseHooks.session.create.before); a bearer key skips that hook
-  // entirely, so the same refusal has to happen here.
+  // A bearer key skips better-auth databaseHooks.session.create.before, which refuses a banned account at the cookie layer, so refuse here too.
   if (!row || row.user.banned) return null;
 
   return {
@@ -88,23 +70,8 @@ async function userFromApiKey(
   };
 }
 
-/**
- * An MCP OAuth access token's owner (#139 follow-up), verified the same way
- * `requireMcpAuth` would: signature against the jwt plugin's own signing
- * keys (fetched in-process, no network hop), issuer pinned to this app's
- * auth base URL, audience pinned to the MCP resource every token here is
- * bound to. Bearer-only, deliberately: DPoP sender-constraint proofs are
- * real hardening `requireMcpAuth` also offers, but they'd have to be
- * threaded through this same forwarded-header path with no request object
- * to attach a proof to, and a plain bearer token is the same trust level our
- * API keys already carry.
- *
- * A revoked grant's already-issued access token stays valid until its own
- * (short) expiry: this checks the JWT alone, not the row oauth-provider
- * would delete on revoke. Revoking a connected app stops it from ever
- * minting another one (see api-keys.tsx's "Connected apps"), which is the
- * same window every bearer credential (a cookie, an API key) already has.
- */
+// Bearer-only: DPoP proofs would need a request object to attach to on this forwarded path, and a plain bearer is the trust level API keys carry.
+// A revoked grant access token stays valid until its short expiry: this checks the JWT alone. Revoking stops it minting another.
 async function userFromOAuthToken(
   env: Env,
   db: DB,
@@ -128,8 +95,6 @@ async function userFromOAuthToken(
     if (!row || row.banned) return null;
     return { user: sessionUserOfRow(row), lastSeenAt: row.lastSeenAt };
   } catch {
-    // Not a JWT, an expired one, a bad signature, or the wrong audience: all
-    // the same "not authenticated this way" to the caller.
     return null;
   }
 }
@@ -147,8 +112,7 @@ function sessionUserOf(user: AuthSession["user"]): SessionUser {
     emailVerified: user.emailVerified,
     plan: planNow(orgPlanOf(user.plan)),
     polarSubscriptionCancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd ?? false,
-    // better-auth types its extra user fields loosely; the column is an
-    // integer, and periodEndOf keeps "no subscription" as null.
+    // better-auth types extra user fields loosely; periodEndOf keeps no subscription as null.
     polarSubscriptionCurrentPeriodEnd: periodEndOf(user.polarSubscriptionCurrentPeriodEnd),
     polarSubscriptionInterval: intervalOf(user.polarSubscriptionInterval),
     image: user.image ?? null,
@@ -157,26 +121,13 @@ function sessionUserOf(user: AuthSession["user"]): SessionUser {
 
 const SEEN_EVERY_MS = 60 * 60 * 1000;
 
-/**
- * How stale an API key's last-used mark may get before a request rewrites it.
- * The keys page shows it as a relative date ("2 minutes ago"), so five minutes
- * is the most it can lag, for one write per five minutes instead of one per
- * call (#489). A key never used before is written at once.
- */
+// The keys page shows a relative date, so five minutes of lag is the most it shows, for one write per five minutes instead of one per call (#489).
 const KEY_USED_EVERY_MS = 5 * 60 * 1000;
 
-/** Whether a mark last written at `at` is old enough to write again. */
 const due = (at: number | null | undefined, every: number, now: number) =>
   at == null || at < now - every;
 
-/**
- * Records that the account was here, at most once an hour.
- *
- * Skipped outright when the mark already loaded with the session is under an
- * hour old, so most signed-in requests send D1 nothing at all (#489). The
- * condition stays for the requests that do write: two arriving together both
- * see an old mark, and only the first changes the row.
- */
+// Two requests arriving together both see an old mark, and only the first changes the row (#489).
 function markSeen(db: DB, userId: string, lastSeenAt: number | null | undefined) {
   const now = Date.now();
   if (!due(lastSeenAt, SEEN_EVERY_MS, now)) return null;
@@ -191,26 +142,9 @@ function markSeen(db: DB, userId: string, lastSeenAt: number | null | undefined)
     );
 }
 
-/**
- * Attaches db + user to context, from the BetterAuth session cookie or, for
- * a caller with no browser session (a remote MCP client, #139), either a
- * scoped API key (#131) or an MCP OAuth access token (#139 follow-up) as
- * `Authorization: Bearer …`. Every path ends up the same SessionUser shape,
- * so every existing :orgId route (requireOrgRole) authorizes a key or a
- * token exactly as it would a browser.
- *
- * `oauthTokenPath`, when given, is the one request path an OAuth token may
- * authenticate: the token's own `aud` claim already names `/api/mcp` (see
- * mcpResource), so this enforces the boundary the token already declares
- * about itself, rather than letting a grant for "confirm your identity"
- * also authorize every other /api/orgs/* route the way a full session or
- * API key does (#242). The public `api` app passes it; mcp.ts's `internal`
- * app (re-dispatching a tool call to the real route handler, in-process,
- * under a path with no /api prefix at all) omits it, since that app is
- * never reachable by a real inbound request — only by mcp.ts's own already-
- * authenticated dispatch() — and restricting it there would break every
- * OAuth-authenticated tool call.
- */
+// oauthTokenPath is the one path an OAuth token may authenticate: its aud names /api/mcp, so a grant for confirming identity cannot authorize
+// every other /api/orgs/* route (#242). mcp.ts internal app omits it: it re-dispatches in-process under a path with no /api prefix,
+// never reachable by an inbound request.
 export function withSession(opts: { oauthTokenPath?: string } = {}) {
   return createMiddleware<AppEnv>(async (c, next) => {
     configureBilling(c.env);
@@ -246,7 +180,7 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
       c.set("user", user);
       const seen = markSeen(db, user.id, caller.lastSeenAt);
       if (seen) c.executionCtx.waitUntil(seen);
-      // Who made the request, on every API event: ids only, never the email.
+      // Ids only, never the email.
       c.get("log")?.set({ user: { id: user.id, plan: user.plan, admin: user.isAdmin } });
     }
     await next();

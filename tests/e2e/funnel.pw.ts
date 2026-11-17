@@ -1,13 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { gunzipSync } from "node:zlib";
 
-// The funnel (#64) is only worth anything if the consent gate holds, so these
-// assert the privacy behaviour first and the instrumentation second.
-//
-// Nothing here talks to PostHog. Every test blocks its hosts outright and
-// watches what the app *tries* to send, which is the thing that matters: a
-// request that leaves the browser has already leaked, whether or not the far
-// end is reachable.
+// Tests block PostHog's hosts and watch what the app tries to send: a request
+// that leaves the browser has already leaked, reachable or not.
 
 const POSTHOG_GLOB = "**/*.i.posthog.com/**";
 const CONSENT_KEY = "rdyrct:consent:v2";
@@ -40,7 +35,6 @@ test("the hero signup CTA navigates in-page", async ({ page }) => {
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
 });
 
-/** Records every request the page attempts toward PostHog, and blocks them. */
 async function trapPostHog(page: import("@playwright/test").Page) {
   const attempts: string[] = [];
   await page.route(POSTHOG_GLOB, (route) => {
@@ -68,8 +62,6 @@ async function clickHeroCta(page: import("@playwright/test").Page) {
     });
 }
 
-/** Trap PostHog, open the landing page, wait for it to render. Every test
- *  here starts this way. */
 async function openLanding(page: import("@playwright/test").Page) {
   const attempts = await trapPostHog(page);
   await page.goto("/");
@@ -98,7 +90,6 @@ test("rejecting keeps PostHog off and discards what was buffered", async ({ page
 
   expect(attempts).toEqual([]);
 
-  // And it stays off across a reload, rather than re-prompting and re-arming.
   await page.reload();
   await page.waitForTimeout(600);
   expect(attempts).toEqual([]);
@@ -118,19 +109,12 @@ test("accepting flushes the steps that happened before the banner was answered",
 
   await page.getByRole("button", { name: "Accept" }).click();
 
-  // Now it should try to reach PostHog. The requests are blocked, so this
-  // asserts intent, not delivery.
   await expect.poll(() => attempts.length, { timeout: 10_000 }).toBeGreaterThan(0);
   expect(await page.evaluate((k) => localStorage.getItem(k), CONSENT_KEY)).toBe("accepted");
 });
 
-// Rejected is not the same as unanswered: browsing on after a refusal must
-// stay silent, not merely unsent-for-now.
-//
-// That the rejected period is never even *queued* is asserted directly in
-// tests/consent-buffer.test.ts. It cannot be asserted here, because a capture
-// batch never leaves the browser while the test intercepts PostHog's config
-// request, so "no request" would look identical either way.
+// That nothing is queued is asserted in tests/consent-buffer.test.ts: here "no
+// request" looks the same either way, since the config request is intercepted.
 test("browsing on after a rejection stays silent", async ({ page }) => {
   const attempts = await openLanding(page);
 
@@ -152,7 +136,6 @@ test("the pre-consent buffer does not survive a reload", async ({ page }) => {
   await page.waitForTimeout(600);
 
   expect(attempts).toEqual([]);
-  // Nothing about the queue should have been written down anywhere.
   const stored = await page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
   expect(stored).not.toContain("funnel_");
 });

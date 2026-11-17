@@ -1,11 +1,4 @@
-/**
- * Saved UTM templates for the free builder: a set of tags somebody reuses
- * (the weekly newsletter, the launch on LinkedIn), kept in this browser.
- *
- * localStorage, not an account: the page needs none, and a template holds
- * nothing but the five tag values. Junk under the key is dropped on read
- * rather than repaired.
- */
+// localStorage, not an account: the page needs none. Junk under the key is dropped on read.
 import { useMemo, useSyncExternalStore } from "react";
 import * as v from "valibot";
 import { UTM_KEYS } from "@/shared/utm";
@@ -14,7 +7,6 @@ import type { UtmFields } from "@/shared/utm";
 const KEY = "rdyrct:utm-templates:v1";
 const CHANGED = "rdyrct:utm-templates";
 
-/** More than this and the row of templates is a list nobody scans. */
 const MAX_UTM_TEMPLATES = 12;
 
 const fieldsSchema = v.object({
@@ -35,10 +27,8 @@ const storedSchema = v.pipe(
   ),
 );
 
-/** The name a template goes by: its values in the order they are read, an
- *  empty one in the middle as "–" so that each value keeps its place and two
- *  different templates never read the same ("a / – / b" is not "a / b").
- *  Empty values at the end are left off. */
+// An empty value in the middle is "–" so each value keeps its place and two
+// different templates never read the same ("a / – / b" is not "a / b").
 export function templateName(fields: UtmFields): string {
   const values = [
     fields.utmSource,
@@ -51,12 +41,10 @@ export function templateName(fields: UtmFields): string {
   return values.map((value) => value || "–").join(" / ");
 }
 
-/** A key that differs whenever the tags do, for lists. */
 export const templateKey = (fields: UtmFields) =>
   // JSON, not a join: a value decoded from a pasted link can hold a newline.
   JSON.stringify(UTM_KEYS.map(([, key]) => fields[key]));
 
-/** The values as the link uses them, with no edge spaces. */
 export const trimTags = (fields: UtmFields): UtmFields => ({
   utmSource: fields.utmSource.trim(),
   utmMedium: fields.utmMedium.trim(),
@@ -86,8 +74,6 @@ function snapshot(): string | null {
   }
 }
 
-/** False when the browser refused the write (storage disabled or full):
- *  templates are only ever read back from storage, so nothing was kept. */
 function write(templates: UtmFields[]): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify(templates.slice(0, MAX_UTM_TEMPLATES)));
@@ -107,9 +93,6 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-/** Saves the tags at the front, once: saving the same tags again moves them
- *  to the front instead of adding a twin. Values are trimmed, as the link
- *  trims them. */
 export function saveTemplate(fields: UtmFields): boolean {
   const trimmed = trimTags(fields);
   return write([trimmed, ...read(snapshot()).filter((t) => !sameTags(t, trimmed))]);
@@ -119,8 +102,7 @@ export function removeTemplate(fields: UtmFields): void {
   write(read(snapshot()).filter((t) => !sameTags(t, fields)));
 }
 
-/** The saved templates, newest first. Empty in the prerendered page, where
- *  there is no storage, so the row appears after hydration. */
+// Empty in the prerendered page, where there is no storage, so the row appears after hydration.
 export function useUtmTemplates(): UtmFields[] {
   const raw = useSyncExternalStore(subscribe, snapshot, () => null);
   return useMemo(() => read(raw), [raw]);

@@ -1,16 +1,6 @@
 /**
- * `bun run dev`: the app, the Resend inbox and the Google sign-in emulator,
- * each behind portless under this checkout's names (scripts/dev-hosts.ts).
- *
- * It also does what a first run needs, so a fresh clone is `bun install`
- * then `bun run dev`: it creates `.dev.vars` from the example when there is
- * none, and applies the local D1 migrations.
- *
- * The Worker's addresses (APP_URL and the rest, DEV_HOST_KEYS) come from
- * here, not from `.dev.vars`: they depend on the checkout and on whether
- * portless runs in LAN mode, and a fixed value is wrong in every other
- * case. vite.config.ts passes them to the Worker when RDYRCT_DEV_HOSTS is
- * set.
+ * The Worker's addresses (DEV_HOST_KEYS) come from here, not `.dev.vars`: they depend on the checkout and on
+ * whether portless runs in LAN mode. vite.config.ts passes them on when RDYRCT_DEV_HOSTS is set.
  */
 import { $, type Subprocess } from "bun";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -22,8 +12,6 @@ const DEV_VARS = ".dev.vars";
 const EXAMPLE = ".dev.vars.local.example";
 
 if (!existsSync(DEV_VARS)) {
-  // The example's values all work locally; only the auth secret is made up
-  // here, so no two checkouts share one.
   const secret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64");
   writeFileSync(
     DEV_VARS,
@@ -35,9 +23,7 @@ if (!existsSync(DEV_VARS)) {
   console.log(`Created ${DEV_VARS} from ${EXAMPLE}.`);
 }
 
-// Lines that set one of the address keys: left over from before this script
-// existed. They would override the right values, so stop rather than serve
-// a checkout that cannot sign anybody in.
+// Left over from before this script: they would override the right values, so stop.
 const pinned = readFileSync(DEV_VARS, "utf8")
   .split("\n")
   .filter((line) => DEV_HOST_KEYS.some((key) => line.trim().startsWith(`${key}=`)));
@@ -54,11 +40,8 @@ if (pinned.length) {
 await $`bunx wrangler d1 migrations apply DB --local`.quiet();
 
 /**
- * The secret Polar's CLI signs the webhooks it forwards with (`bun run
- * polar:listen`), when `.dev.vars` sets none of its own. Nothing when the
- * CLI is missing, signed out or slow to answer (it gets three seconds): the
- * webhook route then refuses every event, which is right for a checkout
- * that cannot receive any.
+ * Nothing when the CLI is missing, signed out or slow (three seconds): the webhook route then refuses
+ * every event, which is right for a checkout that cannot receive any.
  */
 async function polarForwardSecret(): Promise<string | undefined> {
   if (!Bun.which("polar")) return undefined;
@@ -73,10 +56,8 @@ const polarSecret = /^POLAR_WEBHOOK_SECRET=\S/m.test(readFileSync(DEV_VARS, "utf
   ? undefined
   : await polarForwardSecret();
 
-// The proxy first, on its own, in the foreground. On a fresh machine it asks
-// for a password (port 443 needs sudo) and creates the CA the probe below
-// reads; three `portless <name>` runs would otherwise race to start it, two
-// of them with no terminal to ask on. When it already runs this is a no-op.
+// The proxy first, alone, in the foreground: on a fresh machine it asks for a password (port 443 needs sudo),
+// and three `portless <name>` runs would race to start it, two with no terminal to ask on.
 const proxy = Bun.spawnSync(["portless", "proxy", "start"], {
   stdio: ["inherit", "inherit", "inherit"],
 });
@@ -94,11 +75,9 @@ const appEnv: NodeJS.ProcessEnv = {
 };
 if (polarSecret) appEnv.POLAR_WEBHOOK_SECRET = polarSecret;
 
-/** The pinned devDependency, not whatever `bunx` would fetch today. */
 const EMULATE = `${process.cwd()}/node_modules/.bin/emulate`;
 
-/** One service behind portless. `$PORT` and `$PORTLESS_URL` come from
- * portless, so the shell expands them, not this script. */
+/** `$PORT` and `$PORTLESS_URL` come from portless, so the shell expands them, not this script. */
 const emulator = (name: string, args: string) =>
   [
     "portless",
@@ -115,7 +94,6 @@ const stop = (code: number) => {
 };
 process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
-// Whatever ends this process (an exception included) ends the servers too.
 process.on("exit", () => {
   for (const child of children) child.kill();
 });
@@ -134,7 +112,6 @@ try {
       { stdio: ["ignore", "ignore", "inherit"] },
     ),
   );
-  // One of them dying leaves a half-working app: take the rest down with it.
   for (const child of children) void child.exited.then((code) => stop(code ?? 1));
 
   // After vite's own start-up lines, so this is the last thing on screen.
@@ -144,11 +121,8 @@ try {
   stop(1);
 }
 
-/**
- * Whether the app answers yet. portless's own CA signs its certificates, and
- * Bun trusts its bundled roots rather than the system's, so the probe names
- * the CA. It is read on every try: on a first run it may not exist yet.
- */
+/** portless's CA signs its certificates and Bun trusts only its bundled roots, so the probe names the CA.
+ * Read on every try: on a first run it may not exist yet. */
 async function ready(app: string): Promise<boolean> {
   let ca: string | undefined;
   if (app.startsWith("https:")) {
@@ -164,7 +138,6 @@ async function ready(app: string): Promise<boolean> {
   );
 }
 
-/** This machine's LAN address, for the line about other devices. */
 function lanAddress(): string | undefined {
   const nets = Object.values(networkInterfaces()).flatMap((n) => n ?? []);
   return nets.find((net) => net.family === "IPv4" && !net.internal)?.address;

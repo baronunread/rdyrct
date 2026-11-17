@@ -74,10 +74,8 @@ import { useSavePendingQrStyle } from "../lib/pending-qr-style";
 import { shouldOfferFirstLink } from "../lib/billing-page";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
 
-/** How a subscription is billed. Yearly is 10% cheaper per month. */
 type BillingInterval = "month" | "year";
 
 type PlanActionSnapshot = {
@@ -108,7 +106,6 @@ type UsageSnapshot = {
   memberCount: number;
   domainCount: number;
   ownedOrgs: number;
-  /** How many orgs this account may own: its plan's cap or a custom one. */
   ownedOrgLimit: number;
   loading: boolean;
 };
@@ -122,9 +119,6 @@ type PortalState = {
 
 const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
 
-/** Everything the subscription portal can change, as one comparable string:
- * the plan, whether a cancel is scheduled, and when the period ends. Enough
- * to tell "the webhook has landed" from "it has not landed yet". */
 function portalState(user?: {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
@@ -141,9 +135,7 @@ function portalState(user?: {
 }
 
 function billingSnapshot(state: PortalState) {
-  // JSON, not join: a join renders null as an empty string, so "no period
-  // end" and "period end of ''" would compare equal and the wait would end
-  // on a change that never happened.
+  // JSON, not join: a join renders null as "", so "no period end" and "" compare equal and the wait would end on a change that never happened.
   return JSON.stringify([state.plan, state.cancelAtPeriodEnd, state.periodEnd, state.interval]);
 }
 
@@ -154,12 +146,9 @@ const PLAN_LABEL = {
   unlimited: "Unlimited (Self-hosted instance)",
 } satisfies Record<OrgPlan, string>;
 
-/** The plans anybody can pick, in order, so "up" and "down" mean something. */
 const PLAN_ORDER = ["free", "hobby", "pro"] as const;
 type SellablePlan = (typeof PLAN_ORDER)[number];
 
-/** What a plan gets, as the short lines its card lists. Read off PLAN_LIMITS,
- * so the card can never promise more than the caps allow. */
 function planFeatures(plan: SellablePlan): string[] {
   const limits = PLAN_LIMITS[plan];
   return [
@@ -197,8 +186,6 @@ function IntervalSwitch({
   );
 }
 
-/** One plan, side by side with the others: its price at the chosen cycle,
- * what it gets, and the one button that moves to it. */
 function PlanCard({
   plan,
   current,
@@ -250,8 +237,6 @@ function CurrentPlanButton() {
   );
 }
 
-/** Free: the three plans, with checkout one click away. Pro is the one
- * primary button on the screen. */
 function FreePlans({
   checkoutPlan,
   shake,
@@ -297,13 +282,7 @@ function FreePlans({
   );
 }
 
-/**
- * A subscriber's plans, behind "Change plan". A plan changes in the
- * subscription portal, never through a second checkout (that would be a second
- * subscription), so every button here opens the portal. The cycle switch only
- * shows the prices, and on the plan you are on, the other cycle's button
- * opens the portal too: that is where monthly becomes yearly.
- */
+/** A plan changes in the subscription portal, never through a second checkout (that would be a second subscription). */
 function ChangePlanDialog({
   open,
   onOpenChange,
@@ -330,8 +309,7 @@ function ChangePlanDialog({
       </Button>
     );
   };
-  // The plan you are on, at the other cycle: yearly is its own Polar
-  // product, so moving to it is a plan change like any other.
+  // Yearly is its own Polar product, so moving to it is a plan change.
   const ownCard = () =>
     interval === currentInterval ? (
       <CurrentPlanButton />
@@ -371,17 +349,13 @@ function ChangePlanDialog({
   );
 }
 
-/** What to call the account's plan: Enterprise when it has custom limits. */
 function planName(snapshot: PlanActionSnapshot): string {
   return snapshot.tier === "enterprise" ? "Enterprise" : PLAN_LABEL[snapshot.plan];
 }
 
-/** The cancel-scheduled and still-confirming status notes; either, both, or
- * neither can show depending on account state. */
 function CancelScheduledNotice({ name, periodEnd }: { name: string; periodEnd: number }) {
   return (
-    // Ink, not a caution colour: the sentence carries the warning, and
-    // --butter is under AA as text on cream.
+    // Ink, not a caution colour: --butter is under AA as text on cream.
     <p className="text-sm text-text">
       Your {name} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features remain
       available until then.
@@ -397,25 +371,7 @@ function ConfirmingPaymentNotice() {
   );
 }
 
-/**
- * The notes arrive on their own, seconds after the page settles, when the
- * webhook behind a portal visit lands. Appearing outright reads as a glitch,
- * so they grow in instead.
- *
- * `initial={false}` keeps that to the arrival: a note already true when the
- * page loads is simply there, with nothing to watch.
- *
- * Renders no wrapper of its own, so each note is a direct child of whatever
- * holds it: a row in the plan card, or an item in the page column.
- */
-function PlanStatusNotes({
-  snapshot,
-  inset,
-}: {
-  snapshot: PlanActionSnapshot;
-  /** Pad each note as a row of the card it sits in. */
-  inset?: boolean;
-}) {
+function PlanStatusNotes({ snapshot, inset }: { snapshot: PlanActionSnapshot; inset?: boolean }) {
   const reduced = useReducedMotion();
   const grow = reduced
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
@@ -453,18 +409,13 @@ function PlanStatusNotes({
   );
 }
 
-/** A paid plan with no billing account. The portal cannot open for them, so
- * offer the truth instead of a button that errors (#85). Which truth depends
- * on how they got the plan: comped, or a subscription that arrived without a
- * customer id. Thanking the second group for a gift nobody gave them would be
- * false (#81). */
+/** No billing account, so the portal cannot open (#85). Thanking a subscription with no customer id for a gift would be false (#81). */
 function NoBillingAccountNote({ name, comped }: { name: string; comped: boolean }) {
   return (
     <p className="px-4 py-3 text-sm text-pretty text-muted">
       {comped
-        ? // Not "nothing to pay": the comp is what grants the plan, and it
-          // says nothing about whether a subscription is still charging
-          // somewhere. Only support can see both and answer that.
+        ? // Not "nothing to pay": a comp grants the plan and says nothing about a
+          // subscription still charging. Only support can see both.
           `You have ${name} for free, with our thanks. There is no billing account linked, so the subscription portal cannot open. Email support if you want anything changed.`
         : "No billing account is linked to this plan, so the subscription portal cannot open. Email support and we will link it."}
     </p>
@@ -473,9 +424,6 @@ function NoBillingAccountNote({ name, comped }: { name: string; comped: boolean 
 
 const MONTH_DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
 
-/** "$9 a month, renews Nov 14" while a subscription runs on; just the price
- * once a cancel is scheduled, since the note below says its own date. A comp
- * pays and renews nothing. */
 function renewalLine(snapshot: PlanActionSnapshot): string | null {
   // Enterprise is priced by hand: the plan's list price would be a wrong figure.
   if (!snapshot.hasBillingAccount || snapshot.comped || snapshot.tier === "enterprise") return null;
@@ -488,30 +436,21 @@ function renewalLine(snapshot: PlanActionSnapshot): string | null {
   return `${price}, renews ${MONTH_DAY.format(new Date(snapshot.periodEnd))}`;
 }
 
-/** Cancelling happens in the portal; offered while there is something to
- * cancel. A scheduled cancel is undone there too, from Manage. */
 function canCancel(snapshot: PlanActionSnapshot): boolean {
   return canChangePlan(snapshot) && !snapshot.cancelAtPeriodEnd;
 }
 
-/** Whether "Change plan" can do anything: only a subscription the portal can
- * change. Not for a comp, which would still outrank whatever it changed to. */
+/** Not for a comp, which would still outrank whatever it changed to. */
 function canChangePlan(snapshot: PlanActionSnapshot): boolean {
-  // Enterprise is arranged by hand: nothing to switch to in the portal.
   return snapshot.hasBillingAccount && !snapshot.comped && snapshot.tier !== "enterprise";
 }
 
-/** What the plan pays for: one organization, unless an admin raised this
- * account's cap (Enterprise). Organizations kept past a downgrade are not
- * covered: they are read-only, which the over-limit banner says. */
 function coversLine(ownedOrgLimit: number): string {
   return ownedOrgLimit > 1
     ? `Covers up to ${ownedOrgLimit} organizations you own.`
     : "Covers one organization.";
 }
 
-/** A paid plan: what it is, what it costs and when it renews, the way to
- * change or cancel it, and what it is being used for, in one card. */
 function PaidPlan({
   snapshot,
   usage,
@@ -561,9 +500,6 @@ function PaidPlan({
   );
 }
 
-/** The card and the invoices, as Polar holds them (`BillingDetails`). The
- * portal buttons stay beside them as the way to change anything, and are all
- * that is left when Polar did not answer. */
 function PaymentGroups({
   snapshot,
   commands,
@@ -616,7 +552,6 @@ function PaymentGroups({
   );
 }
 
-/** The brands whose names are not just their id with a capital letter. */
 const CARD_BRANDS = new Map([
   ["amex", "American Express"],
   ["diners", "Diners Club"],
@@ -624,8 +559,7 @@ const CARD_BRANDS = new Map([
   ["unionpay", "UnionPay"],
 ]);
 
-/** "Visa · Ending 4242, expires 08/28". The brand as a word, not a logo:
- * the CSP allows no remote image and a drawn logo would be a trademark. */
+/** The brand as a word, not a logo: the CSP allows no remote image. */
 function CardFace({ card }: { card: PaymentCard }) {
   const brand =
     CARD_BRANDS.get(card.brand) ?? card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
@@ -684,9 +618,6 @@ function formatMoney(cents: number, currency: string): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
 
-/** One figure against its cap: "184 of 3,000" over a thin bar. Over the cap,
- * the figure and the bar turn to the danger colour; the figure already says
- * by how much. */
 function UsageRow({
   label,
   hint,
@@ -728,11 +659,6 @@ function UsageRow({
   );
 }
 
-/**
- * This month's tracked clicks (#387), and from 80% on, what happens at the
- * cap. The links keep working either way, and the line says so before it
- * says anything else.
- */
 function ClickUsageRow({ usage }: { usage: ClickUsage }) {
   const level = clickUsageLevel(usage.clicks, usage.limit);
   const now = Date.now();
@@ -753,8 +679,6 @@ function ClickUsageRow({ usage }: { usage: ClickUsage }) {
   );
 }
 
-/** The rows the usage card is waiting on, each the height of the row it
- * stands in for, so nothing moves when the figures arrive. */
 function UsageRowsSkeleton() {
   return (
     <>
@@ -773,7 +697,6 @@ function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: Plan
     <>
       <UsageRow label="Links" count={snapshot.linkQuotaCount ?? 0} limit={limits.links} />
       <UsageRow label="Members" count={snapshot.memberCount} limit={limits.members} />
-      {/* Free has no custom domains: "0 of 0" says nothing. */}
       {(limits.domains > 0 || snapshot.domainCount > 0) && (
         <UsageRow label="Custom domains" count={snapshot.domainCount} limit={limits.domains} />
       )}
@@ -782,8 +705,6 @@ function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: Plan
   );
 }
 
-/** What an Enterprise account has beyond the meters: the limits that are not
- * counted against, and who to ask to change any of them. */
 function EnterpriseTerms({ limits }: { limits: PlanLimits }) {
   return (
     <>
@@ -809,14 +730,10 @@ function EnterpriseTerms({ limits }: { limits: PlanLimits }) {
   );
 }
 
-/** The organizations meter is worth a row only where there is more than
- * one to have (Enterprise), or more owned than the plan covers (a downgrade
- * in its grace period). "1 of 1" says nothing. */
 function showsOrgs(usage: UsageSnapshot): boolean {
   return usage.ownedOrgLimit > 1 || usage.ownedOrgs > usage.ownedOrgLimit;
 }
 
-/** The plan's meters, as rows of the plan card. */
 function UsageInPlan({ usage }: { usage: UsageSnapshot }) {
   if (!usage.org) return null;
   return (
@@ -870,15 +787,6 @@ function BillingOverlay({ show, message }: { show: boolean; message: string }) {
   );
 }
 
-/**
- * The moment after checkout.
- *
- * Somebody who bought from a landing CTA gets here before they have made
- * anything: they signed up, paid, and are now looking at an invoice. So when
- * the account has no links, the overlay carries the next step instead of the
- * old claim that they "have access to all Pro features", which is not
- * something they can see until a link exists.
- */
 function CelebrationOverlay({
   show,
   plan,
@@ -888,7 +796,6 @@ function CelebrationOverlay({
   show: boolean;
   plan: OrgPlan;
   onDismiss: () => void;
-  /** Set only while the account has no links: the first-run handoff. */
   onFirstLink?: () => void;
 }) {
   return (
@@ -901,12 +808,8 @@ function CelebrationOverlay({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          {/* The backdrop is the dismiss control, beside the card rather
-              than wrapped around it. Wrapped, the card's own button sat
-              inside a role="button" that answered Enter and Space too: a
-              keyboard press on "Shorten your first link" closed the overlay
-              on the way past, and stopping the click did nothing about the
-              key. */}
+          {/* The backdrop is the dismiss control, beside the card, not around it: a role="button" wrapper answered Enter and Space,
+             so a key press on the card's button closed the overlay. */}
           <button
             type="button"
             aria-label="Dismiss celebration"
@@ -940,7 +843,6 @@ function CelebrationOverlay({
   );
 }
 
-/** Confetti and the overlay that goes with it, for four seconds. */
 function useCelebration() {
   const [showCelebration, setShowCelebration] = useState(false);
   const celebrate = useCallback(() => {
@@ -954,7 +856,6 @@ function useCelebration() {
         startVelocity: 50,
         origin: { x: angle === 60 ? 0 : 1, y: 0.75 },
         colors,
-        // The overlay still says it; the burst is the part that moves.
         disableForReducedMotion: true,
       });
     }
@@ -963,15 +864,7 @@ function useCelebration() {
   return { showCelebration, setShowCelebration, celebrate };
 }
 
-/**
- * `?plan=hobby` (with an optional `&interval=year`) on the landing CTAs sends
- * someone straight to checkout, so a visitor who picked a plan before signing
- * up does not have to pick it twice.
- *
- * Once only, and only for a free account: re-running it would open checkout
- * again behind the person's back. The URL is cleaned either way, so a reload
- * is an ordinary visit to the billing page.
- */
+/** Once only, and only for a free account: re-running would open checkout again behind the person's back. */
 function useAutoUpgradeFromUrl(
   user: { plan: OrgPlan } | undefined,
   onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void,
@@ -996,9 +889,6 @@ function upgradeIfFree(
   if (request && plan === "free") onUpgrade(request.target, request.interval);
 }
 
-/** The plan and cycle a landing CTA asked for, read off the URL and then
- * removed from it, so a reload is an ordinary visit. Null when the URL asks
- * for nothing. */
 function takeUpgradeRequest(): { target: "hobby" | "pro"; interval: BillingInterval } | null {
   const url = new URL(window.location.href);
   const target = url.searchParams.get("plan");
@@ -1016,9 +906,6 @@ function useCheckoutFlow() {
   const portal = usePortal();
   const confirmCheckout = useConfirmCheckout();
   const toast = useToast();
-  // One handle per button, kept here because the mutation error handlers
-  // below are what call `start()`. Grouped so the three travel as one prop,
-  // and memoized so the group changes only when a button actually shakes.
   const shakeHobby = useShake();
   const shakePro = useShake();
   const shakePortal = useShake();
@@ -1032,11 +919,8 @@ function useCheckoutFlow() {
   const [showPortalOverlay, setShowPortalOverlay] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmTimedOut, setConfirmTimedOut] = useState(false);
-  // The checkout id from the return URL, kept around so onGaveUp below can
-  // ask Polar about this exact checkout if the webhook never shows up.
+  // Kept so onGaveUp can ask Polar about this exact checkout if the webhook never shows up.
   const [checkoutId, setCheckoutId] = useState<string | null>(null);
-  // The billing state as it was before a trip to the portal, while we wait
-  // for the webhook to move it. Null when we are not waiting.
   const [portalSnapshot, setPortalSnapshot] = useState<string | null>(null);
   const { showCelebration, setShowCelebration, celebrate } = useCelebration();
 
@@ -1058,9 +942,8 @@ function useCheckoutFlow() {
     setShowPortalOverlay(true);
     try {
       const data = await portal.mutateAsync();
-      // Remembered across the trip to Polar, so the return can tell whether
-      // the webhook has landed yet. sessionStorage because the browser back
-      // button is the only way back and nothing survives that in memory.
+      // Remembered across the trip to Polar to tell whether the webhook has landed.
+      // sessionStorage: nothing in memory survives the browser back button.
       sessionStorage.setItem(
         PORTAL_SNAPSHOT_KEY,
         billingSnapshot(portalState(currentUser.data?.user)),
@@ -1073,7 +956,7 @@ function useCheckoutFlow() {
     }
   };
 
-  // Reset overlay state when returning from Polar via bfcache (browser back).
+  // Reset overlay state when returning from Polar via bfcache.
   useEffect(() => {
     const handler = () => {
       setCheckoutPlan(null);
@@ -1082,11 +965,8 @@ function useCheckoutFlow() {
       setConfirmTimedOut(false);
       setCheckoutId(null);
       setShowCelebration(false);
-      // The portal is where a plan changes, a cancel is scheduled, and a
-      // cancel is undone, and none of the three sends the browser back here
-      // with anything in the URL to notice. Without this the page restores
-      // from bfcache and shows the state from before the visit, because
-      // refetchOnWindowFocus is off for every query (src/app/main.tsx).
+      // The portal sends nothing in the URL to notice, so without this bfcache restores the pre-visit state
+      // (refetchOnWindowFocus is off for every query, src/app/main.tsx).
       void qc.refetchQueries({ queryKey: ["user"] });
       const before = sessionStorage.getItem(PORTAL_SNAPSHOT_KEY);
       if (before !== null) {
@@ -1096,20 +976,11 @@ function useCheckoutFlow() {
     };
     window.addEventListener("pageshow", handler);
     return () => window.removeEventListener("pageshow", handler);
-    // setShowCelebration now arrives from useCelebration rather than a
-    // useState in this scope. It is still the same stable setter, so listing
-    // it costs nothing and keeps the dependency honest.
   }, [qc, setShowCelebration]);
 
   const plan = currentUser.data?.user.plan ?? "free";
   const snapshot = billingSnapshot(portalState(currentUser.data?.user));
 
-  /**
-   * The portal return. Silent, with no overlay: unlike the checkout return,
-   * we do not know that anything changed in the portal, and most visits
-   * change nothing. A visit that really changed nothing polls quietly and
-   * gives up.
-   */
   useAwaitWebhook({
     waiting: portalSnapshot !== null,
     arrived: snapshot !== portalSnapshot,
@@ -1117,7 +988,6 @@ function useCheckoutFlow() {
     onGaveUp: () => setPortalSnapshot(null),
   });
 
-  // Detect the checkout return once on mount.
   useEffect(() => {
     const url = new URL(window.location.href);
     const id = url.searchParams.get("checkout_id");
@@ -1131,10 +1001,7 @@ function useCheckoutFlow() {
     }
   }, []);
 
-  // The checkout return: the plan flipping to paid is the webhook landing.
-  // If it hasn't landed by the time the poll gives up, ask Polar directly
-  // rather than leaving someone who already paid looking free on reload
-  // (see POST /billing/checkout/:id/confirm on the worker).
+  // If the webhook has not landed when the poll gives up, ask Polar directly (POST /billing/checkout/:id/confirm).
   useAwaitWebhook({
     waiting: confirming,
     arrived: plan !== "free",
@@ -1175,14 +1042,10 @@ function useCheckoutFlow() {
   };
 }
 
-/** How many orgs the user owns (vs. member/admin of), for the "Orgs you
- * own / plan limit" usage line. */
 function ownedOrgCount(orgs: { role: string }[] | undefined): number {
   return orgs?.filter((o) => o.role === "owner").length ?? 0;
 }
 
-/** The full-page loading overlay's visibility and message: shown for an
- * in-flight checkout/portal redirect, or while confirming a completed one. */
 function billingOverlayState(
   checkoutPlan: "hobby" | "pro" | null,
   showPortalOverlay: boolean,
@@ -1194,12 +1057,6 @@ function billingOverlayState(
   };
 }
 
-/**
- * The account fields this page reads, with their defaults applied once.
- *
- * Every one of them is optional on the user, and defaulting each at the point
- * of use turned the page into a list of `?? false`.
- */
 const FREE_TIER: AccountTier = "free";
 
 const NO_ACCOUNT_YET = {
@@ -1214,9 +1071,6 @@ const NO_ACCOUNT_YET = {
 
 function useBillingAccount() {
   const currentUser = useCurrentUser();
-  // One default for the whole shape, not one per field: every one of these
-  // is required on User, so the only question is whether the user query has
-  // answered yet.
   const { hasBillingAccount, comped, ...subscription } = currentUser.data?.user ?? NO_ACCOUNT_YET;
   return {
     isLoading: currentUser.isLoading,
@@ -1284,9 +1138,6 @@ function useBillingPageModel() {
   const dismissCelebration = () => flow.setShowCelebration(false);
 
   return {
-    // Waits for the card and invoices too, so the payment rows arrive whole
-    // rather than as portal buttons that turn into a list. A Polar failure
-    // ends the wait and leaves the buttons.
     loading: account.isLoading || (account.hasBillingAccount && details.isPending),
     details: details.data,
     planActions: {
@@ -1320,15 +1171,11 @@ function useBillingPageModel() {
   };
 }
 
-/** The card and invoices belong to the account, not an org, and the page
- * opens org-less too: preloaded here, for an account Polar bills. */
 export function preloadAccount(qc: QueryClient) {
   const billed = qc.getQueryData(userQuery.queryKey)?.user.hasBillingAccount ?? false;
   return settle([billed ? qc.ensureQueryData(billingDetailsQuery(true)) : undefined]);
 }
 
-/** Everything the billing page's first frame reads (see
- * lib/route-preload.ts): the usage it sets against the plan. */
 export function preload(qc: QueryClient, orgId: string) {
   return settle([
     qc.ensureQueryData(linkQuotaUsageQuery(orgId)),
@@ -1340,18 +1187,12 @@ export function preload(qc: QueryClient, orgId: string) {
 
 export function BillingPage() {
   const model = useBillingPageModel();
-  // Checkout comes back here: a QR style tried on Free is saved as soon as
-  // the webhook puts its org on a paid plan.
   useSavePendingQrStyle();
   const { data: current } = useCurrentUser();
   const [changingPlan, setChangingPlan] = useState(false);
-  // A self-hosted instance sells nothing.
   if (current?.user.plan === "unlimited") return <NotFound />;
 
-  // The shell cache is deliberately not an authority for plan or billing
-  // state. Rendering its free defaults here made the paid page flash first.
-  // The fresh /user answer may land before the rest: it only picks the
-  // skeleton's shape, never what the page says.
+  // The shell cache is not an authority for plan or billing: its free defaults made the paid page flash first.
   if (model.loading) return <BillingSkeleton plan={current?.user.plan} />;
 
   const { snapshot, commands } = model.planActions;
@@ -1399,9 +1240,7 @@ export function BillingPage() {
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
           <BillingOverlay {...model.overlay} />
-          {/* No org means no quota query, so the count never arrives: an account
-            that checked out from a landing CTA before it had an organization
-            is exactly the one this hand-off is for. */}
+          {/* No org means no quota query, so the count never arrives. Checking out from a landing CTA before an org exists is that case. */}
           <CelebrationOverlay {...model.celebration} />
         </MotionConfig>
       </LazyMotion>

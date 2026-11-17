@@ -3,14 +3,10 @@ import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
 
-// A toast says what happened, with a mark the eye finds first: a tick for
-// an outcome, a cross for a failure no field owns.
-
 test("a toast carries a tick for an outcome and a cross for a failure", async ({ page }) => {
   await signUpAndVerify(page, `toasts-${Date.now()}@gmail.com`, password);
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
 
-  // An outcome: inviting from ⌘K.
   const invitee = `toast-invitee-${Date.now()}@gmail.com`;
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByPlaceholder("Search links, pages and actions").fill(invitee);
@@ -19,7 +15,6 @@ test("a toast carries a tick for an outcome and a cross for a failure", async ({
   await expect(sent).toBeVisible();
   await expect(sent.locator('[data-toast-mark="ok"]')).toBeVisible();
 
-  // A failure: the same request, refused.
   await page.route("**/api/orgs/*/invites", (route) =>
     route.fulfill({ status: 500, json: { error: "Could not send the invite" } }),
   );

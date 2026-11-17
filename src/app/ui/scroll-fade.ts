@@ -1,12 +1,5 @@
 import { useLayoutEffect, type RefObject } from "react";
 
-/**
- * Fades the edge of a sideways-scrolling row that has more behind it
- * (`[data-fade]` in styles.css), so a row of filters cut off by a narrow
- * window says there is more instead of looking complete. Nothing fades when
- * everything fits.
- */
-/** By hidden edges: none, right, left, both. "none" matches no rule. */
 const FADES = ["none", "right", "left", "both"] as const;
 
 export function useScrollFade(row: RefObject<HTMLElement | null>) {

@@ -12,17 +12,8 @@ declare global {
   }
 }
 
-/**
- * Records every Content-Security-Policy violation the browser reports on this
- * page, from before the first byte of application code runs.
- *
- * Console scraping is not good enough here: a blocked subresource is reported
- * differently across browsers and log levels, and a test that greps stderr
- * quietly stops catching anything the day the wording changes. The
- * `securitypolicyviolation` event is the specified signal and fires whether
- * or not the request would have reached the network, so these assertions hold
- * in CI with no outbound access.
- */
+// Console scraping is unreliable across browsers and log levels. The
+// securitypolicyviolation event is the specified signal and fires with no network.
 export async function collectCspViolations(page: Page): Promise<void> {
   await page.addInitScript(() => {
     window.__cspViolations = [];
@@ -40,14 +31,8 @@ export async function cspViolations(page: Page): Promise<CspViolation[]> {
   return page.evaluate(() => window.__cspViolations ?? []);
 }
 
-/**
- * Whether the page's policy would block loading `src` as a script, asked of
- * the browser rather than inferred by parsing the header ourselves.
- *
- * The element is appended and the answer read from the violation event, so
- * the request never has to succeed: CSP is enforced before the fetch, which
- * keeps this deterministic offline.
- */
+// Asked of the browser, not inferred from the header. CSP is enforced before the fetch,
+// so the request need not succeed and this holds offline.
 export async function scriptIsBlocked(page: Page, src: string): Promise<boolean> {
   return page.evaluate(async (url) => {
     return await new Promise<boolean>((resolve) => {

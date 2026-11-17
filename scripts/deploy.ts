@@ -1,14 +1,7 @@
 /**
- * `bun run deploy`, for rdyrct.com and for a self-hosted copy alike.
- *
- * `VITE_RDYRCT_SITE=1` (scripts/site-mode.ts) makes it rdyrct.com, which
- * also builds source maps and sends them to PostHog before the deploy; the
- * upload deletes them from dist/, so no map is ever served. The flag has to
- * agree with wrangler.jsonc's `APP_HOST`, or nothing ships: a forgotten flag
- * would put rdyrct.com live without its landing page, and a stray one would
- * give a fork rdyrct.com's pages and analytics.
- *
- * Both builds apply D1 migrations before the Worker goes out.
+ * The flag must agree with wrangler.jsonc's `APP_HOST`, or nothing ships: a forgotten flag would put rdyrct.com live
+ * without its landing page, a stray one would give a fork rdyrct.com's pages. The rdyrct.com build sends source
+ * maps to PostHog; the upload deletes them from dist/.
  */
 import { $ } from "bun";
 import { readFileSync } from "node:fs";
@@ -18,9 +11,7 @@ import { isRdyrctSite, namesRdyrct } from "./site-mode";
 const source = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 const site = isRdyrctSite();
 
-// The Deploy to Cloudflare button, and every later push to the repository it
-// made: Cloudflare builds a copy whose wrangler.jsonc still describes
-// rdyrct.com, so it gets the self-hosted config on the way through.
+// Cloudflare builds a copy whose wrangler.jsonc still describes rdyrct.com, so it gets the self-hosted config.
 if (process.env.WORKERS_CI === "1" && !site && namesRdyrct(source)) {
   const host = await deploySelfHosted({ source, dropIds: false });
   console.log(`Deployed a self-hosted copy to https://${host}`);
@@ -44,9 +35,7 @@ if (site) await $`bun run posthog:upload`;
 // query sent by the same command that refreshed is often refused with 7403
 // (7 of 10 in a test; 0 of 26 once the refresh ran first). workers-sdk#16402.
 await $`bunx wrangler whoami`.quiet();
-// Migrate first, so new code never meets an old schema. To undo a migration,
-// restore D1 with Time Travel (AGENTS.md, "Rolling back a release"). CI=true
-// skips Wrangler's "continue?" prompt: answering "n" there exits 0 having
-// applied nothing, and the deploy below would then ship anyway.
+// Migrate first, so new code never meets an old schema. CI=true skips Wrangler's prompt: answering "n" exits 0
+// having applied nothing, and the deploy would ship anyway.
 await $`bunx wrangler d1 migrations apply DB --remote`.env({ ...process.env, CI: "true" });
 await $`bunx wrangler deploy`;

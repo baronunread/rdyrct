@@ -1,10 +1,6 @@
 /**
- * How many logos one org can keep in R2 (#18).
- *
- * Every upload is a new object under the org's prefix, and nothing deletes one
- * until it has gone unused for a day. A member looping uploads wrote objects
- * without end. The cap leaves room for every link to carry its own logo, plus
- * the org's default and a day of uploads nobody saved.
+ * How many logos one org can keep in R2 (#18). Nothing deletes an upload until
+ * it has gone unused for a day, so a looping member wrote objects without end.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";

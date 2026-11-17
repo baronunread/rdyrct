@@ -6,18 +6,10 @@ import { cn } from "../ui/cn";
 import { Logo } from "../ui/logo";
 import type { InvitePreview, OrgRole } from "@/shared/types";
 
-/**
- * The sign-in, sign-up and code screens, as the redesign mock draws them:
- * one 380px card on the paper with the logo at its top, centred heading,
- * 16px between everything. On a phone the card drops its surface and
- * shadow and the screen is the card.
- */
 export function AuthPanel({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="grid min-h-dvh place-items-center px-3 py-10 sm:px-6 sm:py-20">
-      {/* The card and its logo are what travel into the app (setup-arrive in
-          styles.css): the card becomes the org switcher, the logo the
-          sidebar's. */}
+      {/* The card and its logo travel into the app (setup-arrive in styles.css). */}
       <div
         data-setup-card
         className={cn(
@@ -38,11 +30,9 @@ export function AuthHeading({ children }: { children: ReactNode }) {
   return <h1 className="text-center text-lg font-semibold text-balance">{children}</h1>;
 }
 
-/** A link in running auth copy: ink, with a quiet underline. */
 export const AUTH_LINK =
   "cursor-pointer text-text underline decoration-border underline-offset-[3px] transition-[text-decoration-color] duration-150 [@media(hover:hover)]:hover:decoration-current";
 
-/** The token of an invite `next` points at, if it does. */
 function inviteTokenOf(next: string): string | null {
   const m = next.match(/^\/invite\/([^/?#]+)/);
   return m ? decodeURIComponent(m[1]) : null;
@@ -55,7 +45,6 @@ const ROLE_WITH_ARTICLE = {
   viewer: "a viewer",
 } satisfies Record<OrgRole, string>;
 
-/** An organization's initial on the accent: who you are about to join. */
 function OrgInitial({ name, size = 28 }: { name: string; size?: 28 | 48 }) {
   return (
     <span
@@ -70,12 +59,6 @@ function OrgInitial({ name, size = 28 }: { name: string; size?: 28 | 48 }) {
   );
 }
 
-/**
- * On a sign-in or sign-up reached from an invite: what happens after it, so
- * the detour through a form does not read as losing the invite. Nothing
- * while the invite loads, and nothing for a dead one (the invite page says
- * that once they arrive).
- */
 export function InviteBanner({ next }: { next: string }) {
   const token = inviteTokenOf(next);
   const preview = useQuery<InvitePreview>({
@@ -104,10 +87,6 @@ const ROLE_SAYS = {
   viewer: "Viewers see links and analytics.",
 } satisfies Record<OrgRole, string>;
 
-/**
- * The mock's join screen (routes/invite.tsx): the org's initial, "Join
- * <org>", who invited you as what, then the page's own actions.
- */
 export function InviteJoinCard({
   preview,
   actions,

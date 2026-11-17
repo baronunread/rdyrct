@@ -1,10 +1,8 @@
 import * as v from "valibot";
 import { INVITABLE_ROLES } from "@/shared/types";
 
-/** The first-run form asks for a link, not an organization name (#65). The
- * server decides what counts as a web address, and accepts scheme-less input
- * the way the signed-in quick-create does, so this only checks that something
- * was typed. */
+// The server decides what counts as a web address and accepts scheme-less input,
+// so this only checks that something was typed.
 export const orgNameSchema = v.object({
   name: v.pipe(
     v.string(),
@@ -14,8 +12,6 @@ export const orgNameSchema = v.object({
   ),
 });
 
-/** Your own display name. Shown in the sidebar and used for the blobatar
- * initials. Same shape as an org name: something typed, 100 chars or fewer. */
 export const accountNameSchema = v.object({
   name: v.pipe(
     v.string(),
@@ -52,8 +48,6 @@ export const inviteEmailSchema = v.object({
   role: v.picklist(INVITABLE_ROLES),
 });
 
-/** The auth forms' messages are field reasons: they sit on the right of
- * the field's label line (rdyrct-design, form errors), so they stay short. */
 const authEmail = v.pipe(v.string(), v.nonEmpty("Required"), v.email("Not a valid email"));
 
 export const loginSchema = v.object({

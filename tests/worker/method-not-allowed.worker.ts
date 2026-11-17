@@ -15,11 +15,8 @@ async function call(method: string, path: string): Promise<Response> {
 }
 
 describe("wrong method, wrong path", () => {
-  // Every request here reaches withSession, which now resolves the auth
-  // instance's oauth-provider bookkeeping (the MCP OAuth plugin, #139
-  // follow-up) even for a route with nothing to do with it — migrated, or
-  // every one of these 500s before it gets anywhere near the routing this
-  // file actually tests.
+  // withSession resolves oauth-provider bookkeeping (MCP OAuth, #139) on every
+  // request, so each case 500s unless the database is migrated.
   beforeEach(applyTestMigrations);
   afterEach(reset);
 

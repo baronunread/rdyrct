@@ -20,21 +20,10 @@ import type { ClickBuffer } from "../../src/worker/click-buffer";
 import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
-/**
- * What the ASSETS binding hands back for anything it is asked for: the SPA's
- * one document, under a 200, which is what `not_found_handling:
- * single-page-application` does in production.
- */
 const SPA_SHELL = `<!doctype html><html><head><title>rdyrct - branded short links for your team</title></head><body><div id="root"></div></body></html>`;
 
-/** What `bun run build` writes to 404-short.html (scripts/prerender-404.tsx),
- * cut down to the parts the Worker reads: the marker and the link. */
 const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><h1>No link at this address.</h1><p><a href="/">Go home</a></p></div></body></html>`;
 
-// The worker reaches this binding through serveSpa's `c.env.ASSETS.fetch`
-// in src/worker/index.ts, and for the short-host 404. `connect` is here because
-// Fetcher declares it, and it throws rather than returning something: nothing
-// opens a socket to the asset bundle, so a caller that got here is lost.
 const stubAssets: Fetcher = {
   fetch: async (input) =>
     new Response(
@@ -48,18 +37,9 @@ const stubAssets: Fetcher = {
   },
 };
 
-/**
- * A `createBatch` for a stub Workflow binding, from an implementation of the
- * array form.
- *
- * workers-types 5.20261019 overloads `createBatch`: the object form
- * (`{ instances }` or `{ count }`, resolving to `{ created, errors }`) and
- * the deprecated array form (resolving to the instances it created). A stub
- * written as one method cannot satisfy both, so it goes through here. The
- * app only calls the array form, because it relies on that form leaving an
- * id already in use out of the result rather than reporting it as an error
- * (`deleteOrg` in src/worker/routes/orgs.ts), so the object form throws.
- */
+// workers-types overloads createBatch (object and deprecated array form), and
+// a one-method stub cannot satisfy both. The app calls the array form, which
+// leaves an id already in use out of the result (`deleteOrg`), so the object form throws.
 export function arrayFormCreateBatch<T>(
   impl: (batch: WorkflowInstanceCreateOptions<T>[]) => Promise<WorkflowInstance[]>,
 ): Workflow<T>["createBatch"] {
@@ -81,11 +61,8 @@ export function arrayFormCreateBatch<T>(
   return createBatch;
 }
 
-/**
- * Workflow tests inject their own binding when they need to assert scheduling
- * or instance state. Every other worker test gets a completed no-op instead,
- * so a real workflow cannot outlive the test and query D1 after its reset.
- */
+// Every worker test gets a completed no-op instance, so a real workflow cannot
+// outlive the test and query D1 after its reset.
 function stubWorkflow<T>(): Workflow<T> {
   const instance: WorkflowInstance = {
     id: "test-workflow",
@@ -96,7 +73,6 @@ function stubWorkflow<T>(): Workflow<T> {
     restart: async () => {},
     sendEvent: async () => {},
     delete: async () => {},
-    // workers-types 5.20260919 added this; nothing in the app subscribes.
     subscribe: () => {
       throw new Error("no worker test subscribes to workflow events");
     },
@@ -115,24 +91,9 @@ function stubWorkflow<T>(): Workflow<T> {
   };
 }
 
-// The ambient worker-test binding, under the same name the worker knows it by
-// (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast),
-// with the one binding that environment cannot supply stubbed in.
-//
-// The Vitest plugin builds no asset bundle, so ASSETS is genuinely absent
-// and every request reaching the SPA fallback threw on `undefined.fetch` and
-// came back a 500. Tests wrote around it (expiry.worker.ts asserted "not a
-// 302" because it could not assert the status it meant), which is how a
-// stubbed 500 got mistaken for the fallback working.
-/**
- * Polar, refusing every call (#412). The worker tests read .dev.vars.local.example,
- * which carries a placeholder token and the sandbox server, so without this a
- * route that ends a subscription (a ban, an account deletion) built the real
- * SDK and sent the request to Polar's sandbox, which turned the fake token
- * away. The test passed on that refusal, needed the network to do it, and
- * timed out on CI when the connection dropped. A test that wants Polar to
- * answer passes its own BILLING (billing.worker.ts).
- */
+// The Vitest plugin builds no asset bundle, so ASSETS is stubbed: without it the SPA fallback
+// threw a 500. Polar refuses every call (#412), or the placeholder token would time out on CI;
+// a test that wants Polar to answer passes its own BILLING.
 const noPolar = () => Promise.reject(new Error("No Polar in worker tests: pass a BILLING stub"));
 export const unreachableBilling: BillingProvider = {
   checkouts: { create: noPolar, get: noPolar },
@@ -164,14 +125,9 @@ export function overrideEnv(overrides: Partial<Env>): Env {
   return { ...testEnv, ...overrides };
 }
 
-// Backlog numbers nothing asserts on: a stub queue has no backlog.
 const noBacklog = { backlogCount: 0, backlogBytes: 0 };
 
-/**
- * A queue binding that hands every message to `onSend` instead of delivering
- * it, so a producer's fan-out can be asserted without a live consumer running
- * in the same test. Throw from `onSend` to make the send itself fail.
- */
+// Throw from `onSend` to make the send itself fail.
 export function stubQueue<Body>(onSend: (body: Body) => void): Queue<Body> {
   return {
     async metrics() {
@@ -188,14 +144,8 @@ export function stubQueue<Body>(onSend: (body: Body) => void): Queue<Body> {
   };
 }
 
-/**
- * The real object with a few members swapped out.
- *
- * Everything not named keeps working, so a test can prove one operation
- * misbehaved rather than that the whole binding was replaced. Methods are
- * re-bound to the target because a native Cloudflare binding rejects any other
- * receiver.
- */
+// Methods are re-bound to the target because a native Cloudflare binding
+// rejects any other receiver.
 export function overriding<T extends object>(target: T, overrides: Partial<T>): T {
   return new Proxy(target, {
     get(actual, property) {
@@ -206,20 +156,16 @@ export function overriding<T extends object>(target: T, overrides: Partial<T>): 
       const value = actual[key];
       return value instanceof Function ? value.bind(actual) : value;
     },
-    // A write lands on the view, never on the real binding. Sentry's D1
-    // instrumentation assigns a wrapped `prepare` onto whatever env.DB it is
-    // handed; without this trap that assignment went through to the shared
-    // binding and every later test in the file read the broken override.
+    // A write lands on the view, never on the real binding: Sentry's D1
+    // instrumentation assigns a wrapped `prepare` onto env.DB, which would break
+    // every later test in the file.
     set(_actual, property, value) {
       return Reflect.set(overrides, property, value);
     },
   });
 }
 
-/**
- * authEnv() with every SQL string the Worker prepares recorded, lowercased,
- * in `sql`: how a test proves a path sent D1 nothing (#489).
- */
+// Records every SQL string the Worker prepares, lowercased: how a test proves a path sent D1 nothing (#489).
 export function recordingEnv() {
   const sql: string[] = [];
   const db = overriding(env.DB, {
@@ -231,36 +177,21 @@ export function recordingEnv() {
   return { env: overrideEnv({ ...authEnv(), DB: db }), sql };
 }
 
-/** The single ClickBuffer instance the redirect path writes to (#225). Its
- * add/alarm/buffered/reset methods are callable straight off the stub as RPC. */
 export function clicksStub(): DurableObjectStub<ClickBuffer> {
   return env.CLICK_BUFFER.get(env.CLICK_BUFFER.idFromName("clicks"));
 }
 
-/** The clicks still sitting in the buffer, unwritten. */
 export function bufferedClicks(): Promise<ClickMessage[]> {
   return clicksStub().buffered();
 }
 
-/** Drop whatever the buffer is holding, so one test's clicks do not leak into
- * the next. */
 export async function resetClicks(): Promise<void> {
   await clicksStub().reset();
 }
 
-// Env with a non-empty auth secret, independent of the ambient .dev.vars, so
-// sign-in's rate-limit key derivation has a key to HMAC with.
-/**
- * The default binding for worker tests: a known BETTER_AUTH_SECRET, and
- * Turnstile explicitly off.
- *
- * It has to be cleared rather than merely unmentioned, because the ambient
- * binding is built from .dev.vars, which sets TURNSTILE_SECRET_KEY so the
- * browser tests run the real check (#304). Inheriting it here would make
- * every signup in every worker test fail the check first and report 400,
- * hiding whatever that test was actually about. Tests that want it on say so:
- * see turnstile.worker.ts.
- */
+// Turnstile is cleared, not left out: .dev.vars sets TURNSTILE_SECRET_KEY for
+// the browser tests (#304), and inheriting it would fail every signup in the
+// worker tests with 400. See turnstile.worker.ts for tests that want it on.
 export const authEnv = () =>
   // A Web Risk key in a developer's .dev.vars must not reach the tests.
   overrideEnv({
@@ -270,16 +201,8 @@ export const authEnv = () =>
     WEB_RISK_API_KEY: undefined,
   });
 
-/**
- * Drive one request through the real worker and wait for anything it
- * deferred with waitUntil (click enqueues, storage sends) before returning,
- * so a test can assert on those without racing them.
- *
- * Defaults to authEnv() rather than the ambient env: it is the same binding
- * with a known BETTER_AUTH_SECRET, which is what cookies from
- * signInCookie()/adminCookie() are signed against. Tests needing a different
- * binding pass one.
- */
+// Defaults to authEnv(): cookies from signInCookie()/adminCookie() are signed
+// against its auth secret.
 export async function fetchWorker(request: Request, testEnv: Env = authEnv()): Promise<Response> {
   const ctx = createExecutionContext();
   const response = await worker.fetch(request, testEnv, ctx);
@@ -287,10 +210,7 @@ export async function fetchWorker(request: Request, testEnv: Env = authEnv()): P
   return response;
 }
 
-// Deterministic Polar product ids and webhook secret for billing tests,
-// independent of the ambient .dev.vars. Keeps the same auth secret as
-// authEnv() so a cookie minted via signInCookie()/adminCookie() still
-// validates on requests made with this env.
+// Keeps authEnv()'s auth secret so cookies from signInCookie()/adminCookie() still validate.
 export const POLAR_HOBBY_PRODUCT_ID = "prod_hobby";
 export const POLAR_PRO_PRODUCT_ID = "prod_pro";
 export const POLAR_HOBBY_YEARLY_PRODUCT_ID = "prod_hobby_yearly";
@@ -306,7 +226,6 @@ export const billingEnv = () =>
     POLAR_PRO_YEARLY_PRODUCT_ID,
   });
 
-/** One outbound Resend send, as the worker posted it. */
 export interface CapturedEmail {
   from?: string;
   to: string;
@@ -315,22 +234,9 @@ export interface CapturedEmail {
   text: string;
 }
 
-/**
- * Captures what would go to Resend, and optionally answers the MX lookup
- * signup does.
- *
- * `sendEmail()` and `domainHasMailRecords()` both post with plain `fetch`
- * (the Resend SDK cannot repoint its base URL, which is what keeps the local
- * emulator flow working), so replacing the global is the honest seam: the
- * request under assertion is the one the worker would really send.
- *
- * `mx` answers the DNS lookup too, so a test decides which domains can
- * receive mail rather than the network.
- *
- * `hold` keeps the send hanging until that promise resolves, which is how a
- * test proves the worker answered without waiting for Resend. `started()`
- * reports whether the send was reached at all.
- */
+// sendEmail() and domainHasMailRecords() post with plain `fetch` (the Resend
+// SDK cannot repoint its base URL), so replacing the global is the seam.
+// `hold` keeps the send hanging, to prove the worker answered without waiting for Resend.
 export function captureEmails({
   mx,
   hold,
@@ -338,7 +244,6 @@ export function captureEmails({
 }: {
   mx?: "deliverable" | "unroutable";
   hold?: Promise<void>;
-  /** Addresses Resend answers with a 500, as an outage or a bounce would. */
   refuse?: string[];
 } = {}) {
   const sent: CapturedEmail[] = [];
@@ -365,8 +270,6 @@ export function captureEmails({
   return { sent, started: () => started, restore: () => (globalThis.fetch = original) };
 }
 
-/** The `user-1` row the billing and entitlement suites both write against,
- * with only the columns under test spelled out at the call site. */
 export async function seedBillingUser(
   overrides: Partial<typeof schema.user.$inferInsert> = {},
 ): Promise<void> {
@@ -386,7 +289,6 @@ export async function applyTestMigrations(): Promise<void> {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 }
 
-/** Migration 0042's backfill: the click rollups rebuilt from raw clicks. */
 export function rollupBackfill(): string[] {
   const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0042_"));
   // readD1Migrations keeps comments, and 0042's mention the WHERE true the range test replaces.
@@ -395,21 +297,13 @@ export function rollupBackfill(): string[] {
     .map((q) => q.replace(/^\s*--.*$\n?/gm, ""));
 }
 
-/**
- * Rows a test writes straight into `clicks` skip insertClicks, which is what
- * keeps the rollups (#26) current. This runs the same backfill production
- * ran, so the stats routes see them.
- */
+// Raw `clicks` rows skip insertClicks, which keeps the rollups current (#26); this runs the production backfill.
 export async function rebuildClickRollups(): Promise<void> {
   await env.DB.batch(rollupBackfill().map((q) => env.DB.prepare(q)));
 }
 
-// The password every seeded test user shares: fine since each test's DB is
-// wiped between runs and nothing depends on a real secret.
 export const TEST_PASSWORD = "correct-horse-battery";
 
-// Signs in a previously-seeded user and returns a cookie header ready to
-// attach to a follow-up request.
 export async function signInCookie(email: string, password: string): Promise<string> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
@@ -429,8 +323,6 @@ export async function signInCookie(email: string, password: string): Promise<str
     .join("; ");
 }
 
-// Seeds a platform admin and signs in, returning a cookie header ready to
-// attach to a follow-up request.
 export async function adminCookie(): Promise<string> {
   await env.DB.batch([
     env.DB.prepare(
@@ -443,10 +335,8 @@ export async function adminCookie(): Promise<string> {
   return signInCookie("admin@example.com", TEST_PASSWORD);
 }
 
-// A real (non-admin) free-plan user who owns "org-1" — unlike adminCookie(),
-// which is both a platform admin and on the pro plan, so it bypasses checks
-// tests often want exercised (org membership, paid-plan gates). Pass `domain`
-// to also seed an active custom domain for that org.
+// Unlike adminCookie() (platform admin, pro plan), a non-admin free-plan owner
+// of "org-1", so org membership and paid-plan gates apply.
 export async function freeOwnerCookie(domain?: { id: string; hostname: string }): Promise<string> {
   const statements = [
     env.DB.prepare(
@@ -482,12 +372,8 @@ export const sampleLink = {
   utmContent: "",
 };
 
-// Every links column beyond the ones a test usually cares about
-// (id/orgId/slug/destination/createdAt), spelled out because raw D1 inserts
-// (unlike the API route) don't fall back to the schema's column defaults for
-// columns left out of a batch insert alongside other rows that do specify
-// them. Tests that need a raw `links` row — bypassing the API to seed data
-// directly — spread this in and override just what they're testing.
+// Raw D1 inserts do not fall back to the schema's column defaults when batched
+// with rows that specify them, so every column is spelled out here.
 const rawLinkDefaults: Partial<typeof schema.links.$inferInsert> = {
   title: "",
   utmSource: "",
@@ -515,7 +401,6 @@ export function rawLinkRow(
   return { ...rawLinkDefaults, ...row };
 }
 
-// Same idea as rawLinkDefaults, for a raw `link_addresses` row.
 const rawAddressDefaults: Partial<typeof schema.linkAddresses.$inferInsert> = {
   domainId: null,
   creationReason: "",
@@ -533,9 +418,7 @@ export function rawAddressRow(
   return { ...rawAddressDefaults, ...row };
 }
 
-// The primary address row every link carries alongside it (see #38): a slug
-// only resolves via link_addresses now, so seedLink() must create this row
-// too, not just the links row.
+// A slug only resolves via link_addresses (#38), so seedLink() must create this row.
 export const sampleAddress: Omit<typeof schema.linkAddresses.$inferInsert, "createdAt"> = {
   id: "addr-1",
   linkId: "link-1",
@@ -548,10 +431,6 @@ export const sampleAddress: Omit<typeof schema.linkAddresses.$inferInsert, "crea
   retiredAt: null,
 };
 
-// Seeds one org ("org-1"), one link ("link-1", slug "sale"), and that link's
-// primary address row ("addr-1") — the fixture shared by tests that need a
-// real link row to satisfy a foreign key (clicks, KV publish) without caring
-// about its other fields.
 export async function seedLink(destination = "https://example.com") {
   const db = drizzle(env.DB, { schema });
   await db.batch([
@@ -562,11 +441,6 @@ export async function seedLink(destination = "https://example.com") {
   return db;
 }
 
-/**
- * Reads a response body as the shape the route under test is documented to
- * return. Kept in one place so the tests do not repeat the same cast at every
- * call site.
- */
 export async function jsonBody<T>(res: Response): Promise<T> {
   // SAFETY: the caller names the shape it is about to assert on, and the
   // assertions are what check it: a route that stops returning that shape
@@ -574,7 +448,6 @@ export async function jsonBody<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** The schema-bound drizzle client every worker test reaches for. */
 export function testDb() {
   return drizzle(env.DB, { schema });
 }
@@ -594,20 +467,12 @@ export async function addressesOf(linkId: string) {
     .where(eq(schema.linkAddresses.linkId, linkId));
 }
 
-// A queue that records what was sent instead of delivering it, so a route's
-// KV-sync fan-out can be asserted without a live queue consumer running inside
-// the same test.
 export function captureStorageQueue() {
   const sent: StorageMessage[] = [];
   return { queue: stubQueue<StorageMessage>((m) => sent.push(m)), sent };
 }
 
-/**
- * Every storage follow-up a mutation produced, whichever path ran it: a KV
- * key written in the request (a small batch of link syncs) or a message the
- * queue was handed (R2 work, bulk syncs, failed writes). Both land in `sent`
- * as messages, so a test asserts which keys were resynced, not how.
- */
+// Both paths land in `sent` as messages, so a test asserts which keys were resynced, not how.
 export function captureStorage() {
   const { queue, sent } = captureStorageQueue();
   const real = env.LINKS;
@@ -624,8 +489,6 @@ export function captureStorage() {
   return { env: { STORAGE_QUEUE: queue, LINKS } satisfies Partial<Env>, sent };
 }
 
-/** KV whose writes fail, so a link sync cannot be applied in the request
- * and goes to the queue instead. */
 export function failingKv(): KVNamespace {
   const fail = async () => {
     throw new Error("injected KV failure");
@@ -633,13 +496,9 @@ export function failingKv(): KVNamespace {
   return overriding(env.LINKS, { put: fail, delete: fail });
 }
 
-// Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
-// retry/dead-letter assertions exercise the same runtime semantics production
-// queue delivery does, rather than hand-rolled spies.
-/** `attempts` takes an array to give each message its own delivery count:
- * Cloudflare re-batches a redelivered message alongside fresh ones, so a
- * consumer that reads the batch's worst attempt count and acts on the whole
- * batch is a bug a uniform number cannot catch. */
+// Built with the cloudflare:test helpers so ack/retry/dead-letter assertions match production.
+// `attempts` as an array gives each message its own delivery count: a consumer acting on the
+// batch's worst count is a bug a uniform number cannot catch.
 export function batchOf<Body>(queueName: string, bodies: Body[], attempts: number | number[] = 1) {
   const attemptOf = (i: number) => (Array.isArray(attempts) ? (attempts[i] ?? 1) : attempts);
   const batch = createMessageBatch<Body>(
@@ -655,23 +514,16 @@ export function batchOf<Body>(queueName: string, bodies: Body[], attempts: numbe
   return { batch, ctx };
 }
 
-/**
- * Stub rate-limit bindings.
- *
- * Cloudflare's per-location counters do not reset between test cases, so a
- * test that wants "this budget is gone" says so with a binding rather than by
- * spending a real one.
- */
+// Cloudflare's per-location counters do not reset between test cases, so a test
+// says "this budget is gone" with a binding.
 export function exhaustedLimit(): RateLimit {
   return { limit: async () => ({ success: false }) };
 }
 
-/** Always allows, isolating which of several budgets is under test. */
 export function openLimit(): RateLimit {
   return { limit: async () => ({ success: true }) };
 }
 
-/** Allows, and records the key each call was counted against. */
 export function recordingLimit(keys: string[]): RateLimit {
   return {
     limit: async (options) => {
@@ -681,7 +533,6 @@ export function recordingLimit(keys: string[]): RateLimit {
   };
 }
 
-// Buckets without a stub always allow.
 export function rateLimits(stubs: Partial<Record<RateLimitBucket, RateLimit>>) {
   const RATE_LIMIT: RateLimit = {
     limit: async (options) => {
@@ -692,9 +543,6 @@ export function rateLimits(stubs: Partial<Record<RateLimitBucket, RateLimit>>) {
   return { RATE_LIMIT } satisfies Partial<Env>;
 }
 
-// Seeds `count` active links (each with its own primary address), so a
-// caller can fill an org up to just under its links cap before racing the
-// last slot.
 export async function seedFillerLinks(
   db: ReturnType<typeof testDb>,
   orgId: string,
@@ -727,7 +575,6 @@ export async function seedFillerLinks(
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 }
 
-/** One email as deliverBatch() posts it to the provider. */
 export interface Posted {
   from: string;
   to: string[];
@@ -738,11 +585,9 @@ export interface Posted {
   headers: Record<string, string>;
 }
 
-/** Stands in for the provider's batch endpoint. `status` answers each call
- * by its index (from 0), so a test can fail one batch and not the others.
- * Like Resend, a key it has already delivered sends nothing again: the same
- * body gets the first answer back, another body a 409. `calls` counts every
- * request, repeats included. */
+// `status` answers each call by its index, so a test can fail one batch only.
+// Like Resend, a key already delivered sends nothing again: the same body gets
+// the first answer, another body a 409.
 export function captureBatches(status: (call: number) => number = () => 200) {
   const batches: { key: string | null; emails: Posted[] }[] = [];
   const delivered = new Map<string, string>();
@@ -777,8 +622,6 @@ export function captureBatches(status: (call: number) => number = () => 200) {
   };
 }
 
-/** Fills org-1 to the free plan's 30 links with raw rows, each with the
- * primary address that makes it count against the cap. */
 export async function fillFreePlanLinks(): Promise<void> {
   const statements = [];
   for (let i = 0; i < 30; i++) {
@@ -796,17 +639,12 @@ export async function fillFreePlanLinks(): Promise<void> {
   await env.DB.batch(statements);
 }
 
-/** The init of a worker API request in tests: headers as a plain record, so a
- * helper can spread them without an array of pairs turning into indices. */
 export type ApiInit = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
-/** The address a mocked `fetch` was called with. */
 export function requestUrl(input: RequestInfo | URL): string {
   return input instanceof Request ? input.url : input.toString();
 }
 
-/** The body a mocked `fetch` was given, as text: a string or form fields,
- * "" for no body. */
 export function bodyText(init?: RequestInit): string {
   const body = init?.body;
   if (body instanceof URLSearchParams) return body.toString();

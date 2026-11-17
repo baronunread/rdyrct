@@ -14,22 +14,12 @@ import { republishOrgLinks } from "./storage";
 import { WARN_REASON, warnOrgLinks } from "./link-warning";
 
 /**
- * Abuse controls the 2026-09-10 incident showed were missing
- * (docs/incidents/2026-09-10-queue-ops-exhaustion.md, #224). A free account
- * created two links pointing at other public URL shorteners and drove ~3,400
- * redirects in a day, which exhausted the Cloudflare Queues op cap. `risk.ts`
- * scored both destinations "Clean" because a redirector resolves fine.
+ * Added after the 2026-09-10 incident (docs/incidents/2026-09-10-queue-ops-exhaustion.md,
+ * #224): two links to other shorteners drove ~3,400 redirects and `risk.ts` scored
+ * both "Clean" because a redirector resolves fine.
  */
 
-/* ---------------- no chaining another shortener ---------------- */
-
-/**
- * Hosts that are themselves link shorteners or redirect services. Sending one
- * of our links to one of these hides the real destination from our risk check
- * and from whoever clicks, and has no legitimate use. Not exhaustive and never
- * will be: this is the cheap early catch, the redirect ceiling below is the
- * backstop that needs no list.
- */
+/** Not exhaustive: the cheap early catch. The redirect ceiling below is the backstop. */
 const SHORTENER_HOSTS = new Set([
   "bit.ly",
   "bitly.com",
@@ -56,7 +46,6 @@ const SHORTENER_HOSTS = new Set([
   "adf.ly",
 ]);
 
-/** Whether `destination`'s host is a known shortener, exact or a subdomain. */
 export function isShortenerDestination(destination: string): boolean {
   let host: string;
   try {
@@ -67,8 +56,6 @@ export function isShortenerDestination(destination: string): boolean {
   return SHORTENER_HOSTS.has(host) || [...SHORTENER_HOSTS].some((h) => host.endsWith(`.${h}`));
 }
 
-/** Refuse a destination that is another shortener. Called from every create
- * path: organization links and the anonymous shortener. */
 export function assertNotShortener(destination: string): void {
   if (isShortenerDestination(destination))
     throw new HTTPException(422, {
@@ -77,19 +64,10 @@ export function assertNotShortener(destination: string): void {
     });
 }
 
-/* ---------------- per-organization redirect ceiling ---------------- */
-
 /**
- * A free organization past this many redirects in 24 hours raises an alert
- * and is flagged for review; a new one also gets a warning on its links
- * (#344). It is never suspended for it (#387): volume alone is not a verdict
- * about anything. Roughly 60x a normal day's whole platform volume, and well
- * under the point where click ingestion strains anything.
- *
- * ponytail: counted from the `clicks` table on the frequent cron, so it lags
- * a few minutes and undercounts by whatever the per-location click rate
- * limiter (the click bucket) dropped. Tighten when #50's durable limiter
- * lands.
+ * Over this many redirects in 24 hours an org is alerted and flagged (#344), never suspended (#387).
+ * ponytail: counted from `clicks` on the frequent cron, so it lags and undercounts what the
+ * click limiter dropped. Tighten when #50's durable limiter lands.
  */
 export const REDIRECT_CEILING_PER_DAY = 2_000;
 
@@ -97,51 +75,25 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 /**
- * Only an org this new gets a warning on its links for volume alone; an older
- * one is alerted and flagged, and left for a human to look at.
- *
- * The ceiling counts *recorded* clicks on the public redirect path, which
- * anyone can drive: the click rate limit allows 600/minute per org, so an
- * unauthenticated requester can clear 2,000 in about four minutes just by
- * hammering any org's public link. Suspending on raw volume would make our
- * own abuse control a way to take down a stranger's org -- point a flood at
- * their link and the sweep suspends the victim. That is why volume never
- * suspends anything (#387): a hold needs a signal about the destination or a
- * report. A brand-new org hitting the ceiling is the 2026-09-10 incident's
- * shape (an account minting abuse minutes after signup), so its links get
- * the warning page, which costs a scam most of its clicks and a real launch
- * one extra click. A long-standing org suddenly seeing volume is at least as
- * likely to be a link that went viral, and is a case for a human.
+ * Volume never suspends (#387): the public redirect path can be driven by anyone, so a
+ * stranger could take an org down by flooding its link. A brand-new org hitting it matches
+ * the 2026-09-10 shape and gets the warning page; an older one is likelier viral, for a human.
  */
 export const NEW_ORG_WINDOW_MS = 7 * DAY_MS;
 
-/** How long the automatic checks leave an org alone after an admin cleared
- * it. The same as the new-org window: past it the sweep only alerts anyway. */
+/** Past it the sweep only alerts anyway. */
 const CLEARED_FOR_MS = NEW_ORG_WINDOW_MS;
 
-/**
- * Suspend every currently-live link in an organization and republish so the
- * redirect path stops serving them. This is the automatic path; the manual
- * one is `POST /admin/links/orgs/:orgId/suspend`, which does the same select /
- * update / republish for both directions. Returns how many links it
- * suspended: zero means they were already suspended, which is what makes a
- * repeat call a no-op.
- */
+/** Zero means they were already suspended, which makes a repeat call a no-op. */
 export async function suspendOrgLinks(
   env: Env,
   db: DB,
   orgId: string,
-  // The user who asked, or null when the sweep did: `links.suspended_by` is a
-  // foreign key, so an automatic action leaves it null rather than inventing a
-  // user row. The audit entry still names a "system" actor (that column is not
-  // a foreign key).
+  // Null when the sweep did it: `links.suspended_by` is a foreign key, so no invented user row.
   suspendedBy: string | null,
   reason: string,
 ): Promise<number> {
-  // Set first and unconditionally: this is what stops the org minting a
-  // replacement link the moment its existing ones go dark (requireOrgRole
-  // reads it on every write), independent of how many link rows below
-  // actually change on a given call.
+  // Set first and unconditionally: it stops the org minting a replacement link (requireOrgRole reads it).
   await db
     .update(schema.orgs)
     .set({ linksSuspendedAt: Date.now(), reviewFlaggedAt: null })
@@ -155,8 +107,7 @@ export async function suspendOrgLinks(
     .update(schema.links)
     .set({ suspendedAt: Date.now(), suspendedBy, suspendReason: reason })
     .where(live);
-  // After the flag is written, so a message consumed early cannot read the old
-  // value: suspension is enforced in storage.ts's desiredKvValue.
+  // After the flag is written; suspension is enforced in storage.ts's desiredKvValue.
   await republishOrgLinks(env, db, orgId);
   await recordAdminAction(env, {
     actorUserId: suspendedBy ?? "system",
@@ -168,41 +119,23 @@ export async function suspendOrgLinks(
   return links.length;
 }
 
-/**
- * Find free organizations over the daily redirect ceiling, and new free ones
- * whose traffic looks wrong. Idempotent: an org already flagged, warned or
- * held is skipped, so running this every ten minutes costs a few grouped
- * counts and nothing else.
- *
- * Returns the links whose traffic spiked in an org it warned, for the caller
- * to ask Web Risk about again (destination-check.ts's sweepAbuse).
- */
+/** Idempotent: an org already flagged, warned or held is skipped. Returns the spiked links of warned orgs, for Web Risk. */
 export async function sweepAbusiveOrgs(env: Env): Promise<{ spikingLinks: string[] }> {
   const db = drizzle(env.DB, { schema });
-  // A rolling 24 hours, not the UTC day: a day boundary lets 1,900 redirects
-  // at 23:00 and 1,900 more at 00:10 trip nothing.
+  // Rolling, not the UTC day: a day boundary lets 1,900 redirects at 23:00 and 1,900 at 00:10 trip nothing.
   const since = Date.now() - DAY_MS;
   await alertOverCeiling(env, db, since);
   return { spikingLinks: await flagSuspiciousOrgs(env, db, since) };
 }
 
-/** Every org with at least `min` redirects since `since`, and its count. */
 function orgsWithRedirects(db: DB, since: number, min: number) {
-  // Stored and dropped past a plan's cap both count (click-overflow.ts).
   return redirectsByOrg(db, since, min);
 }
 
-/**
- * Alert on every free org over the ceiling, once: a Sentry event and a mail
- * to the platform admin when the org is first flagged or its links first
- * warned, and nothing on the passes after. A new free org's links get the
- * warning page as well. Nothing is suspended (see NEW_ORG_WINDOW_MS).
- */
+/** Once per org: nothing on later passes. Nothing is suspended (see NEW_ORG_WINDOW_MS). */
 async function alertOverCeiling(env: Env, db: DB, since: number): Promise<void> {
   const rows = await orgsWithRedirects(db, since, REDIRECT_CEILING_PER_DAY + 1);
 
-  // Independent per org, and the list is short (an org over the ceiling is
-  // rare), so handle them together rather than one round trip at a time.
   await Promise.all(
     rows.map(async ({ orgId, n }) => {
       const [{ plan }, { createdAt, cleared }] = await Promise.all([
@@ -230,8 +163,7 @@ async function alertOverCeiling(env: Env, db: DB, since: number): Promise<void> 
   );
 }
 
-/** Flag an org for an admin to look at. False when it already was, or its
- * links are suspended or its owner banned, so a caller mails about a flag once. */
+/** False when it was already flagged, suspended or banned, so a flag is mailed once. */
 export async function flagForReview(db: DB, orgId: string): Promise<boolean> {
   const flagged = await db
     .update(schema.orgs)
@@ -241,7 +173,6 @@ export async function flagForReview(db: DB, orgId: string): Promise<boolean> {
         eq(schema.orgs.id, orgId),
         isNull(schema.orgs.reviewFlaggedAt),
         isNull(schema.orgs.linksSuspendedAt),
-        // Already decided: its owner is banned.
         isNull(schema.orgs.disabledAt),
       ),
     )
@@ -249,33 +180,15 @@ export async function flagForReview(db: DB, orgId: string): Promise<boolean> {
   return flagged.length > 0;
 }
 
-/* ---------------- earlier signals: hold, or flag ---------------- */
-
-/** Redirects in the last hour that look wrong for a new free org. */
 const VELOCITY_PER_HOUR = 200;
-/** Redirects in 24 hours on a link made in the same 24 hours. A new link that
- * somebody is already pushing hard is the shape of a scam campaign. */
 const NEW_LINK_REDIRECTS = 300;
-/** An org this new is held, not just flagged. Real launches are rare in the
- * first three days and scams are common, so the cheap mistake is a pause an
- * admin lifts in one click; the expensive one is thousands of victims. */
+/** Real launches are rare in the first days and scams common: the cheap mistake is a pause an admin lifts in one click. */
 const HOLD_WINDOW_MS = 3 * DAY_MS;
 
 /**
- * Act on a new free org whose traffic looks wrong: a burst in the last hour,
- * or a link made in the last 24 hours that is already past NEW_LINK_REDIRECTS.
- * Both were true of the 2026-10-18 case, whose links all scored clean: the
- * destination was not the signal, the shape of the traffic was.
- *
- * Under three days old, with a second signal, the org's links are held
- * (suspended, reversible, the owner told why and how to appeal). Otherwise,
- * up to seven days old, it is flagged for an admin and its links show the
- * warning page (#344) but keep working. Idempotent: an org already flagged
- * or suspended is left alone, so this acts once per org.
- *
- * Returns the links behind each warned org's signal: the new link past
- * NEW_LINK_REDIRECTS, or the busiest link of a burst. A kit often goes live
- * after the link was checked, so the caller asks Web Risk about them again.
+ * Both signals were true of the 2026-10-18 case, whose links all scored clean. Under three
+ * days old with a second signal the links are held; up to seven days they are flagged and
+ * warned. Idempotent. Returns links per signal, since a kit often goes live after the check.
  */
 async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<string[]> {
   const now = Date.now();
@@ -301,14 +214,11 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<stri
       ]);
       if (plan.plan !== "free" || cleared) return;
       if (createdAt === null || now - createdAt > NEW_ORG_WINDOW_MS) return;
-      // Traffic alone never pauses an org: anyone can drive clicks at somebody
-      // else's public link, and a launch looks the same as a campaign. It is
-      // held only when something else agrees: a link on a free app host, or an
-      // open report. Otherwise its links get the warning page, and it is
-      // flagged for a person to look at.
+      // Traffic alone never pauses an org: anyone can drive clicks at a public link.
+      // It is held only when something else agrees: a free app host, or an open report.
       if (now - createdAt < HOLD_WINDOW_MS && (await hasSecondSignal(db, orgId)))
         return holdOrg(env, db, orgId, redirects, signal);
-      // Before the early return below: an org already flagged still spikes.
+      // Before the early return: an org already flagged still spikes.
       const burst = bursts.some((b) => b.orgId === orgId);
       spiking.push(...(await linksBehindSignal(db, orgId, freshLinks, burst, now - HOUR_MS)));
       const warned = await warnOrgLinks(env, db, orgId, WARN_REASON.traffic);
@@ -327,8 +237,6 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<stri
   return spiking;
 }
 
-/** The links behind an org's signal: its new links past NEW_LINK_REDIRECTS,
- * and on a burst its busiest link of the last hour. */
 async function linksBehindSignal(
   db: DB,
   orgId: string,
@@ -342,7 +250,6 @@ async function linksBehindSignal(
   return [...links];
 }
 
-/** A free-host destination among the org's links, or an open report on one. */
 async function hasSecondSignal(db: DB, orgId: string): Promise<boolean> {
   const [links, reports] = await Promise.all([
     db
@@ -369,8 +276,7 @@ async function holdOrg(env: Env, db: DB, orgId: string, redirects: number, signa
     [reason, "Restore it from Organizations if it is legitimate."],
     "/admin/orgs",
   );
-  // The owner is told it happened and how to answer it, not which rule fired:
-  // a reason that names the threshold is a how-to for the next signup.
+  // Not told which rule fired: a reason that names the threshold is a how-to for the next signup.
   await notifyHold(
     env,
     db,
@@ -380,16 +286,8 @@ async function holdOrg(env: Env, db: DB, orgId: string, redirects: number, signa
   ).catch(() => {});
 }
 
-/**
- * Tell an org's owner that links were paused, and why. The grounds and the way
- * to appeal are in the mail: a pause nobody explains reads as an outage, and
- * an owner who cannot answer it has no way to ask for the pause to be lifted.
- */
-/**
- * A short mail to the platform admin, because a Sentry alert is not where a
- * person looks first. One per event, worded as a report about somebody else's
- * org so it is never mistaken for a problem with the admin's own account.
- */
+/** A pause nobody explains reads as an outage, and the owner needs the way to appeal. */
+/** Worded as a report about somebody else's org, never mistaken for the admin's own account. */
 export async function notifyAdmin(
   env: Env,
   subject: string,
@@ -414,8 +312,6 @@ export async function notifyHold(
   orgId: string,
   heading: string,
   grounds: string,
-  /** Said straight after the grounds, e.g. whose list it was and how far to
-   * trust it (destination-check.ts's WEB_RISK_ADVISORY). */
   more: string[] = [],
 ): Promise<void> {
   const owner = await orgOwnerEmail(db, orgId);
@@ -436,12 +332,8 @@ export async function notifyHold(
 }
 
 /**
- * An org's age, and whether an admin cleared it recently.
- *
- * Without the second, every restore and every "mark reviewed" is undone by
- * the next sweep: it recounts the same 24 hours of redirects, finds the same
- * total, and suspends or flags the org again ten minutes later. Clearing
- * means a human looked, so the automatic checks stand down for a while.
+ * Without the second, every restore and "mark reviewed" is undone by the next
+ * sweep, which recounts the same 24 hours. Clearing means a human looked.
  */
 async function orgState(db: DB, orgId: string) {
   const rows = await db

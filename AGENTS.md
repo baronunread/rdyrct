@@ -446,6 +446,12 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 
 ## Conventions
 
+- **Comments only say what the code cannot.** Make the code clear instead:
+  a good name beats a comment. Keep a comment only for a non-obvious why (an
+  outside constraint, a workaround, a security or privacy invariant, a
+  choice someone would otherwise "fix"), at most 3 lines.
+  `rdyrct/max-comment-lines` (`.oxlint/rdyrct`) fails anything longer, except
+  `SAFETY:` comments and tool directives.
 - **A form error marks its field**: danger outline, a short reason in the
   field's label row, `aria-invalid` and focus on the first bad field, and no
   text below the field (nothing shifts). **Toasts** (`useToast`) are for

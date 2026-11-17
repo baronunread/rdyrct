@@ -13,17 +13,7 @@ export { SUPPORT_EMAIL };
 
 const linkClass = "hover:text-accent";
 
-function Column({
-  title,
-  children,
-  wide,
-}: {
-  title: string;
-  children: ReactNode;
-  /** On a phone, spans both columns and wraps its links like a line of text,
-   * so an odd count leaves a ragged line end, not an empty cell in a grid. */
-  wide?: boolean;
-}) {
+function Column({ title, children, wide }: { title: string; children: ReactNode; wide?: boolean }) {
   return (
     <div className={wide ? "col-span-2 sm:col-span-1" : undefined}>
       <p className="text-sm font-semibold text-text">{title}</p>
@@ -39,11 +29,8 @@ function Column({
   );
 }
 
-/** Light and dark side by side, the chosen one raised. Either button flips
- * the theme, so a click on the one already raised still does something.
- * Which one is raised comes from the root's data-theme through CSS
- * (`.theme-switch` in styles.css), not from state, so the prerendered page
- * and the hydrated one agree whatever the visitor stored. */
+// Which one is raised comes from the root's data-theme through CSS (`.theme-switch` in
+// styles.css), not from state, so the prerendered page and the hydrated one agree.
 function ThemeSwitch() {
   const [, toggleTheme] = useTheme();
   return (
@@ -62,11 +49,7 @@ function ThemeSwitch() {
   );
 }
 
-/**
- * The name, set as large as the page is wide and fading into it, cut off by
- * the bottom edge. The last thing on every public page, and decoration: the
- * logo at the top of the footer is the one a screen reader meets.
- */
+// Decoration: the logo at the top of the footer is the one a screen reader meets.
 function Wordmark() {
   return (
     <svg
@@ -96,28 +79,19 @@ function Wordmark() {
   );
 }
 
-/** Directories that list rdyrct.com for free in exchange for a plain text
- * link back from the homepage (the badge directories are in BadgeCarousel).
- * Followed links on purpose (that is the deal), so no rel=nofollow; only on
- * the landing page, not on every page. */
+// Followed links on purpose (that is the deal), so no rel=nofollow; only on the landing page.
 const FEATURED_ON = [{ name: "Twelve Tools", href: "https://twelve.tools" }];
 
-/**
- * Fazier's launch badge, one of the remote badge images on the site: their verifier
- * reads the homepage HTML for this exact link and image, so it is theirs and
- * not a copy (img-src allows fazier.com for rdyrct.com's build alone,
- * security-headers.ts). Both themes are in the HTML and the page's theme
- * shows one; the light one is the default. The double slash is Fazier's.
- */
+// Their verifier reads the homepage HTML for this exact link and image, so it is theirs, not a
+// copy (img-src allows fazier.com for rdyrct.com's build alone, security-headers.ts).
+// The double slash is Fazier's.
 const FAZIER_BADGE = (theme: "light" | "dark") =>
   `https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&theme=${theme}`;
 
-/** A badge in the carousel; the loop's second copy passes -1 so the keyboard
- *  meets each badge once (BadgeCarousel). */
 type BadgeProps = { tabIndex?: number };
 
 function FazierBadge({ tabIndex }: BadgeProps) {
-  const img = "h-[2.375rem] w-auto"; // 103x44 drawn at 89x38, the row's height
+  const img = "h-[2.375rem] w-auto";
   return (
     <a
       href="https://fazier.com/launches/rdyrct.com"
@@ -146,12 +120,8 @@ function FazierBadge({ tabIndex }: BadgeProps) {
   );
 }
 
-/**
- * PeerPush's trending badge, from their own embed code: like Fazier's, their
- * page and image, not a copy (img-src allows peerpush.com for rdyrct.com's
- * build alone). One image for both themes; it is 230x65, drawn at the row's
- * 38px.
- */
+// From their own embed code: like Fazier's, their page and image, not a copy
+// (img-src allows peerpush.com for rdyrct.com's build alone).
 function PeerPushBadge({ tabIndex }: BadgeProps) {
   return (
     <a
@@ -173,11 +143,7 @@ function PeerPushBadge({ tabIndex }: BadgeProps) {
   );
 }
 
-/**
- * Launchstag's badge, from their embed code (light and dark images, their
- * own, so img-src allows launchstag.com for rdyrct.com's build alone). It is
- * 198x62, drawn at the row's 38px.
- */
+// From their embed code, their own images (img-src allows launchstag.com for rdyrct.com's build alone).
 function LaunchstagBadge({ tabIndex }: BadgeProps) {
   const img = "h-[2.375rem] w-auto";
   return (
@@ -208,12 +174,7 @@ function LaunchstagBadge({ tabIndex }: BadgeProps) {
   );
 }
 
-/**
- * launched.tools' transparent badge, from their embed code: markup and
- * inline styles, no image, so it needs nothing from the CSP. Two changes:
- * the title takes the theme's text color, and less padding brings it to the
- * row's height.
- */
+// From their embed code: markup and inline styles, no image, so it needs nothing from the CSP.
 function LaunchedToolsBadge({ tabIndex }: BadgeProps) {
   return (
     <a
@@ -229,7 +190,7 @@ function LaunchedToolsBadge({ tabIndex }: BadgeProps) {
         background: "transparent",
         border: "1px solid #D4D7C9",
         borderRadius: 10,
-        padding: "5px 12px", // theirs is 8px; 5px matches the row's 38px
+        padding: "5px 12px",
         textDecoration: "none",
         fontFamily: "sans-serif",
       }}
@@ -271,16 +232,9 @@ function Badges({ tabIndex }: BadgeProps) {
   );
 }
 
-/**
- * The directory badges as one strip that scrolls sideways (`.badge-carousel`
- * in styles.css), so four badges take the room of two. Every badge is in the
- * prerendered HTML, which is what each directory's checker reads; the
- * animation is CSS on that markup, never a script swapping badges in. The
- * second copy only closes the loop. Half the time it is the one on screen, so
- * a pointer can click it (no `inert`), but it is hidden from screen readers
- * and out of the tab order, and gone when the visitor asks for less motion,
- * where the strip scrolls by hand instead.
- */
+// Every badge is in the prerendered HTML, which is what each directory's checker reads; the
+// animation is CSS on that markup. The second copy only closes the loop: it is hidden from
+// screen readers and the tab order, and gone under reduced motion.
 function BadgeCarousel() {
   return (
     <div className="badge-carousel w-full max-w-[22rem] overflow-hidden">
@@ -320,8 +274,6 @@ export function Footer({ featured = false }: { featured?: boolean }) {
           </div>
 
           <Column title="Product">
-            {/* A real page people search for, not just a legal link: it is the
-                only entry point to the app that needs no account at all. */}
             <li>
               <MarketingLink to="/qr-code-generator" className={linkClass}>
                 QR generator
@@ -347,9 +299,7 @@ export function Footer({ featured = false }: { featured?: boolean }) {
                 Pricing
               </MarketingLink>
             </li>
-            {/* Down here rather than in the header: somebody looking for the
-                roadmap is looking for it on purpose, and the header's three
-                slots belong to the pages that sell. */}
+            {/* Down here rather than in the header: the header's three slots belong to the pages that sell. */}
             <li>
               <MarketingLink to="/roadmap" className={linkClass}>
                 Roadmap
@@ -362,9 +312,8 @@ export function Footer({ featured = false }: { featured?: boolean }) {
             </li>
           </Column>
 
-          {/* The blog is a separate Worker behind the /blog* route, so its link
-              is a plain anchor: a client-side Link would try to render a path
-              the SPA does not have. */}
+          {/* The blog is a separate Worker behind the /blog* route, so its link is a plain anchor:
+             a client-side Link would try to render a path the SPA does not have. */}
           <Column title="Company">
             <li>
               <a href="/blog" className={linkClass}>
@@ -386,9 +335,8 @@ export function Footer({ featured = false }: { featured?: boolean }) {
                 Report a link
               </MarketingLink>
             </li>
-            {/* Not on a phone: the header's GitHub icon covers it there, and
-                dropping this one leaves Company the same length as Product,
-                so the two columns end together. */}
+            {/* Not on a phone: the header's GitHub icon covers it there, and dropping this one
+               leaves Company the same length as Product. */}
             <li className="max-sm:hidden">
               <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={linkClass}>
                 GitHub
@@ -440,12 +388,8 @@ export function Footer({ featured = false }: { featured?: boolean }) {
           </Column>
         </div>
 
-        {/* On a phone: the legal links on one line, then the copyright and the
-            theme switch sharing the next. `contents` hands nav and switch to
-            this grid there, and from sm up they are one flex group again. */}
+        {/* On a phone `contents` hands nav and switch to this grid; from sm up they are one flex group again. */}
         <div className="mt-8 grid grid-cols-[1fr_auto] items-center gap-y-4 border-t border-border pt-6 text-xs sm:mt-10 sm:flex sm:justify-between sm:gap-3">
-          {/* On a phone the credit stacks under the copyright, and the dot
-              between them goes, so nothing dangles at a line end. */}
           <div className="flex items-center gap-x-2 max-sm:flex-col max-sm:items-start max-sm:gap-y-2">
             <span>
               © {new Date().getFullYear()} {BUSINESS.name} · P.IVA {BUSINESS.vatNumber}

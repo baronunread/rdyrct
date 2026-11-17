@@ -1,5 +1,5 @@
 const ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const SLUG_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"; // no lookalikes
+const SLUG_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 
 function randomFrom(alphabet: string, len: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(len));
@@ -11,14 +11,10 @@ function randomFrom(alphabet: string, len: number): string {
 export const uid = (len = 16) => randomFrom(ID_ALPHABET, len);
 export const randomSlug = () => randomFrom(SLUG_ALPHABET, 7);
 
-// A renamed custom-domain address keeps working for exactly this long before
-// the daily sweep (storage.ts's sweepExpiredAliases) retires it.
 export const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 
 export const SLUG_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
-// Paths the SPA owns at the top level; slugs may not shadow them. There is no
-// /app prefix; every app page is a root keyword, so all of them are reserved.
 export const RESERVED_SLUGS = new Set([
   "__dev",
   "api",
@@ -28,7 +24,6 @@ export const RESERVED_SLUGS = new Set([
   "sitemap.xml",
   "llms.txt",
   "pricing.md",
-  // public
   "login",
   "signup",
   "onboarding",
@@ -60,7 +55,6 @@ export const RESERVED_SLUGS = new Set([
   "flowcode-alternative",
   "tinyurl-alternative",
   "docs",
-  // authenticated app tabs
   "dashboard",
   "analytics",
   "links",
@@ -75,8 +69,6 @@ export const RESERVED_SLUGS = new Set([
   "audit",
 ]);
 
-// UTM tagging moved to src/shared/utm.ts so the free UTM builder can tag a
-// URL exactly as the redirect does. Re-exported for the Worker's callers.
 export {
   buildDestination,
   EMPTY_UTM,
@@ -102,12 +94,7 @@ export function referrerHost(referrer: string): string {
   }
 }
 
-// Throwaway inbox providers. A signup from one of these is worth spotting in
-// the admin user list, so support can watch for abuse patterns. This is a
-// deliberately short, hand-picked list of the well-known ones, not a 50k-entry
-// blocklist: it is display-only and never blocks a signup, so a miss costs
-// nothing. Mainstream regional providers stay OFF: qq.com (Tencent) reads as
-// unfamiliar, not throwaway, and its users are real. Keep entries lowercase.
+// Display-only list, so a miss costs nothing. Mainstream regional providers (qq.com) stay off. Keep entries lowercase.
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "mailinator.com",
   "yopmail.com",
@@ -129,7 +116,6 @@ const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "moakt.com",
 ]);
 
-/** True when an email's domain is a known throwaway inbox provider. */
 export function isDisposableEmail(email: string): boolean {
   const at = email.lastIndexOf("@");
   if (at === -1) return false;
@@ -140,31 +126,14 @@ export function isDisposableEmail(email: string): boolean {
   return DISPOSABLE_EMAIL_DOMAINS.has(domain);
 }
 
-/**
- * The longest hostname the DNS spec allows. A referrer longer than this is
- * not a hostname we failed to shorten, it's junk, so it stores as "".
- */
+// A longer referrer is junk, not a hostname we failed to shorten, so it stores as empty.
 const REFERRER_MAX_LENGTH = 253;
 
-/** The longest single dot-separated label DNS allows. */
 const REFERRER_MAX_LABEL_LENGTH = 63;
 
-/**
- * What a stored referrer may look like: lowercase letters, digits, hyphens,
- * and the dots between labels. Unicode domains arrive from `URL.hostname`
- * already punycoded (`xn--…`), so they fit without an exception.
- *
- * Migration 0016 applies the same shape to the rows written before this
- * existed. Keep the two in step: a value one accepts and the other clears
- * would leave the table holding referrers ingestion would now refuse.
- */
+// Migration 0016 applies the same shape to older rows. Keep the two in step.
 const REFERRER_ALLOWED_CHARS = /^[a-z0-9.-]+$/;
 
-/**
- * True when `host` is shaped like a name we could report on: within the DNS
- * length limits, no empty labels (so no leading, trailing, or doubled dot),
- * and at least one dot, which rules out bare words like "localhost".
- */
 function isReportableHost(host: string): boolean {
   if (host.length > REFERRER_MAX_LENGTH) return false;
   if (!REFERRER_ALLOWED_CHARS.test(host)) return false;
@@ -173,20 +142,8 @@ function isReportableHost(host: string): boolean {
   return labels.every((label) => label.length > 0 && label.length <= REFERRER_MAX_LABEL_LENGTH);
 }
 
-/**
- * What a click may remember about where it came from: a bare lowercase
- * hostname, or "" for direct and for anything we can't read (see issue #20).
- *
- * A raw Referer header is a whole URL, and other people's URLs carry search
- * terms, session tokens, and account identifiers in their paths and query
- * strings. None of that is ours to keep, and storing it would contradict the
- * promise the analytics page makes. `URL.hostname` drops the path, query,
- * fragment, port, and any user:password credentials in one step; everything
- * else here rejects rather than repairs.
- *
- * Applied when the click is recorded, not when it's read: the read path
- * cannot un-store what ingestion already wrote down.
- */
+// A raw Referer is a whole URL whose path and query carry other people tokens: none of that is ours to keep (#20).
+// URL.hostname drops path, query, port and credentials in one step. Applied at ingestion: reads cannot un-store.
 export function normalizeReferrer(referrer: string): string {
   if (!referrer) return "";
   let url: URL;
@@ -195,8 +152,6 @@ export function normalizeReferrer(referrer: string): string {
   } catch {
     return "";
   }
-  // A referrer arrives over http(s). Anything else (data:, javascript:,
-  // file:, an app's custom scheme) is not a site we can name.
   if (url.protocol !== "http:" && url.protocol !== "https:") return "";
   const host = url.hostname.toLowerCase();
   if (!isReportableHost(host)) return "";
@@ -212,9 +167,7 @@ export function isValidHttpUrl(value: string): boolean {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
 
-    // URLs with a trailing dot or a one-character top-level domain are almost
-    // always a pasted typo (for example, "http./path"). Keep IP addresses
-    // valid, but require ordinary hostnames to have a real TLD.
+    // A trailing dot or a one-character TLD is almost always a typo (http./path). IP addresses stay valid.
     const hostname = url.hostname;
     if (hostname.endsWith(".") || hostname.includes(":")) return !hostname.endsWith(".");
     if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return true;
@@ -225,33 +178,22 @@ export function isValidHttpUrl(value: string): boolean {
   }
 }
 
-/* ---------------- QR appearance validation ---------------- */
-
 import { HTTPException } from "hono/http-exception";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type QrOverrides } from "@/shared/types";
 import type { Env } from "./env";
 
-/**
- * Logo images live in R2; D1 rows store only the serving URL. Upload and
- * serving both go through /api/orgs/:orgId/qr-logo (org members only).
- */
 export const qrLogoUrl = (orgId: string, file: string) => `/api/orgs/${orgId}/qr-logo/${file}`;
 
-// Only the file name is charset-checked: it is ours (uid() + a known
-// extension). The org id never goes through a regex — validateQrFields
-// matches it by construction and qrLogoKeyFromUrl takes "one path segment" —
-// so any org id works (the seed script's "seed-" ids included).
+// Only the file name is charset-checked: the org id never goes through a regex, so any org id works (seed- ids too).
 export const QR_LOGO_FILE_RE = /^[A-Za-z0-9]+\.[a-z0-9]+$/;
 
-/** R2 key (`{orgId}/{file}`) for a serving URL, null for anything else. */
 export function qrLogoKeyFromUrl(url: string): string | null {
   const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(url);
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-// Background alone supports an alpha channel (the color picker's
-// HexAlphaColorPicker emits 8-digit hex, or 6-digit when fully opaque).
+// Background alone supports alpha (HexAlphaColorPicker emits 8-digit hex).
 const HEX_COLOR_ALPHA_RE = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
 
 type QrFields = {
@@ -287,8 +229,7 @@ function validateQrColor(value: string | undefined, label: string) {
 
 function validateQrBg(value: string | undefined) {
   if (!value) return;
-  // 'transparent' is a legacy sentinel kept readable for old data; the
-  // picker now expresses transparency through the hex string's alpha byte.
+  // transparent is a legacy sentinel kept readable for old data.
   if (value === "transparent") return;
   if (!HEX_COLOR_ALPHA_RE.test(value)) {
     invalidQrField("QR background must be a hex color like #17151f or #17151f80");
@@ -301,7 +242,6 @@ function validateQrLogoSize(value: number | null | undefined) {
   }
 }
 
-/** Shared validation for org QR defaults and per-link overrides ('' = inherit). */
 export function validateQrFields(fields: QrFields, orgId: string) {
   validateQrLogo(fields.qrLogo, orgId);
   validateQrChoice(fields.qrStyle, QR_DOT_STYLES, "Unknown QR dot style");
@@ -309,26 +249,13 @@ export function validateQrFields(fields: QrFields, orgId: string) {
   validateQrBg(fields.qrBg);
   validateQrColor(fields.qrColor, "QR color");
   validateQrColor(fields.qrEyeColor, "QR eye color");
-  // null = inherit; otherwise a sane footprint ratio (bigger stops scanning).
   validateQrLogoSize(fields.qrLogoSize);
 }
 
 const QR_FIELDS = ["qrLogo", "qrStyle", "qrColor", "qrCorner", "qrBg", "qrEyeColor"] as const;
 
-/**
- * True when the body would *set* a QR appearance field to something other
- * than what is already stored (#162).
- *
- * Not "carries QR fields": the editor loads a link's styling and sends it
- * back with every save, so a plain title edit on a downgraded org's link
- * arrives carrying the same logo and colours it has always had. Refusing
- * that used to leave the client only one way out, which was to wipe the
- * fields — so fixing a typo destroyed styling somebody paid for.
- *
- * Clearing is always allowed. Giving up a paid look needs no plan, and an
- * owner who wants their downgraded link plain should not have to upgrade to
- * say so.
- */
+// Not carries QR fields: the editor sends a link styling back with every save, so refusing that left wiping the fields as the only way out (#162).
+// Clearing is always allowed.
 export function changesQr(
   body: Partial<QrOverrides>,
   existing: Partial<QrOverrides> | null,
@@ -341,12 +268,8 @@ export function changesQr(
   return body.qrLogoSize != null && body.qrLogoSize !== (existing?.qrLogoSize ?? null);
 }
 
-/** The host shared-domain links use: SHARED_LINK_HOST, or the app's own host
- * on a deployment with no second domain. */
 export const sharedLinkHost = (env: Env) => env.SHARED_LINK_HOST || env.APP_HOST;
 
-/** A link's full address, built here once so the app, the REST API and the
- * MCP server all hand out the same one. */
 export function linkUrl(env: Env, domain: string | null, slug: string): string {
   if (domain) return `https://${domain}/${slug}`;
   if (env.SHARED_LINK_HOST) return `https://${env.SHARED_LINK_HOST}/${slug}`;

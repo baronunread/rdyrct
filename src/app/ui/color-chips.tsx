@@ -4,12 +4,9 @@ import { HexColorInput, HexColorPicker } from "react-colorful";
 import { cn } from "./cn";
 import { toHex6 } from "../lib/qr-contrast";
 
-// A checkerboard for a colour that lets what is behind it through.
 const CHECKER =
   "[background-image:conic-gradient(from_90deg,var(--border)_90deg,var(--surface)_0_180deg,var(--border)_0_270deg,var(--surface)_0)] [background-size:10px_10px]";
 
-/** Quick picks under the picker: black and white for contrast, then colours
- * dark enough to scan on white. */
 const PRESETS = [
   "#000000",
   "#ffffff",
@@ -21,14 +18,8 @@ const PRESETS = [
   "#c2410c",
 ] as const;
 
-/**
- * One colour as a chip: the swatch, what it colours, and its hex. Pressing
- * the chip opens a picker in a popover: a saturation square, a hue strip,
- * quick picks and a hex field to paste a brand colour into.
- *
- * The swatch keeps a 7px radius rather than nesting strictly (10 - 6 = 4),
- * which reads as a square at 28px.
- */
+// The swatch keeps a 7px radius rather than nesting strictly (10 - 6 = 4),
+// which reads as a square at 28px.
 export function ColorChip({
   label,
   value,
@@ -38,11 +29,9 @@ export function ColorChip({
   className,
 }: {
   label: string;
-  /** Any hex; shown as "#rrggbb". */
   value: string;
   onChange: (hex: string) => void;
   disabled?: boolean;
-  /** Draw the swatch as see-through and say "None" instead of a hex. */
   transparent?: boolean;
   className?: string;
 }) {
@@ -127,10 +116,6 @@ function Swatch({
   );
 }
 
-/** Chips side by side. On a phone they stay on one line, tighter, and a
- * label truncates before a chip drops to a second line. The hex never
- * truncates: each chip keeps room for it (5.75rem), and only when three of
- * those do not fit (a 360px screen) does one wrap. */
 export function ColorChips({ children, label }: { children: ReactNode; label: string }) {
   return (
     <div

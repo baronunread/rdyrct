@@ -26,12 +26,6 @@ import {
   testEnv,
 } from "./support";
 
-/**
- * Tracked clicks per plan (#387): past an org's monthly cap its links keep
- * redirecting and the clicks are not recorded; the counter is exact; the
- * owner hears about it once at 80% and once at 100%.
- */
-
 const NOW = Date.now();
 const MONTH = monthKey(NOW);
 
@@ -41,7 +35,6 @@ beforeEach(async () => {
 });
 afterEach(reset);
 
-/** org-1 and link-1, owned by a user on `plan`. */
 async function seedOwnedLink(plan: StoredPlan = "free") {
   await seedLink();
   await env.DB.batch([
@@ -90,7 +83,6 @@ async function count(table: string): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** What one click is in every table that records it. */
 async function recorded() {
   const daily = await env.DB.prepare(
     "select coalesce(sum(clicks), 0) as n from click_daily",
@@ -130,7 +122,6 @@ describe("the monthly cap at flush time", () => {
   it("spends one unit on a click that appears twice in a flush", async () => {
     await seedOwnedLink("free");
     await setUsage(PLAN_LIMITS.free.trackedClicks - 2);
-    // dup-0, then dup-0 and dup-1.
     await insertClicks(testEnv, [...clicks(1, "dup"), ...clicks(2, "dup")]);
 
     // Stored once, so it spends one unit and the other click still fits.
@@ -214,7 +205,6 @@ describe("the monthly cap at flush time", () => {
     const lastMonth = Date.UTC(new Date(NOW).getUTCFullYear(), new Date(NOW).getUTCMonth(), 0);
     await setUsage(PLAN_LIMITS.free.trackedClicks, monthKey(lastMonth));
 
-    // One flush that straddles midnight on the 1st.
     await insertClicks(testEnv, [...clicks(2, "late", lastMonth), ...clicks(2, "early")]);
 
     expect((await recorded()).raw).toBe(2);
@@ -227,18 +217,14 @@ describe("the monthly cap at flush time", () => {
     const rows = clicks(450, "big"); // three chunks of the batch
 
     await insertClicks(testEnv, rows);
-    // A flush that wrote but heard back an error, delivered again.
     await insertClicks(testEnv, rows);
-    // The same id twice in one flush.
     const twice = clicks(1, "twice")[0]!;
     await insertClicks(testEnv, [twice, twice]);
-    // A deleted link sends the batch row by row: the counter rides each row.
     await insertClicks(testEnv, [
       ...rows.slice(0, 3),
       ...clicks(2, "fallback"),
       { ...twice, dedupeId: "gone", linkId: "no-such-link" },
     ]);
-    // And through the buffer's own alarm.
     const stub = clicksStub();
     await stub.add(rows[0]!);
     await stub.add(clicks(1, "alarm")[0]!);
@@ -444,7 +430,6 @@ describe("the 80% and 100% emails", () => {
   });
 
   it("names the cap, not a count it never stored, after a downgrade", () => {
-    // A Pro org with 100,000 clicks that moved to Free.
     const mail = clickUsageEmail(
       "reached",
       { name: "Acme", plan: "free", clicks: 100_000, limit: 5_000, now: NOW },
@@ -461,7 +446,6 @@ describe("the 80% and 100% emails", () => {
 });
 
 describe("the abuse sweep past the cap", () => {
-  /** org-1 made just now, its free owner already at the cap. */
   async function seedCappedNewOrg() {
     await seedOwnedLink("free");
     await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(NOW).run();
@@ -489,7 +473,6 @@ describe("the abuse sweep past the cap", () => {
 
   it("still sees a burst the org sends after its cap, though none of it is stored", async () => {
     await seedCappedNewOrg();
-    // Past the 200-an-hour burst check, all of it dropped by the cap.
     await insertClicks(testEnv, clicks(250, "burst"));
     expect((await recorded()).raw).toBe(0);
 

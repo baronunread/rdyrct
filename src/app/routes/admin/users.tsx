@@ -38,10 +38,8 @@ import { LimitsDialog } from "./limits-dialog";
 import { BanDialog } from "./ban-dialog";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
-/** Every action but the ban, which has its own dialog (ban-dialog.tsx). */
 type ConfirmedAction = Exclude<UserAction, "ban">;
 
-/** What the confirmation dialog for one user action says. */
 interface UserActionMeta {
   title: string;
   confirmLabel: string;
@@ -99,16 +97,8 @@ const userActionMeta = {
   },
 } satisfies Record<ConfirmedAction, UserActionMeta>;
 
-/**
- * What the plan column adds to the plan, when there is something to add: a
- * comp (not somebody paying, #81 and #82), a payment that is failing, or a
- * subscription that ends. Each is a state worth finding at a glance, so each
- * is a badge. The plan itself is an attribute of the row, so it is text.
- */
 function PlanNote({ user }: { user: AdminUserRow }) {
   if (user.compPlan) {
-    // The reason an admin typed hangs off the badge on hover instead of
-    // setting the row's height.
     const detail = [user.compReason ?? "No reason recorded.", user.compGrantedBy]
       .filter(Boolean)
       .join(" · ");
@@ -135,8 +125,6 @@ function PlanNote({ user }: { user: AdminUserRow }) {
   return null;
 }
 
-/** Grant, change, or revoke a comp. There is no "set plan": a plan an admin
- * writes by hand is a comp, and it is recorded as one. */
 function CompMenuItems({
   user,
   onGrant,
@@ -164,13 +152,11 @@ function CompMenuItems({
   );
 }
 
-/** Custom limits that are saved but do not count, because the account is on Free. */
 function LimitsKeptBadge({ user }: { user: AdminUserRow }) {
   if (!user.limitOverrides || user.tier === "enterprise") return null;
   return <Badge color="muted">limits kept</Badge>;
 }
 
-/** Enterprise is handled by hand: an admin sets custom limits for one account. */
 function LimitsMenuItem({ user, onClick }: { user: AdminUserRow; onClick: () => void }) {
   return (
     <MenuItem onClick={onClick}>
@@ -182,7 +168,6 @@ function LimitsMenuItem({ user, onClick }: { user: AdminUserRow; onClick: () => 
   );
 }
 
-/** "Make/remove platform admin", hidden for your own row. */
 function AdminToggleMenuItem({
   user,
   isSelf,
@@ -201,8 +186,6 @@ function AdminToggleMenuItem({
   );
 }
 
-/** Ban/unban and delete, hidden for your own row; ban is also hidden for
- * other platform admins. */
 function DangerMenuItems({
   user,
   isSelf,
@@ -229,9 +212,6 @@ function DangerMenuItems({
   );
 }
 
-/** Marks on the person that change what an admin does next. Each is a
- * state, so each keeps its pill; "banned" is said in the Last active column,
- * where it replaces the date. */
 function PersonMarks({ user }: { user: AdminUserRow }) {
   return (
     <>
@@ -259,9 +239,6 @@ function UserRow({
 }) {
   return (
     <tr className={PHONE.row}>
-      {/* Two lines (rdyrct-design, "Tables earn two lines"): the name over
-          the address, beside the picture. Both truncate, with the whole
-          value on hover. */}
       <Td className={PHONE.main}>
         <span className="flex min-w-0 items-center gap-3">
           <UserAvatar
@@ -281,8 +258,6 @@ function UserRow({
           </span>
         </span>
       </Td>
-      {/* The plan is an attribute, so it is text; what it adds (a comp, a
-          failing payment, an end date) is a state, so it is a pill. */}
       <Td className={PHONE.meta} data-label="Plan">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className={user.tier === "free" ? "text-muted capitalize" : "capitalize"}>
@@ -428,8 +403,6 @@ function UserActionConfirmDialog({
   );
 }
 
-/** The filters above the table. "Paid" is somebody paying: a comp grants
- * the same access and is counted on its own (#82). */
 const FILTERS = [
   { id: "all", label: "All", test: () => true },
   { id: "paid", label: "Paid", test: (u) => u.plan !== "free" && !u.compPlan },
@@ -443,7 +416,6 @@ type UserFilter = (typeof FILTERS)[number]["id"];
 
 const filterTest = (id: UserFilter) => FILTERS.find((f) => f.id === id)?.test ?? (() => true);
 
-/** What an empty table says: the search it found nothing for, or the filter. */
 function emptyMessage(filter: UserFilter, term: string): string {
   if (term) return `No users match “${term}”.`;
   if (filter === "news") return "Nobody has opted in to product news yet.";
@@ -452,11 +424,6 @@ function emptyMessage(filter: UserFilter, term: string): string {
   return filter === "all" ? "No users yet." : `No ${label} users.`;
 }
 
-/**
- * Every privileged change an admin can make to a user, plus which user is
- * under the pointer for each. The page below is a table and two dialogs; this
- * is the part that writes.
- */
 function useAdminUserActions() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -464,8 +431,6 @@ function useAdminUserActions() {
   const [compFor, setCompFor] = useState<AdminUserRow | null>(null);
   const [limitsFor, setLimitsFor] = useState<AdminUserRow | null>(null);
 
-  // All privileged changes go through one PATCH; the confirm popup closes on
-  // success and each call site adds its own toast.
   const patchUser = useMutation({
     mutationFn: ({
       userId,
@@ -481,11 +446,7 @@ function useAdminUserActions() {
     onError: withErrorToast(toast),
   });
 
-  // Comps have their own routes: they write the comp columns and re-derive
-  // the plan, and they can never be mistaken for a Polar subscription (#81).
-  //
-  // `["user"]` goes too: an admin can comp their own account, and the cached
-  // current user carries the plan that the rest of the app gates on.
+  // Comp routes write the comp columns and re-derive the plan (#81). `["user"]` too: an admin can comp their own account.
   const compChanged = () => {
     void qc.invalidateQueries({ queryKey: ["admin", "users"] });
     void qc.invalidateQueries({ queryKey: ["user"] });
@@ -511,8 +472,6 @@ function useAdminUserActions() {
     onError: withErrorToast(toast),
   });
 
-  // The limits decide which orgs are locked, so the cached current user goes
-  // too, like a comp: an admin can set their own.
   const setLimits = useMutation({
     mutationFn: ({
       userId,
@@ -580,7 +539,6 @@ function useAdminUserActions() {
   };
 }
 
-/** The dialogs behind the row menus: whichever action is open. */
 function UserDialogs({ actions }: { actions: ReturnType<typeof useAdminUserActions> }) {
   const {
     confirm,
@@ -627,7 +585,6 @@ function UserDialogs({ actions }: { actions: ReturnType<typeof useAdminUserActio
   );
 }
 
-/** The users page's first frame (see lib/route-preload.ts). */
 export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminUsersQuery)]);
 
 export function AdminUsersPage() {
@@ -695,8 +652,6 @@ export function AdminUsersPage() {
           />
         </FilterBar>
       </div>
-      {/* Rows only: the header and search box above are real, so the
-          page-level skeleton would draw a second one of each. */}
       {users.isLoading ? (
         <TableSkeleton rows={6} testId="admin-users-rows-skeleton" />
       ) : (

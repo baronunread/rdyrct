@@ -1,19 +1,11 @@
-/**
- * The pieces every marketing page is built from (rdyrct-design, "Light on
- * the marketing pages"): the hairline frame, the two-tone heading, and the
- * page opening that the landing's hero stands in for everywhere else.
- */
 import type { ReactNode } from "react";
 import { cn } from "../ui/cn";
 
-/** A row of the page's hairline frame, with a small cross where its top
- *  rule meets the rails. The rails are the parent's 1px side borders. */
 export function FrameRow({
   children,
   className,
   id,
 }: {
-  /** None closes the frame: just the rule and its crosses. */
   children?: ReactNode;
   className?: string;
   id?: string;
@@ -27,16 +19,11 @@ export function FrameRow({
   );
 }
 
-/**
- * Two 1px bars in an 11px box, drawn rather than typed: a "+" glyph sits
- * wherever the font puts it. The box hangs 6px over the row's top-left (or
- * top-right) corner, so each bar's sixth pixel is the pixel where the top
- * rule (1px above the row's padding box) crosses the rail (1px outside it).
- */
+// Drawn, not typed: a "+" glyph sits wherever the font puts it. The box hangs 6px over
+// the corner so each bar's sixth pixel is where the top rule crosses the rail.
 const CROSS =
   "pointer-events-none absolute -top-[6px] size-[11px] before:absolute before:inset-x-0 before:top-[5px] before:h-px before:bg-muted/70 after:absolute after:inset-y-0 after:left-[5px] after:w-px after:bg-muted/70";
 
-/** Two tones in one heading: the claim in ink, the reason for it muted. */
 export function SplitHeading({
   id,
   lead,
@@ -61,11 +48,6 @@ export function SplitHeading({
   );
 }
 
-/**
- * How every marketing page but the landing opens: the title large and left,
- * the line under it muted, in a framed row over a field of dots. One h1 per
- * page, and it is this.
- */
 export function PageHero({
   title,
   intro,
@@ -73,7 +55,6 @@ export function PageHero({
 }: {
   title: ReactNode;
   intro: ReactNode;
-  /** Anything that belongs with the opening: a call to action, a note. */
   children?: ReactNode;
 }) {
   return (
@@ -90,11 +71,6 @@ export function PageHero({
   );
 }
 
-/**
- * The frame below a page's hero: every section between the same two rails,
- * each opened by a crossed rule, the last one closed. The hero closes its
- * own frame, so this one starts on the same line.
- */
 export function FramedSections({ children }: { children: ReactNode }) {
   return (
     <div className="-mt-px mb-16 border-x border-border/70">
@@ -104,9 +80,6 @@ export function FramedSections({ children }: { children: ReactNode }) {
   );
 }
 
-/** One section of the frame: its heading and content on the page's one left
- *  edge. Prose keeps its own measure inside (`max-w-3xl`); tables and grids
- *  take the full width. */
 export function FrameSection({
   title,
   children,
@@ -128,8 +101,6 @@ export function FrameSection({
   );
 }
 
-/** Where a framed page ends: the dark band, as wide as the column, with the
- *  claim, the one call to action and a line under it. */
 export function EndBand({
   title,
   note,
@@ -137,7 +108,6 @@ export function EndBand({
 }: {
   title: string;
   note?: ReactNode;
-  /** The call to action, and at most one quieter second. */
   children: ReactNode;
 }) {
   return (

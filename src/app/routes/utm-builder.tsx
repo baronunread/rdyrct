@@ -1,23 +1,5 @@
-/**
- * A free UTM builder (#281, #326).
- *
- * Its own page for the same reason as /qr-code-generator: "utm builder" is a
- * search, and a tool that answers it is a better introduction than a post
- * about it. It needs no account.
- *
- * The URL is tagged with the same code the Worker uses when it applies a
- * link's UTM columns on redirect (src/shared/utm.ts), so what the page shows
- * is exactly what a short link made from it would send.
- *
- * What the many other builders lack, and #326 asked for: a check that the
- * values are lowercase, because analytics tools count "Email" and "email" as
- * two mediums; and "Shorten it", which hands the tagged URL to the same
- * anonymous shortener the landing page uses. Nothing leaves the browser
- * until that button is pressed.
- *
- * What the builders ranking above it have and it lacked: many links at once
- * (components/utm-bulk.tsx) and saved templates (lib/utm-templates.ts).
- */
+/** The URL is tagged with the code the Worker uses on redirect (src/shared/utm.ts), so the page shows exactly what a short link would send.
+ * Nothing leaves the browser until Shorten is pressed. */
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ArrowRight, Copy, Plus, X } from "@/app/ui/icons";
 import { EMPTY_UTM, UTM_KEYS } from "@/shared/utm";
@@ -60,7 +42,6 @@ import {
 
 type UtmKey = keyof UtmFields;
 
-/** What each field asks for, in the order the parameters are usually read. */
 const FIELD_COPY = {
   utmSource: {
     label: "Source",
@@ -93,9 +74,6 @@ const FIELD_COPY = {
 
 const FIELDS = UTM_KEYS.map(([param, key]) => ({ param, key, ...FIELD_COPY[key] }));
 
-/** What each parameter is for, and where Google Analytics 4 shows it, for the
- *  reference under the builder. Checked against Google's "Collect campaign
- *  data with custom URLs" and the GA4 Data API schema. */
 const PARAMETERS = [
   ["utm_source", "Where the visitor came from: google, newsletter, linkedin.", "Session source"],
   ["utm_medium", "The kind of channel: email, social, cpc, banner, qr.", "Session medium"],
@@ -195,26 +173,16 @@ const GUIDES = [
   ["/blog/click-id-vs-utm", "Click IDs and UTM tags"],
 ] as const;
 
-/** Why the shortener cannot be offered here, or null when it can. */
 function shortenBlocker(authed: boolean, atCap: boolean): "authed" | "cap" | null {
   if (authed) return "authed";
   return atCap ? "cap" : null;
 }
 
 const ELSEWHERE = {
-  // Signed in, the app shortens with the same fields and keeps the link.
   authed: { href: "/links", label: "Shorten it in the app" },
-  // Signed out with this browser's one free link spent, signing up is the
-  // way to the next one.
   cap: { href: "/signup", label: "Sign up to shorten it" },
 } as const;
 
-/**
- * The presets as a segmented control: one pill that slides to whichever
- * preset the fields match, and none when they match none. On a phone the
- * five wrap onto two lines, where a sliding pill cannot follow, so the
- * chosen one is shaded instead.
- */
 function Presets({
   fields,
   onPick,
@@ -227,7 +195,6 @@ function Presets({
   return (
     <div className="min-w-0">
       <span className="mb-1.5 flex min-h-4 items-center text-xs text-muted">Start from</span>
-      {/* Radii nest: an 11px track, 2px of padding, 9px segments. */}
       <div
         ref={track}
         role="group"
@@ -249,7 +216,6 @@ function Presets({
               aria-pressed={on}
               onClick={() => onPick(preset)}
               className={cn(
-                // 34px inside the 2px track: as tall as the URL field beside it.
                 "relative h-[34px] cursor-pointer rounded-[9px] px-3 text-sm whitespace-nowrap transition-[color,background-color] duration-150 ease-out max-sm:h-10",
                 on
                   ? "text-text max-sm:bg-surface-2"
@@ -273,16 +239,12 @@ function UtmFieldsGrid({
 }: {
   fields: UtmFields;
   setField: (key: UtmKey, value: string) => void;
-  /** Why Source is needed, set when saving a template without one. */
   sourceError?: string;
   sourceRef: RefObject<HTMLInputElement | null>;
 }) {
   return (
-    // Five across only where a field has room for its name and its tip.
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {FIELDS.map(({ key, param, label, placeholder, tip, ...rest }) => (
-        // The parameter name sits in the tip rather than on the label line:
-        // beside a name, a tip mark and "optional" it ran into the next field.
         <Field
           key={key}
           label={label}
@@ -304,9 +266,6 @@ function UtmFieldsGrid({
   );
 }
 
-/** The saved templates as buttons that fill all five fields, each with its
- *  own remove, and the button that saves the fields as one more. Only the
- *  save button until something is saved. */
 function Templates({
   templates,
   fields,
@@ -326,7 +285,6 @@ function Templates({
         const name = templateName(template);
         const on = sameTags(template, current);
         return (
-          // Radii nest: a 9px chip, 2px of padding, a 7px remove button.
           <span
             key={templateKey(template)}
             className={cn(
@@ -334,7 +292,6 @@ function Templates({
               on ? "bg-surface-2 smooth-shadow-ring-xs" : "bg-bg",
             )}
           >
-            {/* A long template is cut at 16rem; the tooltip shows all of it. */}
             <OverflowTip content={name}>
               <button
                 type="button"
@@ -361,11 +318,7 @@ function Templates({
   );
 }
 
-/** The line under the link: the case check when a value strays from one
- *  spelling, otherwise what the page does with what you type. A value with
- *  a capital or a space still works, it just reports apart from its twin. */
 function CaseNote({ fields, onTidy }: { fields: UtmFields; onTidy: () => void }) {
-  // Edge spaces alone are no second spelling: the link leaves them out.
   const untidy = FIELDS.find(({ key }) => fields[key].trim() !== tidy(fields[key]));
   return (
     <div className="flex min-h-8 flex-col items-start justify-between gap-1 px-3 pb-1.5 text-xs sm:flex-row sm:items-center sm:gap-3 sm:px-3.5">
@@ -391,14 +344,9 @@ function CaseNote({ fields, onTidy }: { fields: UtmFields; onTidy: () => void })
   );
 }
 
-/** The short link the anonymous shortener made from the tagged URL, and the
- *  one ask that follows it. */
 function ShortLinkResult({ link }: { link: AnonLink }) {
   const toast = useToast();
   return (
-    // Its own row under the tagged link, not in its place: change a tag
-    // afterwards and the line above shows the new link while this one still
-    // says what was shortened.
     <div className="flex flex-col gap-2 rounded-[14px] bg-bg p-1.5 pl-4 motion-safe:animate-value-in sm:flex-row sm:items-center">
       <div className="flex min-w-0 flex-1 flex-col py-1">
         <a
@@ -432,9 +380,6 @@ function ShortLinkResult({ link }: { link: AnonLink }) {
   );
 }
 
-/** The anonymous shortener, as the landing's form uses it: the Turnstile
- *  challenge solved while the fields are filled in, the link stored for the
- *  claim at sign-up. */
 function useShortener(tagged: string | null, onMade: (link: AnonLink) => void) {
   const toast = useToast();
   const { prime, guarded, challenge } = useTurnstile("anon-link");
@@ -476,7 +421,6 @@ function ShortenAction({
 }: {
   tagged: string | null;
   shortener: Shortener;
-  /** With no link to shorten it says why, on the field, like Copy. */
   onNothing: () => void;
 }) {
   const { busy, blocker, shorten, challenge } = shortener;
@@ -497,7 +441,6 @@ function ShortenAction({
     <Button
       variant="outline"
       onClick={() => (tagged ? void shorten(tagged) : onNothing())}
-      // Only while the request or the bot check is under way.
       disabled={button.disabled}
     >
       <BusyContent busy={button.spinning}>
@@ -507,23 +450,17 @@ function ShortenAction({
   );
 }
 
-/** The tagged link on its panel, with Copy and Shorten beside it (under it
- *  on a phone, where beside it the link wrapped every twenty characters).
- *  There before it has anything to show, so the card does not grow on the
- *  first keystroke. */
 function TaggedOutput({
   tagged,
   onNothing,
   children,
 }: {
   tagged: string | null;
-  /** Copy is never disabled: with no link to copy it says why, on the field. */
   onNothing: () => void;
   children: ReactNode;
 }) {
   const toast = useToast();
   return (
-    // 14px inside the sheet's 20px with its 6px of padding.
     <div className="flex flex-col gap-2 rounded-[14px] bg-bg bg-[radial-gradient(100%_140%_at_0%_0%,color-mix(in_oklab,var(--accent)_8%,transparent),transparent_60%)] p-1.5 pl-4 sm:flex-row sm:items-center">
       <output
         aria-label="Tagged link"
@@ -553,16 +490,11 @@ function TaggedOutput({
   );
 }
 
-/** Why the address field cannot be tagged, or null when it can. */
 function addressReason(address: string): string | null {
   if (!address.trim()) return "Paste a link first";
   return webAddress(address) ? null : "Not a web address";
 }
 
-/** The address and the five tags, with the edits the builder offers: a
- *  pasted tagged link fills the fields from its own parameters (so editing
- *  a tagged link is the same as building one), a preset sets source and
- *  medium, and the case fix tidies every value at once. */
 function useUtmForm() {
   const [address, setAddress] = useState("");
   const [fields, setFields] = useState<UtmFields>(EMPTY_UTM);
@@ -588,15 +520,11 @@ function useUtmForm() {
   };
 }
 
-/** Copy or Shorten with nothing to act on marks the address field, rather
- *  than being a greyed-out button that never says why: the reason in its
- *  label row, one shake, and focus. Any edit clears it. */
 function useAddressRefusal(address: string) {
   const [reason, setReason] = useState<string | null>(null);
   const [shakes, setShakes] = useState(0);
   const input = useRef<HTMLInputElement>(null);
-  // After the shake remounts the field, so focus lands in the new input,
-  // not the one that just left the page.
+  // After the shake remounts the field, so focus lands in the new input.
   useEffect(() => {
     if (shakes) input.current?.focus();
   }, [shakes]);
@@ -649,8 +577,6 @@ const MODES = [
 
 type Mode = (typeof MODES)[number]["id"];
 
-/** Save as template with no source marks Source rather than saving a
- *  template that would split from every link tagged with one. */
 function useTemplateSave(fields: UtmFields) {
   const toast = useToast();
   const [error, setError] = useState<string | undefined>();
@@ -658,8 +584,6 @@ function useTemplateSave(fields: UtmFields) {
   return {
     error,
     source,
-    /** Wraps an edit so it also clears the mark: any change to the tags
-     *  answers it. */
     clearing:
       <A extends unknown[]>(edit: (...args: A) => void) =>
       (...args: A) => {
@@ -682,8 +606,6 @@ function useTemplateSave(fields: UtmFields) {
   };
 }
 
-/** The one-link builder's own state: the address refusal, the shortener
- *  (primed only while this mode shows), and the short link it made. */
 function useOneLink(form: ReturnType<typeof useUtmForm>, active: boolean) {
   const refusal = useAddressRefusal(form.address);
   const [made, setMade] = useState<AnonLink | null>(null);
@@ -694,17 +616,13 @@ function useOneLink(form: ReturnType<typeof useUtmForm>, active: boolean) {
 
 type OneLink = ReturnType<typeof useOneLink>;
 
-/** The tagged link with Copy and Shorten, then the short link once made. */
 function OneLinkOutput({ one }: { one: OneLink }) {
   const { refusal, made, tagged, shortener } = one;
   return (
     <>
-      {/* The Turnstile slot sits straight above the panel holding Shorten, in
-          a column of its own so its empty box adds no gap. */}
       <div className="flex flex-col">
         <TurnstileSlot challenge={shortener.challenge} />
         <TaggedOutput tagged={tagged} onNothing={refusal.refuse}>
-          {/* Once made, the row below carries the next step. */}
           {!made && (
             <ShortenAction tagged={tagged} shortener={shortener} onNothing={refusal.refuse} />
           )}
@@ -726,8 +644,6 @@ function Builder() {
   const note = many ? bulkNote(bulk.result) : null;
 
   return (
-    // On a phone the sheet takes back most of the hero's gutter, as the QR
-    // generator's does.
     <div
       data-utm-builder
       className="flex w-full max-w-4xl flex-col gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]"

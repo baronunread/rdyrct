@@ -20,8 +20,7 @@ describe("what gets held", () => {
   });
 
   test("holds nothing once the banner has been answered", () => {
-    // The case that matters: after a rejection, a later Accept in the same
-    // document must not replay events the visitor already refused.
+    // After a rejection, a later Accept in the same document must not replay refused events.
     expect(bufferBeforeConsent(FUNNEL.ctaClicked, { placement: "hero_primary" }, ANSWERED)).toBe(
       false,
     );

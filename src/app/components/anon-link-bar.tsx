@@ -1,11 +1,3 @@
-/**
- * The visitor's anonymous link, following them down the landing page.
- *
- * Only for somebody who made one: the bar shows their own link and the real
- * time it has left, so the urgency is a fact about their link rather than a
- * sales device. It stays out of the way while the hero card that already
- * shows the link is on screen, and one click hides it for the visit.
- */
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { X } from "../ui/icons";
 import { buttonClass } from "../ui/button-class";
@@ -26,16 +18,12 @@ function timeLeft(ms: number): string {
     .join(":");
 }
 
-/** The newest link this browser made, kept current as the hero makes one. */
 function useStoredAnonLink() {
   const raw = useSyncExternalStore(subscribeAnonLinks, anonLinksSnapshot, () => null);
-  // Parsed through storedAnonLinks, which validates and drops expired links;
-  // `raw` is only what tells this to look again.
+  // storedAnonLinks drops expired links; `raw` only tells this to look again.
   return useMemo(() => (raw ? storedAnonLinks()[0] : undefined), [raw]);
 }
 
-/** Whether the hero's shortener form is on screen. Signed-in visitors and
- * the other hero arm have no such form, so there is nothing to wait for. */
 function useHeroFormVisible() {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
@@ -51,7 +39,6 @@ function useHeroFormVisible() {
   return visible;
 }
 
-/** The current time, ticking once a second while `ticking`. */
 function useNow(ticking: boolean) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -62,15 +49,12 @@ function useNow(ticking: boolean) {
   return now;
 }
 
-/** The link to show, or nothing while the hero card shows it or the visitor
- * has hidden the bar. */
 function useVisibleLink(hidden: boolean) {
   const link = useStoredAnonLink();
   const heroVisible = useHeroFormVisible();
   return hidden || heroVisible ? undefined : link;
 }
 
-/** That link with the time now, ticking, until it expires. */
 function useLiveLink(link: StoredAnonLink | undefined) {
   const now = useNow(link !== undefined);
   return link && link.expiresAt > now ? { link, now } : null;

@@ -2,29 +2,14 @@ import type { OrgInsight, OrgInsights, StatsLinkRef } from "../shared/types";
 import { computeWindows } from "./rollups";
 import type { Env } from "./env";
 
-/**
- * What changed in a range against the range before it (the dashboard's
- * "What changed"), read from the rollup tables: three small queries, none
- * touching raw clicks.
- *
- * The floors keep small numbers out. "Up 100%" from 1 click to 2 is noise, so
- * a move needs real volume in at least one of the two periods and a real
- * share change on top of it.
- */
+// Floors keep small numbers out: Up 100% from 1 click to 2 is noise.
 const INSIGHT_FLOORS = {
-  /** Clicks a country needs in the larger of its two periods. */
   countryClicks: 20,
-  /** Smallest share change that counts, in percent. */
   countryPct: 25,
-  /** Smallest absolute change that counts, in clicks. */
   countryDelta: 10,
-  /** Clicks a link needed in the earlier period to be said to have fallen. */
   linkPrevious: 20,
-  /** Smallest fall that counts, in percent. */
   linkFallPct: 50,
-  /** Clicks a new referrer needs before it is news. */
   referrerClicks: 10,
-  /** The biggest move is shown when nothing else is, from this many clicks. */
   minorDelta: 3,
 };
 
@@ -33,8 +18,7 @@ const FAR_FUTURE = "9999-12-31";
 
 const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-/** The day keys a comparison reads from. The 24-hour view compares the last
- * two whole UTC days, since the rollups are daily and today is partial. */
+// The 24-hour view compares the last two whole UTC days: rollups are daily and today is partial.
 function insightWindow(days: number, now = Date.now()) {
   if (days <= 1) {
     const today = now - (now % DAY_MS);
@@ -89,8 +73,6 @@ async function fallenLink(env: Env, orgId: string, w: Window) {
   return results[0] ?? null;
 }
 
-/** A link with earlier clicks that now gets some from a referrer it never
- * had before the range began. */
 async function newReferrer(env: Env, orgId: string, w: Window) {
   const { results } = await env.DB.prepare(
     `select l.id, l.slug, l.title, dm.hostname as domain, d.value as referrer,
@@ -118,8 +100,7 @@ function countryInsight(c: CountryRow): OrgInsight {
     country: c.country,
     current: c.cur,
     previous: c.prev,
-    // A country with no clicks before has no percent to give: 100 is the
-    // honest cap, and only the volume floor lets one through.
+    // A country with no clicks before has no percent: 100 is the cap, and only the volume floor lets one through.
     pct: c.prev > 0 ? pctChange(c.cur, c.prev) : 100,
   };
 }
@@ -127,7 +108,6 @@ function countryInsight(c: CountryRow): OrgInsight {
 const bySize = (a: CountryRow, b: CountryRow) =>
   Math.abs(b.cur - b.prev) - Math.abs(a.cur - a.prev);
 
-/** The sentences a range's numbers write, most newsworthy first. */
 export async function orgInsights(
   env: Env,
   orgId: string,

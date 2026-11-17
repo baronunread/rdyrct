@@ -47,9 +47,6 @@ beforeEach(async () => {
   ]);
 });
 
-/** The custom domain (go.example.com -> org-1) plus its one KV-published
- * slug ("pricing" -> link-2), shared by every test that exercises
- * custom-domain resolution. */
 async function putCustomDomainAndSlug(): Promise<void> {
   await env.LINKS.put(
     "domain:go.example.com",
@@ -76,7 +73,6 @@ describe("redirect hot path", () => {
     const buffered = await bufferedClicks();
     expect(buffered).toHaveLength(1);
     expect(buffered[0]).toMatchObject({ linkId: "link-1", orgId: "org-1" });
-    // Buffered, not yet flushed to D1.
     expect(
       (await env.DB.prepare("select count(*) as count from clicks").first<{ count: number }>())
         ?.count,
@@ -88,10 +84,8 @@ describe("redirect hot path", () => {
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    // A domain entry under this exact host, with a different destination and
-    // no slug of its own: if the shared-host check ever stopped short-
-    // circuiting before the custom-domain lookup, this is what would answer
-    // instead, and the assertions below would catch it.
+    // A decoy: if the shared-host check stopped short-circuiting before the
+    // custom-domain lookup, this entry would answer instead.
     await env.LINKS.put(
       `domain:${sharedHost}`,
       JSON.stringify({
@@ -113,11 +107,9 @@ describe("redirect hot path", () => {
   });
 
   it("keeps the second shared link host redirect-only: no API, no app", async () => {
-    // SHARED_LINK_HOST never gets its own WAF rate-limiting rules (see
-    // docs/rate-limiting.md): those only ever go on APP_HOST's zone, on the
-    // premise that this host serves nothing but redirects. If it ever fell
-    // through to the app like APP_HOST does, auth would be reachable there
-    // unprotected by that layer.
+    // SHARED_LINK_HOST gets no WAF rate-limiting rules (docs/rate-limiting.md),
+    // since it only redirects. Falling through to the app would expose auth
+    // there without that layer.
     for (const path of ["/api/auth/get-session", "/api/reports", "/dashboard"]) {
       const res = await fetchWorker(
         new Request(`http://localhost${path}`, { headers: { host: sharedHost } }),
@@ -166,7 +158,6 @@ describe("redirect hot path", () => {
     }
     expect(await bufferedClicks()).toEqual([]);
 
-    // The tenant's own address still answers.
     const own = await fetchWorker(
       new Request("http://localhost/pricing", {
         headers: { host: "go.example.com" },
@@ -201,7 +192,6 @@ describe("redirect hot path", () => {
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    // Three recorded clicks per key per window, like a spent production bucket.
     const keys: string[] = [];
     const counts = new Map<string, number>();
     const threePerKey: RateLimit = {
@@ -222,14 +212,12 @@ describe("redirect hot path", () => {
         }),
         limitedEnv,
       );
-      // The redirect ships whatever the limiter says.
       expect(res.status).toBe(302);
     };
 
     for (let i = 0; i < 5; i++) await visit("203.0.113.1");
     for (let i = 0; i < 2; i++) await visit("198.51.100.2");
 
-    // A's overflow is dropped; both of B's clicks are recorded.
     expect(await bufferedClicks()).toHaveLength(5);
     expect(new Set(keys).size).toBe(2);
     // The key holds a digest, never the address.
@@ -322,12 +310,10 @@ describe("redirect hot path", () => {
   it("answers 404 on the shared host for a slug nobody registered", async () => {
     // Under a 200 this is a soft 404: the SPA shell canonicals at the landing
     // page, so every mistyped or retired short link asked a crawler to index
-    // it as a duplicate of the home page. Google had five pages "discovered,
-    // not indexed" and an unbounded supply of these competing for the crawl.
+    // it as a duplicate of the home page.
     const res = await fetchWorker(new Request("http://localhost/no-such-slug"));
 
     expect(res.status).toBe(404);
-    // Still the SPA: the browser gets the app, which renders its NotFound page.
     expect(await res.text()).toContain('<div id="root">');
   });
 
@@ -354,10 +340,8 @@ describe("redirect hot path", () => {
   it("resolves a trailing-slash slug on a custom domain without a detour through the SPA's redirect", async () => {
     await putCustomDomainAndSlug();
 
-    // The custom-domain middleware is a dead end for its own host (it never
-    // calls next()), so it has to strip the trailing slash itself: it can't
-    // rely on the shared-domain trimTrailingSlash middleware registered
-    // after it.
+    // The custom-domain middleware never calls next(), so it must strip the
+    // trailing slash itself, not rely on trimTrailingSlash registered after it.
     const res = await fetchWorker(
       new Request("http://localhost/pricing/", {
         headers: { host: "go.example.com" },
@@ -381,8 +365,6 @@ describe("redirect hot path", () => {
   });
 
   it("leaves the app's own root keywords on 200", async () => {
-    // The 404 above is decided one line below the RESERVED_SLUGS check, so the
-    // way to get it wrong is to start 404ing the pages the SPA serves.
     for (const path of ["/", "/privacy", "/qr-code-generator", "/dashboard"]) {
       const res = await fetchWorker(new Request(`http://localhost${path}`));
       expect(res.status, `status of ${path}`).toBe(200);

@@ -1,6 +1,5 @@
 import { shortDate } from "./dates";
 
-/** "today" / "3d ago" / a date, for the users table's last-seen column. */
 export function lastSeenLabel(ts: number | null): string {
   if (!ts) return "never";
   const days = Math.floor((Date.now() - ts) / 86_400_000);

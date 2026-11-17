@@ -3,9 +3,6 @@ import { MenuItem } from "../ui/menu";
 import { cn } from "../ui/cn";
 import type { UserOrg } from "@/shared/types";
 
-/** An organization's initial on a small tile: the accent for the one you
- * are in, paper for the rest, and a lock for a read-only one, current or
- * not, since that is the thing to know about it. */
 function OrgTile({
   org,
   current,
@@ -30,9 +27,6 @@ function OrgTile({
   );
 }
 
-/** One row per organization: its tile, its name, a tick on the current one.
- *  Shared by the app's switcher and the home page's card, so the two lists
- *  cannot drift apart. */
 export function OrgMenuItems({
   orgs,
   currentId,
@@ -47,8 +41,7 @@ export function OrgMenuItems({
     return (
       <MenuItem key={o.id} onClick={() => onPick(o.id)}>
         <OrgTile org={o} current={current} />
-        {/* A locked org stays in the list and says so (#160). Hiding it is
-            how somebody concludes their data is gone. */}
+        {/* A locked org stays in the list and says so (#160). */}
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate">{o.name}</span>
           {o.locked && <span className="text-xs text-muted">Read-only</span>}

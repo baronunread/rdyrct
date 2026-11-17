@@ -38,23 +38,16 @@ function linkDetailPath(link: LinkDTO): string {
     : `/links/${link.slug}`;
 }
 
-/** What a row can do to its link. The table threads these straight through. */
 interface RowActions {
   navigate: (to: string) => void;
   onQrClick: (link: LinkDTO) => void;
   onEdit: (link: LinkDTO) => void;
-  /** False for a viewer, who may read every one of these rows and change
-   * none of them (#157). The analytics and QR entries stay: both are reads. */
+  /** False for a viewer (#157). */
   canWrite: boolean;
   onDelete: (link: LinkDTO) => void;
   onCreateAlias: (link: LinkDTO) => void;
 }
 
-/**
- * A 16px box, ticked in the accent. Native underneath (so Space, labels and
- * screen readers work as they always do), drawn over by the tick, inside a
- * 40px target so it is easy to hit without being big.
- */
 function RowCheck({
   checked,
   indeterminate = false,
@@ -96,9 +89,6 @@ function RowCheck({
   );
 }
 
-/** The link in two lines (rdyrct-design, "Tables earn two lines"): its
- * title in bold over the short address in mono. An untitled link puts the
- * address on the first line alone. The QR code is in the row's menu. */
 function LinkCell({
   link,
   isExpanded,
@@ -113,14 +103,12 @@ function LinkCell({
   const aliases = link.addressCount - 1;
   const key = morphKey(link);
   const morphing = useIsMorphLink(key);
-  // Marked before the click navigates, so the page being left has this
-  // row's parts named when the browser takes its picture (lib/link-morph.ts).
+  // Marked before the click navigates, so the page being left names this row's parts for the transition (lib/link-morph.ts).
   const open = () => {
     flushSync(() => setMorphLink(key));
     navigate(linkDetailPath(link));
   };
-  // A button, not a link, so the router's hover preload does not reach it:
-  // ask for the link's page the same way (see lib/route-preload.ts).
+  // A button, so the router's hover preload does not reach it: preload by hand (lib/route-preload.ts).
   const router = useRouter();
   const preload = () =>
     void router
@@ -140,8 +128,6 @@ function LinkCell({
             onPointerEnter={preload}
             onFocus={preload}
             {...morphPart("title", morphing)}
-            // A title in Arabic or Hebrew runs right to left: `dir="auto"`
-            // lets it, so it truncates at its own end and keeps its order.
             dir={link.title ? "auto" : undefined}
             className={cn(
               "min-w-0 cursor-pointer text-start text-sm font-semibold [@media(hover:hover)]:hover:underline",
@@ -186,19 +172,14 @@ function LinkCell({
   );
 }
 
-/** Where the link goes: a letter tile for the site, the host over the rest,
- * so a column of them scans by site first. */
 function DestinationCell({ destination }: { destination: string }) {
   let host = destination;
   let rest = "";
   try {
     const url = new URL(destination);
-    // Shown as people read them; the href and the tooltip keep the raw URL.
     host = displayHost(url.host);
     rest = displayPath(`${url.pathname === "/" ? "" : url.pathname}${url.search}`);
-  } catch {
-    // Stored destinations are absolute URLs; show anything else as it is.
-  }
+  } catch {}
   return (
     <OverflowTip content={destination}>
       <a
@@ -278,10 +259,7 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
   );
 }
 
-/** Copy and the menu. Shown on hover or keyboard focus where there is
- * hover, always on a touch screen, where nothing hovers. Keyboard focus, not
- * any focus: a clicked Copy keeps focus, and would keep its row's actions up
- * after the pointer left. */
+/** Keyboard focus, not any focus: a clicked Copy keeps focus and would keep its row's actions up. */
 function RowActionsCell({ link, actions }: { link: LinkDTO; actions: RowActions }) {
   const toast = useToast();
   return (
@@ -380,10 +358,8 @@ export function LinksTable({
   rows: LinkRow[];
   sort: Sort;
   onSort: (s: Sort) => void;
-  /** Ids of the ticked rows on this page. */
   selection: Set<string>;
   onSelectionChange: (next: Set<string>) => void;
-  /** Member names by user id, for the line under Created. */
   creators: Map<string, string>;
   paging: {
     page: number;
@@ -416,17 +392,8 @@ export function LinksTable({
     <LazyMotion features={domAnimation}>
       <div className="overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs">
         <div className="overflow-x-auto overscroll-x-none">
-          {/* Load-bearing widths: the table is `fixed`, so these decide the
-              layout rather than describing it, and columns drop in as the
-              screen grows.
-                <sm   link + clicks + actions
-                sm    + checkbox + created
-                lg    + destination
-                xl    + last 7 days
-              The link column takes what is left. */}
+          {/* The table is `fixed`, so these widths decide the layout. Columns drop in as the screen grows. */}
           <table className="w-full table-fixed text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40">
-            {/* No header on a phone: two columns explain themselves, and the
-                rows start at the top of the card as the mock draws them. */}
             <thead className="max-sm:hidden">
               <tr>
                 <Th className="hidden w-10 py-1.5 pr-0 pl-2 sm:table-cell">
@@ -449,7 +416,6 @@ export function LinksTable({
                 {/* fallow-ignore-next-line css-token-drift */}
                 <Th className="hidden lg:table-cell lg:w-[22%]">Destination</Th>
                 <Th className="hidden w-28 text-end xl:table-cell">Last 7 days</Th>
-                {/* Wide enough for "9,874,312" in tabular figures. */}
                 <SortTh
                   label="Clicks"
                   sortKey="clicks"

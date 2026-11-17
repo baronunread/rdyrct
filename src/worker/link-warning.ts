@@ -1,38 +1,21 @@
-/**
- * The warning tier (#344): a link that still works, behind a page that names
- * the destination's host and asks the visitor to continue. Bitly's model: a
- * warning for links that are only suspicious, and a hold for links where a
- * visit does harm.
- *
- * Set automatically by open reports from enough different reporters
- * (routes/reports.ts, which also lifts it after a week) and by the abuse sweep for
- * a new free org with unusual traffic, and by an admin in one click. The
- * state lives on the link row and reaches the redirect path through the KV
- * value (storage.ts's desiredLink), so every write here ends in a republish.
- */
+// Bitly model: a warning for links that are only suspicious, a hold for links where a visit does harm (#344).
+// The state lives on the link row and reaches the redirect path through the KV value (desiredLink), so every write ends in a republish.
 import { and, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { publishAnonLink, resolveSlug } from "./kv";
 import { republishLink, republishOrgLinks } from "./storage";
 
-/** Why a link carries a warning. For the admin; no visitor ever sees it. */
 export const WARN_REASON = {
   report: "Open report",
   traffic: "Unusual traffic on a new free organization",
   admin: "Set by an admin",
 } as const;
 
-/** The reasons a person did not choose. Clearing a review clears these and
- * leaves an admin's own warning in place. */
+// Reasons a person did not choose: clearing a review clears these and leaves an admin own warning in place.
 const AUTOMATIC_REASONS = [WARN_REASON.report, WARN_REASON.traffic];
 
-/**
- * Put a warning on one link. A held link is left alone: it already serves
- * nothing, and a warning on it would read as a lighter verdict after the
- * hold is lifted. Returns whether anything changed, so a caller acting on
- * the first warning only (a mail, an alert) can tell.
- */
+// A held link is left alone: a warning on it would read as a lighter verdict after the hold is lifted.
 export async function warnLink(env: Env, db: DB, linkId: string, reason: string): Promise<boolean> {
   const changed = await db
     .update(schema.links)
@@ -50,11 +33,7 @@ export async function warnLink(env: Env, db: DB, linkId: string, reason: string)
   return true;
 }
 
-/**
- * Make an automatic warning an admin's own, so dismissing the report or
- * reviewing the org no longer lifts it. Nothing to republish: KV carries the
- * warning, not its reason.
- */
+// Nothing to republish: KV carries the warning, not its reason.
 export async function adoptWarning(db: DB, linkId: string): Promise<boolean> {
   const changed = await db
     .update(schema.links)
@@ -64,11 +43,6 @@ export async function adoptWarning(db: DB, linkId: string): Promise<boolean> {
   return changed.length > 0;
 }
 
-/**
- * Take the warning off one link. With `onlyReason`, only a warning set for
- * that reason: dismissing the last report on a link lifts the warning the
- * report put there, not one an admin chose.
- */
 export async function clearLinkWarning(
   env: Env,
   db: DB,
@@ -91,10 +65,7 @@ export async function clearLinkWarning(
   return true;
 }
 
-/** Warn every live link in an org, and mark the org so the links it makes
- * from now on are born warned (orgLinkWarning). Returns how many links it
- * warned: zero means they already were, which is what makes a repeat sweep a
- * no-op. */
+// Zero means they already were, which makes a repeat sweep a no-op.
 export async function warnOrgLinks(
   env: Env,
   db: DB,
@@ -120,8 +91,6 @@ export async function warnOrgLinks(
   return changed.length;
 }
 
-/** An admin marked the org reviewed: lift every warning an automatic check
- * put on its links, and the org mark that warns the links it makes next. */
 export async function clearOrgAutomaticWarnings(env: Env, db: DB, orgId: string): Promise<number> {
   await db
     .update(schema.orgs)
@@ -136,11 +105,7 @@ export async function clearOrgAutomaticWarnings(env: Env, db: DB, orgId: string)
   return changed.length;
 }
 
-/**
- * The warning a link made in this org right now is born with, or null. Set
- * while the sweep has the org warned: without it, an org whose links show the
- * warning page could make new ones that redirect straight through.
- */
+// Set while the sweep has the org warned, or new links would redirect straight through.
 export async function orgLinkWarning(
   db: DB,
   orgId: string,
@@ -153,17 +118,8 @@ export async function orgLinkWarning(
   return { warnedAt: Date.now(), warnReason: org.reason ?? WARN_REASON.traffic };
 }
 
-/* ---------------- anonymous links (#488) ---------------- */
-
-/**
- * Put the warning page in front of an anonymous link, the rule a free org's
- * link gets from reports. It has no links row and no D1 fallback on the
- * redirect path, so the write goes straight to its KV key, and the warning
- * lives only there: the link is deleted within 24 hours anyway, which is
- * shorter than any warning an admin would want to lift. An expired or gone
- * link is left alone: a put would bring its key back. Returns whether it
- * wrote, so a repeat report does not rewrite the key.
- */
+// No links row and no D1 fallback on the redirect path, so the write goes straight to its KV key.
+// An expired or gone link is left alone: a put would bring its key back.
 export async function warnAnonLink(env: Env, db: DB, anonId: string): Promise<boolean> {
   const [anon] = await db
     .select({
@@ -175,10 +131,7 @@ export async function warnAnonLink(env: Env, db: DB, anonId: string): Promise<bo
     .from(schema.anonLinks)
     .where(and(eq(schema.anonLinks.id, anonId), gt(schema.anonLinks.expiresAt, Date.now())));
   if (!anon) return false;
-  // Only if the key still belongs to this anonymous link. A claim landing
-  // since the read has republished the slug under the organization link's id,
-  // and putting the anonymous value over it would stop that link resolving
-  // when the anonymous expiry passes (as forgetAnonLink guards its delete).
+  // Only if the key still belongs to this anonymous link: a claim since the read has republished the slug under the org link id (as forgetAnonLink guards its delete).
   const published = await resolveSlug(env, anon.slug, null);
   if (published && published.linkId !== anon.id) return false;
   await publishAnonLink(env, { ...anon, warned: true });

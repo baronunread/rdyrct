@@ -16,7 +16,6 @@ describe("blockable", () => {
 
   test("any other host", () => {
     expect(blockable("phish.example")).toBe(true);
-    // A look-alike is not the real site.
     expect(blockable("google.com.evil.example")).toBe(true);
     expect(blockable("notgoogle.com")).toBe(true);
   });

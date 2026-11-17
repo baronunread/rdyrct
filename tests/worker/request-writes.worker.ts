@@ -10,13 +10,7 @@ import {
 } from "./support";
 import type { ApiKeyDTO } from "../../src/shared/types";
 
-/**
- * What a signed-in request writes to D1 on its way through withSession
- * (#489). Every request used to queue an update of the account's last-seen
- * mark, and every API-key request an update of the key's last-used mark,
- * whether or not either had anything to change. The marks are read with the
- * caller, so a fresh one now means no statement at all.
- */
+// #489: the marks are read with the caller, so a fresh one means no statement at all.
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -130,7 +124,6 @@ describe("withSession's last-seen and last-used marks (#489)", () => {
       const sql = await useKey(key);
 
       expect(keyWrites(sql)).toHaveLength(0);
-      // The account was seen a moment ago too, so the request writes nothing.
       expect(seenWrites(sql)).toHaveLength(0);
       expect(await lastUsed(key.id)).toBe(recent);
     });

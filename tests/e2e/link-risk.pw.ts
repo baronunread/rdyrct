@@ -3,18 +3,8 @@ import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
 import { openNewLinkForm } from "./orgs";
 
-/**
- * Destination scoring, through the app the way a person uses it (#68).
- *
- * The worker tests stub the resolver and assert the pipeline. This one runs
- * against the real resolver and asserts the two things only a browser can
- * show: that creating a link is not delayed or blocked by the scoring, and
- * that the verdict lands on the row afterwards.
- *
- * It scores a genuinely bad destination using the addresses Cloudflare
- * publishes for exactly this purpose, so the assertion does not depend on
- * some real site's reputation staying bad.
- */
+// Cloudflare publishes this destination for testing, so the assertion does not
+// depend on a real site's reputation staying bad.
 
 const password = "test-password-123";
 const BLOCKED_DESTINATION = "https://malware.testcategory.com/";
@@ -31,17 +21,13 @@ test("a new link is created immediately and scored afterwards (#68)", async ({ p
   const started = Date.now();
   await form.getByRole("button", { name: "Create link" }).click();
 
-  // The link exists straight away: scoring never sits in the request path.
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
   expect(Date.now() - started).toBeLessThan(10_000);
 
-  // Nothing about the score is shown to the person who made it: this is
-  // admin-only signal (#67), and telling a creator which destinations pass
-  // is a map for working around the check. The API-shape version of this
-  // assertion, which is the one with teeth, is in link-risk.worker.ts.
+  // The score is admin-only (#67): showing it would tell a creator which
+  // destinations pass. The API-shape check is in link-risk.worker.ts.
   await expect(page.getByText(/dns_blocklist|risk score/i)).toHaveCount(0);
 
-  // The verdict lands on the row shortly after, from the real resolver.
   await expect
     .poll(
       async () => {

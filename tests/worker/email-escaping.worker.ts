@@ -18,9 +18,6 @@ afterEach(reset);
 describe("outbound email escapes user-controlled values (#72)", () => {
   const hostileOrgName = `Acme</strong><a href="https://phish.example">Click to keep access</a>`;
 
-  /** Invites one address from org-1 and hands back the mail that went out.
-   * `orgName` renames the org first, which is how a hostile name gets into
-   * the message in the first place. */
   async function invite(orgName?: string): Promise<{ status: number; sent: CapturedEmail[] }> {
     const cookie = await freeOwnerCookie();
     if (orgName)
@@ -47,13 +44,10 @@ describe("outbound email escapes user-controlled values (#72)", () => {
     expect(sent).toHaveLength(1);
     const { html } = sent[0]!;
 
-    // The attacker's URL may appear as text (it is part of the name they
-    // chose). What it may not do is be a link: no live href, and exactly one
-    // anchor in the message, ours.
+    // The attacker's URL may appear as text, but not as a link: no live href, one anchor, ours.
     expect(html).not.toContain(`href="https://phish.example"`);
     expect(html.match(/<a\s/g) ?? []).toHaveLength(1);
     expect(html).toContain("/invite/");
-    // The name still reads correctly, just as text.
     expect(html).toContain("Acme&lt;/strong&gt;");
   });
 

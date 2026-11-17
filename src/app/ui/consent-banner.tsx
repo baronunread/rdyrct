@@ -5,14 +5,10 @@ import { openConsentBanner, useConsentBannerVisible } from "../lib/consent";
 import { grantAnalyticsConsent, revokeAnalyticsConsent } from "../lib/posthog";
 import { RDYRCT_SITE } from "@/shared/site";
 
-/** A self-hosted copy has no /privacy of its own: it links whatever policy
- *  its operator names, or none. */
 const OPERATOR_PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL;
 
-// The session cookie is strictly necessary and needs no consent, but
-// PostHog is not: it stays off (nothing loads, nothing is sent) until the
-// visitor picks "Accept". Reject is just as easy, and PostHog stays off.
-// "Cookie settings" brings this back, so either answer can be changed later.
+// PostHog stays off (nothing loads, nothing is sent) until the visitor picks "Accept".
+// The session cookie is strictly necessary and needs no consent.
 export function ConsentBanner() {
   const visible = useConsentBannerVisible();
   if (!visible) return null;
@@ -33,7 +29,7 @@ export function ConsentBanner() {
           Reject
         </Button>
         {/* Same variant on purpose: the Garante and the EDPB treat a bright
-            Accept next to a muted Reject as steering the answer. */}
+           Accept next to a muted Reject as steering the answer. */}
         <Button size="sm" variant="outline" className="flex-1" onClick={grantAnalyticsConsent}>
           Accept
         </Button>
@@ -42,11 +38,9 @@ export function ConsentBanner() {
   );
 }
 
-/** Reopens the banner, to withdraw or give consent after the first answer. */
 export function CookieSettingsButton({ className }: { className?: string }) {
   return (
-    // A button that reads as a link: Tailwind v4 gives buttons the default
-    // cursor, so the pointer has to be asked for.
+    // Tailwind v4 gives buttons the default cursor, so the pointer has to be asked for.
     <button type="button" onClick={openConsentBanner} className={cn("cursor-pointer", className)}>
       Cookie settings
     </button>

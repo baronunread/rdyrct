@@ -6,14 +6,9 @@ import { createQuickLink as createLink } from "./orgs";
 
 const password = "test-password-123";
 
-/** Creates a quick link and returns its slug and id. The slug comes from D1
- * rather than from the dialog's text: shared-domain slugs are generated, so
- * there is nothing to predict, and scraping the rendered URL out of
- * surrounding copy is the brittle part of this test, not the part under
- * test. The id is what lets the click assertion below find its own click
- * rather than the globally-last one: the click buffer (#225) is one shared
- * instance across every test the suite runs in parallel (playwright.config.ts
- * runs 2 workers), so two tests' clicks can land in the very same flush. */
+/** The slug comes from D1, not the dialog text. The id lets the click assertion
+ * find its own click: the click buffer (#225) is shared by every parallel test
+ * and can flush two tests' clicks together. */
 async function createQuickLink(page: Page): Promise<{ slug: string; id: string }> {
   await createLink(page, "example.com/referrer-privacy");
 
@@ -30,18 +25,13 @@ test("a click records the referring host, never the URL it came from (#20)", asy
   await signUpAndVerify(page, email, password);
   const { slug, id: linkId } = await createQuickLink(page);
 
-  // A real referring URL: the path and query are the parts that carry other
-  // people's search terms and session tokens, and neither may be stored.
+  // A real referrer: its path and query carry search terms and session tokens,
+  // and neither may be stored.
   const referer = "https://forum.example.com/threads/42?q=private+search&token=secret";
 
-  // Polled every 0.5 s, not retried every 12 s: the buffer (#225) flushes
-  // 0.5 s out under CLICK_FLUSH_MS, and a slow sign-up used to leave a 12 s
-  // retry loop too little of the test's budget. Each attempt re-sends the
-  // redirect: the slug may not be live on KV yet (that publish rides the
-  // storage queue), and a click is best-effort (clickAnalyticsAllowed and
-  // the buffer both fail closed rather than block a redirect), so one hit can
-  // land nothing to poll for. Scoped to this test's own link: the buffer
-  // batches every concurrent test's clicks into the same flush.
+  // Polled every 0.5 s: the buffer (#225) flushes at CLICK_FLUSH_MS. Each attempt
+  // re-sends the redirect, since the slug may not be on KV yet and a click is
+  // best-effort. Scoped to this link: the buffer batches every test's clicks.
   await expect
     .poll(
       async () => {
@@ -74,11 +64,8 @@ test("a click records the referring host, never the URL it came from (#20)", asy
 test("one address cannot be mailed without limit by many callers (#50)", async ({ page }) => {
   const victim = `victim-${Date.now()}@gmail.com`;
 
-  // Each attempt claims its own caller address, which the worker reads from
-  // cf-connecting-ip. That is what makes this a test of the recipient budget:
-  // no caller's own budget is spent twice, so the per-caller limit cannot be
-  // what refuses, and without a recipient-keyed limit every one of these
-  // would be accepted.
+  // Each attempt claims its own cf-connecting-ip, so the per-caller limit cannot
+  // be what refuses: without a recipient-keyed limit all of these would pass.
   const statuses: number[] = [];
   for (let attempt = 0; attempt < 8; attempt++) {
     const response = await page.request.post(
@@ -96,20 +83,16 @@ test("one address cannot be mailed without limit by many callers (#50)", async (
     if (response.status() === 429) break;
   }
 
-  // Refused on the fifth, not merely somewhere: the email_recipient limit allows 4
-  // a minute, so the position of the 429 is what names
-  // which budget ran out. Anything later would mean the recipient limit let
-  // a fifth send through.
+  // Refused on the fifth: email_recipient allows 4 a minute, so the 429's
+  // position names which budget ran out.
   expect(statuses.indexOf(429)).toBe(4);
 });
 
 test("a throttled verification email still lands on the code screen (#50)", async ({ page }) => {
   const email = `throttled-${Date.now()}@gmail.com`;
 
-  // The send refused, the account made anyway. That is what the email rate
-  // limit looks like from the browser, and the app used to answer it by
-  // leaving the person on the signup form: it reads as "signup failed", so
-  // they submit again, spend another send, and get the same nothing.
+  // The send is refused but the account is made. The app used to leave the person
+  // on the signup form, which reads as "failed" and spends another send.
   await page.route("**/api/auth/email-otp/send-verification-otp", (route) =>
     route.fulfill({
       status: 429,
@@ -120,15 +103,12 @@ test("a throttled verification email still lands on the code screen (#50)", asyn
 
   await submitSignup(page, email, password);
 
-  // The toast shows for 3.25s, and a sign-up under a loaded suite can take
-  // longer than the default 5s to answer at all: this waits for the whole
-  // round trip, not just for the toast's own life.
+  // Sign-up under a loaded suite can outlast the toast's 3.25s and the default
+  // 5s: wait for the whole round trip.
   await expect(page.getByText("Too many requests. Try again shortly.")).toBeVisible({
     timeout: 20_000,
   });
-  // The code screen, which is where the resend button is, not back at the form.
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send a new code" })).toBeVisible();
-  // Young sending domains land in junk, so the screen says where to look.
   await expect(page.getByText("Not there? Check your spam folder")).toBeVisible();
 });

@@ -1,7 +1,5 @@
 import { QR_DEFAULT_BG, QR_DEFAULT_COLOR, type QrOverrides } from "@/shared/types";
 
-/** A link's or org's QR appearance, already resolved to concrete override
- * values (each field "" means "no override: inherit the built-in default"). */
 export interface OrgQr {
   logo: string;
   style: string;
@@ -12,7 +10,6 @@ export interface OrgQr {
   logoSize: number | null;
 }
 
-/** Map a UserOrg's QR defaults into the OrgQr shape the editors consume. */
 export function orgQrFrom(org?: Partial<QrOverrides> | null): OrgQr {
   return {
     logo: org?.qrLogo ?? "",
@@ -25,8 +22,6 @@ export function orgQrFrom(org?: Partial<QrOverrides> | null): OrgQr {
   };
 }
 
-/** A link's QR overrides resolved over its org's defaults: what the code
- * actually renders with, ready to pass straight to QRPreview. */
 export function resolveQrLook(form: Partial<QrOverrides>, orgQr: OrgQr) {
   return {
     logo: form.qrLogo || orgQr.logo || undefined,
@@ -39,8 +34,6 @@ export function resolveQrLook(form: Partial<QrOverrides>, orgQr: OrgQr) {
   };
 }
 
-/** What each QR field falls back to when a link leaves it unset (shown as
- * the color swatch's placeholder while the field reads "Org default"). */
 export function qrFallbacks(form: Partial<QrOverrides>, orgQr: OrgQr) {
   return {
     dotColor: orgQr.color || QR_DEFAULT_COLOR,

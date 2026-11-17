@@ -19,7 +19,6 @@ test("a scam-shaped destination is created paused, and the owner can see that", 
     [destination],
   );
   expect(link.suspended_at).not.toBeNull();
-  // It does not redirect.
   expect((await page.request.get(`/${link.slug}`, { maxRedirects: 0 })).status()).not.toBe(302);
 
   await page.goto("/links");
@@ -35,7 +34,6 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   const abuser = await (await browser.newContext()).newPage();
   await signUpAndVerify(abuser, abuserEmail, password);
   await createQuickLink(abuser, `https://${host}/spin`);
-  // The "Link created" dialog covers the form; a fresh dashboard does not.
   await abuser.goto("/dashboard");
   await createQuickLink(abuser, "https://www.google.com/maps");
   const [link] = await queryRows<{ slug: string }>(
@@ -53,15 +51,12 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   await row.getByRole("button", { name: /^Actions for / }).click();
   await page.getByRole("menuitem", { name: /Ban owner/ }).click();
   const dialog = page.getByRole("dialog", { name: "Ban user" });
-  // Says what it will do before it does it, and needs a reason.
   await expect(dialog.getByText(/deleted in 90 days/)).toBeVisible();
-  // An empty reason marks the field and bans nobody.
   const reason = dialog.getByRole("textbox", { name: "Reason" });
   await dialog.getByRole("button", { name: "Ban user" }).click();
   await expect(reason).toHaveAttribute("aria-invalid", "true");
   await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
   await expect(dialog).toBeVisible();
-  // Nothing is blocked unless picked, and a site everyone uses cannot be.
   const scamBox = dialog.getByRole("checkbox", { name: host });
   await expect(scamBox).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: "google.com" })).toBeDisabled();
@@ -75,7 +70,6 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   });
   await expect(row.getByText("disabled")).toBeVisible();
 
-  // The short link answers the disabled page, not the scam.
   await expect
     .poll(async () => (await page.request.get(`/${link.slug}`, { maxRedirects: 0 })).status(), {
       timeout: 15_000,
@@ -84,7 +78,6 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   const disabled = await page.request.get(`/${link.slug}`, { maxRedirects: 0 });
   expect(await disabled.text()).toContain("This link has been disabled.");
 
-  // The picked host is on the list, with the reason; google.com is not.
   await page.goto("/admin/links");
   await page.getByRole("button", { name: "Blocked hosts", exact: true }).click();
   const blocked = page.getByRole("row").filter({ hasText: host });
@@ -92,7 +85,6 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   await expect(blocked.getByText(/spin-to-win scam/)).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: "google.com" })).toHaveCount(0);
 
-  // An unban brings the link back.
   await page.goto("/admin/users");
   const userRow = page.getByRole("row").filter({ hasText: abuserEmail });
   await userRow.getByRole("button", { name: /^Actions for / }).click();

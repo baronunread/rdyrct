@@ -2,21 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
 
-/**
- * A reload of an app page answers with its prerendered shell
- * (scripts/prerender-app-shell.tsx, serveAppShell in src/worker/index.ts),
- * and nothing else ever does: not another path, not a write, and not the
- * SPA fallback a missing shell file turns into.
- */
-
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
 const SHELL = `<!doctype html><html><head><title>rdyrct</title></head><body><div id="root"><div data-shell-static="">sidebar</div></div></body></html>`;
 const LANDING = `<!doctype html><html><head><title>rdyrct</title></head><body><div id="root"><h1>Landing hero</h1></div></body></html>`;
 
-/** An asset bundle with the shell files as the build writes them (.txt,
- * served as text/plain) and the landing-baked index.html for the rest. */
+// Shell files as the build writes them: .txt, served as text/plain.
 function assets({ withShell }: { withShell: boolean }): Fetcher {
   return {
     fetch: async (input) => {

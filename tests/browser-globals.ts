@@ -1,10 +1,6 @@
 /**
- * The browser globals bun's test runner does not provide.
- *
- * App code that reads `window`, `document` or `localStorage` is exercised here
- * without a DOM, so a test installs just enough of each to answer what the
- * code under test asks. Each field is only as wide as that: this is a list of
- * what the tests stand in for, not an attempt at a browser.
+ * The browser globals bun's test runner does not provide. There is no DOM, so a
+ * test installs just enough of each to answer what the code under test asks.
  */
 export interface BrowserGlobals {
   window?: {
@@ -20,12 +16,10 @@ export interface BrowserGlobals {
 // changing the type of anything that already exists.
 const globals = globalThis as BrowserGlobals;
 
-/** Installs the given globals for the duration of a test. */
 export function installBrowserGlobals(values: BrowserGlobals): void {
   Object.assign(globals, values);
 }
 
-/** Takes them away again, so the next test starts without a browser. */
 export function removeBrowserGlobals(...names: (keyof BrowserGlobals)[]): void {
   for (const name of names) delete globals[name];
 }

@@ -67,18 +67,13 @@ import type {
 } from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-// Active aliases (temp + permanent) a single link may hold at once: keeps the
-// alias thread readable and caps how much of the org's link quota one link
-// can soak up through kept-forever aliases.
+// Active aliases a link may hold at once: caps how much of the org's link quota one link can soak up
+// through kept-forever aliases.
 const MAX_ALIASES_PER_LINK = 5;
 
-// Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
 linkRoutes.use("*", jsonBodyLimit());
 
-/** Shared by link creation/rename and standalone address creation: a
- * provided slug must match the allowed charset and not be reserved. Empty or
- * missing is fine everywhere this is called (means "allocate a random one"). */
 function validateSlug(slug: string | undefined): void {
   if (slug === undefined || slug === "") return;
   if (!SLUG_RE.test(slug))
@@ -107,11 +102,9 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
   validateQrFields(body, orgId);
 }
 
-// From the rollups (#26), the same expression the clicks sort uses.
 const clickCount = linkClicksTotal.as("clicks");
 
-// NB: literal `links.id`; interpolating the drizzle column renders an
-// unqualified "id" that SQLite resolves against the subquery's own table.
+// Literal `links.id`: the drizzle column renders an unqualified "id" that SQLite resolves against the subquery's table.
 const addressCount = sql<number>`(
   select count(*) from link_addresses
   where link_addresses.link_id = links.id and link_addresses.retired_at is null
@@ -152,9 +145,6 @@ function toDTO(
   };
 }
 
-/** Fetches a link's total click count and current address count, then builds
- * its DTO: the shape every route handler needs after writing to a link, so
- * they all funnel through here instead of repeating the same two queries. */
 async function linkToDTO(
   env: Env,
   db: DB,
@@ -169,8 +159,6 @@ async function linkToDTO(
   return toDTO(env, row, clicks, hostname, addressCount);
 }
 
-/** The link's DTO with the org's quota usage beside it: what a write that can
- * change either answers with, so the app updates both from one response. */
 async function linkWithQuota(
   env: Env,
   db: DB,
@@ -184,9 +172,6 @@ async function linkWithQuota(
   return { ...dto, ...quota };
 }
 
-/** Inserts a new address row, publishes its KV key, and responds with the
- * link's fresh DTO: the shape both "add a standalone alias" and "merge into
- * an existing link" end with, once the address row itself is built. */
 async function insertAddressAndRespond(
   env: Env,
   db: DB,
@@ -197,14 +182,9 @@ async function insertAddressAndRespond(
   status: 200 | 201,
   linkLimit: number,
 ) {
-  // Atomic: both caps are re-checked at write time inside one D1 statement,
-  // not from a count fetched earlier (see issue #18). The per-link one is in
-  // there for the same reason as the org's: assertAliasQuota reads before the
-  // insert, so two merges arriving together both found room for the fifth
-  // alias and both took it.
-  //
-  // MAX_ALIASES_PER_LINK counts aliases; the statement counts addresses, and
-  // the primary is one of those.
+  // Atomic: both caps are re-checked at write time inside one D1 statement (#18). The per-link one too:
+  // assertAliasQuota reads before the insert, so two merges arriving together both took the fifth alias.
+  // MAX_ALIASES_PER_LINK counts aliases; the statement counts addresses, the primary included.
   const inserted = await insertAddressWithinLimit(
     env,
     address,
@@ -216,15 +196,8 @@ async function insertAddressAndRespond(
   return { dto: await linkWithQuota(env, db, orgId, link), status } as const;
 }
 
-/**
- * Why the guarded address insert refused, said accurately.
- *
- * The insert re-checks the plan cap and the org's teardown flag in one
- * statement, so a refusal has two possible causes and only one of them is
- * about money. Telling somebody whose org is being deleted to upgrade their
- * plan sells them a fix for a problem they do not have (#52). Costs one read,
- * on a path that has already failed.
- */
+// The insert has two possible refusals and only one is about money: telling an org being deleted to
+// upgrade sells a fix for a problem they do not have (#52). Costs one read, on an already failed path.
 async function refuseAddressInsert(db: DB, orgId: string): Promise<never> {
   if (await orgDeleting(db, orgId))
     throw new HTTPException(409, { message: "Organization is being deleted" });
@@ -234,8 +207,6 @@ async function refuseAddressInsert(db: DB, orgId: string): Promise<never> {
   });
 }
 
-/** Count active addresses for a single link, for call sites that don't
- * already have it from a batched query. */
 async function countAddressesForLink(db: DB, linkId: string): Promise<number> {
   const rows = await db
     .select({ n: sql<number>`count(*)` })
@@ -244,8 +215,6 @@ async function countAddressesForLink(db: DB, linkId: string): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-/** Rejects adding another alias once a link already holds MAX_ALIASES_PER_LINK
- * (temp + permanent combined, matching what the alias thread shows). */
 async function assertAliasQuota(db: DB, linkId: string): Promise<void> {
   const activeAliases = (await countAddressesForLink(db, linkId)) - 1; // exclude primary
   if (activeAliases >= MAX_ALIASES_PER_LINK)
@@ -255,7 +224,6 @@ async function assertAliasQuota(db: DB, linkId: string): Promise<void> {
     });
 }
 
-/** Fetch a link inside an org or 404. */
 async function findLink(db: DB, orgId: string, linkId: string) {
   const rows = await db
     .select()
@@ -266,11 +234,7 @@ async function findLink(db: DB, orgId: string, linkId: string) {
   return link;
 }
 
-/**
- * 409 with a machine-readable code so the editor can shake the dialog and
- * point at the slug field. On the shared domain the message also pitches
- * custom domains, where the whole namespace is the org's own.
- */
+/** 409 with a machine-readable code so the editor can point at the slug field. */
 function slugConflict(slug: string, sharedDomain: boolean): HTTPException {
   return new HTTPException(409, {
     message: sharedDomain
@@ -280,7 +244,6 @@ function slugConflict(slug: string, sharedDomain: boolean): HTTPException {
   });
 }
 
-/** Fetch one of a link's addresses inside an org or 404. */
 async function findAddress(db: DB, orgId: string, linkId: string, addressId: string) {
   const rows = await db
     .select()
@@ -297,22 +260,16 @@ async function findAddress(db: DB, orgId: string, linkId: string, addressId: str
   return address;
 }
 
-/** The three lines every :linkId route opens with. */
 async function linkFromRequest(c: Context<AppEnv>) {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
   return { db, orgId, link: await findLink(db, orgId, c.req.param("linkId")!) };
 }
 
-/** The org's fresh link-quota count, timestamped at the read (see
- * QuotaUsage): every mutation response spreads this in instead of the client
- * making a follow-up GET /links/quota-usage (#100). */
 async function quotaUsageFields(db: DB, orgId: string): Promise<QuotaUsage> {
   return { quotaUsage: await countActiveAddresses(db, orgId), quotaUsageAt: Date.now() };
 }
 
-/** The `{ ok: true }` response shape once a mutation only changed which
- * addresses are active, with the org's fresh quota count attached (#100). */
 async function okWithQuota(db: DB, orgId: string) {
   return { ok: true as const, ...(await quotaUsageFields(db, orgId)) };
 }
@@ -351,10 +308,6 @@ export function newAddressRow(
   };
 }
 
-/** Recent click count, last-use time, and top referrers for one address over
- * the last 7 days — only meaningful for a temp/permanent alias (the copy on
- * a temporary alias is "check where its clicks come from before it stops
- * working"), so the primary row skips this and reports zeros. */
 async function addressClickStats(
   db: DB,
   addressId: string,
@@ -407,19 +360,9 @@ function addressToDTO(
   };
 }
 
-/**
- * Every link in the org whose primary destination and UTM set exactly
- * matches (see #38): different UTM values never match, by construction,
- * since they are part of the comparison tuple. Aliases don't carry their own
- * destination, so this only ever needs to look at `links` itself. Usually
- * one row, but "create separate link anyway" lets a caller end up with
- * several, so the match dialog must offer all of them, not just the first.
- *
- * Restricted to `domainId`: an alias can only live on the same domain as the
- * link it addresses (see #38 grouped addresses), so a match on a different
- * domain could never actually be merged into and would just be a dead-end
- * suggestion.
- */
+// Different UTM values never match (they are part of the tuple). Usually one row, but "create separate
+// link anyway" can leave several, so the match dialog offers all. Restricted to `domainId`: an alias
+// lives only on its link's domain (#38).
 async function findSameDestinationLinks(
   db: DB,
   orgId: string,
@@ -445,16 +388,9 @@ async function findSameDestinationLinks(
     .orderBy(desc(schema.links.createdAt));
 }
 
-/**
- * Slug uniqueness on a custom domain. (A new shared-domain slug never comes
- * here: allocateSharedSlug issues each one once, ever.) It lives on the
- * active address set, not on `links` directly: a slug a link
- * just moved away from stays reserved by its own temp_alias/permanent_alias
- * row, not free for a stranger to grab, while a retired row never blocks
- * anything. `excludeLinkId` excludes every row belonging to that link (not
- * just one address), so promoting one of a link's own aliases to primary
- * never trips over that same link's other rows.
- */
+// A new shared slug never comes here (allocateSharedSlug). Uniqueness lives on the active address set: a slug
+// a link moved away from stays reserved by its alias row. excludeLinkId excludes all of that link's rows,
+// so promoting its own alias never trips over its other rows.
 async function slugTaken(
   db: DB,
   slug: string,
@@ -474,10 +410,6 @@ async function slugTaken(
   return rows.some((r) => r.linkId !== excludeLinkId);
 }
 
-/** True when this link already has an active address (an alias, since the
- * caller only checks this for a slug that differs from the current primary)
- * sitting on the given slug: renaming onto it would collide with that row
- * instead of freeing it up, so the caller must reject before writing. */
 async function ownsSlugAsAlias(
   db: DB,
   linkId: string,
@@ -508,15 +440,9 @@ async function findDomain(db: DB, orgId: string, domainId: string) {
   return rows[0];
 }
 
-/**
- * A link's domain: must exist and belong to the org. Returns its hostname
- * (used as the KV key prefix), or null for the shared domain.
- *
- * A locked domain answers too. Everything that touches an address already on
- * it (edit, keep forever, promote, remove, the DTO) has to work through the
- * grace period that lock is about, and refusing here once left D1 written and
- * KV not (#485). Only a new address is refused: see `newAddressHostname`.
- */
+// A locked domain answers too: everything touching an address already on it has to work through the
+// grace period, and refusing here once left D1 written and KV not (#485). Only a new address is
+// refused: see `newAddressHostname`.
 async function domainHostname(
   db: DB,
   orgId: string,
@@ -525,11 +451,6 @@ async function domainHostname(
   return domainId ? (await findDomain(db, orgId, domainId)).hostname : null;
 }
 
-/**
- * The domain a new link or alias goes on, refused while it is locked: it
- * stops serving when the org's grace period ends (#159), so a new address
- * there would die on a known date.
- */
 async function newAddressHostname(
   db: DB,
   orgId: string,
@@ -567,15 +488,8 @@ function assertQrAllowed(
     });
 }
 
-/**
- * Resolves the slug for a new link: honors a chosen slug (custom domains
- * only) or allocates a random one, retrying on the unlikely collision.
- *
- * Null on the shared domain: that slug comes from allocateSharedSlug, which
- * issues each one for good, so the caller draws it (issueSlug) only once
- * nothing else can refuse the request. Otherwise every refused create would
- * use up a slug.
- */
+// Null on the shared domain: allocateSharedSlug issues each slug for good, so the caller draws it
+// (issueSlug) only once nothing else can refuse, or every refused create would use one up.
 async function resolveNewSlug(
   db: DB,
   requested: string,
@@ -599,14 +513,8 @@ async function resolveNewSlug(
   throw new HTTPException(500, { message: "Could not allocate slug" });
 }
 
-/** The slug resolveNewSlug settled on, or a fresh shared-domain one. Call it
- * after the last check that can refuse the request. */
 const issueSlug = (db: DB, resolved: string | null) => resolved ?? allocateSharedSlug(db);
 
-/**
- * Resolves the slug for a rename: keeps the existing slug unless a new one
- * is requested. Chosen slugs exist only on custom domains.
- */
 async function resolveRenamedSlug(
   db: DB,
   existing: typeof schema.links.$inferSelect,
@@ -632,13 +540,7 @@ async function resolveRenamedSlug(
   return newSlug;
 }
 
-/**
- * One page of an organization's links, newest first by default.
- *
- * Paged with a cursor rather than a page number, and searched, filtered and
- * sorted here rather than in the browser: see links-page.ts for why the
- * browser cannot do either job once it only holds one page.
- */
+// Cursor-paged, searched, filtered and sorted here: see links-page.ts for why the browser cannot.
 linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   const orgId = c.req.param("orgId")!;
   const now = Date.now();
@@ -692,7 +594,6 @@ linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   } satisfies Page<LinkListItem>);
 });
 
-/** The counts beside the chips above the links table. */
 linkRoutes.get("/facets", requireOrgRole("viewer"), async (c) => {
   const orgId = c.req.param("orgId")!;
   const facets = await linkFacets(c.var.db, orgId);
@@ -700,20 +601,9 @@ linkRoutes.get("/facets", requireOrgRole("viewer"), async (c) => {
   return c.json(facets);
 });
 
-// Distinct from the links list's own count: a link plus its kept-forever
-// aliases can consume more than one unit of the plan's `links` cap (a
-// rename's automatic 48h temp_alias never does, see countActiveAddresses),
-// so the UI needs this to show usage and gate creation accurately.
-/**
- * Claims the link this browser made on the landing page before it had an
- * account (Direction A of #96), moving it into this org for good.
- *
- * A missing, spent, or expired token all answer the same way, so nothing
- * learns which tokens exist by probing. Claiming is best-effort by design:
- * the app fires it once after the first org exists and never blocks on it,
- * because a failed claim should cost a 24-hour link, not the signup.
- */
-/** What the claim route reads off its request body. */
+// Distinct from the list's count: a link plus its kept-forever aliases can use more than one unit of the
+// plan's `links` cap (a rename's 48h temp_alias never does, see countActiveAddresses).
+// Claiming is best-effort: a failed claim should cost a 24-hour link, not the signup.
 const claimBodySchema = v.object({ claimToken: optionalText });
 
 linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
@@ -739,8 +629,6 @@ linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
   return c.json({ count: quotaUsage, at: quotaUsageAt });
 });
 
-/** Builds a new link row: unset appearance/UTM fields fall back to their
- * column default ("" or null), not to an existing row like an update would. */
 export function newLinkRow(
   orgId: string,
   domainId: string | null,
@@ -770,33 +658,22 @@ export function newLinkRow(
     qrLogoSize: body.qrLogoSize ?? null,
     createdBy,
     createdAt: Date.now(),
-    // Unscored until the waitUntil after this response lands (#68). Null is
-    // not "clean": it is "nobody has looked yet", which is also what puts
-    // this row first in the cron's queue if the lookup fails.
+    // Null is not "clean", it is "nobody has looked yet" (#68): it also puts this row first in the cron's queue.
     riskScore: null,
     riskReasons: null,
     riskCheckedAt: null,
     riskProvider: null,
-    // New links are never born suspended; only an admin sets this (#67).
     suspendedAt: null,
     suspendedBy: null,
     suspendReason: null,
-    // Nor warned (#344), unless the caller copies the org's warning in
-    // (orgLinkWarning); a report or the sweep sets it later.
     warnedAt: null,
     warnReason: null,
     webRiskCheckedAt: null,
   };
 }
 
-/**
- * Adds an address to a link the caller already resolved a same-destination
- * match against: no new `links` row, a permanent alias on the existing one.
- *
- * Its own function because the checks it has to make (same domain, and the
- * target still pointing where the caller thought) are half the branches in
- * the create route while having nothing to do with creating a link.
- */
+// Its own function: the same-domain and target-still-matches checks are half the branches in create and
+// have nothing to do with creating a link.
 async function mergeAddressIntoLink(
   c: Context<AppEnv>,
   args: {
@@ -814,15 +691,11 @@ async function mergeAddressIntoLink(
 ) {
   const db = c.var.db;
   const target = await findLink(db, args.orgId, args.linkId);
-  // An alias can only live on the same domain as the link it addresses
-  // (see #38): the match list is already domain-filtered, but re-check here
-  // in case the caller sent a stale mergeIntoLinkId.
+  // The match list is domain-filtered, but re-check in case the caller sent a stale mergeIntoLinkId (#38).
   if (target.domainId !== args.domainId)
     throw new HTTPException(400, {
       message: "An address can only be added to a link on the same domain",
     });
-  // The match list the caller acted on can be stale: confirm the target still
-  // points at the destination the caller asked to merge into.
   if (target.destination !== args.destination || !sameUtm(target, args.utm))
     throw new HTTPException(409, {
       message: "That link no longer has this destination. Review the link and try again.",
@@ -851,8 +724,6 @@ async function mergeAddressIntoLink(
   );
 }
 
-/** Whether a link already carries exactly these UTM values. Part of the
- * match tuple, so a different campaign is a different link. */
 function sameUtm(
   link: {
     utmSource: string | null;
@@ -886,23 +757,16 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   assertQrAllowed(body, limits, null);
 
   const domainId = body.domainId ?? null;
-  // Slugs on the shared domain are always random (every plan): chosen slugs
-  // exist only on custom domains, so the shared namespace can't be squatted.
   const [hostname, resolvedSlug] = await Promise.all([
     newAddressHostname(db, orgId, domainId),
     resolveNewSlug(db, body.slug?.trim() || "", domainId),
   ]);
 
-  // UTM params already in the destination are extracted into the columns so
-  // analytics group-bys see them; explicit fields fill whatever is missing.
-  // Then stripped back out of the destination itself, so it stays the bare
-  // link and the columns are the only place UTM data lives.
+  // UTM params in the destination move into the columns so analytics group-bys see them, then are stripped
+  // from the destination so the columns are the only place UTM data lives.
   const utm = resolveUtm(body.destination, body);
   body.destination = stripUtmParams(body.destination);
 
-  // Adding an address to a link the caller already resolved a same-destination
-  // match against (see below): skip matching entirely, insert a permanent
-  // alias on that link, and return its DTO — no new `links` row.
   if (body.mergeIntoLinkId) {
     const { dto, status } = await mergeAddressIntoLink(c, {
       orgId,
@@ -919,9 +783,6 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     return c.json(dto, status);
   }
 
-  // An exact destination+UTM match already exists in the org: offer to add
-  // this address there instead of silently forking a second link. Different
-  // UTM values are part of the match tuple, so they never trigger this.
   if (!body.forceSeparateLink) {
     const matches = await findSameDestinationLinks(db, orgId, body.destination, utm, domainId);
     if (matches.length) {
@@ -939,26 +800,21 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   assertLinkQuota(activeCount, plan, limits);
   const slug = await issueSlug(db, resolvedSlug);
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
-  // A scam-shaped destination is created on hold: it exists, and a human
-  // decides whether it redirects. Applied before the insert so it never serves.
-  // Otherwise it is born warned while the org is (#344), so a warned org
-  // cannot get round the warning page by making a fresh link.
+  // A scam-shaped destination is created on hold, before the insert so it never serves. Otherwise it is
+  // born warned while the org is (#344), so a warned org cannot get round it with a fresh link.
   Object.assign(
     link,
     (await holdIfSuspicious(c.env, db, orgId, plan, link.destination)) ??
       (await orgLinkWarning(db, orgId)),
   );
   const address = newAddressRow(link.id, orgId, domainId, slug, "primary", "created");
-  // Atomic: the link insert, the org's links-cap-guarded address insert, and
-  // a compensating delete (only if the cap was hit) all run in one D1 batch,
-  // not from `activeCount` fetched above (see issue #18) — so no link ever
-  // persists without its primary address, and the rollback can't itself fail
-  // as a separate call.
+  // Atomic: the link insert, the cap-guarded address insert and a compensating delete run in one D1 batch,
+  // not from `activeCount` above (#18), so no link persists without its primary address and the rollback
+  // cannot itself fail as a separate call.
   const inserted = await insertLinkWithinLimit(db, c.env, link, address, limits.links);
   if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
-  // Score the destination after the response (#68), the way clicks are
-  // recorded: nobody waits on it. Only a Web Risk hit acts (#341).
+  // Score after the response (#68): nobody waits on it. Only a Web Risk hit acts (#341).
   c.executionCtx.waitUntil(checkLinkDestination(c.env, link));
   return c.json(
     { ...toDTO(c.env, link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) },
@@ -966,8 +822,6 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   );
 });
 
-/** Merges a PATCH body over the existing row: an unset field (undefined)
- * keeps its existing value: `??` here is "not provided", not "falsy". */
 function mergedLinkUpdate(
   existing: typeof schema.links.$inferSelect,
   body: LinkInput,
@@ -995,32 +849,22 @@ function mergedLinkUpdate(
     qrCorner: body.qrCorner ?? existing.qrCorner,
     qrBg: body.qrBg ?? existing.qrBg,
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
-    // `undefined`, not nullish: `null` is how the client clears the logo
-    // size, and `??` swallowed it, so a reset silently kept the old value.
-    // The five fields above take "" for the same job, which is why only this
-    // one needed spelling out.
+    // `undefined`, not nullish: `null` is how the client clears the logo size, and `??` swallowed it. The
+    // five fields above take "" for the same job.
     qrLogoSize: body.qrLogoSize !== undefined ? body.qrLogoSize : existing.qrLogoSize,
     ...riskAfterDestinationChange(existing, fields.destination),
   };
 }
 
-/**
- * Clears the risk verdict when a destination changes (#68), in the same write
- * that changes it.
- *
- * Leaving the previous score in place until the re-scan lands would let a
- * link swapped to a bad destination keep reading clean, which is exactly the
- * attack the re-score exists to catch. An unchanged destination keeps its
- * verdict, so editing a title does not send the row back through the queue.
- */
+// Leaving the previous score until the re-scan lands would let a link swapped to a bad destination keep
+// reading clean (#68). An unchanged destination keeps its verdict.
 function riskAfterDestinationChange(
   existing: typeof schema.links.$inferSelect,
   destination: string,
 ) {
   if (destination === existing.destination) return {};
-  // Web Risk's stamp too: it was for the old destination. Left in place, a
-  // lookup the new one never got (over budget, Google down) would keep the
-  // link out of the rescan for the week the old stamp still buys.
+  // Web Risk's stamp too: it was for the old destination. Left in place, a lookup the new one never got
+  // would keep the link out of the rescan for the week the stamp buys.
   return {
     riskScore: null,
     riskReasons: null,
@@ -1030,8 +874,6 @@ function riskAfterDestinationChange(
   };
 }
 
-/** A moved link leaves a stale key behind: syncing that old key finds no row
- * and deletes it. Syncing the new key publishes the updated row. */
 function renameSyncMessages(
   existing: typeof schema.links.$inferSelect,
   updated: typeof schema.links.$inferSelect,
@@ -1049,11 +891,7 @@ function renameSyncMessages(
   ];
 }
 
-/** Every active address of a link (primary + aliases), each with its own
- * hostname: the full set of KV keys that answer for it. Every message the
- * storage queue processes is self-healing (the consumer re-reads current D1
- * truth for that one key), so callers can freely resync this whole set
- * without first figuring out which fields actually changed. */
+/** Every active address of a link, each with its own hostname. Queue messages are self-healing, so callers can resync the whole set. */
 export async function activeAddressesOf(db: DB, linkId: string) {
   return db
     .select({
@@ -1066,11 +904,6 @@ export async function activeAddressesOf(db: DB, linkId: string) {
     .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
 }
 
-/**
- * What an edit that changes the destination owes the abuse rules: a blocked
- * host is refused, and a scam-shaped one puts the link on hold. Returns the
- * suspension columns to write with the edit, or null.
- */
 async function guardChangedDestination(
   env: Env,
   db: DB,
@@ -1089,53 +922,39 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId, true);
   const db = c.var.db;
-  // The plan and the row are independent reads, so they go out together.
   const [{ plan, limits }, existing] = await Promise.all([
     orgPlan(db, orgId),
     findLink(db, orgId, c.req.param("linkId")!),
   ]);
 
-  // After the row is read: what the plan gates is a *change* to the styling,
-  // not the styling arriving back unchanged with an edit to some other field.
+  // After the row is read: the plan gates a *change* to the styling, not styling returning unchanged.
   assertQrAllowed(body, limits, existing);
 
   const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
-  // A link's domain is fixed after creation (see `#38`): its aliases are
-  // bound to that domain, so moving the primary would strand them. The
-  // editor UI already greys the field out; this guards direct API calls.
+  // A link's domain is fixed after creation (#38): its aliases are bound to it, so moving the primary
+  // would strand them. The editor greys the field out; this guards direct API calls.
   if (domainId !== existing.domainId)
     throw new HTTPException(400, {
       message: "A link's domain can't change. Create a new link on the other domain instead.",
     });
-  // Chosen slugs exist only on custom domains; renaming a shared-domain link
-  // is out for every plan, but keeping its existing slug stays allowed.
   const [hostname, oldHostname, newSlug, aliases] = await Promise.all([
     domainHostname(db, orgId, domainId),
     domainHostname(db, orgId, existing.domainId),
     resolveRenamedSlug(db, existing, body.slug?.trim() || "", domainId),
-    // Gathered up front (pre-write): the primary's own before/after keys are
-    // handled separately below, so this only ever needs each alias's own
-    // (unaffected-by-this-write) slug/hostname.
     activeAddressesOf(db, existing.id),
   ]);
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
-  // Only a custom-domain address leaves a temporary alias behind. A link's
-  // domain cannot change (checked above) and a shared-domain slug cannot be
-  // renamed (resolveRenamedSlug), so a shared-domain link never moves.
+  // Only a custom-domain address leaves a temporary alias behind: a shared-domain slug cannot be renamed
+  // (resolveRenamedSlug), so such a link never moves.
   const createsAlias = moved && existing.domainId !== null;
   if (createsAlias) await assertAliasQuota(db, existing.id);
 
   const destination = body.destination ?? existing.destination;
-  // Re-resolve against the final destination: its params win, explicit
-  // fields fill gaps or clear, anything else keeps the existing value.
-  // Then stripped back out, same as on create: destination stays the bare
-  // link, existing.destination already is (or, pre-migration, may still
-  // carry legacy embedded params, which this cleans up on next edit).
+  // Re-resolve against the final destination, then strip params out of it as on create. existing.destination
+  // may still carry legacy embedded params (pre-migration), which this cleans up.
   const utm = resolveUtm(destination, body, existing);
   const cleanDestination = stripUtmParams(destination);
 
-  // Swapping a clean destination for a scam-shaped one is the standard move,
-  // so a changed destination is held the same way a new link is.
   const hold = await guardChangedDestination(c.env, db, orgId, plan, existing, cleanDestination);
   const updated = {
     ...mergedLinkUpdate(existing, body, {
@@ -1148,28 +967,18 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   };
   const messages = [
     ...renameSyncMessages(existing, updated, body, moved, hostname, oldHostname),
-    // KV caches each address's fully-built redirect URL (destination + UTM
-    // already applied), not just a pointer to the link: every other active
-    // address needs resyncing too, or it would keep serving the pre-edit URL
-    // until something else happened to touch it. Unconditional, not gated on
-    // "did destination/UTM actually change" — these messages are cheap and
-    // self-healing (see activeAddressesOf), so there's nothing to gain from
-    // detecting a no-op edit that a routine PATCH doesn't already cost.
+    // KV caches each address's fully-built redirect URL (destination + UTM applied), so every other active
+    // address needs resyncing or it would keep serving the pre-edit URL. Unconditional: the messages are
+    // cheap and self-healing (see activeAddressesOf).
     ...aliases.flatMap((a) => (a.kind === "primary" ? [] : [syncLinkMsg(a.slug, a.hostname)])),
   ];
 
-  // The primary link_addresses row is kept in sync with links.domainId/slug
-  // in the same batch as the links write, never as a separate follow-up: the
-  // two can never observably disagree (see decision #1 in the plan).
-  // Every statement carries the teardown guard, for the reason the guarded
-  // inserts in plan.ts do: requireOrgRole read `deleting_at` before this
-  // handler ran, so a rename that started a moment earlier would otherwise
-  // commit after the teardown workflow took its snapshot and leave the new
-  // slug serving as a public redirect for an org that is gone (#52).
+  // The primary link_addresses row changes in the same batch as the links write, so the two never disagree.
+  // Every statement carries the teardown guard: a rename that started just before teardown would otherwise
+  // commit after the workflow's snapshot and leave the slug serving for an org that is gone (#52).
   const notDeleting = notDeletingSql(orgId);
-  // Raw statements in one D1 batch, not drizzle's: the alias is a conditional
-  // insert, which a plain INSERT builder cannot express, and it has to ride
-  // the same batch as the rename to stay atomic with it.
+  // Raw statements, not drizzle's: the alias is a conditional insert a plain INSERT builder cannot express,
+  // and it has to ride the rename's batch to stay atomic.
   const writes = [
     toD1Statement(
       c.env,
@@ -1211,20 +1020,14 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
       : []),
   ];
   const results = await c.env.DB.batch(writes);
-  // The guard wrote nothing, so the org started tearing down while this
-  // request was in flight. Say that rather than answering 200 for an edit
-  // that did not happen.
+  // The guard wrote nothing: the org started tearing down mid-request. Say so rather than answering 200.
   if (results[0] && results[0].meta.changes === 0)
     throw new HTTPException(409, { message: "Organization is being deleted" });
   await enqueueStorage(c.env, messages);
 
-  // Re-score a changed destination (#68). This is the trigger that matters:
-  // the standard move is to register a clean destination, pass the check,
-  // then swap it, and scoring only at creation buys false confidence.
-  //
-  // mergedLinkUpdate already cleared the old verdict in the same write, so
-  // the link reads as unscored from the moment it changed rather than
-  // carrying the previous destination's clean bill until this finishes.
+  // Re-score a changed destination (#68): the standard move is to register a clean destination, pass the
+  // check, then swap it. mergedLinkUpdate already cleared the old verdict in the same write, so the link
+  // reads as unscored from the moment it changed.
   if (updated.destination !== existing.destination)
     c.executionCtx.waitUntil(checkLinkDestination(c.env, updated));
 
@@ -1237,7 +1040,6 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   // its own KV key, and the cascade only removes the D1 rows, not those keys.
   const addresses = await activeAddressesOf(db, link.id);
   await db.delete(schema.links).where(eq(schema.links.id, link.id));
-  // Syncing each now-orphaned key deletes it; the logo delete clears R2.
   await enqueueStorage(c.env, [
     ...addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
     deleteQrLogoMsg(link.qrLogo),
@@ -1247,8 +1049,6 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   await reconcileAfterDelete(c.env, db, orgId, "links");
   return c.json(await okWithQuota(db, orgId));
 });
-
-/* ---------------- addresses (aliases + primary) ---------------- */
 
 linkRoutes.get("/:linkId/addresses", requireOrgRole("viewer"), async (c) => {
   const { db, link } = await linkFromRequest(c);
@@ -1284,8 +1084,6 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
   assertLinkQuota(activeCount, plan, limits);
   await assertAliasQuota(db, link.id);
 
-  // An alias always lives on the same domain as the link it addresses (#38):
-  // no domain picker, so there's nothing for a caller to get wrong here.
   const domainId = link.domainId;
   const [hostname, resolvedSlug] = await Promise.all([
     newAddressHostname(db, orgId, domainId),
@@ -1307,11 +1105,6 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
   return c.json(dto, status);
 });
 
-/**
- * One address, three things a caller can do to it, and only two verbs needed
- * (#104): `PATCH { kind }` keeps a temporary alias forever or promotes one to
- * primary, and `DELETE` retires it.
- */
 const addressPatchSchema = v.object({ kind: v.picklist(["permanent", "primary"]) });
 
 linkRoutes.patch("/:linkId/addresses/:addressId", requireOrgRole("member"), async (c) => {
@@ -1324,18 +1117,14 @@ async function keepAddressForever(c: Context<AppEnv>) {
   if (address.kind !== "temp_alias")
     throw new HTTPException(400, { message: "Only a temporary alias can be made permanent" });
 
-  // Before the write, so nothing can refuse between it and the KV re-publish
-  // below (#485).
+  // Before the write, so nothing can refuse between it and the KV re-publish (#485).
   const [{ limits }, hostname] = await Promise.all([
     orgPlan(db, orgId),
     domainHostname(db, orgId, address.domainId),
   ]);
 
-  // Atomic: the org's links cap is re-checked at write time inside one D1
-  // statement (see issue #18). Also guarded on retired_at IS NULL: if the
-  // daily sweep already retired this alias (it missed the window between
-  // expiring and this request), the update affects zero rows rather than
-  // reviving a dead one.
+  // Atomic: the links cap is re-checked inside one D1 statement (#18). Also guarded on retired_at IS NULL:
+  // if the daily sweep already retired this alias, the update affects zero rows rather than reviving it.
   const kept = await keepAddressForeverWithinLimit(c.env, {
     addressId: address.id,
     orgId,
@@ -1348,11 +1137,9 @@ async function keepAddressForever(c: Context<AppEnv>) {
       .where(eq(schema.linkAddresses.id, address.id));
     if (!current || current.retiredAt !== null)
       throw new HTTPException(409, { message: "This address already expired" });
-    // Still an active temp_alias: the guard failed on the cap, not a race.
-    // If it's no longer temp_alias, a concurrent keep-forever already
-    // promoted it — the caller's intent is already satisfied, so fall
-    // through to the re-publish + success response below instead of a
-    // false upgrade prompt.
+    // Still an active temp_alias: the guard failed on the cap, not a race. If it is no longer temp_alias, a
+    // concurrent keep-forever already promoted it: fall through to the re-publish and success response
+    // instead of a false upgrade prompt.
     if (current.kind === "temp_alias")
       throw new HTTPException(402, {
         message: "Upgrade your plan to keep more links",
@@ -1360,15 +1147,12 @@ async function keepAddressForever(c: Context<AppEnv>) {
       });
   }
 
-  // Re-publish is required, not optional: the cached expiresAt in KV must
-  // clear too, or the redirect path's lazy-expiry check would still treat
-  // this as expired.
+  // Re-publish is required: the cached expiresAt in KV must clear too, or lazy expiry still treats it as expired.
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
   return c.json(await okWithQuota(db, orgId));
 }
 
-// No `confirm` flag: it never told the server anything it could act on, and
-// asking before an irreversible click is the UI's job (#104).
+// No `confirm` flag: asking before an irreversible click is the UI's job (#104).
 linkRoutes.delete("/:linkId/addresses/:addressId", requireOrgRole("member"), async (c) => {
   const { db, orgId, address } = await findLinkAndAddress(c);
   if (address.kind === "primary")
@@ -1376,9 +1160,8 @@ linkRoutes.delete("/:linkId/addresses/:addressId", requireOrgRole("member"), asy
       message: "Promote another address to primary before removing this one",
     });
 
-  // Before the write, not beside it: a lookup that threw after the update
-  // committed left the address retired in D1 and still redirecting from KV
-  // (#485).
+  // Before the write: a lookup that threw after the update committed left the address retired in D1 and
+  // still redirecting from KV (#485).
   const hostname = await domainHostname(db, orgId, address.domainId);
   const removed = await db
     .update(schema.linkAddresses)
@@ -1386,8 +1169,6 @@ linkRoutes.delete("/:linkId/addresses/:addressId", requireOrgRole("member"), asy
     .where(and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)))
     .returning({ id: schema.linkAddresses.id });
   if (!removed.length) throw new HTTPException(409, { message: "This address is already gone" });
-  // Re-publish now instead of waiting for the sweep: a removed address
-  // should stop resolving immediately, not up to a day later.
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
   // A permanent alias counts toward the links cap, so removing one can end
   // that overage too (#486).
@@ -1413,19 +1194,9 @@ async function promoteAddress(c: Context<AppEnv>) {
     assertLinkQuota(activeCount, plan, limits);
   }
 
-  // Promoting reuses the rename mechanics: the target's slug/domain becomes
-  // the new primary, and the current primary's slug/domain becomes a new
-  // permanent alias (never a 48h temp: this was an explicit user choice, not
-  // an automatic rename). No fresh uniqueness check is needed — both rows
-  // are already valid, currently-active addresses. But swapping two existing
-  // rows' (domainId, slug) values needs a placeholder step first: SQLite
-  // checks the partial unique index immediately per statement, not deferred
-  // to the end of the batch, so writing the primary row straight to the
-  // target's (domainId, slug) would collide with the target's own row (still
-  // holding those same values until its own statement runs). Moving the
-  // target row to a guaranteed-unique placeholder slug first frees that pair
-  // for the primary row, and only then does the target row take on the old
-  // primary's (now-vacated) values.
+  // Swapping two rows' (domainId, slug) needs a placeholder step: SQLite checks the partial unique index per
+  // statement, not at the end of the batch, so the target moves to a unique placeholder first. The old primary
+  // becomes a permanent alias (an explicit choice, so no 48h temp).
   const [hostname, oldHostname] = await Promise.all([
     domainHostname(db, orgId, address.domainId),
     domainHostname(db, orgId, existing.domainId),

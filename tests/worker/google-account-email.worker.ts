@@ -4,14 +4,6 @@ import { reset } from "cloudflare:test";
 import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
 import { getAuth, googleEmailOf } from "../../src/worker/better-auth";
 
-/**
- * The Signing in group on Settings names the Google account a user linked:
- * its address comes off the id token when the account is linked, is
- * refreshed on each later sign-in, and reaches the page through BetterAuth's
- * own /list-accounts.
- */
-
-/** What these tests put in a token's header or payload. */
 type Claims = { alg?: string; email?: string; sub?: string };
 
 /** An unsigned id token carrying `claims`: all googleEmailOf reads is the payload. */
@@ -58,7 +50,6 @@ describe("a linked Google account's address", () => {
     });
     expect(await storedEmail()).toBe("free.person@gmail.com");
 
-    // A later sign-in writes the new tokens through an update.
     await ctx.internalAdapter.updateAccount(linked.id, {
       idToken: idToken({ email: "renamed@gmail.com" }),
     });

@@ -14,17 +14,13 @@ import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 
-/** Destination hosts nobody may link to. Fed by a ban (only the hosts the
- * admin picks), and by hand here. Listed with a way to remove an entry, because a blocklist with no
- * way out turns one mistake into a permanent outage for a legitimate site. */
+/** A blocklist with no way out turns one mistake into a permanent outage for a legitimate site. */
 export function BlockedHosts() {
   const { data, isPending } = useAdminBlockedHosts();
   const toast = useToast();
   const qc = useQueryClient();
   const [host, setHost] = useState("");
   const [reason, setReason] = useState("");
-  // Which fields the last submit found empty. Cleared field by field as
-  // each gets a value.
   const [missing, setMissing] = useState({ host: false, reason: false });
   const hostRef = useRef<HTMLInputElement>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
@@ -57,8 +53,6 @@ export function BlockedHosts() {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          // Both are required. The button stays live and says which one is
-          // missing, rather than greying out with no word as to why.
           const next = { host: !host.trim(), reason: !reason.trim() };
           setMissing(next);
           if (next.host) return hostRef.current?.focus();

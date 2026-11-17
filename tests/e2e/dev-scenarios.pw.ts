@@ -3,9 +3,8 @@ import { rawSql } from "./db";
 import { hashPassword } from "../../src/worker/password";
 import type { Page } from "@playwright/test";
 
-/** Both tests touch the one "fresh" account, so they run in order, and each
- * starts by removing it: the e2e database is shared and never reset, so a
- * retry or a second run would otherwise find the first run's row. */
+// Both tests use the one "fresh" account and each starts by removing it: the
+// e2e database is shared and never reset, so a retry would find the old row.
 test.describe.configure({ mode: "serial" });
 
 const userId = "seed-scn-fresh";
@@ -24,13 +23,6 @@ async function removeFreshAccount(page: Page) {
   await rawSql(page, "DELETE FROM user WHERE email = 'fresh.account@seed.test'");
 }
 
-/**
- * The dev scenario switcher (src/worker/dev-scenarios.ts) answers on the dev
- * server. The e2e database is not seeded, so a scenario finds no account in
- * its state and says so instead of signing anybody in; with seed data the
- * same link signs in as the seeded account (checked by hand against
- * `bun run db:seed:local`).
- */
 test("the dev scenario list renders and an unseeded scenario signs nobody in", async ({
   page,
   request,
@@ -50,15 +42,8 @@ test("the dev scenario list renders and an unseeded scenario signs nobody in", a
   expect(unseeded.headers()["set-cookie"]).toBeUndefined();
 });
 
-/**
- * The success path: an account in the "fresh" state, written the way the
- * seeder writes it, signs in through its scenario link and lands where the
- * link says, with its org selected.
- */
 test("a scenario link signs in as its seeded account and lands on the page", async ({ page }) => {
   const now = Date.now();
-  // A leftover from a seeded dev database or an earlier run would make the
-  // inserts below collide; this test owns these ids.
   await removeFreshAccount(page);
   await rawSql(
     page,

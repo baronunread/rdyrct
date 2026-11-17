@@ -68,8 +68,6 @@ import {
 } from "../lib/sidebar";
 import { useGoShortcuts } from "../lib/go-shortcuts";
 
-/** Friendly message for a failed org-create request: the org-limit error
- * points at Enterprise, everything else shows the server's own message. */
 function orgCreateErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError && cause.code === "org_limit") return ORG_LIMIT_MESSAGE;
   return errorMessage(cause);
@@ -81,23 +79,13 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
   const shell = useShellUser();
   const navigate = useNavigate();
-  // Only a 401 says somebody is signed out: the query answers null for it
-  // and nothing else. A 5xx or a dropped connection is an error, which must
-  // not send a signed-in person to the login page (#487).
+  // Only a 401 means signed out. A 5xx or dropped connection is an error and must not send a signed-in person to login (#487).
   const signedOut = currentUser.data === null;
   const unreachable = currentUser.isError && currentUser.data === undefined;
-  // An effect, not the declarative <Navigate>: <Navigate> re-invokes
-  // navigate() on every render whose props object isn't the exact same
-  // reference as last time (see its source), which JSX makes impossible to
-  // guarantee, and reading useLocation() here to build the bounce-back
-  // path fed the loop, since navigate() is what changes the location
-  // useLocation() then reports. This effect only re-runs when `signedOut`
-  // itself flips, and reads the current path imperatively instead.
+  // An effect, not <Navigate>: it re-invokes navigate() on every render with a new props object, which looped.
   useEffect(() => {
     if (!signedOut) return;
-    // The router can already be on the sign-in page while this is still
-    // mounted (its chunk loads before the old route unmounts), and sending
-    // that page back to itself as ?next= would be a loop in waiting.
+    // The router can still be on the sign-in page while this is mounted; ?next= pointing at itself would loop.
     const deliberate = takeDeliberateSignOut();
     if (AUTH_PAGES.has(window.location.pathname)) return;
     const from = window.location.pathname + window.location.search;
@@ -109,25 +97,17 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <Unreachable onRetry={() => void currentUser.refetch()} retrying={currentUser.isFetching} />
     );
-  // The cache carries the shell through the wait. A browser that has none is
-  // on its first visit, and still gets the skeleton.
   if (!shell) return <AppShellSkeleton />;
   return children;
 }
 
-/** Platform admin surface: 404s (not a redirect) for non-admins, so the
- * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
-  // An error is not "not an admin": RequireAuth above already shows it, and
-  // this never draws a 404 for an outage.
   if (currentUser.data === undefined) return currentUser.isError ? null : <AdminPlatformSkeleton />;
   if (!currentUser.data?.user.isAdmin) return <AppNotFound />;
   return children;
 }
 
-// The current page is lifted onto the surface, like the sheet beside it, with
-// its icon in the accent: one raised thing in the sidebar, not a tinted well.
 const navLinkProps = {
   className:
     "flex h-9 min-w-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-[background-color,color] [&_svg]:shrink-0",
@@ -143,17 +123,12 @@ const navLinkProps = {
 function triggerClass(phone?: boolean, still?: boolean): string {
   return cn(
     "flex w-full min-w-9 items-center gap-2.5 rounded-lg px-1.5 text-sm select-none",
-    // In the drawer the switcher is lifted, as the mock draws it, so it
-    // reads as a control and not as a heading over the nav.
     phone
       ? "h-11 rounded-[10px] bg-surface px-2 smooth-shadow-ring-xs"
       : cn("h-10", !still && "[@media(hover:hover)]:hover:bg-surface-2"),
   );
 }
 
-/** The switcher's face: the org's initial, so a glance tells two orgs
- * apart, then its name. Folded, only the initial shows. `still` is the
- * same face with nothing to open: no chevron and no hover. */
 function OrgTrigger({
   org,
   collapsed,
@@ -169,7 +144,6 @@ function OrgTrigger({
     <div
       // Tests find the organization's name here, menu or not.
       data-org-switcher=""
-      // What a sign-in card becomes on the way in (setup-arrive in styles.css).
       data-setup-card={phone ? undefined : ""}
       className={triggerClass(phone, still)}
     >
@@ -208,8 +182,6 @@ function OrgSwitcherMenu({
   canCreateOrg: boolean;
   onNewOrg: () => void;
 }) {
-  // One organization and no room for another (every plan but Enterprise):
-  // there is nothing to switch to, so the name is just a name.
   if (orgs.length <= 1 && !canCreateOrg)
     return <OrgTrigger org={org} collapsed={collapsed} phone={phone} still />;
   return (
@@ -218,7 +190,6 @@ function OrgSwitcherMenu({
       label="Switch organization"
     >
       <OrgMenuItems orgs={orgs} currentId={org?.id} onPick={onSwitchOrg} />
-      {/* Only where the plan holds another (Enterprise). */}
       {canCreateOrg && (
         <>
           <MenuSeparator />
@@ -234,11 +205,6 @@ function OrgSwitcherMenu({
   );
 }
 
-/**
- * One entry, not four. The four sections are tabs inside /admin now: as
- * sidebar items they sat directly under the organization's own nav, where
- * "Links" appeared twice meaning two different things.
- */
 function PlatformNav({
   visible,
   collapsed,
@@ -265,8 +231,6 @@ function PlatformNav({
   );
 }
 
-/** Hidden in the rail but still laid out, so nothing beside it moves while
- * the sidebar folds: the rail only clips. */
 const fade = (collapsed: boolean) =>
   cn("whitespace-nowrap transition-opacity duration-150", collapsed && "opacity-0");
 
@@ -281,7 +245,6 @@ function NavItem({
   icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
   collapsed: boolean;
-  /** The drawer's rows: 42px tall and 15px type, for a thumb. */
   phone?: boolean;
 }) {
   const link = (
@@ -293,7 +256,6 @@ function NavItem({
       <Icon size={phone ? 18 : 16} /> <span className={fade(collapsed)}>{label}</span>
     </Link>
   );
-  // In the rail the icon is all that shows, so its name comes up beside it.
   return collapsed ? (
     <Tooltip grouped side="right" content={label}>
       {link}
@@ -303,16 +265,8 @@ function NavItem({
   );
 }
 
-/** "[" as a key, for the fold tooltips. */
 const foldKey = <Shortcut keys={["["]} tone="tooltip" />;
 
-/**
- * The top of the sidebar, as ChatGPT has it. Open: the mark goes to the
- * dashboard, the convention people bring with them, and the fold button sits
- * on the right. Folded: the mark is all that is left, and pointing at it
- * turns it into the unfold button (the icon swap from the interfaces.dev
- * cheat sheet: scale, blur, fade).
- */
 function SidebarTop({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="hidden h-14 items-center gap-1 px-3 md:flex">
@@ -366,9 +320,6 @@ function SidebarTop({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/** Who is signed in, and what they can do about it. The header names the
- * account (name over email, for anybody with two); search sits here too so a
- * phone, which has no ⌘K, still lists it. */
 function AccountMenu({
   user,
   theme,
@@ -378,7 +329,6 @@ function AccountMenu({
   trigger,
   extra,
 }: {
-  /** Items for this org above Settings (the setup guide, while hidden). */
   extra?: ReactNode;
   user: User;
   theme: ReturnType<typeof useTheme>[0];
@@ -431,10 +381,7 @@ function AppSidebar({
   collapsed = false,
   phone = false,
 }: {
-  /** Folded to the icon rail. Desktop only: the phone drawer is always open. */
   collapsed?: boolean;
-  /** Drawn in the phone drawer: the logo on top, bigger rows, and the
-   * account row with its email and no ⌘K, since a phone has no keyboard. */
   phone?: boolean;
   org: UserOrg | null;
   orgs: UserOrg[];
@@ -468,7 +415,6 @@ function AppSidebar({
           <SidebarTop collapsed={collapsed} />
         )}
 
-        {/* org switcher */}
         <div className="px-3 py-2">
           <OrgSwitcherMenu
             org={org}
@@ -481,8 +427,6 @@ function AppSidebar({
           />
         </div>
 
-        {/* nav — always visible: org-scoped pages render their own empty state
-          when no org exists yet, and billing is per-user */}
         <nav data-setup-nav={phone ? undefined : ""} className="flex flex-col gap-0.5 px-3 py-2">
           {appNavItems
             .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
@@ -501,10 +445,7 @@ function AppSidebar({
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} phone={phone} />
 
         <div className="mt-auto">
-          {/* Laid out at the open sidebar's width whatever the rail is
-              doing, and faded rather than removed: mounted or unmounted
-              with the width, it was squeezed into the rail on the way and
-              its words wrapped a line at a time. */}
+          {/* Laid out at the open width and faded, not removed: unmounting squeezed the words into the rail and wrapped them. */}
           <div
             inert={collapsed}
             className={cn(
@@ -532,8 +473,6 @@ function AppSidebar({
               />
             </div>
           ) : (
-            /* You: avatar, name, and the ⌘K key, which opens search (its one
-            home now the top row only folds). The email heads the menu. */
             <div className="flex items-center gap-0.5 px-3 py-3">
               <div className="min-w-0 flex-1">
                 <AccountMenu
@@ -575,11 +514,6 @@ function AppSidebar({
   );
 }
 
-/**
- * The phone's sidebar: a full-height sheet floating over the dimmed page,
- * the logo at its top, as the mock draws it. It sits above the top bar, so
- * the dimmed strip to its right (and Escape) is how it closes.
- */
 function MobileDrawer({
   open,
   onClose,
@@ -589,7 +523,6 @@ function MobileDrawer({
   onClose: () => void;
   children: ReactNode;
 }) {
-  // A menu open inside the drawer takes its own Escape first.
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.key === "Escape" && !e.defaultPrevented) onClose();
   });
@@ -604,8 +537,6 @@ function MobileDrawer({
         <AnimatePresence>
           {open && (
             <div data-app-drawer className="fixed inset-0 z-40 md:hidden">
-              {/* A dimmed page behind the drawer says it is on top and that a
-                  tap outside closes it. A real button, so it is reachable. */}
               <m.button
                 type="button"
                 aria-label="Close menu"
@@ -641,8 +572,6 @@ const TIER_NAME = {
   unlimited: "this instance",
 } satisfies Record<AccountTier, string>;
 
-/** "You own 1 of 1 organization on Pro." Nothing to count on a self-hosted
- * copy, where the cap is a number nobody reaches. */
 function ownedLine(owned: number, limit: number, tier: AccountTier): string | null {
   if (tier === "unlimited") return null;
   return `You own ${owned} of ${limit} ${limit === 1 ? "organization" : "organizations"} on ${TIER_NAME[tier]}.`;
@@ -674,7 +603,6 @@ function NewOrgDialog({
   const line = ownedLine(owned, limit, tier);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    // Submit stays enabled; an empty name marks the field and says why.
     if (!name.trim()) {
       setError("Required");
       input.current?.focus();
@@ -724,19 +652,7 @@ function NewOrgDialog({
   );
 }
 
-/**
- * Hands over the links somebody made on the landing page before they had an
- * account (#96), as soon as there is an organization to hand them to.
- *
- * It used to happen inside "create your organization", which meant three
- * links sat in localStorage waiting on a form. Every account now owns an
- * organization from its first session, so the claim belongs here: they are
- * kept the moment the app loads, and the person is told how many landed
- * rather than left to count rows.
- *
- * Once per mount, and silent when there is nothing to claim, which is the
- * common case.
- */
+/** Once per mount; silent when there is nothing to claim (#96). */
 function useClaimAnonLinks(orgId: string | undefined) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -747,25 +663,15 @@ function useClaimAnonLinks(orgId: string | undefined) {
     claimed.current = true;
     void (async () => {
       const kept = await claimPendingLinks(orgId);
-      // Zero means every claim was refused: expired, or already taken. The
-      // links are gone either way and saying so helps nobody.
       if (kept === 0) return;
       await qc.invalidateQueries({ queryKey: ["links", orgId] });
       await qc.invalidateQueries({ queryKey: ["stats", orgId] });
-      // The claim just added links, and billing's first-link hand-off asks
-      // whether the count is still zero.
       await qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
-      // They made a link before they had an account: say it carried over.
       toast("Your link is saved to your account.");
     })();
   }, [orgId, qc, toast]);
 }
 
-/**
- * The signed-in app: sidebar, phone top bar and drawer, ⌘K, and the sheet
- * the page sits on. `children` stands in for the route's outlet, for the
- * in-app 404, which the router renders outside any app route.
- */
 export function AppShell({ children }: { children?: ReactNode }) {
   const shell = useShellUser();
   const navigate = useNavigate();
@@ -782,9 +688,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
   useSidebarShortcut();
   useGoShortcuts();
 
-  // A tap on a row in the drawer goes somewhere, and the drawer has done
-  // its job: close it with the page change rather than leave it over the
-  // page that just loaded.
   const pathname = useLocation({ select: (l) => l.pathname });
   const [drawerPath, setDrawerPath] = useState(pathname);
   if (drawerPath !== pathname) {
@@ -796,19 +699,14 @@ export function AppShell({ children }: { children?: ReactNode }) {
   useClaimAnonLinks(org?.id);
 
   if (!shell) return null;
-  // No org is fine: org-scoped pages render NoOrgState, billing is per-user.
   const { user } = shell;
 
-  // The owned-org cap is the account's effective limit: its plan's or a custom one.
   const ownedCount = orgs.filter((o) => o.role === "owner").length;
   const canCreateOrg = ownedCount < user.limits.orgs;
 
   const switchOrg = (id: string) => {
     setOrg(id);
-    // A link detail page's slug may not exist under the new org; every other
-    // route (including platform admin) has nothing org-specific in its URL,
-    // so switching org there should leave the user right where they are.
-    // Nothing follows the navigation, so nothing waits on it.
+    // A link detail page's slug may not exist under the new org; other routes stay where they are.
     if (window.location.pathname.startsWith("/links/")) void navigate({ to: "/dashboard" });
   };
 
@@ -826,11 +724,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
       posthog.capture(FUNNEL.orgCreated, { from: "switcher" });
       setNewOrgOpen(false);
       setNewOrgName("");
-      // Same claim as the empty state: someone can sign up, skip the
-      // first prompt, and create their org from the switcher instead.
       await claimPendingLinks(created.id);
       setOrg(created.id);
-      // Not awaited: a failed navigation is not a failed org creation.
       void navigate({ to: "/dashboard" });
     } catch (e) {
       toast(orgCreateErrorMessage(e), "error");
@@ -842,9 +737,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const onNewOrg = () => (canCreateOrg ? setNewOrgOpen(true) : toast(ORG_LIMIT_MESSAGE, "error"));
   const onSignOut = () =>
     logout.mutate(undefined, {
-      // Explicit, not left to RequireAuth's own redirect: that one appends
-      // ?next=<wherever you were>, right for landing on a stale link, wrong
-      // for a deliberate sign-out.
+      // Explicit: RequireAuth's redirect appends ?next=, which is wrong for a deliberate sign-out.
       onSuccess: () => navigate({ to: "/login" }),
       onError: (error) => toast(error.message, "error"),
     });
@@ -870,12 +763,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
         <MarketingPrompt />
         <WebMcpLinkTools />
         <WebMcpAnalyticsTool />
-        {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
         <aside className={layout.aside}>
           <AppSidebar {...sidebarProps} collapsed={collapsed} />
         </aside>
 
-        {/* mobile top bar + drawer */}
         <div
           data-app-bar
           className="fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-1.5 bg-bg/90 px-3 backdrop-blur md:hidden"
@@ -892,7 +783,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
           <Link to="/dashboard" aria-label="rdyrct, dashboard" className="text-base">
             <Logo />
           </Link>
-          {/* A phone has no ⌘K, so search gets a button of its own. */}
           <button
             type="button"
             onClick={openCommandMenu}
@@ -906,17 +796,11 @@ export function AppShell({ children }: { children?: ReactNode }) {
           <AppSidebar {...sidebarProps} phone />
         </MobileDrawer>
 
-        {/* One raised sheet for the page; the sidebar and the phone bar sit on
-          the paper behind it (rdyrct-design, "The app's surfaces"). */}
         <main className={layout.main}>
           <div data-app-sheet className={layout.scroller}>
             <div className="mx-auto w-full max-w-5xl flex-1">
-              {/* Above the route, not inside each one: the state belongs to the
-              org, so it says the same thing on every page (#163). */}
+              {/* Above the route so the org state reads the same on every page (#163). */}
               <OverLimitBanner />
-              {/* The router loads a page before it swaps to it and draws a
-              slow one's skeleton itself (main.tsx), so this is only met by
-              the shell's own first render. */}
               <Suspense fallback={<RouteSkeleton />}>
                 <InShell.Provider value>{children ?? <Outlet />}</InShell.Provider>
               </Suspense>

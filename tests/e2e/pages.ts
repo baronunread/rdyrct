@@ -1,6 +1,5 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Sign out through the account menu in the app-shell sidebar footer. */
 export async function signOut(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
@@ -12,16 +11,9 @@ const LEGAL_PAGES = [
 ];
 
 /**
- * Visit both legal pages and confirm each one actually rendered.
- *
- * Shared because two suites need the same walk for different reasons: the dev
- * suite checks the headings survive, the production suite checks the route
- * raises no Content-Security-Policy violation. Asserting on the heading is
- * what makes either meaningful. A blocked bundle still answers 200 with the
- * pre-render shell.
- *
- * `afterEach` runs while that page is still open, for checks that read state
- * the next navigation would throw away.
+ * Asserting on the heading is what makes both suites meaningful: a blocked
+ * bundle still answers 200 with the prerendered shell. `afterEach` runs while
+ * the page is still open.
  */
 export async function visitLegalPages(
   page: Page,

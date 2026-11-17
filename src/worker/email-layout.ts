@@ -2,14 +2,9 @@ import { type SafeHtml, emailHtml, safeUrl } from "./email-html";
 import { SUPPORT_EMAIL } from "@/shared/support";
 
 /**
- * One layout for every outbound email, rendering both parts from a single
- * call so no send can ship HTML-only (#73).
- *
- * Email HTML is its own dialect: tables for layout, inline styles, no
- * flexbox or grid, and no shared CSS with the app. The palette below mirrors
- * the app's light tokens by value rather than by import, since a stylesheet
- * is not available here. A dark variant rides on prefers-color-scheme, but
- * plenty of clients ignore it, so the light rendering has to stand alone.
+ * Rendering both parts from one call means no send can ship HTML-only (#73).
+ * Email HTML is tables and inline styles; the palette mirrors the app's light tokens
+ * by value. Plenty of clients ignore the dark variant, so the light one must stand alone.
  */
 
 const LIGHT = {
@@ -32,23 +27,16 @@ const DARK = {
   accent: "#cdb9f5",
 };
 
-// Figtree is the product's face, but email cannot fetch a webfont, so this
-// names it for the machines that already have it and falls back to each
-// platform's own sans-serif. Mirrors the app's --font-sans.
+// Email cannot fetch a webfont: name Figtree for machines that have it, then each platform's sans-serif.
 const FONT = `"Figtree Variable", Figtree, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
 
-// The one-time code stays monospace so its digits line up under the letter
-// spacing. Mirrors the app's --font-mono.
+// Monospace keeps the code's digits aligned under the letter spacing.
 const CODE_FONT = `ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace`;
 
-/** A run of text inside a block, or a line break. A link is http(s) only:
- * anything else renders as its text alone. */
 export type EmailInline =
   | { text: string; bold?: boolean; italic?: boolean; underline?: boolean; href?: string }
   | { lineBreak: true };
 
-/** One block of a written email (the newsletter editor's output, parsed in
- * worker/newsletter-doc.ts). Rendered with the same styles as paragraphs. */
 export type EmailBlock =
   | { kind: "paragraph"; content: EmailInline[] }
   | { kind: "heading"; level: 2 | 3; content: EmailInline[] }
@@ -57,38 +45,19 @@ export type EmailBlock =
   | { kind: "button"; label: string; url: string };
 
 export interface EmailContent {
-  /** The grey line inboxes show next to the subject. */
   preheader: string;
   heading: string;
-  /** Plain text; escaped into the HTML part and used as-is in the text part. */
   paragraphs: string[];
-  /** Written blocks after the paragraphs: headings, lists, links, a divider,
-   * buttons. Every string in them is escaped like a paragraph. */
   blocks?: EmailBlock[];
-  /** A code to read and retype, shown large and spaced. */
   code?: string;
   cta?: { label: string; url: string };
-  /** Small print under the body, e.g. how long a link lasts. */
   note?: string;
-  /** Leave out the sender and "Not you?" footer. It exists for mail someone
-   * may not have asked for (codes, resets, notices); a letter to a person who
-   * just signed up has no use for it. Defaults to shown. */
+  /** For mail someone may not have asked for; a letter to a new sign-up has no use for it. */
   footer?: boolean;
-  /** What the footer says after "Sent to you." Defaults to the advice for mail
-   * you may not have asked for (ignore it). Mail about the reader's own
-   * account, where ignoring it is bad advice, passes NOTICE_FOOTER. */
   footerLine?: string;
-  /** Marketing mail only: this reader's own unsubscribe link, shown in the
-   * footer of both parts. Needs the footer, so it is ignored with footer
-   * false. */
   unsubscribeUrl?: string;
-  /** The sender's postal address (env.POSTAL_ADDRESS), shown under the
-   * unsubscribe link in both parts. Marketing mail must carry one
-   * (CAN-SPAM), so it only shows with `unsubscribeUrl`. */
+  /** Marketing mail must carry one (CAN-SPAM), so it only shows with `unsubscribeUrl`. */
   postalAddress?: string;
-  /** A welcome-style layout: brand band, eyebrow, big centred heading, and a
-   * sample (a long link and its short form) in a pill. For the one email that
-   * should feel like a greeting; every other email keeps the plain layout. */
   hero?: { eyebrow?: string; sample: { long: string; short: string } };
 }
 
@@ -97,22 +66,16 @@ export interface EmailBody {
   text: string;
 }
 
-/**
- * Hidden preview text. The invisible characters after it stop the client from
- * filling the rest of the preview line with the top of the message body. They
- * must be zero-width: a no-break space shows as a visible gap in Gmail's list.
- */
+/** The invisible characters must be zero-width: a no-break space shows as a gap in Gmail's list. */
 function preheaderBlock(preheader: string): SafeHtml {
   return emailHtml`<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;mso-hide:all">${preheader}${"\u034f\u200c".repeat(100)}</div>`;
 }
 
-/** A zero-width space after each dot and colon keeps Gmail from turning the
- * sample links into blue underlined ones. They are decoration, not links. */
+/** Zero-width spaces keep Gmail from turning the sample links blue and underlined. */
 function noAutolink(text: string): string {
   return text.replace(/[.:]/g, (mark) => `${mark}\u200b`);
 }
 
-/** A button's size: padding around the label, and the label's type. */
 interface ButtonSize {
   padY: number;
   padX: number;
@@ -123,23 +86,13 @@ interface ButtonSize {
 const BUTTON = { padY: 12, padX: 22, fontSize: 15, weight: 600 } satisfies ButtonSize;
 const HERO_BUTTON = { padY: 14, padX: 28, fontSize: 16, weight: 700 } satisfies ButtonSize;
 
-/**
- * Outlook for Windows ignores padding on a link, so the coloured cell around
- * it would be a button whose edges do nothing. It gets a VML shape instead:
- * the whole shape is the link. Its width is a guess from the label's length
- * (VML cannot size to its text), generous so the label never wraps.
- */
+/** Outlook for Windows ignores padding on a link, so it gets a VML shape. Its width is a generous guess: VML cannot size to its text. */
 function outlookButton(cta: { label: string; url: string }, size: ButtonSize): SafeHtml {
   const height = Math.round(size.fontSize * 1.5) + 2 * size.padY;
   const width = Math.ceil(cta.label.length * size.fontSize * 0.62) + 2 * size.padX;
   return emailHtml`<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${safeUrl(cta.url)}" style="height:${height}px;v-text-anchor:middle;width:${width}px" arcsize="18%" stroke="f" fillcolor="${LIGHT.accent}"><w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:${size.fontSize}px;font-weight:${size.weight}">${cta.label}</center></v:roundrect><![endif]-->`;
 }
 
-/**
- * A button that survives clients without CSS support: a bordered table cell
- * wrapping the anchor, rather than a styled <a> alone. Outlook gets the VML
- * shape above in its place.
- */
 function buttonTable(
   cta: { label: string; url: string },
   size: ButtonSize,
@@ -160,8 +113,7 @@ function ctaBlock(cta: { label: string; url: string }): SafeHtml {
 
 const PARAGRAPH_STYLE = `margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:1.6;color:${LIGHT.text}`;
 
-/** One run of text. A link that is not http(s) keeps its text and loses the
- * link: safeUrl's "#" would leave a dead link in the email. */
+/** A non-http(s) link keeps its text: safeUrl's "#" would leave a dead link. */
 function inlineHtml(run: EmailInline): SafeHtml {
   if ("lineBreak" in run) return emailHtml`<br>`;
   let out = emailHtml`${run.text}`;
@@ -178,7 +130,6 @@ function inlineHtml(run: EmailInline): SafeHtml {
 type HeadingBlock = Extract<EmailBlock, { kind: "heading" }>;
 type ListBlock = Extract<EmailBlock, { kind: "list" }>;
 
-/** A heading inside the body: smaller than the email's own h1. */
 function headingHtml(block: HeadingBlock): SafeHtml {
   const runs = block.content.map(inlineHtml);
   return block.level === 2
@@ -197,7 +148,6 @@ function listHtml(block: ListBlock): SafeHtml {
     : emailHtml`<ul class="text" style="${style}">${items}</ul>`;
 }
 
-/** One written block, styled like the layout's own paragraphs and button. */
 function blockHtml(block: EmailBlock): SafeHtml | null {
   switch (block.kind) {
     case "paragraph":
@@ -213,8 +163,7 @@ function blockHtml(block: EmailBlock): SafeHtml | null {
   }
 }
 
-/** Inside a list item a paragraph drops its bottom margin, so the bullets
- * keep the list's own spacing. */
+/** Keeps the bullets' own spacing. */
 function listItemBlock(block: EmailBlock): SafeHtml | null {
   if (block.kind !== "paragraph") return blockHtml(block);
   return emailHtml`<span>${block.content.map(inlineHtml)}</span>`;
@@ -224,10 +173,7 @@ function codeBlock(code: string): SafeHtml {
   return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
 }
 
-/** The brand band across the top of every email: the Hop mark and the
- * wordmark, outlined from Figtree Bold, on a band that stays dark in both
- * themes. The image's alt text carries the word in the same colour if a client
- * blocks images. */
+/** The alt text carries the word in the same colour if a client blocks images. */
 function bandRow(appUrl: string): SafeHtml {
   return emailHtml`<tr>
           <td class="band" align="center" bgcolor="${DARK.bg}" style="padding:22px 26px;background:${DARK.bg};border-radius:12px 12px 0 0">
@@ -236,7 +182,6 @@ function bandRow(appUrl: string): SafeHtml {
         </tr>`;
 }
 
-/** The plain layout's card rows: band, heading, then the body. */
 function plainRows(content: EmailContent, paragraphs: SafeHtml[], appUrl: string): SafeHtml {
   return emailHtml`        ${bandRow(appUrl)}
         <tr>
@@ -259,8 +204,6 @@ function plainRows(content: EmailContent, paragraphs: SafeHtml[], appUrl: string
         </tr>`;
 }
 
-/** The hero layout's card rows. Centred, with a brand band that stays dark in
- * both themes. The sample pill is decoration, not a code to retype. */
 function heroRows(
   content: EmailContent,
   hero: NonNullable<EmailContent["hero"]>,
@@ -293,21 +236,13 @@ function heroRows(
         </tr>`;
 }
 
-/** The button, centred for the hero layout. */
 function centredCta(cta: { label: string; url: string }): SafeHtml {
   return buttonTable(cta, HERO_BUTTON, true);
 }
 
-/** Renders the HTML and plain-text parts of one email from the same content.
- * appUrl (env.APP_URL) signs the plain-text part with the sending instance,
- * so a self-hosted deploy signs its own mail rather than rdyrct.com's. `to`
- * is the one recipient this render is for: the footer states the plain fact
- * ("sent to X") rather than guessing at why, which was never something this
- * function actually knew. */
+/** `appUrl` signs the plain-text part with the sending instance, so a self-hosted deploy signs its own mail. */
 export function renderEmail(content: EmailContent, appUrl: string, to: string): EmailBody {
-  // Every element that sets its own colour carries the matching class: an
-  // inline colour beats an inherited one, so a dark-mode override on the
-  // wrapping cell alone would leave these dark-on-dark.
+  // An inline colour beats an inherited one, so each element that sets its own colour carries the matching dark class.
   const paragraphs = content.paragraphs.map(
     (paragraph) =>
       emailHtml`<p class="text" style="margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:1.6;color:${LIGHT.text}">${paragraph}</p>`,
@@ -368,16 +303,11 @@ ${preheaderBlock(content.preheader)}
 
 export { SUPPORT_EMAIL };
 
-/** What to do with mail you did not expect, in both parts of every email. */
 const NOT_YOU = `Not you? Ignore it, or write to ${SUPPORT_EMAIL}.`;
 
-/** The footer line for mail about the reader's own account. */
 export const NOTICE_FOOTER = `Questions? Write to ${SUPPORT_EMAIL}.`;
 
-/**
- * The plain-text part. Not a fallback nobody reads: HTML-only mail is a
- * deliverability penalty, and text-only clients otherwise get nothing.
- */
+/** HTML-only mail is a deliverability penalty, and text-only clients otherwise get nothing. */
 function renderText(content: EmailContent, appUrl: string, to: string): string {
   const lines = [
     content.heading,
@@ -406,8 +336,6 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
   return lines.join("\n").trimEnd();
 }
 
-/** A run of text in the plain part: a link as "text (url)", or the url alone
- * when the text is the url. */
 function inlineText(content: EmailInline[]): string {
   return content
     .map((run) => {
@@ -419,7 +347,6 @@ function inlineText(content: EmailInline[]): string {
     .join("");
 }
 
-/** One block as plain-text lines; `indent` nests a list inside a list. */
 function blockText(block: EmailBlock, indent: string): string[] {
   switch (block.kind) {
     case "paragraph":
@@ -442,12 +369,10 @@ function blockText(block: EmailBlock, indent: string): string[] {
   }
 }
 
-/** The written blocks as plain-text lines, a blank line after each. */
 function blocksText(blocks: EmailBlock[] = []): string[] {
   return blocks.flatMap((block) => [...blockText(block, ""), ""]);
 }
 
-/** The blocks' text in reading order, for a preheader. */
 export function blocksPreview(blocks: EmailBlock[], length = 120): string {
   const text = blocks
     .flatMap((block) =>

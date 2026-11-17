@@ -61,8 +61,7 @@ describe("emailHtml (#72)", () => {
   });
 
   test("a hostile org name cannot open an anchor in the invite body", () => {
-    // The shape of the real attack: a link the recipient did not expect,
-    // inside a message our domain signed.
+    // The real attack: an unexpected link inside a message our domain signed.
     const orgName = `Acme</strong><a href="https://phish.example">Click to keep access`;
     const out = emailHtml`<p>You've been invited to join <strong>${orgName}</strong>.</p>`;
 

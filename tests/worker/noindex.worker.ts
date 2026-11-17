@@ -2,12 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
 
-/**
- * App pages answer with `X-Robots-Tag: noindex` (src/worker/noindex.ts), and
- * public pages never do. robots.txt leaves the app pages crawlable on
- * purpose: a crawler that may not fetch a page can still list it, and can
- * never read a noindex on it.
- */
+// robots.txt leaves app pages crawlable on purpose: a crawler that may not
+// fetch a page can still list it, and can never read a noindex on it.
 
 beforeEach(applyTestMigrations);
 afterEach(reset);
@@ -50,8 +46,6 @@ describe("X-Robots-Tag on app pages", () => {
     "/reset-password",
     "/invite/abc123",
     "/consent",
-    // One-off public forms: nobody searches for them, and indexed they only
-    // add thin pages (Ahrefs audit, 2026-11).
     "/login",
     "/report",
   ])("%s is noindex", async (path) => {

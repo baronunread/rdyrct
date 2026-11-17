@@ -3,18 +3,10 @@ import { signUpAndVerify } from "./resend";
 import { queryRows, rawSql } from "./db";
 import { createQuickLink, expectRedirect } from "./orgs";
 
-/**
- * Clicks no longer ride a queue. The redirect hands each one to the ClickBuffer
- * Durable Object, which batches them in memory and flushes to D1 on an alarm
- * (#225): 10 s in production, 0.5 s here under CLICK_FLUSH_MS. The worker
- * tests cover the buffer in isolation; this is the end-to-end claim: a real
- * redirect, and the row turning up shortly after.
- */
+// #225: ClickBuffer batches clicks and flushes to D1 on an alarm (CLICK_FLUSH_MS, 0.5 s here).
 
 const password = "test-password-123";
 
-/** Signs up, makes a link from the dashboard and follows it once. Returns the
- * link's id and slug. */
 async function clickNewLink(page: Page, name: string): Promise<{ id: string; slug: string }> {
   await signUpAndVerify(page, `${name}-${Date.now()}@gmail.com`, password);
   const destination = `https://example.com/${name}-${Date.now()}`;
@@ -27,12 +19,10 @@ async function clickNewLink(page: Page, name: string): Promise<{ id: string; slu
   );
   expect(slug).toBeTruthy();
 
-  // KV is written in the create request, so the redirect is live at once.
   await expectRedirect(page, slug, destination);
   return { id, slug };
 }
 
-/** Polls a count query until it reaches `atLeast`. */
 async function pollCount(page: Page, sql: string, id: string, atLeast: number) {
   await expect
     .poll(async () => Number((await queryRows<{ n: number }>(page, sql, [id]))[0].n), {
@@ -47,13 +37,7 @@ test("a redirect's click reaches D1 through the buffer (#225)", async ({ page })
   await pollCount(page, "select count(*) as n from clicks where link_id = ?", id, 1);
 });
 
-/**
- * The stats pages and the links list read the click rollups (#26), not raw
- * clicks. insertClicks fills them through rollupStatements, in the same D1
- * batch as the buffer's raw insert. The raw row is deleted before either page
- * loads, so the only place /analytics or /links can find the click is the
- * rollup.
- */
+// The raw row is deleted before the page loads, so the rollup (#26) is the only place the click can be found.
 test("a redirect's click shows on /analytics and /links through the rollups (#26)", async ({
   page,
 }) => {
@@ -67,19 +51,15 @@ test("a redirect's click shows on /analytics and /links through the rollups (#26
   await rawSql(page, "delete from clicks where link_id = ?", [id]);
 
   await page.goto("/analytics");
-  // The stats card's first figure: its label, then the number.
   const total = page.locator("dl > div").filter({
     has: page.getByRole("term").getByText("Clicks", { exact: true }),
   });
   await expect(total.getByRole("definition").locator("span").first()).toHaveText("1");
   await expect(page.getByText("Today (UTC)")).toHaveCount(0);
 
-  // The 24-hour view: its chart covers the last 24 hours, its breakdowns
-  // today's UTC day, and each breakdown says so.
   await page.getByRole("button", { name: "24h", exact: true }).click();
   await expect(page.getByText("All links · last 24 hours")).toBeVisible();
   for (const name of ["Countries", "Referrers", "Devices"]) {
-    // Each breakdown card names its period at the end of its tab row.
     const tabRow = page
       .getByRole("tablist")
       .filter({ has: page.getByRole("tab", { name, exact: true }) })

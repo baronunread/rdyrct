@@ -1,31 +1,14 @@
 import { lazyRouteComponent, type AnyRouter, type HistoryLocation } from "@tanstack/react-router";
 import { forgetBlockedTarget, isChunkLoadError, signalNewVersionAvailable } from "./new-version";
 
-/**
- * Stops a click from breaking the app when the page it opens is gone.
- *
- * After a deploy, a tab that is still open asks for page chunks under the old
- * build's hashed names, which no longer exist. The router used to commit the
- * navigation first and find out while rendering: the page you were on was
- * already gone, so all that was left was a blank screen and a reload. This
- * blocker loads the next page's code before the URL changes instead. If that
- * fails, the navigation never happens, the page you were on stays, and the
- * "new version" banner offers a reload that opens the page you asked for.
- *
- * Only the router's own push and replace go through here. Back and forward
- * have already changed the URL by the time a blocker hears of them, so a
- * failure there still falls to the error boundary's reload.
- */
+// Back and forward change the URL before a blocker hears of them, so a failed chunk there
+// still falls to the error boundary's reload.
 
-/** A chunk's import: a module namespace, or a loader's module. */
 type Importer = () => Promise<object>;
 
-/** Each page component's import, so the blocker can ask for the chunk itself:
- * `lazyRouteComponent` swallows a failed load until render, too late. */
+// `lazyRouteComponent` swallows a failed load until render, too late.
 const importers = new WeakMap<object, Importer>();
 
-/** `lazyRouteComponent`, remembering the import for the blocker. The same
- * generics, so each route keeps its page's props. */
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- SAFETY: mirrors lazyRouteComponent's own constraint; M is a module namespace the compiler types.
 export function lazyPage<M extends Record<string, any>, K extends keyof M>(
   importer: () => Promise<M>,
@@ -36,14 +19,10 @@ export function lazyPage<M extends Record<string, any>, K extends keyof M>(
   return component;
 }
 
-/** How long a click waits on its chunk before the router takes over. Every
- * later navigation queues behind this one, so a request that hangs must not
- * hold them all; past this the navigation goes ahead and the router's own
- * pending page and error handling apply, as they did before the guard. */
+// Later navigations queue behind this one, so a hanging request must not hold them all.
 const CHECK_TIMEOUT_MS = 8_000;
 
-/** A failed import stays failed in the browser's module map, so asking again
- * is instant and fails the same way: no network cost to a second click. */
+// A failed import stays failed in the module map, so a second ask is instant.
 async function missingChunk(loads: Promise<object>[]): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<false>((resolve) => {
@@ -60,14 +39,7 @@ async function missingChunk(loads: Promise<object>[]): Promise<boolean> {
   }
 }
 
-/**
- * Installs the blocker on `router`. `extra` names chunks a route needs beyond
- * its own `lazyPage` component, by route id: the app shell, which every app
- * page draws inside, and the pages and layouts that load through React.lazy
- * or a loader of their own.
- */
 export function guardStaleChunks(router: AnyRouter, extra: Record<string, Importer>) {
-  /** Whether to stop a navigation to `next`: only when its code is gone. */
   const blocks = async (next: HistoryLocation, from: HistoryLocation): Promise<boolean> => {
     const loads = router.matchRoutes(router.parseLocation(next)).flatMap((match) => {
       const route = router.routesById[match.routeId];
@@ -80,15 +52,14 @@ export function guardStaleChunks(router: AnyRouter, extra: Record<string, Import
       return true;
     }
     // Another page opened: the banner may stay, but its reload is no longer
-    // for the page an earlier blocked click was opening. Only another page: a
-    // page rewriting its own query string is not the visitor going anywhere.
+    // for the page an earlier blocked click was opening. A page rewriting its own
+    // query string is not the visitor going anywhere.
     if (next.pathname !== from.pathname) forgetBlockedTarget();
     return false;
   };
 
-  // Answers go out in the order the navigations were asked for. Each one waits
-  // on a chunk, and without the queue a later navigation whose chunk came
-  // first would land first, then be overwritten by the earlier one.
+  // Answers go out in the order navigations were asked for. Without the queue a
+  // later navigation whose chunk came first would land first, then be overwritten.
   let previous = Promise.resolve();
   return router.history.block({
     // A blocker asks the browser to confirm leaving the site by default. This

@@ -1,10 +1,7 @@
 /**
- * Deleting an account that owns organizations (#119).
- *
- * The account and its owned-org flags change in one D1 batch, before any
- * teardown starts. That keeps a later account-delete failure from leaving a
- * live account whose organizations are already being destroyed, and keeps a
- * membership race from leaving an ownerless org.
+ * Deleting an account that owns organizations (#119). The account and its owned-org flags
+ * change in one D1 batch before any teardown starts, so a later failure cannot leave a live
+ * account whose orgs are being destroyed.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
@@ -20,7 +17,6 @@ const LEAVING = "user-leaving";
 
 afterEach(reset);
 
-/** org_members.user_id is a foreign key, so every member needs a row. */
 async function seedUser(id: string): Promise<void> {
   await env.DB.prepare(
     "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values (?, 'Person', ?, 1, 0, 'free', 0, 0)",
@@ -49,9 +45,7 @@ async function addMember(userId: string, joinedAt: number, role = "member"): Pro
     .run();
 }
 
-/** A teardown binding that records the ids it was asked to start. `fail`
- * makes the start throw, which is the ambiguous case deleteOrgs fails closed
- * on. */
+// `fail` makes the start throw: the ambiguous case deleteOrgs fails closed on.
 function fakeTeardown(fail = false) {
   const started: string[] = [];
   const binding: typeof env.ORG_DELETE = {
@@ -74,7 +68,6 @@ function fakeTeardown(fail = false) {
 }
 
 describe("deleteAccountAndOwnedOrgs", () => {
-  /** Deletes the leaving account against a teardown binding the test controls. */
   const removeAccount = (binding: typeof env.ORG_DELETE) =>
     deleteAccountAndOwnedOrgs(overrideEnv({ ORG_DELETE: binding }), LEAVING);
 
@@ -91,9 +84,8 @@ describe("deleteAccountAndOwnedOrgs", () => {
       .first<{ deleting_at: number | null }>();
 
   it("takes every organization the account owns, teammates or not", async () => {
-    // The org has no plan of its own: orgPlan reads its owner's. Leaving a
-    // shared one behind gives it no plan, no billing and nobody who can
-    // delete it, so the account cannot be deleted without it.
+    // orgPlan reads the owner's plan: a shared org left behind would have no
+    // plan, no billing and nobody who can delete it.
     await addMember("user-stayer", 200);
     await env.DB.batch([
       env.DB.prepare("insert into orgs (id, name, created_at) values ('solo', 'Solo', 0)"),
@@ -112,7 +104,6 @@ describe("deleteAccountAndOwnedOrgs", () => {
   });
 
   it("leaves an org this account only belongs to", async () => {
-    // Membership is not ownership: someone else's org survives.
     await seedUser("user-other-owner");
     await env.DB.batch([
       env.DB.prepare("insert into orgs (id, name, created_at) values ('theirs', 'Theirs', 0)"),
@@ -132,9 +123,8 @@ describe("deleteAccountAndOwnedOrgs", () => {
   });
 
   it("rolls the org flags back when deleting the account fails", async () => {
-    // The old hook started teardown first. A later user-delete failure then
-    // left the account alive while its org disappeared. This trigger holds
-    // that failure still and proves both D1 writes share one transaction.
+    // This trigger forces the user-delete to fail, proving both D1 writes share
+    // one transaction.
     await env.DB.prepare(
       `create trigger refuse_account_delete before delete on user
        when old.id = '${LEAVING}' begin select raise(abort, 'injected delete failure'); end`,
@@ -201,8 +191,7 @@ describe("deleteOrgs", () => {
       ]),
     ).rejects.toThrow("injected workflow start failure");
 
-    // One start for the whole set, so this is all-or-nothing rather than
-    // "the first two went and the third did not". The flags stay set because
+    // One start for the whole set: all-or-nothing. The flags stay set because
     // the lookup cannot prove nothing is running; the next call restarts.
     expect(await deletingIds()).toEqual(["org-a", "org-b"]);
   });

@@ -22,11 +22,6 @@ import {
   type SessionRow,
 } from "../lib/account-security";
 
-/**
- * How this account signs in, and where else it is signed in: the password,
- * Google, and every other browser. Each row says what is true now and
- * offers the one change that makes sense from there.
- */
 export function SigningInGroup() {
   const accounts = useLinkedAccounts();
   const google = useConfig().data?.googleEnabled ?? false;
@@ -40,8 +35,7 @@ export function SigningInGroup() {
       ) : (
         <PasswordRow hasPassword={hasPassword} />
       )}
-      {/* A Google account linked before Google was switched off on this
-          instance still shows, so it can be disconnected. */}
+      {/* A Google account linked before Google was switched off still shows, so it can be disconnected. */}
       {(google || googleAccount) &&
         (accounts.isPending ? (
           <RowSkeleton label="Google" />
@@ -53,7 +47,6 @@ export function SigningInGroup() {
   );
 }
 
-/** A row whose control is still loading, the height it will be. */
 function RowSkeleton({ label }: { label: string }) {
   return (
     <SettingsRow label={label}>
@@ -86,7 +79,6 @@ function GoogleRow({
   canConnect,
 }: {
   account: LinkedAccount | undefined;
-  /** Google is the only way into this account, so it cannot go. */
   onlyWayIn: boolean;
   canConnect: boolean;
 }) {
@@ -142,7 +134,6 @@ function GoogleRow({
   );
 }
 
-/** "Safari on iPhone, 2 days ago", and how many more there are. */
 function sessionsHint(sessions: SessionRow[]): string {
   if (sessions.length === 0) return "None. Only this browser is signed in.";
   const [newest] = sessions;
@@ -190,8 +181,6 @@ function OtherDevicesRow() {
 
 type PasswordErrors = { current?: string; next?: string };
 
-/** Old password, new password, and whether every other browser goes too.
- * A wrong current password marks that field; anything else is a toast. */
 function ChangePasswordDialog({
   open,
   onOpenChange,

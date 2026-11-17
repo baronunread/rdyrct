@@ -1,9 +1,4 @@
-/**
- * What an admin, or a destination, can do to put links on hold (#334 follow-up).
- *
- * Kept apart from abuse.ts, which owns the sweep: this file imports from it,
- * never the other way round.
- */
+// Kept apart from abuse.ts, which owns the sweep: this file imports from it, never the other way round.
 import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { blockable, blockHostOf, holdReasonFor, hostAndParents } from "../shared/abuse-rules";
@@ -17,23 +12,16 @@ import { startOrgTeardown } from "./routes/orgs";
 import { assertNotShortener, flagForReview, notifyAdmin, notifyHold } from "./abuse";
 import { RESERVED_SLUGS } from "./util";
 
-/** Refuse a destination whose host an admin has blocked. Called from every
- * create and edit path, so a scam kit cannot be pointed at again from a new
- * account. 422, and the same words for every blocked host. */
+// The same 422 words for every blocked host.
 export async function isBlockedHost(db: DB, destination: string): Promise<boolean> {
   const host = blockHostOf(destination);
   if (!host) return false;
   return (await blockedAmong(db, [host])).has(host);
 }
 
-/** D1 binds at most 100 variables a statement. */
+// D1 binds at most 100 variables a statement.
 const HOSTS_PER_QUERY = 90;
 
-/**
- * The hosts in `hosts` (already through blockHostOf) that the blocklist
- * covers: the host itself or any parent domain of it is on the list. The one
- * matching rule every create, edit, claim and import path goes through.
- */
 export async function blockedAmong(db: DB, hosts: string[]): Promise<Set<string>> {
   const candidates = [...new Set(hosts.flatMap(hostAndParents))];
   const chunks: string[][] = [];
@@ -59,15 +47,7 @@ async function assertNotBlocked(db: DB, destination: string): Promise<void> {
     });
 }
 
-/**
- * Hold a new link whose destination looks like a scam: a brand name on a free
- * app host (see shared/abuse-rules). Returns the suspension columns to write
- * with the link, or null. Free orgs only; a paying org has been through
- * billing, and the hold is for the unattended free signup.
- *
- * The org is flagged for review so the hold shows up where an admin looks, and
- * the owner is told why. A hold is not a verdict: restoring it is one click.
- */
+// Free orgs only: a paying org has been through billing, and the hold is for the unattended free signup.
 export async function holdIfSuspicious(
   env: Env,
   db: DB,
@@ -80,8 +60,7 @@ export async function holdIfSuspicious(
   if (!reason) return null;
   await flagForReview(db, orgId);
   captureAlert([{ event: "link_held", orgId, reason }]);
-  // The owner hears that it was paused and how to answer, not which word did
-  // it; the admin gets the specific reason.
+  // The owner hears it was paused and how to answer, not which word did it; the admin gets the specific reason.
   await notifyHold(
     env,
     db,
@@ -98,12 +77,8 @@ export async function holdIfSuspicious(
   return { suspendedAt: Date.now(), suspendedBy: null, suspendReason: reason };
 }
 
-/**
- * Refuse a destination that is another rdyrct short link. Chaining through
- * one launders the real destination past the hold and the risk check: the
- * first link looks clean, and the second is somebody else's. Our own site and
- * its pages stay allowed, so a link to /pricing is fine and /abc1234 is not.
- */
+// Chaining through a short link launders the real destination past the hold and the risk check.
+// Our own site and its pages stay allowed.
 export function assertNotOwnShortLink(env: Env, destination: string): void {
   let url: URL;
   try {
@@ -124,16 +99,8 @@ export function assertNotOwnShortLink(env: Env, destination: string): void {
     });
 }
 
-/**
- * The rules for anywhere rdyrct sends a visitor: not another shortener, not a
- * blocked host, not one of our own short links. Link create and edit, the
- * anonymous shortener and a custom domain's root redirect (#488) run this one
- * function, so a rule added here covers them. Bulk import (routes/link-import.ts)
- * keeps its own copy: it checks a whole file against one blocklist read and
- * reports a reason per row instead of throwing, so a rule added here must be
- * added there too. Each refusal here is a 422 with its own code, which the app
- * maps to the field.
- */
+// Bulk import (routes/link-import.ts) keeps its own copy: it checks a whole file against one blocklist read and reports
+// a reason per row instead of throwing, so a rule added here must be added there too.
 export async function assertDestinationAllowed(
   env: Env,
   db: DB,
@@ -144,14 +111,9 @@ export async function assertDestinationAllowed(
   assertNotOwnShortLink(env, destination);
 }
 
-/* ---------------- banned users ---------------- */
-
-/** How long a banned owner's orgs answer "disabled" before the daily cron
- * deletes them: long enough for a mistaken ban to be undone, and for the
- * people who still click an old text or scan an old code to be told. */
+// Long enough to undo a mistaken ban, and to tell the people who still click an old link.
 export const BAN_PURGE_AFTER_DAYS = 90;
 const BAN_PURGE_AFTER_MS = BAN_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000;
-/** Orgs one daily pass sends to teardown. Bounded like every other sweep. */
 const BAN_PURGE_LIMIT = 50;
 
 async function ownedOrgIds(db: DB, userId: string): Promise<string[]> {
@@ -162,8 +124,6 @@ async function ownedOrgIds(db: DB, userId: string): Promise<string[]> {
   return rows.map((r) => r.orgId);
 }
 
-/** Every destination host in the orgs a user owns, and whether a ban may
- * block it. What the ban dialog lists before anything is blocked. */
 export async function ownedDestinationHosts(
   db: DB,
   userId: string,
@@ -178,19 +138,8 @@ export async function ownedDestinationHosts(
   return [...hosts].sort().map((host) => ({ host, blockable: blockable(host) }));
 }
 
-/**
- * The decision that a user is abuse. Their sessions end and they cannot sign
- * in. Every org they own is disabled: each link and custom domain answers
- * "disabled", nobody can change it, and the daily cron deletes the org
- * BAN_PURGE_AFTER_DAYS later. A subscription is revoked, so a banned account
- * stops paying. Orgs they only belong to are untouched: those have an owner
- * who did nothing.
- *
- * Hosts are blocked only when the admin picks them, from the ones the user
- * linked to, and never one on the NEVER_BLOCKED list: most scam kits live on
- * a throwaway address that will not come back, and a host on the blocklist
- * is refused for every customer.
- */
+// Orgs they only belong to are untouched: those have an owner who did nothing.
+// Hosts are blocked only when the admin picks them, and never one on NEVER_BLOCKED: a host on the blocklist is refused for every customer.
 export async function banUser(
   env: Env,
   db: DB,
@@ -206,8 +155,7 @@ export async function banUser(
   if (orgIds.length === 0) await db.batch([banned, signedOut]);
   else {
     const owned = inArray(schema.orgs.id, orgIds);
-    // One batch, so the orgs are never disabled without the outbox rows that
-    // publish it. Every owned org is queued, not only the ones this disables,
+    // One batch, so orgs are never disabled without the outbox rows that publish it. Every owned org is queued,
     // so a repeated ban repairs whatever an earlier one left unpublished.
     const [, , rows] = await db.batch([
       banned,
@@ -215,7 +163,6 @@ export async function banUser(
       queueOrgSyncs(db, and(owned, isNull(schema.orgs.deletingAt))),
       db
         .update(schema.orgs)
-        // reviewFlaggedAt: the ban answers whatever flag was waiting.
         .set({ disabledAt: now, reviewFlaggedAt: null })
         .where(and(owned, isNull(schema.orgs.disabledAt))),
     ]);
@@ -223,9 +170,7 @@ export async function banUser(
   }
   await publishOrgSyncs(env, db, synced);
 
-  // Before the hosts: a Polar outage must not leave a scammer's links live,
-  // and a blocklist failure must not leave them paying. It is alerted on,
-  // and the admin is told to end it by hand.
+  // Before the hosts: a Polar outage must not leave a scammer links live, and a blocklist failure must not leave them paying.
   const subscriptionEnded = await endSubscriptionBeforeDelete(env, userId);
 
   let hostsBlocked = 0;
@@ -233,8 +178,6 @@ export async function banUser(
   try {
     hostsBlocked = await blockBannedHosts(db, userId, actorId, opts, now);
   } catch (error) {
-    // The ban stands and the admin's audit row still gets written; the
-    // dialog says to add the hosts by hand.
     hostsFailed = true;
     captureAlert([
       {
@@ -247,11 +190,9 @@ export async function banUser(
   return { orgsDisabled: orgIds.length, hostsBlocked, hostsFailed, subscriptionEnded };
 }
 
-/** blocked_hosts binds four values a row, and D1 allows 100 a statement. */
+// blocked_hosts binds four values a row, and D1 allows 100 a statement.
 const BLOCKED_HOSTS_PER_INSERT = 24;
 
-/** Adds the hosts the admin picked, of the ones the user linked to that may
- * be blocked, in one batch. Returns how many it was asked to add. */
 async function blockBannedHosts(
   db: DB,
   userId: string,
@@ -278,9 +219,7 @@ async function blockBannedHosts(
   return rows.length;
 }
 
-/** Undo banUser for the orgs not yet deleted. Blocked hosts stay blocked
- * (they have their own page) and a revoked subscription stays revoked.
- * Returns how many orgs it brought back. */
+// Blocked hosts stay blocked and a revoked subscription stays revoked.
 export async function unbanUser(env: Env, db: DB, userId: string): Promise<number> {
   const orgIds = await ownedOrgIds(db, userId);
   const unbanned = db.update(schema.user).set({ banned: false }).where(eq(schema.user.id, userId));
@@ -288,15 +227,13 @@ export async function unbanUser(env: Env, db: DB, userId: string): Promise<numbe
     await unbanned;
     return 0;
   }
-  // An org the purge has started on stays disabled: teardown is deleting its
-  // KV keys, and a republish racing it could put live ones back.
+  // An org the purge has started on stays disabled: teardown is deleting its KV keys, and a republish could put live ones back.
   const restorable = and(
     inArray(schema.orgs.id, orgIds),
     isNotNull(schema.orgs.disabledAt),
     isNull(schema.orgs.deletingAt),
   );
-  // One batch, for the same reason as banUser's. The outbox rows go first,
-  // while `restorable` still matches the orgs the update is about to change.
+  // The outbox rows go first, while restorable still matches the orgs the update is about to change.
   const [, rows, restored] = await db.batch([
     unbanned,
     queueOrgSyncs(db, restorable),
@@ -310,16 +247,8 @@ export async function unbanUser(env: Env, db: DB, userId: string): Promise<numbe
   return restored.length;
 }
 
-/**
- * Deletes the orgs of owners banned more than BAN_PURGE_AFTER_DAYS ago:
- * links, KV keys, clicks, domains and logos, through the same teardown as a
- * deletion an owner asks for. The user row stays, banned, so the address
- * cannot sign up again. Returns how many orgs it started on.
- *
- * Picks and marks the orgs in one statement. Read first and marked after,
- * an unban landing in between would see an org not yet deleting, restore
- * it, and then lose it to a teardown nobody wanted.
- */
+// Picks and marks in one statement: read first and marked after, an unban in between would restore an org and then lose it
+// to a teardown nobody wanted. The user row stays banned, so the address cannot sign up again.
 export async function purgeBannedOrgs(env: Env, db: DB, now = Date.now()): Promise<number> {
   const due = and(
     isNotNull(schema.orgs.disabledAt),
@@ -345,33 +274,9 @@ export async function purgeBannedOrgs(env: Env, db: DB, now = Date.now()): Promi
   return ids.length;
 }
 
-/**
- * What migration 0046 could not do itself, run by the daily cron. A
- * migration cannot reach KV, and it runs before the new Worker is deployed:
- * an old Worker's drain would drop an `org_sync` row it does not know, and
- * an old Worker's KV sync would publish links live the moment their old
- * "Owner banned" suspension went. So the suspensions go here, after deploy.
- *
- * Every step matches only rows still in the old state, so it changes
- * nothing once that is gone:
- * - an org whose owner is banned and that has no `disabled_at` (an old
- *   Worker banned them during the deploy) is disabled;
- * - a disabled org whose owner is no longer banned (an old Worker unbanned
- *   them during the deploy) is restored and republished, or the purge
- *   would delete it. Nothing else leaves an org disabled under an unbanned
- *   owner: this Worker's unban clears `disabled_at`;
- * - the "Owner banned" suspensions in disabled orgs are cleared, since
- *   `disabled_at` does that job and an unban clears it;
- * - a disabled org's `links_suspended_at` goes when no link in it is still
- *   suspended, or an unban would leave the org read-only.
- *
- * An org gets an `org_sync` only on the run that changes it, so a run with
- * nothing left to do queues nothing. Each one is queued just before its
- * change, in the same batch, under the change's own condition: the rows it
- * picks are exactly the ones the change is about to touch, and both commit
- * or neither does. An org banned through this Worker needs none of it; the
- * ban queued its own.
- */
+// What migration 0046 could not do: a migration cannot reach KV and runs before the new Worker deploys, when an old Worker would drop an
+// org_sync row or publish links live once the old Owner banned suspension went. Every step matches only rows still in the old state.
+// Each org_sync is queued just before its change, in the same batch, under the change own condition.
 export async function settleBannedOrgs(db: DB): Promise<void> {
   const disabled = isNotNull(schema.orgs.disabledAt);
   const live = isNull(schema.orgs.deletingAt);
@@ -420,5 +325,4 @@ export async function settleBannedOrgs(db: DB): Promise<void> {
   ]);
 }
 
-/** The reason the ban wrote on each link before migration 0046. */
 const OLD_BAN_REASON = "Owner banned";

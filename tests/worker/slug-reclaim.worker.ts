@@ -12,23 +12,9 @@ import {
 import { hashPassword } from "../../src/worker/password";
 import type { JsonValue } from "../../src/shared/types";
 
-/**
- * A slug freed by deleting a link cannot be repointed by somebody else (#76).
- *
- * #76 proposed a cooldown that holds a deleted link's slug, on the reasoning
- * that whoever claims it next inherits the QR codes and printed flyers
- * already pointing there. Two rules that predate the issue already close that
- * door, and these tests pin them, because a cooldown would be dead weight
- * while they hold and the issue becomes real the day either one goes:
- *
- * 1. Nobody chooses a slug on the shared domain. Every shared-domain link
- *    gets a random one, so a freed slug cannot be targeted.
- * 2. A link's domain must belong to the org creating it, so a custom-domain
- *    slug can only ever be claimed back by the org that owns the host.
- *
- * What is left is an org reclaiming its own freed slug, which #76 says should
- * stay allowed, and the last test here confirms it does.
- */
+// A slug freed by deleting a link cannot be repointed by somebody else (#76),
+// so no cooldown is needed while two rules hold: nobody chooses a shared-domain
+// slug, and a link's domain must belong to its org. These tests pin both.
 
 beforeEach(async () => {
   await reset();
@@ -57,7 +43,6 @@ async function apiAs(
   return res;
 }
 
-/** A second org, with its own owner and its own active custom domain. */
 async function seedOutsider(): Promise<string> {
   await env.DB.batch([
     env.DB.prepare(
@@ -97,12 +82,8 @@ describe("a slug freed by deletion cannot be repointed by another org (#76)", ()
     expect(created.status).toBe(201);
     const { id } = await created.json<{ id: string }>();
 
-    // The owner deletes it, so the slug is free as far as link_addresses knows.
     expect((await apiAs(owner, "org-1", "DELETE", `/links/${id}`)).status).toBe(200);
 
-    // The outsider now tries to take it on the same host. They cannot even
-    // name that domain: it is not theirs, and the check runs before the slug
-    // is looked at.
     const outsider = await seedOutsider();
     const stolen = await apiAs(outsider, "org-2", "POST", "/links", {
       destination: "https://phish.example/",

@@ -1,7 +1,5 @@
 import type { Sort } from "@/shared/types";
 
-/** Null-safe comparison for one sort column: nulls sort last regardless of
- * direction, otherwise strings/numbers compare normally scaled by `dir`. */
 function compareSortValues(
   va: string | number | null,
   vb: string | number | null,

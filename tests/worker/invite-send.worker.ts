@@ -62,7 +62,6 @@ describe("email invites when a send fails", () => {
   });
 
   it("a retry takes no extra seat", async () => {
-    // Free allows 3 members: the owner plus two open invites fill it.
     await invite(["a@example.com", "b@example.com"], ["b@example.com"]);
     const { status } = await invite(["b@example.com"]);
     expect(status).toBe(201);

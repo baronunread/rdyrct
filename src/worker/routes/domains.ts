@@ -16,10 +16,7 @@ import { jsonBodyLimit } from "../body-limit";
 import { assertDestinationAllowed } from "../abuse-hold";
 import type { DomainDTO, PlanLimits } from "@/shared/types";
 
-// e.g. links.example.com: at least one dot, no scheme/port/path
 const HOSTNAME_RE = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
-
-/* ---------------- Cloudflare for SaaS custom hostnames ---------------- */
 
 interface CfHostname {
   id: string;
@@ -32,7 +29,6 @@ interface CfHostnameResult {
     status: string;
     validation_records?: { txt_name?: string; txt_value?: string }[] | null;
   } | null;
-  /** The ownership TXT record, for a hostname not yet pointed at this zone. */
   ownership_verification?: { name?: string; value?: string } | null;
 }
 
@@ -51,8 +47,7 @@ async function cfRequest<T = Record<string, JsonValue>>(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  // A caller deleting a hostname treats "already gone" as success, so a retried
-  // or racing delete is a no-op instead of a hard failure.
+  // A caller deleting a hostname treats "already gone" as success, so a retried or racing delete is a no-op.
   if (res.status === 404 && opts?.okNotFound) return null;
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -64,8 +59,7 @@ async function cfRequest<T = Record<string, JsonValue>>(
       const parsed = JSON.parse(text) as { errors?: { message?: string }[] };
       message = parsed.errors?.[0]?.message ?? message;
     } catch (e) {
-      // Keep the status-based fallback when Cloudflare does not return JSON,
-      // but surface the unparseable body so a regression is visible.
+      // Keep the status fallback when Cloudflare returns no JSON, but surface the unparseable body.
       Sentry.captureException(e);
     }
     throw new HTTPException(502, { message });
@@ -104,12 +98,6 @@ async function cfCreateHostname(
   return { id: data!.result.id, active: false };
 }
 
-/**
- * Find an existing custom hostname's id by name, or null when the zone has
- * none. This is the lookup half of get-or-create: a retried activation checks
- * here before creating, so it reuses a hostname a prior try already made rather
- * than creating a duplicate. Fake CF owns no hostnames.
- */
 async function cfFindHostname(env: Env, hostname: string): Promise<string | null> {
   if (useFakeCf(env)) return null;
   assertCfConfigured(env);
@@ -126,15 +114,10 @@ async function cfGetHostnameStatus(
   row: typeof schema.domains.$inferSelect,
 ): Promise<CfHostnameResult | null> {
   if (useFakeCf(env)) {
-    // "instant" skips the staged delays entirely: an e2e run asserts on the
-    // end state, and waiting out an artificial timer only buys a race against
-    // whatever budget the test picked.
+    // "instant" skips the staged delays: e2e asserts on the end state.
     if (env.CF_DEV_ENV === "instant") return { status: "active", ssl: { status: "active" } };
-    // Otherwise walk the states on a timer so both are visible in a browser.
-    // Each threshold sits strictly between two probes: probeDelaySeconds puts
-    // them at 0s, 5s, 10s, 20s, 40s, and a threshold landing *on* one of those
-    // is a coin flip. The TLS one used to be 20s, exactly probe 4, so losing
-    // the toss pushed activation out to 40s.
+    // Each threshold sits strictly between two probes (0s, 5s, 10s, 20s, 40s):
+    // one landing on a probe is a coin flip.
     const age = Date.now() - row.createdAt;
     return {
       status: age > 3_000 ? "active" : "pending",
@@ -154,23 +137,17 @@ async function cfGetHostnameStatus(
 export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {
   if (useFakeCf(env)) return;
   assertCfConfigured(env);
-  // Tolerate an already-gone hostname (see okNotFound) so delete is idempotent.
   await cfRequest(env, "DELETE", `/custom_hostnames/${cfHostnameId}`, undefined, {
     okNotFound: true,
   });
 }
 
-/* ---------------- activation (driven by DomainActivateWorkflow) ---------------- */
-
-// Real DNS propagation plus certificate validation can take hours, so give a
-// domain a full day to reach active before we call it failed. A domain moving
-// from another service (#383) waits on TXT records someone adds by hand,
+// Real DNS propagation plus certificate validation can take hours: a day to reach active.
+// A domain moving from another service (#383) waits on TXT records added by hand,
 // often days later, so it gets a week.
 const ACTIVATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const TXT_ACTIVATION_TIMEOUT_MS = 7 * ACTIVATION_TIMEOUT_MS;
 
-/** When the current check of a domain gives up: a day after it started, or a
- * week for TXT validation. "Try again" restarts it (checkingSince). */
 function checkDeadline(row: {
   validation: DomainDTO["validation"];
   checkingSince: number | null;
@@ -180,24 +157,15 @@ function checkDeadline(row: {
   return (row.checkingSince ?? row.createdAt) + timeout;
 }
 
-/** One probe's outcome. `pending` carries the current status for logging/tests. */
 export type DomainProbe =
   | { state: "pending"; status: "checking_dns" | "issuing_tls" }
   | { state: "active" }
   | { state: "error"; reason: string }
   | { state: "gone" };
 
-/**
- * Ensure the domain has a Cloudflare custom hostname and record its id in D1,
- * get-or-create style. Safe to run any number of times:
- *  - if D1 already holds the id, return it and never call Cloudflare;
- *  - else look the hostname up on the zone (a prior try may have created it but
- *    failed before saving the id) and create it only when truly absent;
- *  - if the domain row was deleted while we worked, undo the hostname we just
- *    ensured so a quick add-then-delete leaves nothing orphaned on Cloudflare.
- * This is what stops a duplicate or retried job from creating a second custom
- * hostname for the same domain. Returns the id, or null if the domain is gone.
- */
+// Get-or-create, safe to rerun: a prior try may have made the hostname and failed before
+// saving the id. If the domain row was deleted meanwhile, undo the hostname so nothing
+// is orphaned on Cloudflare.
 async function findDomainById(db: DB, domainId: string) {
   const [row] = await db
     .select()
@@ -220,7 +188,6 @@ export async function ensureHostname(
   const existing = await cfFindHostname(env, hostname);
   const id = existing ?? (await cfCreateHostname(env, hostname, row.validation)).id;
 
-  // RETURNING is empty when the row was deleted meanwhile: compensate.
   const saved = await db
     .update(schema.domains)
     .set({ cfHostnameId: id })
@@ -233,12 +200,7 @@ export async function ensureHostname(
   return id;
 }
 
-/**
- * Move a domain one step along the DNS→TLS pipeline, writing the new status to
- * D1. Idempotent: an already-active or already-errored domain is returned
- * unchanged, and re-running lands on the same D1 state. Publishing the KV
- * redirect key is a separate workflow step, so this never touches KV.
- */
+// Idempotent. Publishing the KV redirect key is a separate workflow step, so this never touches KV.
 export async function probeDomain(env: Env, domainId: string): Promise<DomainProbe> {
   const db = drizzle(env.DB, { schema });
   const row = await findDomainById(db, domainId);
@@ -272,20 +234,13 @@ export async function probeDomain(env: Env, domainId: string): Promise<DomainPro
     return { state: "pending", status: "issuing_tls" };
   }
 
-  // status === "issuing_tls"
   if (h.ssl?.status !== "active") return { state: "pending", status: "issuing_tls" };
   await db.update(schema.domains).set({ status: "active" }).where(eq(schema.domains.id, domainId));
   return { state: "active" };
 }
 
-/**
- * Seconds to wait before the next probe. Fast at first (a pre-created CNAME
- * resolves in seconds), then every 5 minutes for about a day, then every 15:
- * records somebody adds by hand days later do not need minute-by-minute
- * checks, and each probe is a billed Workflow step and a Cloudflare API call.
- * Sleeps do not count toward the step limit; the deadline in probeDomain
- * bounds the loop (a week of TXT checks is about 870 probes).
- */
+// Fast at first, then every 5 minutes for about a day, then every 15: each probe is a billed
+// Workflow step and a Cloudflare API call. The deadline in probeDomain bounds the loop.
 const PROBE_RAMP = [5, 5, 10, 20, 30, 60, 120];
 const PROBES_AT_FIVE_MINUTES = 288;
 export function probeDelaySeconds(attempt: number): number {
@@ -293,9 +248,6 @@ export function probeDelaySeconds(attempt: number): number {
   return attempt < PROBE_RAMP.length + PROBES_AT_FIVE_MINUTES ? 300 : 900;
 }
 
-/* ---------------- routes ---------------- */
-
-// Mounted at /api/orgs/:orgId/domains: org admins, paid plans only.
 export const domainRoutes = new Hono<AppEnv>();
 domainRoutes.use("*", jsonBodyLimit());
 
@@ -324,8 +276,7 @@ async function getDomain(c: { var: { db: DB } }, orgId: string, id: string) {
   return rows[0];
 }
 
-// List domains. A pure read: activation runs in the background workflow, never
-// on a GET, so this never calls Cloudflare or writes D1/KV.
+// A pure read: activation runs in the background workflow, never on a GET.
 domainRoutes.get("/", async (c) => {
   const log = c.get("log");
   log.set({ orgId: c.req.param("orgId") });
@@ -351,8 +302,6 @@ async function assertDomainQuota(db: DB, orgId: string, limits: PlanLimits): Pro
     });
 }
 
-/** Validates and normalizes a requested hostname: well-formed, not one of
- * this app's own hosts, and not already connected to another org. */
 async function resolveNewHostname(
   db: DB,
   body: { hostname?: string },
@@ -373,9 +322,8 @@ async function resolveNewHostname(
   return hostname;
 }
 
-// Add a domain: commit the D1 row, then hand activation to the background
-// workflow. The request never calls Cloudflare, so provider latency and partial
-// failures stay out of the user-facing path.
+// The request never calls Cloudflare, so provider latency and partial failures
+// stay out of the user-facing path.
 domainRoutes.post("/", async (c) => {
   const log = c.get("log");
   const db = c.var.db;
@@ -402,9 +350,8 @@ domainRoutes.post("/", async (c) => {
     checkingSince: null,
     createdAt: Date.now(),
   };
-  // Atomic: the org's domains cap is re-checked at write time inside one D1
-  // statement, not from the assertDomainQuota() count fetched above (see
-  // issue #18).
+  // Atomic: the domains cap is re-checked at write time inside one D1 statement,
+  // not from the assertDomainQuota() count above (#18).
   const inserted = await insertDomainWithinLimit(c.env, row, limits.domains);
   if (!inserted) {
     if (await orgDeleting(db, orgId))
@@ -420,8 +367,7 @@ domainRoutes.post("/", async (c) => {
     await c.env.DOMAIN_ACTIVATE.create({ id, params: { domainId: id, hostname } });
   } catch (err) {
     log.error(err instanceof Error ? err : new Error(String(err)));
-    // Could not start activation: roll the row back so the domain does not sit
-    // stuck in checking_dns with no workflow driving it.
+    // Roll the row back so it does not sit in checking_dns with no workflow driving it.
     Sentry.captureException(err);
     await db.delete(schema.domains).where(eq(schema.domains.id, id));
     throw new HTTPException(502, {
@@ -431,9 +377,7 @@ domainRoutes.post("/", async (c) => {
   return c.json(toDTO(row), 201);
 });
 
-// Manual re-check. A pure read: the background workflow owns activation, so
-// this only reflects the latest D1 status the workflow wrote, which is why it
-// is a GET (#104).
+// A pure read of the status the workflow last wrote, which is why it is a GET (#104).
 domainRoutes.get("/:id", async (c) => {
   const log = c.get("log");
   log.set({ orgId: c.req.param("orgId"), domainId: c.req.param("id") });
@@ -441,11 +385,9 @@ domainRoutes.get("/:id", async (c) => {
   return c.json(toDTO(row));
 });
 
-// Try again, on a domain whose check gave up. Its links may already use it
-// (an import onto a domain still checking), so delete-and-re-add is no way
-// out: this restarts the check, with a fresh deadline, in a new activation.
-// The Cloudflare hostname id is cleared so the activation looks it up again,
-// or creates it if Cloudflare dropped it meanwhile.
+// Restarts the check with a fresh deadline in a new activation (links may already use the
+// domain, so delete-and-re-add is no way out). The hostname id is cleared so activation
+// looks it up again, or creates it if Cloudflare dropped it.
 domainRoutes.post("/:id/retry", async (c) => {
   const log = c.get("log");
   const orgId = c.req.param("orgId")!;
@@ -482,13 +424,8 @@ domainRoutes.post("/:id/retry", async (c) => {
   return c.json(toDTO(retried));
 });
 
-/**
- * The DNS records a domain needs (#383): always the CNAME, and for a "txt"
- * domain the two TXT records that let Cloudflare verify it and issue its
- * certificate while it still points at another service. Read live from
- * Cloudflare, which mints the values after the workflow creates the hostname,
- * so an empty `txt` means "not ready yet, ask again".
- */
+// Read live from Cloudflare, which mints the values after the workflow creates the
+// hostname, so an empty `txt` means not ready yet.
 domainRoutes.get("/:id/records", async (c) => {
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
   const cname = { type: "CNAME" as const, name: row.hostname, value: c.env.APP_HOST };
@@ -538,13 +475,10 @@ domainRoutes.patch("/:id", async (c) => {
         message: "Root redirect must be a valid http(s) URL",
         cause: { code: "bad_destination" },
       });
-    // It serves for the bare host and every slug the host does not know
-    // (index.ts), so it answers more visitors than any one link: the same
-    // rules a link's destination goes through (#488).
+    // It answers the bare host and every slug the host does not know (index.ts), so it
+    // gets the same destination rules as a link (#488).
     await assertDestinationAllowed(c.env, db, rootRedirect);
-    // And not this host itself: the root redirect also answers every miss, so
-    // a redirect back to the host would loop on each one. Other custom domains
-    // are not checked here (see #488).
+    // Not this host itself: the root redirect answers every miss, so it would loop.
     if (new URL(rootRedirect).hostname.toLowerCase() === row.hostname.toLowerCase())
       throw new HTTPException(422, {
         message: "The root redirect cannot point at this domain itself.",
@@ -561,9 +495,7 @@ domainRoutes.delete("/:id", async (c) => {
   log.set({ orgId: c.req.param("orgId"), domainId: c.req.param("id") });
   const db = c.var.db;
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
-  // link_addresses covers both a link's primary address and its aliases, so
-  // this one check is enough: an alias-only reference (no link primarily on
-  // this domain) still blocks the delete, same as a primary reference would.
+  // link_addresses covers primary addresses and aliases, so this one check blocks alias-only references too.
   const inUse = await db
     .select({ n: sql<number>`count(*)` })
     .from(schema.linkAddresses)
@@ -572,16 +504,13 @@ domainRoutes.delete("/:id", async (c) => {
     throw new HTTPException(409, {
       message: "Links still use this domain, move or delete them first",
     });
-  // Idempotent teardown (compensation for a delete that races activation):
-  // remove the CF hostname whether or not we recorded its id (a mid-activation
-  // add may have created it before saving the id), and tolerate it being gone.
+  // Remove the CF hostname whether or not its id was recorded (a mid-activation add may
+  // have created it first), and tolerate it being gone.
   const cfId = row.cfHostnameId ?? (await cfFindHostname(c.env, row.hostname));
   if (cfId) await cfDeleteHostname(c.env, cfId);
   await db.delete(schema.domains).where(eq(schema.domains.id, row.id));
-  // Syncing the now-orphaned domain key deletes it.
   await enqueueStorage(c.env, [syncDomainMsg(row.hostname)]);
-  // One fewer domain can bring the org back under its cap, which unlocks the
-  // one the downgrade locked (#486).
+  // One fewer domain can bring the org under its cap and unlock the one a downgrade locked (#486).
   await reconcileAfterDelete(c.env, db, row.orgId, "domains");
   return c.json({ ok: true });
 });

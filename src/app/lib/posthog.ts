@@ -5,17 +5,13 @@ import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consen
 import { posthogTokenForHost } from "./posthog-project";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
-// analytics in the consent banner (see consent-banner.tsx): before that,
-// capture/identify/reset are no-ops and the library is never even
-// downloaded, so anonymous visitors (landing page, login) pay nothing.
+// analytics in the consent banner: before that, calls are no-ops and the library
+// is never downloaded.
 function hasAnalyticsConsent(): boolean {
   return readConsent() === "accepted";
 }
 
 let clientPromise: Promise<typeof PosthogClient | null> | null = null;
-/** What rides along with an event: values that survive JSON, since that is
- * what leaves the browser. `undefined` is allowed so a caller can pass a
- * field it has not got without building the object twice. */
 export type EventProperties = Record<string, JsonValue | undefined>;
 
 let pendingIdentity: { id: string; properties?: EventProperties } | null = null;
@@ -102,19 +98,10 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
   return clientPromise;
 }
 
-/** Call once at app start: resumes analytics for a returning visitor who
- * already consented, without waiting for a capture() call to trigger it
- * (so e.g. pageviews are tracked from the first navigation). No-ops, and
- * loads nothing, if consent hasn't been granted. */
 export function resumeAnalyticsIfConsented() {
   void loadClient();
 }
 
-/**
- * A CTA can be clicked before the consent banner is answered. See
- * consent-buffer.ts for the rules; this file only decides when to ask and how
- * to replay held events.
- */
 function consentUnanswered(): boolean {
   return readConsent() === null;
 }
@@ -122,9 +109,6 @@ function consentUnanswered(): boolean {
 function flushPending(posthog: typeof PosthogClient | null) {
   if (!posthog) return;
   for (const { event, properties, at } of drainBuffer()) {
-    // `timestamp` belongs in the third argument. Passing it as a property
-    // leaves the SDK stamping the flush time, which would collapse the whole
-    // pre-consent path onto the moment the banner was answered.
     posthog.capture(event, { ...properties, $capture_before_consent: true }, { timestamp: at });
   }
 }
@@ -138,8 +122,6 @@ export function grantAnalyticsConsent() {
 }
 
 function resumeCapturing(posthog: typeof PosthogClient | null) {
-  // After an earlier withdrawal: the opt-out flag outlives the page, so this
-  // runs on a later visit too, not only after "Cookie settings".
   if (posthog?.has_opted_out_capturing()) posthog.opt_in_capturing();
   identifyPendingUser(posthog);
 }
@@ -149,16 +131,11 @@ export function revokeAnalyticsConsent() {
   stopCapturing();
 }
 
-/** Shared by Reject, a Reject in another tab, and the answer lapsing. */
 function stopCapturing() {
   discardBuffer();
-  // A later Accept in this page should identify the user again.
   if (identifiedId) pendingIdentity ??= { id: identifiedId, properties: identifiedProperties };
   identifiedId = null;
   if (clientPromise) {
-    // opt_out_persistence_by_default makes this delete PostHog's cookie and
-    // storage too, leaving only the opt-out flag. No reset(): it would mint a
-    // fresh id and reload flags from PostHog after the refusal.
     void clientPromise.then((posthog) => posthog?.opt_out_capturing());
   } else {
     clearPostHogStorage();
@@ -167,9 +144,6 @@ function stopCapturing() {
 
 onConsentLapse(stopCapturing);
 
-/** What an earlier Accept left behind when no client is loaded to remove it,
- *  e.g. a Reject after the six months lapsed. Cookies are expired on this
- *  host and on each parent domain, since PostHog sets them site-wide. */
 function clearPostHogStorage() {
   if (!("document" in globalThis)) return;
   const persisted = /^ph_.+_posthog$/;
@@ -177,9 +151,7 @@ function clearPostHogStorage() {
     for (const key of Object.keys(localStorage)) {
       if (persisted.test(key)) localStorage.removeItem(key);
     }
-  } catch {
-    /* ignore */
-  }
+  } catch {}
   const labels = location.hostname.split(".");
   const domains = labels.map((_, i) => labels.slice(i).join(".")).slice(0, -1);
   for (const cookie of document.cookie.split("; ")) {
@@ -194,8 +166,6 @@ function clearPostHogStorage() {
 const posthog = {
   capture(event: string, properties?: EventProperties) {
     const client = loadClient();
-    // Null means no consent yet. Hold funnel steps so the path survives a
-    // later Accept; everything else is dropped, as before.
     if (!client) {
       bufferBeforeConsent(event, properties, consentUnanswered());
       return;

@@ -20,16 +20,9 @@ import {
 } from "@tanstack/react-router";
 import { guardStaleChunks, lazyPage } from "./lib/chunk-guard";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-// Figtree carries everything anybody reads; JetBrains Mono is kept for
-// identifiers, the strings a person copies or types. See the rdyrct-design
-// skill for which is which.
-//
-// The variable cut, not four static weights: one 20KB file covers 300 to 900
-// against 48KB for the four, and it is one module in the entry graph instead
-// of four. That last part is why it changed: on a cold dev server in CI the
-// extra transforms pushed the landing page's first paint past a 5s
-// expectation. `wght.css` carries latin and latin-ext behind unicode-range,
-// so only the subset a page needs is fetched.
+// The variable cut, not four static weights: one module in the entry graph instead of four.
+// On a cold dev server in CI the extra transforms pushed the landing page's first paint past
+// a 5s expectation. `wght.css` serves latin and latin-ext behind unicode-range.
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary, RouteError } from "./components/error-boundary";
@@ -53,10 +46,8 @@ import { resumeAnalyticsIfConsented } from "./lib/posthog";
 import { PRERENDERED_PUBLIC_PATHS } from "@/shared/page-meta";
 import { RDYRCT_SITE } from "@/shared/site";
 
-// Every route loads lazily so the entry chunk stays small: visitors on the
-// marketing landing never download the app, and the app never downloads the
-// admin pages unless the user is the platform admin.
-// Router-managed lazy components can preload before navigation commits.
+// Every route loads lazily so the entry chunk stays small: marketing visitors never download
+// the app, and the app never downloads the admin pages unless the user is the platform admin.
 const LoginPage = lazyPage(() => import("./routes/auth"), "LoginPage");
 const SignupPage = lazyPage(() => import("./routes/auth"), "SignupPage");
 // React.lazy pages: named imports, so the stale-chunk guard can ask for them
@@ -70,10 +61,9 @@ const ResetPasswordPage = lazy(() =>
 const InvitePage = lazy(() => invite().then((m) => ({ default: m.InvitePage })));
 const ConsentPage = lazy(() => consent().then((m) => ({ default: m.ConsentPage })));
 
-// The app's pages are router-managed (lazyPage, lib/chunk-guard.ts) rather than
-// React.lazy: the router fetches a page's chunk and its data (the loaders
-// below) before it swaps pages, so the page you are on stays until the next
-// one can draw whole. See lib/route-preload.ts.
+// The app's pages are router-managed (lazyPage, lib/chunk-guard.ts) rather than React.lazy:
+// the router fetches a page's chunk and data before it swaps pages, so the page you are on
+// stays until the next one can draw whole.
 const dashboard = () => import("./routes/dashboard");
 const analytics = () => import("./routes/analytics");
 const links = () => import("./routes/links");
@@ -95,8 +85,7 @@ const adminNewsletter = () => import("./routes/admin/newsletter");
 const adminLayout = () => import("./routes/admin/layout");
 const AdminLayout = lazy(() => adminLayout().then((m) => ({ default: m.AdminLayout })));
 
-// A self-hosted copy has no landing page: its front door is the app, which
-// sends anybody signed out on to /login.
+// A self-hosted copy has no landing page: its front door is the app.
 const appHomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -131,15 +120,13 @@ const consentRoute = createRoute({
   component: ConsentPage,
 });
 
-// Between a pricing link (or Polar) and the app: routes/welcome.tsx. Signed
-// in, but outside the shell, so its card can become the org switcher.
+// Signed in, but outside the shell, so its card can become the org switcher.
 const welcomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/welcome",
-  // Loaded before the route commits (lib/welcome-loader.ts), so the sign-in
-  // card hands over to the page itself and never to a fallback. Only its
-  // own code: it checks sign-in itself, so a full page load (back from
-  // Google or Polar) draws the card without waiting for the app shell.
+  // Loaded before the route commits (lib/welcome-loader.ts), so the sign-in card hands over
+  // to the page itself and never to a fallback. It checks sign-in itself, so a full page load
+  // (back from Google or Polar) draws the card without the app shell.
   loader: () => loadWelcome(),
   component: () => (
     <Suspense fallback={null}>
@@ -158,7 +145,6 @@ const onboardingRoute = createRoute({
   },
 });
 
-// authenticated app: root keywords, no /app prefix, no org id
 const appShellRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app-shell",
@@ -171,20 +157,13 @@ const appShellRoute = createRoute({
   ),
 });
 
-/** Where a page is going, as a loader hears it. */
 interface LoaderArgs {
   params: Record<string, string>;
   location: { searchStr: string };
 }
 
-/**
- * A page's loader: its chunk and the data its first frame reads.
- *
- * Only awaited once the app is on screen. A cold load returns at once and
- * lets the fetches run alongside the first render, so the shell and the
- * page's own skeleton paint as soon as the chunk is in, as they always did,
- * instead of a blank screen waiting on the network.
- */
+// Only awaited once the app is on screen. A cold load returns at once and lets the fetches
+// run alongside the first render, so the shell and skeleton paint as soon as the chunk is in.
 const pageLoader =
   (importPage: () => Promise<{ preload: PagePreload }>) =>
   ({ params, location }: LoaderArgs): Promise<void> | undefined => {
@@ -199,9 +178,8 @@ const adminLoader =
     return router.state.resolvedLocation ? work : undefined;
   };
 
-// A slow page (pendingMs) shows the skeleton of the page it is opening, in
-// the sheet, and keeps it long enough to read as a step (pendingMinMs)
-// rather than a flash. A fast one never shows it.
+// A slow page (pendingMs) shows the skeleton of the page it is opening and keeps it long
+// enough to read as a step (pendingMinMs). A fast one never shows it.
 const appPage = {
   getParentRoute: () => appShellRoute,
   pendingComponent: RouteSkeleton,
@@ -274,9 +252,8 @@ const organizationRoute = createRoute({
   loader: pageLoader(organization),
 });
 
-// One guard for the whole section, and one place for its sub-navigation.
-// Four separate RequireAdmin routes was four chances to forget one, and one
-// of them already had been (#67).
+// One guard for the whole section: four separate RequireAdmin routes was four
+// chances to forget one, and one of them already had been (#67).
 const adminRoute = createRoute({
   getParentRoute: () => appShellRoute,
   path: "/admin",
@@ -288,8 +265,6 @@ const adminRoute = createRoute({
     </Suspense>
   ),
 });
-// Inside the Platform frame, so a slow tab holds the frame and draws only
-// the section's own skeleton under it.
 const adminPage = {
   getParentRoute: () => adminRoute,
   pendingComponent: AdminSectionSkeleton,
@@ -366,22 +341,15 @@ const routeTree = rootRoute.addChildren([
 // react-doctor-disable-next-line react-doctor/only-export-components -- the entry module, not a component file: scripts/prerender-public.tsx imports these to render each public page.
 export const PRERENDER_ROUTES = [...PRERENDERED_PUBLIC_PATHS] as const;
 
-// Before the router: the page loaders fill this cache.
-//
-// 30 seconds fresh, so going back to a page you just left draws it from the
-// cache without asking again. A mutation still refetches what it changes
-// (invalidateQueries ignores staleTime).
+// 30 seconds fresh, so going back to a page you just left draws from the cache.
+// A mutation still refetches what it changes (invalidateQueries ignores staleTime).
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 } },
 });
 
-/**
- * Moving between app pages crossfades the page inside the sheet and nothing
- * else (the `app-page` rules in styles.css). Only when the path changes: a
- * range, a tab or a filter is the same page and swaps in place. Browsers
- * that cannot scope a view transition by type get none, rather than a
- * whole-window fade on every filter change.
- */
+// Only when the path changes: a range, tab or filter is the same page and swaps in place.
+// Browsers that cannot scope a view transition by type get none, rather than a
+// whole-window fade on every filter change.
 const APP_PAGE_TRANSITION = globalThis.CSS?.supports?.("selector(:active-view-transition-type(a))")
   ? { types: (change: ViewTransitionChange) => appPageTransitionTypes(change, inApp) }
   : false;
@@ -399,11 +367,8 @@ function inApp(location: ParsedLocation): boolean {
 const router = globalThis.window
   ? createRouter({
       routeTree,
-      // Hovering or focusing a link fetches the page behind it, chunk and
-      // data, so the click usually finds it ready.
       defaultPreload: "intent",
       defaultPreloadDelay: 50,
-      // TanStack Query decides what is fresh; the router just asks it.
       defaultPreloadStaleTime: 0,
       defaultPendingMs: 400,
       defaultPendingMinMs: 350,
@@ -421,8 +386,6 @@ const router = globalThis.window
       history: createMemoryHistory({ initialEntries: ["/"] }),
     });
 
-// A click into a page whose code is gone (a tab older than the last deploy)
-// stays where it is and offers a reload, instead of a blank screen.
 if (globalThis.window)
   guardStaleChunks(router, {
     [appShellRoute.id]: loadShell,
@@ -448,7 +411,7 @@ export function App() {
             <RouterProvider router={router} />
           </ErrorBoundary>
           {/* Outside the boundary: it stays mounted when a chunk failure crashes
-            the app underneath, so the "new version available" prompt survives. */}
+             the app underneath, so the "new version available" prompt survives. */}
           <NewVersionBanner />
         </ToastProvider>
       </QueryClientProvider>
@@ -464,14 +427,8 @@ export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number])
   await router.load();
 }
 
-/**
- * A reload of an app page by somebody signed in (index.html's head script
- * sets data-auth from the cached /user) starts fetching the shell's chunk
- * now, alongside this one, rather than when React first asks for it. The
- * first render does not wait: the skeleton it paints draws the sidebar from
- * the same cache, identical to the shell that replaces it, so the page is
- * there at once and the swap moves nothing.
- */
+// The first render does not wait: the skeleton it paints draws the sidebar from the same cache,
+// identical to the shell that replaces it, so the swap moves nothing.
 const SHELL_ROOTS = [...appNavItems.map((item) => item.to), "/import", "/admin"];
 
 function prefetchShell() {
@@ -481,14 +438,9 @@ function prefetchShell() {
     loadShell().catch(() => {});
 }
 
-/**
- * The prerendered shell stays on screen until React has drawn its own. React
- * empties its container on the first commit, before the router has drawn
- * anything, which showed as a one-frame blank between the two. So the static
- * copy steps out of #root first, and goes the moment React puts anything in
- * it: a MutationObserver runs before the browser paints, so the two never
- * show together and nothing is ever missing.
- */
+// React empties its container on the first commit, before the router has drawn anything, which
+// showed as a one-frame blank. So the static copy steps out of #root once React puts anything
+// in it: a MutationObserver runs before paint, so the two never show together.
 function handOverStaticShell(root: HTMLElement) {
   const shell = root.querySelector("[data-shell-static]");
   if (!shell) return;
@@ -511,18 +463,10 @@ if (globalThis.document) globalThis.document.documentElement.dataset.motionReady
 if (root) {
   resumeAnalyticsIfConsented();
   if (root.dataset.prerendered === globalThis.window.location.pathname) {
-    // Hydrating before the route's lazy chunk has arrived renders its
-    // pending component over the prerendered page: the text vanishes and
-    // pops back in. Load the route first, so hydration finds what the server
-    // sent and the page stays as painted. A failed or hung load (a stalled
-    // chunk request) still hydrates, after HYDRATE_WAIT_MS.
-    //
-    // And the router must know the HTML came from a server render. It leaves
-    // out the root Suspense boundary for server HTML (as the prerender did);
-    // without this the client adds one, React finds a tree that differs from
-    // the HTML (error #418) and throws the prerendered DOM away.
+    // Hydrating before the route's lazy chunk arrives renders its pending component over the
+    // prerendered page, so load it first (a hung load still hydrates after HYDRATE_WAIT_MS).
+    // The router must know the HTML was server-rendered, or React hits error #418 and drops the DOM.
     router.ssr = { manifest: undefined };
-    // Nothing to wait for: the catch below swallows a failed load.
     void Promise.race([
       router.load(),
       new Promise((resolve) => setTimeout(resolve, HYDRATE_WAIT_MS)),

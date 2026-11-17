@@ -1,9 +1,3 @@
-/**
- * Which sign-in method this browser used last, and (for Google) which
- * account, so the login and signup pages can offer a one-click "continue as
- * you". A convenience hint kept in localStorage: a wrong or missing value
- * only costs one extra click.
- */
 import * as v from "valibot";
 
 export type AuthMethod = "google" | "password";
@@ -17,11 +11,6 @@ const schema = v.object({
 
 export type LastAuth = v.InferOutput<typeof schema>;
 
-/**
- * Record the method, and the email when we have it. Called with just the
- * method (e.g. before the Google redirect, when the address isn't known
- * yet) it keeps whatever email was stored for that method.
- */
 export function setLastAuth(method: AuthMethod, email?: string): void {
   try {
     const prev = lastAuth();

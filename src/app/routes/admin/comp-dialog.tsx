@@ -9,11 +9,7 @@ import { BusyContent } from "../../ui/spinner";
 
 export type CompPlan = "hobby" | "pro";
 
-/**
- * Granting paid access by hand is a comp, and a comp is recorded: who granted
- * it, when, and why (#81). The reason is required, which is why this is a
- * dialog rather than a menu item that fires straight away.
- */
+/** A comp is recorded with who, when and why (#81); the reason is required. */
 export function GrantCompDialog({
   user,
   onClose,
@@ -32,9 +28,6 @@ export function GrantCompDialog({
   const trimmed = reason.trim();
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} title={`Comp ${user.name}`}>
-      {/* The reason is required, and the button still works without one:
-          pressing it marks the field instead of greying out with no word as
-          to why. */}
       <form
         className="flex flex-col gap-4"
         noValidate

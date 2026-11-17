@@ -1,11 +1,7 @@
 /**
- * Render the public entry pages into the built shell. The browser hydrates
- * these exact route trees, while every other route keeps the client shell.
- *
- * A self-hosted build has no public pages, so it only swaps rdyrct.com's
- * crawler files for its own (scripts/self-host-files.ts).
- *
- *   bun scripts/prerender-public.tsx   (run by `bun run build`)
+ * Render the public entry pages into the built shell. The browser hydrates these exact route
+ * trees. A self-hosted build has no public pages, so it only swaps rdyrct.com's crawler
+ * files for its own (scripts/self-host-files.ts).
  */
 import { mkdir, rm } from "node:fs/promises";
 import { PassThrough } from "node:stream";

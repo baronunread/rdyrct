@@ -6,18 +6,8 @@ function focusSlot(root: HTMLDivElement | null, index: number) {
   root?.querySelectorAll<HTMLInputElement>("input")[index]?.focus();
 }
 
-/**
- * Segmented one-time-code input (the modern boxed style). Wraps Base UI's
- * OTPField: numeric validation, paste-to-fill, and arrow-key nav come for
- * free. `onComplete` fires once the last slot is filled.
- */
-/**
- * Whether a digit typed on the page belongs to this field.
- *
- * Not when it landed inside the field already (its own input handles that),
- * and not when it landed in some other control the visitor is typing into.
- * A keydown with no element behind it is nobody else's, so it counts.
- */
+// Not when it landed inside the field already (its own input handles that), and not in some
+// other control the visitor is typing into. A keydown with no element behind it counts.
 function isStrayDigit(root: HTMLElement, target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return true;
   if (root.contains(target)) return false;
@@ -65,9 +55,8 @@ export function OtpInput({
   });
 
   useEffect(() => {
-    // Typing a digit anywhere on the page (not just clicking into a box
-    // first) jumps into the next empty slot, so an interruption elsewhere
-    // (clicking away, tabbing out and back) doesn't force a re-click.
+    // Typing a digit anywhere on the page jumps into the next empty slot, so an
+    // interruption elsewhere (clicking away, tabbing out and back) doesn't force a re-click.
     if (disabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!/^[0-9]$/.test(event.key) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -77,8 +66,7 @@ export function OtpInput({
       event.preventDefault();
       const next = valueRef.current + event.key;
       // Update the ref immediately, not just on the next render: back-to-back
-      // keydowns in the same tick (fast typing, a paste-like burst) would
-      // otherwise all read the same stale value and clobber each other.
+      // keydowns in the same tick would otherwise read the same stale value and clobber each other.
       valueRef.current = next;
       handleDigit(next);
       focusSlot(root, Math.min(next.length, length - 1));
@@ -104,8 +92,6 @@ export function OtpInput({
           key={i}
           autoFocus={autoFocus && i === 0}
           aria-label={`Digit ${i + 1} of ${length}`}
-          // Lifted like every other input (a ring shadow, no border), 48px
-          // tall, and the focused box ringed in the accent as the mock has it.
           className="h-12 w-full min-w-0 rounded-[10px] bg-surface text-center text-xl font-semibold text-text tabular-nums smooth-shadow-ring-xs transition-[box-shadow] duration-150 focus-visible:shadow-[0_0_0_1.5px_var(--accent),0_0_0_4px_color-mix(in_oklab,var(--accent)_25%,transparent)] focus-visible:outline-none disabled:opacity-50"
         />
       ))}

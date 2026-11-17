@@ -21,12 +21,10 @@ export function ConfirmDialog({
   onClose: () => void;
   onConfirm: () => void;
   confirmLabel: string;
-  /** The danger button instead of the primary one. */
   danger?: boolean;
   pending?: boolean;
   confirmDisabled?: boolean;
   size?: DialogSize;
-  /** Focus this on open instead of the close button (a typed check). */
   initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {

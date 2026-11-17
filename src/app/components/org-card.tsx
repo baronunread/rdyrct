@@ -7,14 +7,6 @@ import { LiveStatus } from "../ui/live-status";
 import { Spinner } from "../ui/spinner";
 import { QRPreview } from "./qr";
 
-/**
- * The organization as others will see it, while it is being set up
- * (components/setup-flow.tsx): its name, its first link and QR code, the
- * domain it could have, its team. Empty places stay drawn, so what is missing
- * reads as missing. It is what the sign-in card became, and it becomes the
- * org switcher on the way into the app (data-setup-card, setup-arrive in
- * styles.css).
- */
 const PLAN_LABEL = {
   free: "Free",
   hobby: "Hobby",
@@ -40,12 +32,9 @@ export function OrgCard({
   plan: OrgPlan;
   link: LinkDTO | null;
   domain: string;
-  /** The domain was added, rather than shown as what it could be. */
   domainSet: boolean;
-  /** The added domain is serving. */
   domainLive?: boolean;
   invited: string[];
-  /** The first click on the org, once somebody opens the link. */
   firstClick?: RecentClick | null;
   className?: string;
 }) {
@@ -97,8 +86,7 @@ function CardRow({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function FirstLink({ link, click }: { link: LinkDTO | null; click: RecentClick | null }) {
-  // Clicks arrive in batches about every 10 seconds (worker/click-buffer.ts):
-  // once they open it, the card says it is counting rather than look stuck.
+  // Clicks arrive in batches (worker/click-buffer.ts): say it is counting rather than look stuck.
   const [opened, setOpened] = useState(false);
   if (!link)
     return (
@@ -172,8 +160,6 @@ function Domain({
   );
 }
 
-/** The team starts with whoever is setting it up; each invite takes a
- * place, and two empty ones say there is room for more. */
 function Team({ invited }: { invited: string[] }) {
   const me = initial(useCurrentUser().data?.user.name ?? "");
   const shown = invited.slice(0, 6);

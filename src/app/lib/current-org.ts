@@ -3,8 +3,7 @@ import { useCurrentUser, useShellUser } from "./hooks";
 import type { UserOrg } from "@/shared/types";
 
 // There is no org id in the URL: the current org lives here, backed by
-// localStorage so a reload keeps it. Store and hook share one file because
-// the hook was the store's only reader.
+// localStorage so a reload keeps it.
 
 const KEY = "rdyrct:currentOrg";
 
@@ -24,9 +23,7 @@ function setCurrentOrgId(id: string | null) {
   try {
     if (id) localStorage.setItem(KEY, id);
     else localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  } catch {}
   listeners.forEach((l) => l());
 }
 
@@ -37,21 +34,14 @@ function subscribeToOrg(l: () => void) {
   return () => listeners.delete(l);
 }
 
-/** The org a list resolves to: the stored one while it is still in the
- * list, otherwise the first. One rule for the hook below and for the route
- * loaders, which pick the org before any component has mounted. */
+// One rule for the hook and the route loaders, which pick the org before any component mounts.
 export function pickOrg(orgs: UserOrg[], storedId: string | null = getCurrentOrgId()) {
   return orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
 }
 
-/**
- * Which of these is the current one, and remember it.
- *
- * Two callers pass two different lists: the sidebar's switcher passes the
- * cached one so a reload keeps drawing it, and everything else passes the
- * checked one. Org identity is the same either way; org settings are not,
- * which is why only the switcher may read the cached list.
- */
+// The sidebar's switcher passes the cached list so a reload keeps drawing it; everything
+// else passes the checked one. Org identity is the same either way, org settings are not,
+// which is why only the switcher may read the cached list.
 function usePickOrg(orgs: UserOrg[]) {
   const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId, () => null);
   const org = pickOrg(orgs, storedId);
@@ -64,15 +54,13 @@ function usePickOrg(orgs: UserOrg[]) {
   return { org, orgs, setOrg: setCurrentOrgId };
 }
 
-/** The current org as the app knows it: waits for the checked answer.
- * `enabled: false` asks nothing, for a public page that only needs the
- * hook's shape (a stranger's /user would 401). */
+// `enabled: false` asks nothing, for a public page that only needs the hook's shape
+// (a stranger's /user would 401).
 export function useCurrentOrg(enabled = true) {
   const currentUser = useCurrentUser(enabled);
   return usePickOrg(currentUser.data?.orgs ?? []);
 }
 
-/** The current org as the sidebar draws it, cache included. Chrome only. */
 export function useShellOrgs() {
   return usePickOrg(useShellUser()?.orgs ?? []);
 }

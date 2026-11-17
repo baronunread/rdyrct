@@ -68,13 +68,11 @@ describe("storage queue: kv_sync", () => {
   it("deletes the key when the row is gone, whatever order messages ran in", async () => {
     const db = await seedLink();
     const message = syncLinkMsg(sampleLink.slug, null);
-    // Publish once so KV holds a value.
     await applyStorageMessage(testEnv, db, message);
     expect(await env.LINKS.get("slug:sale")).not.toBeNull();
 
-    // Now delete the row and replay the SAME message. Because the consumer
-    // reads current D1 truth, a stale "publish-era" message still lands on a
-    // delete: no older message can revive a removed link.
+    // The consumer reads current D1 truth, so a stale publish message cannot
+    // revive a removed link.
     await db.delete(schema.links).where(eq(schema.links.id, "link-1"));
     await applyStorageMessage(testEnv, db, message);
 
@@ -90,7 +88,6 @@ describe("storage queue: kv_sync", () => {
       .update(schema.links)
       .set({ destination: "https://new.example.com" })
       .where(eq(schema.links.id, "link-1"));
-    // Two identical messages, run after the update: both converge on the new value.
     await applyStorageMessage(testEnv, db, message);
     await applyStorageMessage(testEnv, db, message);
 
@@ -145,13 +142,11 @@ describe("storage queue: dead-letter visibility", () => {
     const loggedDeadLetter = () =>
       errors.mock.calls.some(([a]) => String(a).includes("storage_message_dead_letter"));
 
-    // An early delivery that fails retries without the dead-letter log.
     const early = batchOf("rdyrct-storage", [syncLinkMsg("sale", null)], 1);
     await consumeStorageBatch(down, early.batch);
     expect((await getQueueResult(early.batch, early.ctx)).retryMessages).toHaveLength(1);
     expect(loggedDeadLetter()).toBe(false);
 
-    // The sixth (last) failing delivery logs that the message will dead-letter.
     const last = batchOf("rdyrct-storage", [syncLinkMsg("sale", null)], 6);
     await consumeStorageBatch(down, last.batch);
     expect((await getQueueResult(last.batch, last.ctx)).retryMessages).toHaveLength(1);
@@ -185,11 +180,9 @@ describe("org teardown steps under secondary-store outage", () => {
     await env.LINKS.put("slug:sale", "stale");
     await env.MEDIA.put("org-1/logo.webp", "logo");
 
-    // Step 1: gather while the org still exists.
     const gathered = await orgDeleteGather(db, "org-1");
     expect(gathered.kvKeys).toEqual(["slug:sale"]);
 
-    // Step 2: the org leaves D1 immediately (the workflow's second step).
     await db.delete(schema.orgs).where(eq(schema.orgs.id, "org-1"));
     expect(await env.DB.prepare("select id from orgs where id = 'org-1'").first()).toBeNull();
 
@@ -204,7 +197,6 @@ describe("org teardown steps under secondary-store outage", () => {
     expect(await env.LINKS.get("slug:sale")).not.toBeNull();
     expect(await env.MEDIA.head("org-1/logo.webp")).not.toBeNull();
 
-    // Once the stores recover the steps complete and are idempotent.
     await deleteKvKeys(testEnv, gathered.kvKeys);
     await deleteR2Prefix(testEnv, "org-1/");
     expect(await env.LINKS.get("slug:sale")).toBeNull();
@@ -226,7 +218,6 @@ describe("producing messages", () => {
       r2,
     ]);
     expect(sent).toEqual([r2]);
-    // No link row in D1, so the sync's answer is "this key should not exist".
     expect(await env.LINKS.get("slug:sale")).toBeNull();
   });
 
@@ -251,14 +242,12 @@ describe("producing messages", () => {
   });
 
   it("records a producer-side send failure to the outbox and returns", async () => {
-    // The mutation that called this already committed, so the recovery path is
-    // the outbox row, not a thrown error the caller would surface as a 500
-    // (#227). The full contract, including the rethrow when the outbox write
-    // also fails, is in storage-outbox.worker.ts.
     const queue = stubQueue<StorageMessage>(() => {
       throw new Error("injected queue-send failure");
     });
 
+    // The mutation already committed: recover via the outbox, not a throw the
+    // caller would surface as a 500 (#227).
     await expect(
       enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [r2]),
     ).resolves.toBeUndefined();
