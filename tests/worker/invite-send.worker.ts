@@ -108,7 +108,7 @@ describe("the per-recipient email budget (#15)", () => {
       mailed += sent.length;
       refused += body.failed.length;
     }
-    // RL_EMAIL_RECIPIENT allows 4 a minute, the same budget /api/auth/* spends.
+    // The email_recipient limit allows 4 a minute, the same budget /api/auth/* spends.
     expect(mailed).toBeLessThanOrEqual(4);
     expect(mailed).toBeGreaterThan(0);
     expect(refused).toBe(12 - mailed);

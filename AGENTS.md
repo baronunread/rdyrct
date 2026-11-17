@@ -127,7 +127,7 @@ without wrangler CLI calls).
 ```sh
 bun run check                          # app + shared, worker, worker tests (three bun check runs)
 bun run test                           # unit tests (bun test, tests/)
-bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
+bun run test:worker                    # worker tests (@cloudflare/vitest-plugin, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); bring their own env, whatever your .dev.vars and .env say
 bun run e2e:production                 # browser tests against the built worker, where the real CSP applies (builds dist/)
 bun run e2e:self-host                  # browser tests against a self-hosted build (builds dist/, so not alongside e2e:production)

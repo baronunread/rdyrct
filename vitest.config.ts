@@ -1,4 +1,4 @@
-import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
@@ -20,14 +20,6 @@ export default defineConfig({
           SENTRY_DSN: "",
           SHARED_LINK_HOST: "short.localhost",
           TEST_MIGRATIONS: await readD1Migrations(path.join(import.meta.dirname, "migrations")),
-        },
-        // A one-token click bucket makes the redirect fail-open behavior
-        // deterministic without weakening production's 600/min threshold.
-        ratelimits: {
-          RL_CLICK_RECORDING: {
-            namespace_id: "14008",
-            simple: { limit: 1, period: 60 },
-          },
         },
       },
     })),

@@ -23,17 +23,7 @@ export interface Env {
   /* click ingestion: redirects buffer here instead of writing D1 directly
      (#225), one instance, flushed to D1 on a ~10 s alarm */
   CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;
-  RL_AUTH_PUBLIC: RateLimit;
-  RL_EMAIL: RateLimit;
-  RL_EMAIL_RECIPIENT: RateLimit;
-  RL_WRITE_FREE: RateLimit;
-  RL_WRITE_PAID: RateLimit;
-  RL_QR_UPLOAD: RateLimit;
-  RL_DOMAIN_SETUP: RateLimit;
-  RL_BILLING: RateLimit;
-  RL_CLICK_RECORDING: RateLimit;
-  /* the landing page's anonymous shortener (Direction A of #96) */
-  RL_ANON_LINK: RateLimit;
+  RATE_LIMIT: RateLimit;
 
   /* auth + email (secrets unless noted) */
   BETTER_AUTH_SECRET: string;

@@ -8,6 +8,27 @@ import { logFailure } from "./log-failure";
 
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
+// Calls per key per minute. One binding counts them all: a call spends
+// RATE_LIMIT_POOL / limit units, and Cloudflare passes a call while the key's
+// count is below the pool, so each bucket allows exactly its limit.
+// email_recipient is tight on purpose: it caps what one inbox receives (#50).
+export const RATE_LIMITS = {
+  auth: 30,
+  email: 10,
+  email_recipient: 4,
+  write_free: 90,
+  write_paid: 300,
+  qr_upload: 20,
+  domain: 30,
+  billing: 10,
+  click: 600,
+  anon_link: 15,
+} as const;
+
+export type RateLimitBucket = keyof typeof RATE_LIMITS;
+
+export const RATE_LIMIT_POOL = 1800;
+
 export type RateLimitGroup =
   | "auth"
   | "email"
@@ -38,7 +59,8 @@ function rateLimitLog(
 }
 
 export async function rateLimitAllows(
-  binding: RateLimit,
+  env: Env,
+  bucket: RateLimitBucket,
   key: string,
   options: {
     group: RateLimitGroup;
@@ -48,7 +70,10 @@ export async function rateLimitAllows(
   },
 ): Promise<boolean> {
   try {
-    const { success } = await binding.limit({ key });
+    const { success } = await env.RATE_LIMIT.limit({
+      key: `${bucket}:${key}`,
+      delta: RATE_LIMIT_POOL / RATE_LIMITS[bucket],
+    });
     if (!success) rateLimitLog("rate_limited", options.group, options);
     return success;
   } catch (error) {
@@ -149,18 +174,11 @@ export function publicAuthGroup(path: string): "auth" | "email" | null {
   return null;
 }
 
-/** Which counter each public group spends. */
-const PUBLIC_LIMIT_BINDINGS = {
-  auth: (env) => env.RL_AUTH_PUBLIC,
-  email: (env) => env.RL_EMAIL,
-} satisfies Record<"auth" | "email", (env: Env) => RateLimit>;
-
 export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Response | null> {
   const group = publicAuthGroup(c.req.path);
   if (!group) return null;
   const client = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
-  const binding = PUBLIC_LIMIT_BINDINGS[group](c.env);
-  const allowed = await rateLimitAllows(binding, `${group}:${c.req.path}:${client}`, {
+  const allowed = await rateLimitAllows(c.env, group, `${c.req.path}:${client}`, {
     group,
     method: c.req.method,
   });
@@ -178,11 +196,10 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
   if (group === "email") {
     const recipient = await recipientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
     if (recipient) {
-      const withinRecipientBudget = await rateLimitAllows(
-        c.env.RL_EMAIL_RECIPIENT,
-        `email-recipient:${recipient}`,
-        { group, method: c.req.method },
-      );
+      const withinRecipientBudget = await rateLimitAllows(c.env, "email_recipient", recipient, {
+        group,
+        method: c.req.method,
+      });
       if (!withinRecipientBudget) return rateLimitedResponse(c, group);
     }
   }
@@ -192,11 +209,12 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
 /**
  * Spends one unit of an address's email budget (#50), for mail the app sends
  * outside /api/auth/* (#15). The same counter and key the auth routes use, so
- * an inbox gets at most RL_EMAIL_RECIPIENT a minute from all of them together.
+ * an inbox gets at most the email_recipient limit a minute from all of them
+ * together.
  */
 export async function recipientEmailAllowed(env: Env, address: string): Promise<boolean> {
   const recipient = await keyedDigest(env.BETTER_AUTH_SECRET, address.trim().toLowerCase());
-  return rateLimitAllows(env.RL_EMAIL_RECIPIENT, `email-recipient:${recipient}`, {
+  return rateLimitAllows(env, "email_recipient", recipient, {
     group: "email",
     method: "POST",
   });
@@ -229,8 +247,8 @@ function writeRouteFamily(path: string): string {
   return "api";
 }
 
-export function writeRateLimitBinding(env: Env, plan: SessionUser["plan"]): RateLimit {
-  return plan === "free" ? env.RL_WRITE_FREE : env.RL_WRITE_PAID;
+export function writeBucket(plan: SessionUser["plan"]): "write_free" | "write_paid" {
+  return plan === "free" ? "write_free" : "write_paid";
 }
 
 export async function enforceSignedApiRateLimit(c: Context<AppEnv>, next: Next) {
@@ -240,29 +258,28 @@ export async function enforceSignedApiRateLimit(c: Context<AppEnv>, next: Next) 
 
   const orgId = orgIdFromPath(c.req.path);
   const actor = orgId ? `org:${orgId}:user:${user.id}` : `user:${user.id}`;
-  let binding: RateLimit;
-  let key = `${group}:${actor}`;
+  let bucket: RateLimitBucket;
+  let key = actor;
 
   switch (group) {
-    // Same binding, separate counters (the key starts with the group), so
+    // Same bucket, separate counters (the key starts with the group), so
     // downloading invoices never uses up the budget for checking out.
     case "checkout":
     case "billing_read":
-      binding = c.env.RL_BILLING;
+      bucket = "billing";
+      key = `${group}:${actor}`;
       break;
     case "domain":
-      binding = c.env.RL_DOMAIN_SETUP;
-      break;
     case "qr_upload":
-      binding = c.env.RL_QR_UPLOAD;
+      bucket = group;
       break;
     case "write":
-      binding = writeRateLimitBinding(c.env, user.plan);
-      key = `${key}:${writeRouteFamily(c.req.path)}`;
+      bucket = writeBucket(user.plan);
+      key = `${actor}:${writeRouteFamily(c.req.path)}`;
       break;
   }
 
-  const allowed = await rateLimitAllows(binding, key, {
+  const allowed = await rateLimitAllows(c.env, bucket, key, {
     group,
     method: c.req.method,
     plan: user.plan,
@@ -283,8 +300,8 @@ export async function clickAnalyticsAllowed(
   method = "GET",
   visitor?: string,
 ): Promise<boolean> {
-  const key = visitor ? `click:org:${subject}:${visitor}` : `click:org:${subject}`;
-  return rateLimitAllows(env.RL_CLICK_RECORDING, key, {
+  const key = visitor ? `org:${subject}:${visitor}` : `org:${subject}`;
+  return rateLimitAllows(env, "click", key, {
     group: "click",
     method,
     failClosed: true,

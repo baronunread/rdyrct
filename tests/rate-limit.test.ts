@@ -7,14 +7,49 @@ import {
   enforceSignedApiRateLimit,
   publicAuthGroup,
   publicClientKey,
+  RATE_LIMIT_POOL,
+  RATE_LIMITS,
+  type RateLimitBucket,
   rateLimitAllows,
   signedApiGroup,
-  writeRateLimitBinding,
+  writeBucket,
 } from "../src/worker/rate-limit";
+import { lookup } from "../src/shared/lookup";
+import * as v from "valibot";
 
-function limiter(success: boolean): RateLimit {
+const ratelimitsSchema = v.optional(
+  v.array(
+    v.object({ name: v.string(), simple: v.object({ limit: v.number(), period: v.number() }) }),
+  ),
+);
+const wranglerSchema = v.object({
+  ratelimits: ratelimitsSchema,
+  env: v.record(v.string(), v.object({ ratelimits: ratelimitsSchema })),
+});
+
+const bucketOf = (call: RateLimitOptions) => call.key.split(":")[0];
+
+function bucketLimiter(results: Partial<Record<RateLimitBucket, boolean>>) {
+  const calls: RateLimitOptions[] = [];
+  const RATE_LIMIT: RateLimit = {
+    limit: async (options) => {
+      calls.push(options);
+      return { success: lookup(results, bucketOf(options) ?? "") ?? true };
+    },
+  };
+  return { RATE_LIMIT, calls };
+}
+
+// Cloudflare's documented counting: a refused call adds nothing.
+function poolCounter(): RateLimit {
+  const counts = new Map<string, number>();
   return {
-    limit: mock(async () => ({ success })),
+    limit: async ({ key, delta = 1 }) => {
+      const count = counts.get(key) ?? 0;
+      if (count >= RATE_LIMIT_POOL) return { success: false };
+      counts.set(key, count + delta);
+      return { success: true };
+    },
   };
 }
 
@@ -64,13 +99,10 @@ describe("Cloudflare rate limiting", () => {
     expect(signedApiGroup("/api/orgs/org-1/links", "GET")).toBeNull();
   });
 
-  it("uses the higher write binding for either paid plan", () => {
-    const free = limiter(true);
-    const paid = limiter(true);
-    const env = partialEnv({ RL_WRITE_FREE: free, RL_WRITE_PAID: paid });
-    expect(writeRateLimitBinding(env, "free")).toBe(free);
-    expect(writeRateLimitBinding(env, "hobby")).toBe(paid);
-    expect(writeRateLimitBinding(env, "pro")).toBe(paid);
+  it("uses the higher write bucket for either paid plan", () => {
+    expect(writeBucket("free")).toBe("write_free");
+    expect(writeBucket("hobby")).toBe("write_paid");
+    expect(writeBucket("pro")).toBe("write_paid");
   });
 
   it("builds a stable opaque public key without exposing the address", async () => {
@@ -93,11 +125,8 @@ describe("Cloudflare rate limiting", () => {
       const limited = await enforcePublicAuthRateLimit(c);
       return limited ?? c.json({ ok: true });
     });
-    const env = partialEnv({
-      BETTER_AUTH_SECRET: "test-secret",
-      RL_AUTH_PUBLIC: limiter(false),
-      RL_EMAIL: limiter(true),
-    });
+    const { RATE_LIMIT } = bucketLimiter({ auth: false });
+    const env = partialEnv({ BETTER_AUTH_SECRET: "test-secret", RATE_LIMIT });
 
     const response = await app.request(
       "/api/auth/sign-in/email",
@@ -114,19 +143,14 @@ describe("Cloudflare rate limiting", () => {
     });
   });
 
-  it("uses the email binding for sign-up email", async () => {
+  it("uses the email bucket for sign-up email", async () => {
     const app = new Hono<AppEnv>();
     app.post("/api/auth/*", async (c) => {
       const limited = await enforcePublicAuthRateLimit(c);
       return limited ?? c.json({ ok: true });
     });
-    const auth = limiter(true);
-    const email = limiter(false);
-    const env = partialEnv({
-      BETTER_AUTH_SECRET: "test-secret",
-      RL_AUTH_PUBLIC: auth,
-      RL_EMAIL: email,
-    });
+    const { RATE_LIMIT, calls } = bucketLimiter({ email: false });
+    const env = partialEnv({ BETTER_AUTH_SECRET: "test-secret", RATE_LIMIT });
 
     const response = await app.request(
       "/api/auth/sign-up/email",
@@ -135,18 +159,13 @@ describe("Cloudflare rate limiting", () => {
     );
 
     expect(response.status).toBe(429);
-    expect(email.limit).toHaveBeenCalledTimes(1);
-    expect(auth.limit).not.toHaveBeenCalled();
+    expect(calls.map(bucketOf)).toEqual(["email"]);
   });
 
-  it("limits free writes and allows the same request through the paid binding", async () => {
+  it("limits free writes and allows the same request through the paid bucket", async () => {
     const logged = spyOn(console, "error").mockImplementation(() => {});
-    const free = limiter(false);
-    const paid = limiter(true);
-    const env = partialEnv({
-      RL_WRITE_FREE: free,
-      RL_WRITE_PAID: paid,
-    });
+    const { RATE_LIMIT, calls } = bucketLimiter({ write_free: false });
+    const env = partialEnv({ RATE_LIMIT });
 
     const limited = await signedWriteApp("free").request(
       "/api/orgs/org-1/links",
@@ -154,8 +173,6 @@ describe("Cloudflare rate limiting", () => {
       env,
     );
     expect(limited.status).toBe(429);
-    expect(free.limit).toHaveBeenCalledTimes(1);
-    expect(paid.limit).not.toHaveBeenCalled();
 
     const allowed = await signedWriteApp("hobby").request(
       "/api/orgs/org-1/links",
@@ -163,7 +180,7 @@ describe("Cloudflare rate limiting", () => {
       env,
     );
     expect(allowed.status).toBe(200);
-    expect(paid.limit).toHaveBeenCalledTimes(1);
+    expect(calls.map(bucketOf)).toEqual(["write_free", "write_paid"]);
     logged.mockRestore();
   });
 
@@ -174,16 +191,52 @@ describe("Cloudflare rate limiting", () => {
         throw new Error("binding unavailable");
       }),
     };
+    const env = partialEnv({ RATE_LIMIT: broken });
     expect(
-      await rateLimitAllows(broken, "user-1", {
+      await rateLimitAllows(env, "write_free", "user-1", {
         group: "write",
         method: "POST",
       }),
     ).toBe(true);
 
-    const env = partialEnv({ RL_CLICK_RECORDING: broken });
     expect(await clickAnalyticsAllowed(env, "org-1")).toBe(false);
     expect(logged).toHaveBeenCalledTimes(2);
+    logged.mockRestore();
+  });
+});
+
+describe("one weighted binding for every limit", () => {
+  // SAFETY: RATE_LIMITS is an `as const` literal whose keys are exactly
+  // RateLimitBucket; Object.keys only loses that to `string[]`.
+  const buckets = Object.keys(RATE_LIMITS) as RateLimitBucket[];
+
+  it("keeps the pool a whole multiple of every limit, so each delta is an integer", () => {
+    for (const bucket of buckets) expect(RATE_LIMIT_POOL % RATE_LIMITS[bucket]).toBe(0);
+  });
+
+  it("sets the binding's limit to the pool in every environment", async () => {
+    const config = v.parse(
+      wranglerSchema,
+      Bun.JSONC.parse(await Bun.file("wrangler.jsonc").text()),
+    );
+    const pools = [config, ...Object.values(config.env)]
+      .flatMap((section) => section.ratelimits ?? [])
+      .map((binding) => [binding.name, binding.simple.limit, binding.simple.period]);
+    expect(pools).toEqual([
+      ["RATE_LIMIT", RATE_LIMIT_POOL, 60],
+      ["RATE_LIMIT", RATE_LIMIT_POOL, 60],
+    ]);
+  });
+
+  it("lets each bucket through exactly its own limit a minute", async () => {
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    const env = partialEnv({ RATE_LIMIT: poolCounter() });
+    for (const bucket of buckets) {
+      let allowed = 0;
+      while (await rateLimitAllows(env, bucket, "caller", { group: "write", method: "POST" }))
+        allowed++;
+      expect([bucket, allowed]).toEqual([bucket, RATE_LIMITS[bucket]]);
+    }
     logged.mockRestore();
   });
 });

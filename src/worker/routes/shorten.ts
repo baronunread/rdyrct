@@ -61,7 +61,12 @@ shortenRoutes.post("/", async (c) => {
   // out of signing in. Keyed by the same HMAC the auth limiter uses, so no
   // raw address reaches storage or logs.
   const key = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
-  if (!(await rateLimitAllows(c.env.RL_ANON_LINK, key, { group: "anon_link", method: "POST" })))
+  if (
+    !(await rateLimitAllows(c.env, "anon_link", `shorten:${key}`, {
+      group: "anon_link",
+      method: "POST",
+    }))
+  )
     throw new HTTPException(429, {
       message: "Too many links from here. Try again shortly, or sign up.",
     });
@@ -164,7 +169,7 @@ shortenRoutes.get("/clicks", async (c) => {
   if (!token) throw new HTTPException(404, { message: "No such link" });
   const key = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
   if (
-    !(await rateLimitAllows(c.env.RL_ANON_LINK, `clicks:${key}`, {
+    !(await rateLimitAllows(c.env, "anon_link", `clicks:${key}`, {
       group: "anon_link",
       method: "GET",
     }))

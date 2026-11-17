@@ -131,7 +131,7 @@ unsubscribeRoutes.use("*", async (c, next) => {
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)),
   );
   const link = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const allowed = await rateLimitAllows(c.env.RL_AUTH_PUBLIC, `unsubscribe:${link}`, {
+  const allowed = await rateLimitAllows(c.env, "auth", `unsubscribe:${link}`, {
     group: "unsubscribe",
     method: c.req.method,
   });

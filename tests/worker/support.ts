@@ -13,6 +13,8 @@ import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
+import type { RateLimitBucket } from "../../src/worker/rate-limit";
+import { lookup } from "../../src/shared/lookup";
 import type { ClickMessage } from "../../src/worker/clicks";
 import type { ClickBuffer } from "../../src/worker/click-buffer";
 import type { StorageMessage } from "../../src/worker/storage";
@@ -117,7 +119,7 @@ function stubWorkflow<T>(): Workflow<T> {
 // (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast),
 // with the one binding that environment cannot supply stubbed in.
 //
-// vitest-pool-workers builds no asset bundle, so ASSETS is genuinely absent
+// The Vitest plugin builds no asset bundle, so ASSETS is genuinely absent
 // and every request reaching the SPA fallback threw on `undefined.fetch` and
 // came back a 500. Tests wrote around it (expiry.worker.ts asserted "not a
 // 302" because it could not assert the status it meant), which is how a
@@ -387,7 +389,10 @@ export async function applyTestMigrations(): Promise<void> {
 /** Migration 0042's backfill: the click rollups rebuilt from raw clicks. */
 export function rollupBackfill(): string[] {
   const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0042_"));
-  return (migration?.queries ?? []).filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q));
+  // readD1Migrations keeps comments, and 0042's mention the WHERE true the range test replaces.
+  return (migration?.queries ?? [])
+    .filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q))
+    .map((q) => q.replace(/^\s*--.*$\n?/gm, ""));
 }
 
 /**
@@ -674,6 +679,17 @@ export function recordingLimit(keys: string[]): RateLimit {
       return { success: true };
     },
   };
+}
+
+// Buckets without a stub always allow.
+export function rateLimits(stubs: Partial<Record<RateLimitBucket, RateLimit>>) {
+  const RATE_LIMIT: RateLimit = {
+    limit: async (options) => {
+      const stub = lookup(stubs, options.key.split(":")[0] ?? "");
+      return stub ? stub.limit(options) : { success: true };
+    },
+  };
+  return { RATE_LIMIT } satisfies Partial<Env>;
 }
 
 // Seeds `count` active links (each with its own primary address), so a
