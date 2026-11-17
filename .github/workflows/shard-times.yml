@@ -32,7 +32,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       BRANCH: chore/e2e-shard-times
     steps:
+      # main, even when run by hand from another branch, so the PR carries
+      # only the table. No stored credentials; the push passes the token.
       - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
@@ -61,7 +66,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
           git commit -m "e2e: refresh shard times from main's last five runs" -- tests/e2e/shard-times.json
-          git push --force origin "$BRANCH"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
           if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
             gh pr create --head "$BRANCH" --base main \
               --title "e2e: refresh shard times" \
