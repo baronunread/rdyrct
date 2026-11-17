@@ -1,18 +1,6 @@
-/**
- * Import from another service (#383): recreates links exported from Short.io,
- * Bitly, Rebrandly or Dub on the same domain and slug, so every short URL
- * already printed keeps landing where it did once the domain points here.
- *
- * The browser reads the file (src/shared/link-import.ts) and sends rows in
- * chunks: first to /check, which writes nothing and says what each row would
- * do, then to /run, which checks again and writes. Chunks keep each request
- * inside the body limit and one D1 batch, and let the page show progress.
- * Every row is checked on its own, so a retry sends the same rows back and
- * the ones already written come back as `exists`, never twice.
- *
- * Paid plans only: an imported link keeps its own slug, and chosen slugs exist
- * only on custom domains.
- */
+// The browser sends rows in chunks to /check (writes nothing), then /run (checks again, writes).
+// Each row is checked on its own, so a retry returns written rows as `exists`, never twice.
+// Paid plans only: an imported link keeps its slug, and chosen slugs exist only on custom domains (#383).
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import * as v from "valibot";
@@ -45,7 +33,6 @@ import {
 } from "@/shared/link-import";
 import type { JsonValue } from "@/shared/types";
 
-// Mounted at /api/orgs/:orgId/link-import
 export const linkImportRoutes = new Hono<AppEnv>();
 
 const Row = v.object({
@@ -66,7 +53,6 @@ const rowsBody = (max: number) =>
     ),
   });
 
-/** A row this import can write: where it goes, and the link it becomes. */
 interface Plan {
   row: Row;
   domainId: string;
@@ -81,8 +67,7 @@ const failed = (row: Row, reason: string): Checked => ({
   verdict: { line: row.line, status: "failed", reason },
 });
 
-/** Imports are a paid feature (#383): a free org sees the upgrade, not a 402
- * on every chunk. */
+/** A free org sees the upgrade, not a 402 on every chunk. */
 async function paidPlan(db: DB, orgId: string) {
   const plan = await orgPlan(db, orgId);
   if (plan.plan === "free")
@@ -93,9 +78,6 @@ async function paidPlan(db: DB, orgId: string) {
   return plan;
 }
 
-/** What every row in a chunk would do, read in four queries however many
- * rows there are: the org's domains, the addresses already on those slugs,
- * the links behind them, and the blocklist. */
 async function checkRows(env: Env, db: DB, orgId: string, rows: Row[]): Promise<Checked[]> {
   const domains = await db
     .select({
@@ -149,8 +131,7 @@ async function checkRows(env: Env, db: DB, orgId: string, rows: Row[]): Promise<
   });
 }
 
-/** Why a slug from another service cannot be one of ours, or null. Dub and
- * Rebrandly allow `/` and `.`, which a single path segment here cannot hold. */
+/** Dub and Rebrandly allow `/` and `.`, which a single path segment here cannot hold. */
 function slugProblem(slug: string): string | null {
   if (!SLUG_RE.test(slug))
     return slug.length > 64
@@ -160,7 +141,6 @@ function slugProblem(slug: string): string | null {
   return null;
 }
 
-/** The same refusals creating a link by hand gives, as a reason per row. */
 function destinationIssue(env: Env, destination: string, blocked: Set<string>): string | null {
   if (!isValidHttpUrl(destination)) return "The destination is not a valid http(s) URL.";
   if (isShortenerDestination(destination))
@@ -185,8 +165,6 @@ function sameUtm(a: UtmFields, b: UtmFields): boolean {
   );
 }
 
-/** Active addresses already on the chunk's slugs, keyed `domainId/slug`, with
- * the destination of the link each belongs to. */
 async function existingAddresses(db: DB, domainIds: string[], rows: Row[]) {
   const found = new Map<string, UtmFields & { destination: string }>();
   if (!domainIds.length) return found;
@@ -234,13 +212,9 @@ linkImportRoutes.post("/check", requireOrgRole("member"), async (c) => {
   ]);
   return c.json({
     verdicts: checked.map((entry) => entry.verdict),
-    // How many more links the plan takes, so the preview can say how many of
-    // the ready rows will fit before anything is written.
     room: Math.max(0, limits.links - used),
   });
 });
-
-/* ---------------- the job: upload, start, follow ---------------- */
 
 const MAX_IMPORT_ROWS = 20_000;
 
@@ -249,8 +223,6 @@ const NewImport = v.object({
   total: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_IMPORT_ROWS)),
 });
 
-/** The import a request names, or a 404: an id from another org is not ours
- * to show. */
 async function findImport(c: Context<AppEnv>) {
   const [job] = await c.var.db
     .select()
@@ -265,11 +237,8 @@ async function findImport(c: Context<AppEnv>) {
   return job;
 }
 
-/**
- * Starts an import: the file's rows arrive next, in chunks. An import still
- * uploading from an earlier visit is dropped, since its rows came from a file
- * the person is now sending again; a running one makes this wait.
- */
+// An upload still open from an earlier visit is dropped (its rows came from a file now
+// being resent); a running import makes this wait.
 linkImportRoutes.post("/", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   const db = c.var.db;
@@ -304,12 +273,9 @@ linkImportRoutes.post("/", requireOrgRole("member"), async (c) => {
   return c.json({ id }, 201);
 });
 
-/** Rows one insert into link_import_rows takes: eight columns each (the
- * status and reason defaults included) under D1's 100 bound variables. */
+/** Eight columns a row, under D1's 100 bound variables. */
 const ROWS_PER_INSERT = 12;
 
-/** A chunk of the file's rows. Sent again after an interruption, a row
- * already here is left alone (same line). */
 linkImportRoutes.post("/:id/rows", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const job = await findImport(c);
@@ -324,8 +290,7 @@ linkImportRoutes.post("/:id/rows", requireOrgRole("member"), async (c) => {
     destination: row.destination,
     title: row.title,
   }));
-  // D1 binds at most 100 variables a statement, so a whole chunk is several
-  // inserts, sent as one batch.
+  // D1 binds at most 100 variables a statement, so a chunk is several inserts in one batch.
   const inserts = [];
   for (let i = 0; i < values.length; i += ROWS_PER_INSERT)
     inserts.push(
@@ -339,8 +304,6 @@ linkImportRoutes.post("/:id/rows", requireOrgRole("member"), async (c) => {
   return c.json({ ok: true });
 });
 
-/** Every row is here: hand the import to the workflow. From now on it runs
- * whether or not anybody keeps the page open. */
 linkImportRoutes.post("/:id/start", requireOrgRole("member"), async (c) => {
   const log = c.get("log");
   const orgId = c.req.param("orgId")!;
@@ -373,11 +336,8 @@ linkImportRoutes.post("/:id/start", requireOrgRole("member"), async (c) => {
   return c.json(await importStatus(db, { ...job, status: "running" }));
 });
 
-/**
- * Starts the workflow for an import already marked running. If it cannot
- * start, nothing would ever finish the import and the org could not start
- * another, so its pending rows fail with a reason and Try again works.
- */
+// If the workflow cannot start, nothing would finish the import and the org could not start
+// another, so its pending rows fail with a reason and Try again works.
 async function startWorkflow(c: Context<AppEnv>, importId: string, instanceId: string) {
   try {
     await c.env.LINK_IMPORT.create({ id: instanceId, params: { importId } });
@@ -388,8 +348,6 @@ async function startWorkflow(c: Context<AppEnv>, importId: string, instanceId: s
   }
 }
 
-/** The org's latest import that nobody has put away: what the page shows on
- * return, whether it is still running or finished while the tab was closed. */
 linkImportRoutes.get("/current", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   const db = c.var.db;
@@ -404,14 +362,9 @@ linkImportRoutes.get("/current", requireOrgRole("member"), async (c) => {
   return c.json({ import: job ? await importStatus(db, job) : null });
 });
 
-/** Imports a history lists at most. */
 const HISTORY_LIMIT = 20;
 
-/**
- * The org's finished imports, newest first, put away or not: a dismissed
- * import keeps its row and its rows' outcomes, so it stays here. One that
- * never finished (dropped while uploading) has nothing to report.
- */
+// A dismissed import keeps its row and outcomes, so it stays here.
 linkImportRoutes.get("/history", requireOrgRole("member"), async (c) => {
   const imports = await c.var.db
     .select({
@@ -434,8 +387,6 @@ linkImportRoutes.get("/history", requireOrgRole("member"), async (c) => {
   return c.json({ imports } satisfies LinkImportHistory);
 });
 
-/** Sends the failed rows through again: the plan may have room now, or the
- * slug may have been freed. */
 linkImportRoutes.post("/:id/retry", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const job = await findImport(c);
@@ -457,7 +408,6 @@ linkImportRoutes.post("/:id/retry", requireOrgRole("member"), async (c) => {
   return c.json(await importStatus(db, { ...job, status: "running" }));
 });
 
-/** Puts a finished import away, so /import offers a new one. */
 linkImportRoutes.post("/:id/dismiss", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const job = await findImport(c);
@@ -470,8 +420,6 @@ linkImportRoutes.post("/:id/dismiss", requireOrgRole("member"), async (c) => {
   return c.json({ ok: true });
 });
 
-/** How far an import has got: counts by outcome, its domains, and the first
- * rows that failed with why. */
 async function importStatus(
   db: DB,
   job: typeof schema.linkImports.$inferSelect,
@@ -515,18 +463,10 @@ async function importStatus(
   };
 }
 
-/** Rows one workflow step writes: two statements a row in one D1 batch. */
 const STEP_ROWS = IMPORT_CHUNK_ROWS;
 
-/**
- * Writes the next chunk of an import's pending rows and records each one's
- * outcome. Returns how many rows are still pending, so the workflow knows
- * when to stop. Safe to run twice on the same rows: a row already written
- * comes back `exists`.
- *
- * Links are left unscored: a null risk score is what puts a link first in the
- * risk cron's queue (#68), so they are scored within minutes anyway.
- */
+// Safe to run twice: a written row comes back `exists`. Links are left unscored: a null
+// risk score puts a link first in the risk cron's queue (#68).
 export async function importNextChunk(env: Env, importId: string): Promise<number> {
   const db = drizzle(env.DB, { schema });
   const [job] = await db
@@ -599,9 +539,6 @@ export async function importNextChunk(env: Env, importId: string): Promise<numbe
   return n;
 }
 
-/** Marks an import done once no row is pending. */
-/** Ends an import that cannot go on: whatever is still pending fails, so the
- * page shows it and offers to try those rows again. */
 export async function stopImport(env: Env, importId: string): Promise<void> {
   await env.DB.batch([
     env.DB.prepare(
@@ -621,13 +558,8 @@ export async function finishImport(env: Env, importId: string): Promise<void> {
     .run();
 }
 
-/**
- * Writes the ready rows in one D1 batch: a link insert and a cap-guarded
- * primary address per row, then one delete that takes back every link whose
- * address the cap refused. The same guard single link creation uses, so an
- * import can never take an org past its plan, even racing another request.
- * Returns the links that were written, by line.
- */
+// Same cap guard as single link creation, so an import can never take an org past its plan,
+// even racing another request.
 async function writeLinks(
   env: Env,
   db: DB,
@@ -676,9 +608,8 @@ async function writeLinks(
   try {
     results = await env.DB.batch(statements);
   } catch {
-    // A unique index refused a row: someone took one of these slugs between
-    // the check and the write. The batch rolled back whole; checking again
-    // turns that row into a reason and lets the rest through.
+    // A unique index refused a row: someone took a slug between check and write. The batch
+    // rolled back whole; checking again turns that row into a reason.
     throw new HTTPException(409, {
       message: "Some of these links changed while importing. Import again to pick up the rest.",
     });

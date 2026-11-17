@@ -3,12 +3,6 @@ import { signUpAndVerify } from "./resend";
 import { queryRows, rawSql, type SqlParam } from "./db";
 import { createQuickLink, expectRedirect } from "./orgs";
 
-/**
- * Tracked clicks per plan (#387): an org at its monthly cap keeps
- * redirecting, the click is not recorded, and the owner is told so on
- * /billing and the dashboard. The worker tests cover the counter and the
- * emails; this is the claim a person checks in a browser.
- */
 test("an org at its click cap still redirects, and /billing shows the cap reached", async ({
   page,
 }) => {
@@ -21,7 +15,6 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
     [destination],
   );
   const { id, slug, orgId } = link;
-  // A free org that has already reached its 5,000 clicks this month.
   const month = new Date().toISOString().slice(0, 7);
   const usage: SqlParam[] = [orgId, month];
   await rawSql(
@@ -32,10 +25,8 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
 
   await expectRedirect(page, slug, destination);
 
-  // Wait on the capped click's own trace: the flush counts what it drops in
-  // click_overflow (for the abuse sweep). Once it reads 1, the flush has run
-  // and chosen to drop the click, so the checks below cannot pass merely
-  // because nothing was flushed yet.
+  // Wait on the capped click's own trace: once click_overflow reads 1, the flush has run and
+  // dropped the click, so the checks below cannot pass merely because nothing flushed yet.
   const dropped = async () =>
     (
       await queryRows<{ n: number }>(
@@ -59,7 +50,6 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
   expect(clicks).toBe(5000);
 
   await page.goto("/billing");
-  // The usage row: its label (with the reset date), a bar, and "5,000 of 5,000".
   const clickRow = page
     .getByText(/^Clicks counted/)
     .first()
@@ -68,7 +58,6 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
   await expect(page.getByText("Limit reached.")).toBeVisible();
 
   await page.goto("/dashboard");
-  // One line of facts, and the sentence as the note under it.
   await expect(page.getByText("Click limit reached", { exact: true })).toBeVisible();
   await expect(
     page.getByText(

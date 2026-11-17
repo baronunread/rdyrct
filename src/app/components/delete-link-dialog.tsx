@@ -12,8 +12,6 @@ import posthog from "../lib/posthog";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** What deleting costs, said before it happens: the code on paper stops too,
- * and the history goes with it. */
 function warning(links: LinkDTO[]): string {
   const clicks = links.reduce((sum, link) => sum + link.clicks, 0);
   if (links.length === 1) {
@@ -30,13 +28,6 @@ function warning(links: LinkDTO[]): string {
   return `These short links and their QR codes stop working at once, including printed copies. ${history} This can't be undone.`;
 }
 
-/**
- * The delete confirmation, for one link from its row menu or the editor, or
- * for the rows ticked in the table.
- *
- * A plain confirmation: the dialog names the link and says what goes with
- * it. Typing a name to confirm is kept for deleting a whole organization.
- */
 export function DeleteLinkDialog({
   orgId,
   links,
@@ -44,10 +35,8 @@ export function DeleteLinkDialog({
   onDeleted,
 }: {
   orgId: string;
-  /** The links to delete; null or empty keeps the dialog closed. */
   links: LinkDTO[] | null;
   onClose: () => void;
-  /** After every one of them is gone, with their ids. */
   onDeleted?: (ids: string[]) => void;
 }) {
   const open = !!links && links.length > 0;
@@ -96,8 +85,7 @@ function DeleteForm({
     setBusy(true);
     const done: string[] = [];
     try {
-      // One at a time: each delete answers with the quota it leaves, and
-      // the cache keeps the freshest of them.
+      // One at a time: each delete answers with the quota it leaves, and the cache keeps the freshest.
       for (const link of links) {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- one at a time on purpose, see above.
         await remove.mutateAsync(link.id);

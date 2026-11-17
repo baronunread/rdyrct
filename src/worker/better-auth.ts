@@ -34,9 +34,7 @@ import { logFailure } from "./log-failure";
 const SUBSCRIPTION_NOT_ENDED =
   "We could not cancel the subscription, so the account was not deleted. Try again in a few minutes.";
 
-/** better-auth paths that must carry a Turnstile token, and the scope the
- * token has to have been rendered for. Keyed by `ctx.path`, which is relative
- * to /api/auth. */
+/** Keyed by `ctx.path`, which is relative to /api/auth. */
 const TURNSTILE_GUARDED_PATHS = {
   "/sign-up/email": "signup",
   "/request-password-reset": "password-reset",
@@ -44,13 +42,7 @@ const TURNSTILE_GUARDED_PATHS = {
 
 const IdTokenClaims = v.object({ email: v.pipe(v.string(), v.email()) });
 
-/**
- * The address in an OpenID id token's payload, or null when there is no
- * token or it names none. Not a signature check, and it needs none: the
- * token came straight from Google's token endpoint over TLS in the same
- * OAuth exchange better-auth just finished, and the address is only shown
- * back to the account's own holder.
- */
+/** Not a signature check, and it needs none: the token came from Google's token endpoint over TLS and the address is only shown to the account's own holder. */
 export function googleEmailOf(idToken: string | null | undefined): string | null {
   const payload = idToken?.split(".")[1];
   if (!payload) return null;
@@ -64,21 +56,9 @@ export function googleEmailOf(idToken: string | null | undefined): string | null
 }
 
 /**
- * Gives an account an organization if it has none.
- *
- * Every account owns one from the moment it can sign in, so "no organization"
- * is a state somebody chose (they deleted their last one) rather than the
- * state everybody starts in. The empty-state screen used to make the
- * organization while telling the person it already existed; now it is true
- * when they read it, and Settings can rename it the same second.
- *
- * On session creation rather than user creation: a signup that never gets
- * past the six-digit code leaves nothing behind, so admin usage counts stay
- * about real accounts. The cost is one indexed read per sign-in.
- *
- * Failure is swallowed on purpose. Nobody should be locked out of an account
- * because an organization could not be written, and the client still carries
- * the create-organization form for exactly that case.
+ * Every account owns one org from its first session, not its creation: a signup that never
+ * passes the code leaves nothing behind. Failure is swallowed so nobody is locked out; the
+ * client has a create-org form.
  */
 async function ensureOrganization(env: Env, db: DB, userId: string): Promise<void> {
   try {
@@ -101,14 +81,8 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
       userId,
       name: defaultOrgName(account.email, account.name ?? undefined),
       ts: Date.now(),
-      // One, not the plan's allowance. createOwnedOrg writes the membership
-      // only while the owner is under the limit it is given, in a single
-      // statement, so a limit of one is what makes this "give them an
-      // organization if they have none" rather than "if they have room".
-      // The read above is a fast path, not the guard: two sessions created
-      // at once both see nothing, and on Pro, where the allowance is three,
-      // both would otherwise have room and the account would arrive with two
-      // organizations and no way to tell which is theirs.
+      // One, not the plan's allowance. The read above is a fast path, not the guard: on Pro
+      // (allowance three) two sessions created at once would both have room and make two orgs.
       ownedOrgLimit: 1,
     });
   } catch (error) {
@@ -117,26 +91,9 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
 }
 
 /**
- * Deletes an account and flags every organization it owns in one D1 act.
- *
- * An org has no plan of its own: `orgPlan()` reads its owner's. Leaving one
- * behind with no owner leaves it with no plan, no billing and nobody who can
- * delete it, so every owned org goes too. Settings names them before it asks.
- *
- * Better Auth calls this after it has checked the session and password, then
- * issues its own idempotent user delete. Doing the real delete here closes the
- * gap between starting destructive workflows and deleting the account: if D1
- * refuses either write, it rolls both back and no teardown starts (#119).
- *
- * The first statement captures the exact ownership set inside the same batch
- * that flags it and deletes the user. A membership change before the batch is
- * included; one after it cannot attach to the deleted user. Workflow starts
- * come last. If that call fails, the account is still gone and the durable
- * flags let the stalled-deletion sweep finish the work.
- *
- * A paying account ends its Polar subscription first (#337). When Polar cannot
- * do that, nothing is deleted and this throws a 503, so the person can try
- * again rather than keep paying for an account that no longer exists.
+ * An org has no plan of its own (`orgPlan()` reads its owner's), so every owned org goes too.
+ * Deleting here in one D1 batch with the flags means a refused write rolls both back (#119).
+ * Workflows start last; a paying account ends its Polar subscription first or this throws a 503 (#337).
  */
 export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
   if (!(await endSubscriptionBeforeDelete(env, userId))) {
@@ -212,28 +169,13 @@ function makeDb(env: Env) {
 type Db = ReturnType<typeof makeDb>;
 
 /**
- * Unauthenticated: anyone can post any address here. An already-verified
- * account must never receive a code, because verification auto-signs-in
- * (autoSignInAfterVerification), so a code would hand a full session to
- * whoever reads that inbox rather than merely confirm ownership.
- *
- * It answers as though it sent one anyway. Saying "already verified" told
- * an anonymous caller which addresses have verified accounts, one address
- * per request (#53). The reply is byte-identical to a real send; what
- * differs is that nothing goes out.
+ * Unauthenticated. A verified account must never receive a code (verification auto-signs-in).
+ * It answers as if it sent one, byte-identical to a real send, since "already verified"
+ * revealed which addresses have accounts (#53).
  */
-/** What the two guarded better-auth endpoints are read for. Each field is
- * whatever arrived, reduced to the string the guard needs or to "". */
 const otpSendBodySchema = v.object({ email: optionalText, type: optionalText });
 const signUpBodySchema = v.object({ email: optionalText, name: optionalText });
 
-/**
- * The request body better-auth is about to act on.
- *
- * better-auth types its hook context's body as unknown, because each of its
- * endpoints has a different one. The guards below parse what they read, so
- * this only has to get it as far as JSON.
- */
 function bodyOf(ctx: { body?: unknown }): JsonValue {
   // SAFETY: better-auth parsed this out of a JSON request body, so it is JSON;
   // the schemas below are what decide it is the right JSON.
@@ -251,13 +193,9 @@ async function guardVerificationOTPSend(db: Db, rawBody: JsonValue) {
 }
 
 /**
- * The reply a real signup gives when verification is still pending,
- * rebuilt from the caller's own input.
- *
- * Every field is either theirs (email, name), a fresh value (a new id, the
- * current time), or the column default a new row would carry, so it matches
- * a genuine response field for field. A shape that differed would be the
- * same oracle in a new place.
+ * Every field is the caller's own, a fresh value, or the column default a new row would
+ * carry, so it matches a genuine response field for field. A different shape would be
+ * the same oracle in a new place.
  */
 function pendingSignUpResponse(email: string, name: string) {
   const timestamp = new Date().toISOString();
@@ -277,14 +215,12 @@ function pendingSignUpResponse(email: string, name: string) {
       polarSubscriptionCurrentPeriodEnd: null,
       polarSubscriptionInterval: null,
       lastSeenAt: null,
-      // Never the existing row's id: this account is not the caller's to
-      // learn anything about. Same alphabet and length as better-auth's.
+      // Never the existing row's id: this account is not the caller's to learn anything about.
       id: uid(32),
     },
   };
 }
 
-/** Tells the address's real owner that someone tried to sign up as them. */
 async function sendExistingAccountNotice(env: Env, email: string) {
   await sendEmail(
     env,
@@ -309,18 +245,9 @@ async function sendExistingAccountNotice(env: Env, email: string) {
 }
 
 /**
- * Signup used to answer a taken address with a plain USER_ALREADY_EXISTS,
- * which let anyone test addresses one at a time (#53). It now answers as it
- * would for a new account and creates nothing, and the address's real owner
- * gets an email saying so, since they are the only person entitled to know.
- *
- * That email carries no code and no session, which is the part better-auth's
- * own disguise got wrong for us: its version let the form walk on to the OTP
- * screen, mail a working code, and sign the visitor into the existing
- * account while the password they had just typed went nowhere.
- *
- * The cost is real and worth stating: someone who forgot they had an account
- * no longer learns it on screen. They learn it in the inbox they own.
+ * A taken address answers as for a new account and creates nothing (#53); the real owner
+ * gets an email with no code and no session. better-auth's own disguise mailed a working
+ * code and signed the visitor into the existing account.
  */
 async function guardSignUp(
   env: Env,
@@ -331,9 +258,7 @@ async function guardSignUp(
   if (!body.email) return;
   const normalized = body.email.toLowerCase();
 
-  // Before the existence check, so both branches answer a dead domain the
-  // same way. Reversed, a 422 here would mean "no account on a domain that
-  // cannot receive mail", and a success would mean "there is one".
+  // Before the existence check, so both branches answer a dead domain the same way.
   const domain = normalized.split("@")[1];
   if (domain && !(await domainHasMailRecords(domain)))
     throw new APIError(422, {
@@ -347,26 +272,14 @@ async function guardSignUp(
     .where(eq(schema.user.email, normalized));
   if (!existing) return;
 
-  // Only for a verified account. An unverified one carries on through the
-  // OTP flow it was already in the middle of, and a code is on its way
-  // there anyway: two emails would say the same thing twice.
-  //
-  // Sent after the response, never inside it. Awaiting it leaked the answer
-  // twice over: a Resend outage made a registered address error while a free
-  // one succeeded, and even on a good day the extra round trip made the
-  // registered address measurably slower to answer. Both are the account
-  // probe #53 set out to close, rebuilt in the fix for it.
-  //
-  // The failure is swallowed and alerted instead. The owner missing one
-  // notice is the smaller loss, and we still hear about it even though they
-  // did not.
+  // Verified accounts only. Sent after the response: awaiting leaked the answer through a
+  // Resend outage and a slower round trip (#53). Failure is swallowed and alerted.
   if (existing.emailVerified)
     afterResponse(
       sendExistingAccountNotice(env, normalized).catch((cause: unknown) =>
         captureAlert([
           { event: "existing_account_notice_failed", error: String(cause) },
-          // Deliberately no address: this log would otherwise be a list of
-          // registered emails, which is the thing being protected.
+          // No address: this log would otherwise be a list of registered emails.
         ]),
       ),
     );
@@ -399,38 +312,25 @@ function buildAuth(env: Env) {
         oauthClientAssertion: schema.oauthClientAssertion,
       },
     }),
-    // Cloudflare Workers Rate Limiting bindings guard auth before BetterAuth.
-    // Keeping BetterAuth's per-isolate limiter enabled would create a second,
-    // inconsistent 429 shape and would not protect the rest of the app.
+    // Workers Rate Limiting bindings guard auth first. BetterAuth's own limiter would add a second, inconsistent 429 shape.
     rateLimit: { enabled: false },
-    // One query for a session and its user, not two in a row. Every signed-in
-    // API call starts with that lookup, and each D1 round trip is ~25 ms.
+    // One query for session and user: every signed-in API call starts here, and a D1 round trip is ~25 ms.
     advanced: { database: { joins: true } },
-    // Link a Google sign-in to an existing email/password account with the
-    // same (verified) address instead of creating a duplicate. Google is a
-    // trusted provider, so an unverified Google account still links to a
-    // verified local one — acceptable, since Google is the trusted IdP.
+    // Google is a trusted IdP, so an unverified Google account still links to a verified local one.
     account: {
-      // The linked Google address, for the Signing in group on Settings.
-      // Written only by the account hooks below, from the id token.
       additionalFields: {
         email: { type: "string", required: false, input: false },
       },
       accountLinking: {
         enabled: true,
         trustedProviders: ["google"],
-        // Deliberately no updateUserInfoOnLink: linking Google must not
-        // overwrite a name the user set. A fresh Google signup still gets its
-        // picture (better-auth sets user.image on user creation, and
-        // session.create.after pulls it into R2); anyone else sets a picture
-        // from Settings.
+        // No updateUserInfoOnLink: linking Google must not overwrite a name the user set.
       },
     },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: emailConfigured(env),
-      // PBKDF2 via WebCrypto: native (fast) on Workers, unlike the default
-      // scrypt implementation which burns CPU budget.
+      // Native on Workers, unlike the default scrypt, which burns CPU budget.
       password: {
         hash: (password) => hashPassword(password),
         verify: ({ hash, password }) => verifyPassword(password, hash),
@@ -458,18 +358,11 @@ function buildAuth(env: Env) {
       },
     },
     emailVerification: {
-      // The frontend is the single, deterministic sender of the verification
-      // OTP (it calls send-verification-otp when it shows the code screen), so
-      // suppress the implicit on-signup send that would otherwise fire and
-      // race and duplicate the email.
+      // The frontend sends the verification OTP, so suppress the implicit on-signup send that would duplicate it.
       sendOnSignUp: false,
-      // Still create the session when the OTP verifies (auto-sign-in).
       autoSignInAfterVerification: true,
     },
-    // Email verification is a 6-digit OTP (not a link): the plugin's
-    // overrideDefaultEmailVerification routes the requireEmailVerification
-    // flow (including signup and unverified-login resends) through OTP.
-    // Password reset stays a link (see sendResetPassword above).
+    // overrideDefaultEmailVerification routes requireEmailVerification through OTP. Password reset stays a link.
     plugins: [
       emailOTP({
         otpLength: 6,
@@ -478,11 +371,7 @@ function buildAuth(env: Env) {
         sendVerificationOnSignUp: true,
         sendVerificationOTP: async ({ email, otp, type }) => {
           if (type !== "email-verification") return;
-          // The already-verified case is rejected up front in hooks.before
-          // (see below): the plugin swallows whatever this callback returns
-          // or throws, so blocking there is the only way for the caller to
-          // learn "already verified" instead of waiting on a code that never
-          // arrives.
+          // The plugin swallows what this callback returns or throws, so "already verified" is rejected up front in hooks.before.
           await sendEmail(
             env,
             email,
@@ -501,12 +390,8 @@ function buildAuth(env: Env) {
           );
         },
       }),
-      // Google sign-in via the generic OAuth2 provider (not the built-in
-      // `google`, whose token endpoint is hardcoded and cannot be redirected
-      // at dev/emulate). Endpoints are env-driven: a discovery URL in prod, or
-      // explicit endpoints at the emulate Google emulator in dev. Only
-      // registered when credentials are present, so environments without
-      // Google config simply have no social login.
+      // The generic OAuth2 provider, not the built-in `google`, whose token endpoint is hardcoded and cannot be redirected at the dev emulator.
+      // Registered only when credentials are present.
       ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? [
             genericOAuth({
@@ -531,19 +416,9 @@ function buildAuth(env: Env) {
             }),
           ]
         : []),
-      // MCP OAuth (#139 follow-up): turns this app into an OAuth 2.1
-      // authorization server for MCP clients, so a chatbot connects with a
-      // consent screen instead of a pasted API key. jwt() supplies the
-      // signing key mcp() uses for access tokens and the /jwks endpoint
-      // session.ts verifies them against. A client identifies itself one of
-      // two ways: cimd(), a URL to its own metadata (what the MCP spec
-      // prefers), or open dynamic client registration, which Claude, Cursor
-      // and VS Code still expect. Open registration is rate-limited with the
-      // other /api/auth routes, and sweepAbandonedOAuthClients() deletes the
-      // rows nobody ever consented to. Only the grants an MCP client uses:
-      // client_credentials would let a client act with no user behind it.
-      // No set-auth-jwt header: nothing reads it, and producing it read the
-      // signing keys from D1 and signed a token on every session lookup.
+      // MCP OAuth (#139): jwt() supplies the signing key for access tokens. Open registration is rate-limited,
+      // and sweepAbandonedOAuthClients() deletes rows nobody consented to. client_credentials is left out: it would
+      // let a client act with no user. No set-auth-jwt header: producing it signed a token on every session lookup.
       jwt({ disableSettingJwtHeader: true }),
       mcp({
         loginPage: "/login",
@@ -561,9 +436,7 @@ function buildAuth(env: Env) {
     user: {
       additionalFields: {
         isAdmin: { type: "boolean", defaultValue: false, input: false },
-        // Suspended by a platform admin; flipped only via the admin API.
         banned: { type: "boolean", defaultValue: false, input: false },
-        // Per-user subscription; flipped by the Polar webhook, never by input.
         plan: { type: "string", defaultValue: "free", input: false },
         polarSubscriptionCancelAtPeriodEnd: {
           type: "boolean",
@@ -576,21 +449,16 @@ function buildAuth(env: Env) {
           input: false,
         },
         polarSubscriptionInterval: { type: "string", required: false, input: false },
-        // Read with the session, so withSession can tell an hour-old mark
-        // from a fresh one without a query of its own (#489). Written only
-        // by markSeen in session.ts.
+        // Read with the session so withSession can tell an hour-old mark from a fresh one without a query (#489).
         lastSeenAt: { type: "number", required: false, input: false },
       },
-      // Self-service account deletion. Authored links/invites keep working
-      // (ON DELETE SET NULL) and memberships cascade. Owned organizations are
-      // flagged in the same D1 batch that deletes the account, then torn down.
+      // Authored links keep working (ON DELETE SET NULL); owned orgs are flagged in the same D1 batch.
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
           try {
             await deleteAccountAndOwnedOrgs(env, user.id);
           } catch (error) {
-            // better-auth answers anything but its own APIError with a bare 500.
             if (error instanceof HTTPException && error.status === 503) {
               throw new APIError("SERVICE_UNAVAILABLE", { message: SUBSCRIPTION_NOT_ENDED });
             }
@@ -600,24 +468,15 @@ function buildAuth(env: Env) {
       },
     },
     hooks: {
-      // Returning a value here short-circuits: better-auth sends it as the
-      // response instead of running the endpoint. Both guards use that to
-      // answer exactly as the real path would while doing nothing (#53).
+      // A returned value short-circuits: better-auth sends it as the response (#53).
       before: createAuthMiddleware(async (ctx) => {
-        // Turnstile (#304) sits in front of the two paths a bot actually wants:
-        // creating accounts, and making us send mail. Not login, where a bot
-        // with correct credentials is not the threat and every real visitor
-        // would pay the tax.
+        // Turnstile (#304) guards account creation and mail sending. Not login: a bot with correct credentials is no threat.
         const capScope = lookup(TURNSTILE_GUARDED_PATHS, ctx.path);
         if (capScope) {
-          // In a header, not the body: better-auth validates each endpoint's
-          // body against its own schema, and an extra key there is at the
-          // mercy of that schema.
+          // In a header: an extra body key is at the mercy of each endpoint's schema.
           const token = ctx.headers?.get(TURNSTILE_TOKEN_HEADER) ?? "";
           if (!(await spendToken(env, capScope, token)))
-            // A code, not just a message: the browser retries this once with
-            // a freshly solved token, and matching on prose to decide that
-            // would break the first time the wording changed.
+            // A code, so the browser's one retry with a fresh token does not break when the wording changes.
             throw new APIError("BAD_REQUEST", {
               code: TURNSTILE_FAILED_CODE,
               message: "Could not verify you are human. Reload the page and try again.",
@@ -632,9 +491,7 @@ function buildAuth(env: Env) {
       }),
     },
     databaseHooks: {
-      // Google's id token names the address the account signed in with: kept
-      // on link (create) and refreshed on each later sign-in (update, which
-      // carries the new tokens). A password account has no id token.
+      // Kept on link (create) and refreshed on each sign-in (update). A password account has no id token.
       account: {
         create: {
           before: async (account) => {
@@ -651,9 +508,7 @@ function buildAuth(env: Env) {
       },
       user: {
         create: {
-          // The superadmin is pinned by secret: the account signing up with
-          // SUPERADMIN_EMAIL is the platform admin (and always lands on Pro,
-          // so all Pro-gated features are reachable). No first-signup rule.
+          // The account signing up with SUPERADMIN_EMAIL is the platform admin, always on Pro.
           before: async (user) => {
             const isSuper = user.email.toLowerCase() === env.SUPERADMIN_EMAIL.toLowerCase();
             return {
@@ -664,13 +519,11 @@ function buildAuth(env: Env) {
               },
             };
           },
-          // Google accounts arrive verified, so the welcome goes out here.
           after: async (user) => {
             afterResponse(sendWelcomeOnce(env, db, user));
           },
         },
-        // A password account is verified by an update, not at creation. The
-        // claim inside sendWelcomeOnce makes every later update a no-op.
+        // A password account is verified by an update; the claim inside sendWelcomeOnce makes later updates no-ops.
         update: {
           after: async (user) => {
             afterResponse(sendWelcomeOnce(env, db, user));
@@ -679,8 +532,7 @@ function buildAuth(env: Env) {
       },
       session: {
         create: {
-          // Banned accounts can't start a session (existing ones are wiped by
-          // the ban). Throwing aborts creation with this message on sign-in.
+          // Existing sessions are wiped by the ban; throwing aborts creation.
           before: async (session) => {
             const rows = await db
               .select({ banned: schema.user.banned })
@@ -693,13 +545,8 @@ function buildAuth(env: Env) {
           },
           after: async (session) => {
             await ensureOrganization(env, db, session.userId);
-            // Re-sync the avatar from Google on every Google sign-in. The OAuth
-            // path refreshes `user.image` to the latest remote URL each time, so
-            // pulling it into R2 here covers both first link and later changes.
-            // Password users already carry the same-origin serving URL and are
-            // skipped. Runs after the org ensure so a brand-new Google user
-            // also gets an org. Any failure here must not abort sign-in, so it
-            // is swallowed: the blobatar stays and re-sync runs next login.
+            // The OAuth path refreshes `user.image` to the remote URL each time. Runs after the org ensure.
+            // A failure must not abort sign-in: it is swallowed and the re-sync runs next login.
             try {
               const [row] = await db
                 .select({ image: schema.user.image })
@@ -713,9 +560,7 @@ function buildAuth(env: Env) {
                     .set({ image: serving })
                     .where(eq(schema.user.id, session.userId));
               }
-            } catch {
-              // keep the session; the avatar simply stays unset
-            }
+            } catch {}
           },
         },
       },
@@ -725,7 +570,6 @@ function buildAuth(env: Env) {
 
 export type Auth = ReturnType<typeof buildAuth>;
 
-// Bindings are stable per isolate, so one instance serves every request.
 let cached: Auth | null = null;
 
 export function getAuth(env: Env): Auth {

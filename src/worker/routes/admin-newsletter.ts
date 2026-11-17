@@ -1,14 +1,3 @@
-/**
- * The newsletter composer's API (admin only, under /api/admin, so it 404s for
- * everyone else like the rest of it).
- *
- * Every issue goes to one list, product news or offers, narrowed by the
- * audience filters (stage, plan). Who gets a send is decided in marketing.ts
- * (opted in to that list, verified, not banned, inside the filters) and
- * how it is delivered in newsletter.ts. This file is the doorway: it
- * parses the issue, counts, sends, and writes one wide event per request with
- * counts, never addresses.
- */
 import { Hono } from "hono";
 import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
@@ -38,7 +27,6 @@ import { docToBlocks, newsletterDocSchema } from "../newsletter-doc";
 
 const listField = v.picklist(MARKETING_LISTS, "list must be news or offers");
 
-/** The filters, each "any" when left out. */
 const audienceFields = {
   stage: v.optional(
     v.picklist(AUDIENCE_STAGES, "stage must be any, new, active or slipping"),
@@ -49,7 +37,6 @@ const audienceFields = {
 
 const audienceSchema = v.object(audienceFields);
 
-/** The count endpoint's query string. */
 const countSchema = v.object({ list: listField, ...audienceFields });
 
 const issueFields = {
@@ -60,19 +47,16 @@ const issueFields = {
     v.minLength(1, "Add a subject"),
     v.maxLength(150, "The subject is too long"),
   ),
-  // The editor's JSON document, never HTML: newsletter-doc.ts allows only
-  // the nodes and marks the email layout renders.
+  // The editor's JSON document, never HTML: newsletter-doc.ts allows only what the layout renders.
   doc: newsletterDocSchema,
 };
 
 const testSchema = v.object(issueFields);
 const sendSchema = v.object({
   ...issueFields,
-  // One per composed issue: the provider ignores a batch it already sent under
-  // the same id, so a double click or a retry cannot send twice.
+  // The provider ignores a batch already sent under this id, so a retry cannot send twice.
   sendId: v.pipe(v.string("sendId is required"), v.regex(/^[\w-]{8,64}$/, "sendId is not valid")),
   audience: v.optional(audienceSchema, EVERYONE),
-  // When it goes, epoch ms; left out, it goes now.
   scheduledFor: v.optional(
     v.pipe(v.number("scheduledFor must be a time"), v.integer("scheduledFor must be a time")),
   ),
@@ -86,14 +70,11 @@ function toIssue(fields: IssueFields): Issue {
 
 export const adminNewsletterRoutes = new Hono<AppEnv>();
 
-/** How many past sends the screen lists. */
 const NEWSLETTER_HISTORY = 20;
 
 const sends = schema.newsletterSends;
 const waiting = sql`${sends.status} = 'scheduled'`;
 
-/** Scheduled sends first, soonest first, then the rest, newest first, with
- * the sender as an email. */
 async function recentSends(db: DB): Promise<NewsletterSendRow[]> {
   const rows = await db
     .select({
@@ -141,8 +122,6 @@ adminNewsletterRoutes.get("/", async (c) => {
   return c.json(status);
 });
 
-// How many people a send to one list, narrowed by the filters, reaches now:
-// the composer asks again whenever a filter changes.
 adminNewsletterRoutes.get("/audience", async (c) => {
   const log = c.get("log");
   const { list, ...filter } = parseBody(countSchema, c.req.query());
@@ -151,8 +130,6 @@ adminNewsletterRoutes.get("/audience", async (c) => {
   return c.json({ count, list, filter } satisfies NewsletterAudienceCount);
 });
 
-// A test goes to the admin alone, through the same path as a real send, so the
-// headers and the footer link (for the chosen list) are the ones recipients get.
 adminNewsletterRoutes.post("/test", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
@@ -167,8 +144,6 @@ adminNewsletterRoutes.post("/test", async (c) => {
   return c.json({ sent: 1 } satisfies NewsletterTestResult);
 });
 
-// The issue rendered as the admin would get it, by the same renderEmail call
-// a send makes, for the composer's Preview. Nothing is sent.
 adminNewsletterRoutes.post("/preview", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
@@ -181,7 +156,6 @@ adminNewsletterRoutes.post("/preview", async (c) => {
   return c.json({ html: rendered.html.html } satisfies NewsletterPreview);
 });
 
-// One send's issue and audience, for Duplicate in the history.
 adminNewsletterRoutes.get("/sends/:id", async (c) => {
   const log = c.get("log");
   const id = c.req.param("id");
@@ -201,11 +175,9 @@ adminNewsletterRoutes.get("/sends/:id", async (c) => {
   return c.json(row satisfies NewsletterDraft);
 });
 
-/** The furthest ahead a send can be scheduled. */
 const MAX_AHEAD_MS = 366 * 24 * 60 * 60 * 1000;
 
-/** A scheduled time must be ahead of now (a minute of slack for the clock
- * between the browser and here) and inside a year. */
+/** A minute of slack for clock skew between the browser and here. */
 function checkScheduledFor(at: number | undefined): Date | null {
   if (at === undefined) return null;
   const now = Date.now();
@@ -220,12 +192,7 @@ function checkScheduledFor(at: number | undefined): Date | null {
   return new Date(at);
 }
 
-/**
- * Send now or Schedule. Stores the issue and starts the send's workflow
- * (newsletter-send.ts), which waits for the time and sends batch by batch.
- * The same send id again (a double click, a retry) answers the first one's
- * state and sends nothing twice.
- */
+/** The same send id again answers the first one's state and sends nothing twice. */
 adminNewsletterRoutes.post("/send", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;
@@ -260,7 +227,6 @@ adminNewsletterRoutes.post("/send", async (c) => {
   return c.json(state satisfies NewsletterSendState);
 });
 
-/** Cancels a send that is waiting for its time. */
 adminNewsletterRoutes.post("/sends/:id/cancel", async (c) => {
   const log = c.get("log");
   const admin = c.var.user!;

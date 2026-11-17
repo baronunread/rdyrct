@@ -4,8 +4,6 @@ type Theme = "dark" | "light";
 
 const listeners = new Set<() => void>();
 
-/** The theme the page is in now: the visitor's choice if they made one,
- * else their OS's (index.html decides before paint). */
 export function currentTheme(): Theme {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
@@ -14,8 +12,7 @@ function apply(next: Theme) {
   const root = document.documentElement;
   // Transitions off for the swap (styles.css, [data-theme-switching]), so
   // the colours change in one frame. Reading a computed style flushes the
-  // new theme's styles before the flag comes off; without it the browser
-  // batches both changes and the transitions run anyway.
+  // new theme's styles before the flag comes off, or the transitions run anyway.
   root.dataset.themeSwitching = "";
   root.dataset.theme = next;
   void getComputedStyle(root).color;
@@ -27,14 +24,9 @@ function apply(next: Theme) {
 function toggle() {
   const next: Theme = currentTheme() === "light" ? "dark" : "light";
 
-  // No view transition here: dark and light are near-opposite flat colors,
-  // so any crossfade between them (soft or instant-cut) reads as a wrong
-  // gray midpoint, and the header's backdrop-filter makes its own
-  // view-transition snapshot come out wrong regardless of blend mode. The
-  // transition API buys nothing a plain swap doesn't already have here, so
-  // this always takes the fallback path — styles.css's crossfade exists for
-  // marketing-to-marketing navigation (the viewTransition Links in
-  // landing-header.tsx), not this.
+  // No view transition: any crossfade between near-opposite flat colors reads as a wrong
+  // gray midpoint, and the header's backdrop-filter makes its snapshot come out wrong
+  // regardless of blend mode. A plain swap is the fallback path.
   apply(next);
 }
 

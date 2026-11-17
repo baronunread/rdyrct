@@ -1,15 +1,7 @@
 /**
- * Restoring a whole batch of links in one request (#14).
- *
- * The route took up to 200 ids and ran the single-link restore for each, at
- * once: a select, the banned-owner check, an update, the org's flags, the
- * address lookup, a KV write per address, a delayed queue send and an audit
- * insert, per link. At 200 links that is thousands of D1 statements and
- * subrequests, past the per-invocation limits, so the request died partway
- * with some links restored and the rest still suspended.
- *
- * These count what one restore costs, by statement and by call, rather than
- * waiting for a limit miniflare does not enforce.
+ * Counts what one restore costs, by statement and by call, rather than waiting
+ * for a limit miniflare does not enforce: restoring 200 links at once died
+ * partway past the per-invocation limits (#14).
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
@@ -87,7 +79,6 @@ function chunk<T>(rows: T[], size: number): T[][] {
   return out;
 }
 
-/** An env that counts D1 statements, KV calls and queue sends. */
 function countingEnv() {
   const queued: StorageMessage[] = [];
   const counts = { statements: 0, kv: 0, queueSends: 0, queued };
@@ -141,8 +132,6 @@ describe("restoring MAX_ROWS links at once", () => {
     expect(await jsonBody<{ count: number }>(res)).toEqual({ count: LINKS });
     expect(await suspendedCount()).toBe(0);
 
-    // Every address is resynced, now or by the queue, and resynced again
-    // after the delay that catches a racing owner edit.
     const keys = new Set(counts.queued.map((m) => (m.op === "kv_sync" ? m.key : "")));
     expect(keys.size).toBe(LINKS * ADDRESSES_PER_LINK);
 
@@ -152,7 +141,6 @@ describe("restoring MAX_ROWS links at once", () => {
     expect(results.map((r) => r.target_id).sort()).toEqual([...ids].sort());
     expect(JSON.parse(results[0]!.detail)).toMatchObject({ orgId: "org-1", addresses: 3 });
 
-    // Before the fix: well over two thousand of each.
     expect(counts.statements).toBeLessThan(150);
     expect(counts.kv + counts.queueSends).toBeLessThan(50);
   });

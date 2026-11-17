@@ -1,12 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * The prerendered app shell (scripts/prerender-app-shell.tsx): a reload of an
- * app page paints the sidebar and the page's skeleton from the HTML alone.
- * The app's scripts are blocked in every case, so what shows is what the
- * Worker sent, before any JavaScript could have drawn it.
- */
-
 const CACHED_USER = {
   user: { id: "u1", name: "Wanda Weiss", email: "wanda@example.test", image: null },
   orgs: [{ id: "o1", name: "Juniper Group", role: "owner", plan: "pro", locked: false }],
@@ -17,9 +10,8 @@ async function reloadWithoutScripts(
   path: string,
   storage: Record<string, string>,
 ): Promise<void> {
-  // Storage is written at document start of the reload itself, before the
-  // head script reads it. Writing it from a page the app is running on
-  // raced that app: its /user answer (signed out) cleared the cache again.
+  // Written at document start of the reload, before the head script reads it:
+  // writing from a running app raced its signed-out /user answer clearing it.
   await page.addInitScript((entries) => {
     localStorage.clear();
     for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value);
@@ -42,7 +34,6 @@ test("a signed-in reload paints the sidebar from the HTML, with the cached org a
   const sidebar = page.locator('[data-shell-width="open"] aside');
   await expect(sidebar).toBeVisible();
   await expect(sidebar.getByText("Links", { exact: true })).toBeVisible();
-  // The slots the head script fills from the cache.
   const orgName = await sidebar
     .locator('[data-shell-slot="org-name"]')
     .evaluate((el) => getComputedStyle(el, "::after").content);

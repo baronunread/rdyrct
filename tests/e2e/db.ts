@@ -3,10 +3,6 @@ import { explorerUrl } from "./environment";
 import { subscriptionGrantsAccess } from "../../src/worker/entitlement";
 import type { JsonValue } from "../../src/shared/types";
 
-/**
- * What the dev Explorer answers a /raw post with: one entry per statement,
- * column-oriented, alongside the write counters D1 reports.
- */
 interface ExplorerRaw {
   result: {
     results: { columns: string[]; rows: JsonValue[][] };
@@ -14,27 +10,14 @@ interface ExplorerRaw {
   }[];
 }
 
-/** What a bound parameter may be at a call site: one SQL scalar. */
 export type SqlParam = string | number | boolean | null;
 
-/**
- * One bound parameter, as the Explorer will accept it.
- *
- * It rejects anything that is not a string and says only "Invalid input",
- * which reads like a broken statement rather than a rejected argument.
- * SQLite's column affinity converts a numeric string back on the way in, so
- * an integer column still holds an integer.
- */
+// The Explorer rejects any non-string parameter with only "Invalid input". SQLite column
+// affinity converts a numeric string back on the way in.
 function asExplorerParam(value: SqlParam): string | null {
   return value === null ? null : String(value);
 }
 
-/**
- * Runs raw SQL against the local D1 database via the dev Explorer API.
- *
- * Parameters go through `asExplorerParam`, which is where the Explorer's
- * string-only rule is handled.
- */
 export async function rawSql(
   page: Page,
   sql: string,
@@ -55,15 +38,8 @@ export async function rawSql(
   return response.json();
 }
 
-/**
- * Runs a SELECT and returns its rows as objects.
- *
- * The Explorer's /raw endpoint answers column-oriented
- * (`{ columns: [...], rows: [[...]] }`), which is easy to misread as a list
- * of row objects: indexing one by column name yields `undefined` rather than
- * an error, so the mistake surfaces later as a confusing assertion failure.
- * Callers get objects instead.
- */
+// The Explorer's /raw answer is column-oriented; indexing a row by column name yields
+// undefined instead of an error, so callers get objects.
 export async function queryRows<T>(page: Page, sql: string, params: SqlParam[] = []): Promise<T[]> {
   const { columns, rows } = (await rawSql(page, sql, params)).result[0].results;
   // SAFETY: the caller names the columns its own SELECT asks for. A column it
@@ -84,11 +60,7 @@ async function expectOneRowChanged(
   expect(result.result[0].meta.changes, what).toBe(1);
 }
 
-/**
- * Gives a user a paying subscription, the way a Polar webhook would: the
- * subscription columns carry the facts and `plan` is derived from them (#81).
- * Writing `plan` on its own would produce a row no real flow can create.
- */
+// Like a Polar webhook: the subscription columns carry the facts and `plan` is derived (#81).
 export async function setPlan(
   page: Page,
   email: string,
@@ -120,11 +92,8 @@ export async function setPlan(
   );
 }
 
-/**
- * Inserts a user who already pays, without going through signup: the test
- * that needs one never signs in as them, and a second signup in the same
- * browser context would have to sign the first user out first.
- */
+// Does not sign in as the user: a second signup in one browser context would first sign
+// the first user out.
 export async function seedSubscriber(page: Page, email: string, plan: "hobby" | "pro" = "pro") {
   await expectOneRowChanged(
     page,
@@ -137,9 +106,7 @@ export async function seedSubscriber(page: Page, email: string, plan: "hobby" | 
   );
 }
 
-/** Promotes a signed-up user to platform admin, for tests that need the
- * admin area. Doing it in SQL keeps the test off the SUPERADMIN_EMAIL
- * secret, which differs between machines. */
+// SQL, so the test does not depend on SUPERADMIN_EMAIL, which differs between machines.
 export async function makePlatformAdmin(page: Page, email: string) {
   await expectOneRowChanged(
     page,
@@ -149,9 +116,6 @@ export async function makePlatformAdmin(page: Page, email: string) {
   );
 }
 
-/** Gives a user a custom limit on organizations owned, the row an admin sets
- * from /admin/users. For tests that need more orgs than the plan gives and
- * are not about that flow. */
 export async function setOrgsOverride(page: Page, email: string, orgs: number) {
   await expectOneRowChanged(
     page,
@@ -163,8 +127,6 @@ export async function setOrgsOverride(page: Page, email: string, orgs: number) {
   );
 }
 
-/** Gives a user paid access the way an admin comp does: no subscription
- * behind it, and no revenue. */
 export async function compUser(
   page: Page,
   email: string,
@@ -181,13 +143,7 @@ export async function compUser(
   );
 }
 
-/**
- * Reads one KV value through the dev Explorer.
- *
- * The redirect hot path answers from KV alone, so this is how a browser test
- * checks the verdict the Worker will act on: the value is what a real
- * reconciliation pass wrote, through the real storage queue, not a fixture.
- */
+// The redirect hot path answers from KV alone, so this reads the verdict the Worker acts on.
 export async function kvValue(page: Page, key: string): Promise<JsonValue | null> {
   const namespaces = await page.request.get(`${explorerUrl}/storage/kv/namespaces`);
   expect(namespaces.ok()).toBe(true);

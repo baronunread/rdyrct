@@ -6,14 +6,8 @@ import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
 import { notFoundPage } from "../../src/worker/not-found-page";
 import { applyTestMigrations, fetchWorker } from "./support";
 
-/**
- * A self-hosted build: the Worker a fork deploys, which serves the app and
- * short links and none of rdyrct.com's own pages.
- *
- * It only runs as `bun run test:worker:self-host` (VITE_RDYRCT_SITE=0, see
- * vitest.config.ts). Every other worker test runs as rdyrct.com, where this
- * file has nothing to check.
- */
+// Runs only as test:worker:self-host (VITE_RDYRCT_SITE=0, see vitest.config.ts);
+// every other worker test runs as rdyrct.com, where this file checks nothing.
 
 beforeEach(applyTestMigrations);
 afterEach(reset);

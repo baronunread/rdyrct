@@ -1,12 +1,6 @@
 /**
- * Takes the landing page's product screenshots (components/product-showcase)
- * from the local dev server: the `showcase` scenario's Dashboard, Analytics
- * and Links pages, light and dark, desktop and phone, saved as WebP in
- * public/showcase/. Resized and encoded with Bun.Image, so no image library.
- *
- *   bun run dev            # in another terminal
- *   bun run db:seed:local  # fresh data, so the charts end today
- *   bun run showcase:shots
+ * Takes the landing page's product screenshots into public/showcase/ from the local dev server.
+ * Run `bun run dev`, then `bun run db:seed:local` (so the charts end today), then `bun run showcase:shots`.
  */
 import { chromium } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
@@ -22,8 +16,7 @@ const sizes = [
   { suffix: "-phone", width: 390, height: 600, scale: 2, outWidth: 780 },
 ] as const;
 
-/** Dev-only hostnames, swapped in the page before each shot so the pictures
- *  show addresses a visitor would recognise. Text only: nothing is sent. */
+/** Swapped in the page before each shot so the pictures show addresses a visitor would recognise. */
 const host = new URL(app).host;
 const swaps: [string, string][] = [
   [host, "rdyr.cc"],
@@ -45,7 +38,6 @@ for (const theme of ["light", "dark"] as const) {
     for (const name of pages) {
       await page.goto(`${app}/${name}`);
       await page.waitForLoadState("networkidle");
-      // Charts and counts settle after their data arrives.
       await page.waitForTimeout(1200);
       await page.evaluate((pairs) => {
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);

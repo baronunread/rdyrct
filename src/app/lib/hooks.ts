@@ -37,24 +37,15 @@ import type {
   ClickUsage,
 } from "@/shared/types";
 
-/**
- * `enabled: false` is for the marketing pages, which ask this only to choose
- * between "Sign up" and "Open dashboard". A signed-out visitor has no session
- * to find, and the 401 that came back was logged by the browser as a page
- * error on every first visit to the landing page. Skipping the round trip for
- * a browser that has never been signed in (see useAudience) costs that visitor
- * nothing and saves them a request. Every caller that decides or submits
- * anything leaves it enabled and waits for the real answer.
- */
+// `enabled: false` is for marketing pages: a signed-out visitor has no session, and the 401
+// was logged by the browser as a page error on every first landing visit. Every caller that
+// decides or submits leaves it enabled and waits for the real answer.
 export function useCurrentUser(enabled = true) {
   return useQuery({ ...userQuery, enabled });
 }
 
-/**
- * The signed-in account, or null for nobody. One definition for the hook and
- * for the route loaders that need it before a page renders (see
- * lib/route-preload.ts), so both read and fill the same cache entry.
- */
+// One definition for the hook and for the route loaders (lib/route-preload.ts),
+// so both read and fill the same cache entry.
 export const userQuery = queryOptions<CurrentUser | null>({
   queryKey: ["user"],
   queryFn: async () => {
@@ -86,18 +77,9 @@ export const userQuery = queryOptions<CurrentUser | null>({
   retry: false,
 });
 
-/**
- * Who the shell draws itself as: the checked answer when it is here, the last
- * one otherwise, so a reload paints the sidebar instead of a skeleton.
- *
- * Chrome only. Everything the app decides or submits keeps reading
- * `useCurrentUser` and keeps waiting for the round trip, because the cache is
- * one page load out of date by definition: somebody who changes their org's
- * default domain and reloads must not be handed a form that still preselects
- * the old one.
- *
- * Snapshotted once per mount: mid-visit changes come from the query.
- */
+// Chrome only. Everything the app decides or submits keeps reading `useCurrentUser`
+// and waits for the round trip: the cache is one page load out of date by definition,
+// so a reload must not hand over a form that still preselects an old default domain.
 export function useShellUser(): CurrentUser | null {
   const currentUser = useCurrentUser();
   const [cached] = useState(readCachedUser);
@@ -105,9 +87,6 @@ export function useShellUser(): CurrentUser | null {
   return currentUser.data !== undefined ? currentUser.data : (cached ?? null);
 }
 
-// Deployment config (e.g. appHost for DNS instructions) — static per deploy.
-/** Shared by useConfig and anything that must wait for the answer outside
- * a render, such as the Turnstile guard. */
 export const configQuery = queryOptions({
   queryKey: ["config"],
   queryFn: () => api<AppConfig>("/config"),
@@ -116,13 +95,8 @@ export const configQuery = queryOptions({
 
 export const useConfig = () => useQuery(configQuery);
 
-/**
- * The card and invoices on the billing page, from Polar by way of the
- * Worker. Only for an account with a billing account: anybody else has
- * neither, and the page shows them nothing to ask about. No retry: when
- * Polar fails the page falls back to the portal buttons, which is better
- * than a second wait for the same failure.
- */
+// No retry: when Polar fails the page falls back to the portal buttons,
+// which beats a second wait for the same failure.
 export const billingDetailsQuery = (enabled: boolean) =>
   queryOptions<BillingDetails>({
     queryKey: ["billingDetails"],
@@ -136,16 +110,12 @@ export const billingDetailsQuery = (enabled: boolean) =>
 
 export const useBillingDetails = (enabled: boolean) => useQuery(billingDetailsQuery(enabled));
 
-// The host shared-domain links display, copy, and redirect through. Falls
-// back to the current origin's host while config is still loading.
 export const useLinkHost = () => useConfig().data?.linkHost ?? window.location.host;
 
 let signedOutOnPurpose = false;
 
-/** Whether the last sign-out was somebody pressing Sign out, read once.
- * RequireAuth sends a deliberate sign-out to plain /login, the same place the
- * menu's own navigation goes, so whichever of the two lands last, the URL
- * carries no ?next= back to the page they chose to leave. */
+// RequireAuth sends a deliberate sign-out to plain /login, so the URL carries no ?next=
+// back to the page they chose to leave.
 export function takeDeliberateSignOut(): boolean {
   const was = signedOutOnPurpose;
   signedOutOnPurpose = false;
@@ -187,13 +157,8 @@ interface LinkPage {
   nextCursor: string | null;
 }
 
-/**
- * One page of links, with the cursor that continues it.
- *
- * Searching, filtering and sorting are all the server's job now: the browser
- * holds a page rather than the table, so anything it did itself would only
- * ever apply to the rows already on screen.
- */
+// Searching, filtering and sorting are the server's job: the browser holds a page rather
+// than the table, so anything it did itself would only apply to the rows on screen.
 export const useLinks = (orgId: string, query: LinkQuery = {}) =>
   useQuery(linksQuery(orgId, query));
 
@@ -223,9 +188,8 @@ interface CachedQuotaUsage {
   at: number;
 }
 
-/** Links used against the plan's `links` cap: a link plus its kept-forever
- * aliases each count (a rename's automatic 48h temp_alias never does), so
- * this can run ahead of `useLinks(...).data.length`. */
+// A link plus its kept-forever aliases each count (a rename's automatic 48h temp_alias never
+// does), so this can run ahead of `useLinks(...).data.length`.
 export const useLinkQuotaUsage = (orgId: string) => useQuery(linkQuotaUsageQuery(orgId));
 
 export const linkQuotaUsageQuery = (orgId: string) =>
@@ -235,8 +199,7 @@ export const linkQuotaUsageQuery = (orgId: string) =>
     enabled: !!orgId,
   });
 
-/** Tracked clicks this month against the plan's cap (#387). A minute stale
- * at most: the count moves with every flush, and nothing decides on it. */
+// A minute stale at most: nothing decides on it.
 export const useClickUsage = (orgId: string) => useQuery(clickUsageQuery(orgId));
 
 export const clickUsageQuery = (orgId: string) =>
@@ -247,11 +210,8 @@ export const clickUsageQuery = (orgId: string) =>
     staleTime: 60_000,
   });
 
-/** Seeds the quota cache from a mutation response instead of a follow-up GET
- * /links/quota-usage (#100), guarded by when the count was read: two
- * mutations racing can have their responses arrive in the opposite order
- * from the writes that produced them, so a response older than what's
- * already cached is dropped instead of clobbering a fresher count. */
+// Guarded by when the count was read: racing mutations can have their responses arrive out
+// of order, so a response older than what is cached is dropped (#100).
 function applyQuotaUsage(qc: ReturnType<typeof useQueryClient>, orgId: string, quota: QuotaUsage) {
   qc.setQueryData<CachedQuotaUsage>(["linkQuotaUsage", orgId], (prev) =>
     prev && prev.at > quota.quotaUsageAt
@@ -260,11 +220,8 @@ function applyQuotaUsage(qc: ReturnType<typeof useQueryClient>, orgId: string, q
   );
 }
 
-/**
- * After a delete in an org that is over a cap: the server may have just
- * reconciled it back under (#486), and the banner, the grace date and the
- * locks all come from the user query. An org that is fine skips the refetch.
- */
+// The server may have just reconciled an over-cap org back under (#486), and the banner,
+// grace date and locks all come from the user query. An org that is fine skips the refetch.
 export function refreshOverLimit(qc: ReturnType<typeof useQueryClient>, orgId: string) {
   const org = qc.getQueryData<CurrentUser | null>(["user"])?.orgs.find((o) => o.id === orgId);
   if (org && isOverLimit(org.over)) void qc.invalidateQueries({ queryKey: ["user"] });
@@ -273,7 +230,6 @@ export function refreshOverLimit(qc: ReturnType<typeof useQueryClient>, orgId: s
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
   const invalidate = (quota: QuotaUsage) => {
-    // Refetches run behind the mutation: its callers do not wait for them.
     void qc.invalidateQueries({ queryKey: ["links", orgId] });
     void qc.invalidateQueries({ queryKey: ["stats", orgId] });
     applyQuotaUsage(qc, orgId, quota);
@@ -287,8 +243,7 @@ export function useLinkMutations(orgId: string) {
     onSuccess: (link) => {
       invalidate(link);
       // Funnel step 7, the activation event (#64). On the hook rather than
-      // the call sites, so the dashboard's quick-create and the links page
-      // both count and neither can be forgotten.
+      // the call sites, so the dashboard's quick-create and the links page both count.
       posthog.capture(FUNNEL.linkCreated, { on_custom_domain: Boolean(link.domainId) });
     },
   });
@@ -308,8 +263,6 @@ export function useLinkMutations(orgId: string) {
   return { create, update, remove };
 }
 
-// A link's primary address plus every alias (temporary, permanent, expired).
-// See #38.
 export const useAddresses = (orgId: string, linkId: string | null) =>
   useQuery(addressesQuery(orgId, linkId));
 
@@ -323,7 +276,6 @@ export const addressesQuery = (orgId: string, linkId: string | null) =>
 export function useAddressMutations(orgId: string, linkId: string) {
   const qc = useQueryClient();
   const invalidate = (quota: QuotaUsage) => {
-    // Refetches run behind the mutation: its callers do not wait for them.
     void qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
     void qc.invalidateQueries({ queryKey: ["links", orgId] });
     void qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
@@ -365,8 +317,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
   return { keepForever, remove, promote, create };
 }
 
-// The dashboard's live pulse: a cheap indexed read (limit rows by ts desc),
-// so it polls while the page is open.
+// A cheap indexed read (limit rows by ts desc), so it polls while the page is open.
 export const useRecentClicks = (orgId: string, limit = 8) =>
   useQuery(recentClicksQuery(orgId, limit));
 
@@ -400,8 +351,6 @@ export const invitesQuery = (orgId: string, enabled = true) =>
 export const useDomains = (orgId: string, enabled = true, every = 10_000) =>
   useQuery(domainsQuery(orgId, enabled, every));
 
-/** `every`: how often to ask while a domain is still checking. A page that
- * waits on one (Import) asks more often than the default. */
 export const domainsQuery = (orgId: string, enabled = true, every = 10_000) =>
   queryOptions<DomainDTO[]>({
     queryKey: ["domains", orgId],
@@ -424,15 +373,12 @@ export function useDomainMutations(orgId: string) {
       }),
     onSuccess: invalidate,
   });
-  // A read, triggered by a button: re-checking a domain only re-reads what the
-  // activation workflow last wrote (#104). It lives here rather than in a
-  // query because nothing polls it, somebody asks for it.
+  // A read, not a poll: re-checking only re-reads what the activation workflow
+  // last wrote (#104), and nothing polls it.
   const refresh = useMutation({
     mutationFn: (id: string) => api<DomainDTO>(`/orgs/${orgId}/domains/${id}`),
     onSuccess: invalidate,
   });
-  // Try again, on a domain whose check gave up: restarts it with a fresh
-  // deadline, keeping the domain and the links on it.
   const retry = useMutation({
     mutationFn: (id: string) =>
       api<DomainDTO>(`/orgs/${orgId}/domains/${id}/retry`, { method: "POST" }),
@@ -464,7 +410,7 @@ export function useDomainMutations(orgId: string) {
 }
 
 // API keys (#131): minted per-user but scoped through an owned org (the
-// route is owner-only), same shape as domains above.
+// route is owner-only).
 export const useApiKeys = (orgId: string, enabled = true) => useQuery(apiKeysQuery(orgId, enabled));
 
 export const apiKeysQuery = (orgId: string, enabled = true) =>
@@ -497,16 +443,9 @@ export interface ConnectedApp {
   lastUsedAt: Date;
 }
 
-// Connected apps (#139 follow-up): an OAuth grant, unlike an API key, is
-// per-user with no owner gate — the oauth-provider endpoints below are
-// session-scoped to whoever is signed in, not to an org, so any member sees
-// and revokes their own connections regardless of role.
-//
-// `polling`: the connect wizard turns this on while it's waiting for a
-// brand-new grant to show up (there is no webhook for "the user finished
-// the OAuth flow in their AI tool" — this list appearing is the signal),
-// and off the moment it does or the person navigates away, so an idle tab
-// on this page isn't polling forever.
+// An OAuth grant is per-user with no owner gate: any member sees and revokes their own
+// connections. `polling` is on while the connect wizard waits for a new grant, the only signal
+// there is (no webhook), and off once it shows or the person leaves.
 export const useConnectedApps = (polling = false) => useQuery(connectedAppsQuery(polling));
 
 export const connectedAppsQuery = (polling = false) =>
@@ -531,10 +470,8 @@ export const connectedAppsQuery = (polling = false) =>
     },
   });
 
-// Not authClient.oauth2.deleteConsent: better-auth's own endpoint only
-// deletes the consent row, leaving any access/refresh token it already
-// minted live. This route (oauth-connections.ts) deletes those too, so
-// disconnecting here actually stops the grant.
+// Not authClient.oauth2.deleteConsent: better-auth's endpoint only deletes the consent row,
+// leaving any token it already minted live. This route (oauth-connections.ts) deletes those too.
 export function useRevokeConnectedApp() {
   const qc = useQueryClient();
   return useMutation({
@@ -543,10 +480,8 @@ export function useRevokeConnectedApp() {
   });
 }
 
-// Billing is per-user (the caller's own subscription), so no orgId.
-// These two only fetch a Polar redirect URL, then the browser leaves the app —
-// nothing in the cache goes stale. Plan changes arrive via the Polar webhook
-// and are picked up by polling ["user"] on the return to /billing.
+// These two only fetch a Polar redirect URL, then the browser leaves the app. Plan changes
+// arrive via the Polar webhook and are picked up by polling ["user"] on return to /billing.
 export function useCheckout() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
@@ -557,11 +492,8 @@ export function useCheckout() {
     }: {
       plan: "hobby" | "pro";
       interval: "month" | "year";
-      /** "welcome" returns both ways out of Polar to /welcome (sign-up and
-       * the setup list); "billing", the default, to the billing page. */
       from?: "billing" | "welcome";
     }) => {
-      // The billing page's request stays as it was; only /welcome says so.
       const body = from === "welcome" ? { plan, interval, from } : { plan, interval };
       return api<{ url: string }>(`/billing/checkout`, { method: "POST", body });
     },
@@ -575,9 +507,6 @@ export function usePortal() {
   });
 }
 
-/** Fallback for when the checkout-return poll gives up before the webhook
- * lands: asks the server to ask Polar directly. See billing.tsx's
- * useAwaitWebhook/onGaveUp and the worker route this calls. */
 export function useConfirmCheckout() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
@@ -621,18 +550,14 @@ export const adminAuditQuery = queryOptions<AdminActionRow[]>({
   queryFn: () => api("/admin/audit"),
 });
 
-/** One DNS record a domain needs, as GET /domains/:id/records lists it. */
 interface DnsRecordDTO {
   type: "TXT" | "CNAME";
   name: string;
   value: string;
 }
 
-/**
- * The records a domain needs (#383). A domain moving from another service
- * needs two TXT records whose values Cloudflare mints a few seconds after the
- * domain is added, so this asks again until they are there.
- */
+// A domain moving from another service needs two TXT records whose values Cloudflare
+// mints a few seconds after the domain is added, so this asks again until they are there (#383).
 export const useDomainRecords = (orgId: string, domainId: string, enabled = true) =>
   useQuery<{ records: DnsRecordDTO[] }>({
     queryKey: ["domain-records", orgId, domainId],
@@ -642,10 +567,6 @@ export const useDomainRecords = (orgId: string, domainId: string, enabled = true
       query.state.data?.records.some((record) => record.type === "TXT") === false ? 3_000 : false,
   });
 
-/**
- * The org's import from another service (#383) that nobody has put away. It
- * runs on the server, so this asks again every few seconds while it does.
- */
 export const useLinkImport = (orgId: string) => useQuery(linkImportQuery(orgId));
 
 export const linkImportQuery = (orgId: string) =>

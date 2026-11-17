@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-/**
- * /google-url-shortener: for people whose goo.gl links stopped. It gives
- * Google's dates with their sources, the steps to move, and one sign-up.
- */
 test("the goo.gl page says what happened, cites Google, and leads to sign-up", async ({ page }) => {
   await page.goto("/google-url-shortener");
   await expect(

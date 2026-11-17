@@ -2,25 +2,15 @@ import { expect, test, type Page } from "@playwright/test";
 import { signOut } from "./pages";
 import { signUpThroughForm, skipSetup } from "./resend";
 
-// Drives the Google button against the local emulate google service (started
-// by the resend webServer, see playwright.config.ts). When Google isn't
-// configured the button is disabled, so we skip rather than fail.
-//
-// The emulator always signs in as testuser@gmail.com, so the tests that use
-// the real OAuth round trip share that one identity and run in order: the
-// linking test claims the password account first, the rest sign into it.
 async function requireGoogle(page: Page) {
   const cfg = await (await page.request.get("/api/config")).json();
   if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
 }
 
-/** From /login through the emulate consent screen to a signed-in dashboard. */
 async function signInWithGoogle(page: Page) {
   await page.goto("/login");
   await page.getByRole("button", { name: /Continue with Google/i }).click();
   await page.getByRole("button", { name: /testuser@gmail\.com/ }).click();
-  // An org with no links gets the setup flow first (onboarding.pw.ts); past
-  // it by its skip buttons, since these tests are about signing in.
   const flow = page.getByRole("heading", { name: "What should we call your organization?" });
   const app = page.getByRole("link", { name: "Dashboard" });
   await expect(flow.or(app).first()).toBeVisible({ timeout: 15_000 });
@@ -46,7 +36,6 @@ test.describe("Google sign-in", () => {
 
     await page.goto("/login");
     const button = page.getByRole("button", { name: /Continue with Google/i });
-    // Disabled in the prerendered form, enabled once /config arrives.
     await expect(button).toBeEnabled();
 
     await button.click();
@@ -60,8 +49,6 @@ test.describe("Google sign-in", () => {
     await expect(page.getByRole("button", { name: /Continue with Google/i })).toBeVisible();
   });
 
-  // A self-hosted instance has no Google credentials. The button stays in the
-  // form (it is in the prerendered HTML) but cannot be pressed.
   test("the Google button is disabled where Google is not configured", async ({ page }) => {
     await page.route("**/api/config", async (route) => {
       const response = await route.fetch();
@@ -85,7 +72,6 @@ test.describe("Google sign-in", () => {
   test("linking Google to an existing account keeps the local name", async ({ page }) => {
     await requireGoogle(page);
 
-    // A password account under the address the emulator signs in as.
     await signUpThroughForm(page, "testuser@gmail.com", "test-password-123");
     const menu = page.getByRole("button", { name: "Account menu" });
     await expect(menu).toContainText("testuser");
@@ -93,7 +79,6 @@ test.describe("Google sign-in", () => {
     await signOut(page);
     await signInWithGoogle(page);
 
-    // The link must not overwrite the name with the Google profile's.
     await expect(menu).toContainText("testuser");
     await expect(menu).not.toContainText("Test User");
   });
@@ -104,12 +89,9 @@ test.describe("Google sign-in", () => {
     await requireGoogle(page);
     await signInWithGoogle(page);
 
-    // Settings names the linked Google account, not just "Connected".
     await page.goto("/settings");
     await expect(page.getByTestId("google-account")).toHaveText("testuser@gmail.com");
 
-    // Sign out, and the login page now leads with a one-click row for that
-    // account instead of the plain button.
     await signOut(page);
     await expect(page).toHaveURL(/\/login$/);
     const resume = page.getByRole("button", { name: "Continue as testuser@gmail.com" });

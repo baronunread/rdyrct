@@ -9,14 +9,6 @@ import {
   rebuildClickRollups,
 } from "./support";
 
-/**
- * Paging an organization's links against a real database (#19).
- *
- * The properties worth asserting are the ones offset cannot give you: a page
- * that does not repeat or skip a row when the table changes underneath it,
- * and a boundary that holds when two rows sort the same.
- */
-
 interface Page {
   items: { id: string; slug: string; createdAt: number; clicks: number }[];
   nextCursor: string | null;
@@ -42,7 +34,6 @@ async function seedLinks(count: number, at: (i: number) => number) {
       .run();
 }
 
-/** Walks every page and returns the ids in the order they arrived. */
 async function walk(cookie: string, query: string): Promise<string[]> {
   const seen: string[] = [];
   let cursor: string | null = null;
@@ -87,10 +78,8 @@ describe("paging an organization's links", () => {
   });
 
   it("does not repeat a row when a newer link arrives mid-walk", async () => {
-    // The offset failure, in one test. A row inserted above the cursor
-    // shifts every later row down by one, so `offset 3` reads a link the
-    // first page already showed. A cursor names the row it continues from,
-    // and rows arriving above it cannot move it.
+    // The offset failure: a row inserted above the cursor shifts later rows down, so `offset 3`
+    // re-reads a link the first page showed. A cursor names the row it continues from.
     const cookie = await freeOwnerCookie();
     await seedLinks(6, (i) => 1000 + i);
 
@@ -127,7 +116,6 @@ describe("paging an organization's links", () => {
       .bind("https://findme.example/x")
       .run();
 
-    // link-0 is the oldest of thirty, so it is nowhere near the first page.
     const page = await list(cookie, "q=findme.example");
 
     expect(page.items).toHaveLength(1);

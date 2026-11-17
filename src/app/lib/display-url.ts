@@ -1,9 +1,5 @@
-/**
- * Addresses as people read them. Hosts are stored the way `URL` writes them
- * (an international domain as punycode, `xn--…`) and paths percent-encoded
- * (`%C3%9F`), which is right for a link and wrong for a label. These undo
- * both for display only: copy buttons and hrefs keep the raw value.
- */
+// Hosts are stored punycode (`xn--…`) and paths percent-encoded, which is right for a link
+// and wrong for a label. This undoes both for display only: copy and hrefs keep the raw value.
 
 const BASE = 36;
 const T_MIN = 1;
@@ -11,8 +7,6 @@ const T_MAX = 26;
 const SKEW = 38;
 const DAMP = 700;
 
-/** The value of one punycode digit (a-z is 0-25, 0-9 is 26-35), or BASE
- * when the character is not a digit. */
 function digitValue(code: number): number {
   if (code >= 48 && code <= 57) return code - 22;
   if (code >= 65 && code <= 90) return code - 65;
@@ -31,8 +25,6 @@ function adapt(delta: number, points: number, first: boolean): number {
   return k + Math.floor(((BASE - T_MIN + 1) * d) / (d + SKEW));
 }
 
-/** RFC 3492 decoding of one label without its `xn--`, or null when the
- * label is not valid punycode. */
 function decodeLabel(input: string): string | null {
   const out: number[] = [];
   const basic = input.lastIndexOf("-");
@@ -66,8 +58,6 @@ function decodeLabel(input: string): string | null {
   return String.fromCodePoint(...out);
 }
 
-/** "xn--bcher-kva.example" as "bücher.example". A label that does not
- * decode is left as it is. */
 export function displayHost(host: string): string {
   return host
     .split(".")
@@ -77,9 +67,7 @@ export function displayHost(host: string): string {
     .join(".");
 }
 
-/** "/b%C3%A4ckerei" as "/bäckerei". Escapes that stand for a reserved
- * character (`%2F`, `%3F`) stay escaped, and a malformed one leaves the
- * whole path as it is. */
+// Escapes that stand for a reserved character (`%2F`, `%3F`) stay escaped.
 export function displayPath(path: string): string {
   try {
     return decodeURI(path);
@@ -88,7 +76,6 @@ export function displayPath(path: string): string {
   }
 }
 
-/** A full address without its scheme, "kürzer.example/slug", for reading. */
 export function displayAddress(url: string): string {
   try {
     const u = new URL(url);
@@ -98,7 +85,6 @@ export function displayAddress(url: string): string {
   }
 }
 
-/** A full URL, scheme included, with its host and path made readable. */
 export function readableUrl(url: string): string {
   try {
     return `${new URL(url).protocol}//${displayAddress(url)}`;

@@ -5,15 +5,9 @@ import { CopyButton } from "../ui/copy-button";
 import { Skeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 
-/**
- * The DNS records a domain needs, one line each with its own copy button
- * (RecordLine): type, name and value, what a DNS provider's form asks for.
- *
- * A domain moving from another service (#383, `validation: "txt"`) lists its
- * two TXT records first. They prove the domain is yours and let us issue its
- * certificate while it still points at the old service, so `showCname` is
- * false until the person is ready to switch.
- */
+/** A domain moving from another service (#383, `validation: "txt"`) lists its two TXT
+ * records first: they let us issue the certificate while it still points at the old
+ * service, so `showCname` stays false until the person is ready to switch. */
 export function DnsRecords({
   orgId,
   domain,
@@ -58,12 +52,6 @@ export function DnsRecords({
   );
 }
 
-/**
- * One DNS record on one line, the way Domains shows a CNAME: its type, the
- * name and where it points, and one copy button that copies the whole record
- * as a message for whoever manages the DNS. Long names and values truncate,
- * with the full text on hover; the copy always carries all of it.
- */
 export function RecordLine({
   type,
   name,
@@ -83,8 +71,6 @@ export function RecordLine({
       <span className="shrink-0 rounded-[5px] px-1.5 text-[11px] text-muted shadow-[inset_0_0_0_1px_var(--border)]">
         {type}
       </span>
-      {/* One line where there is room; on a narrow card the value goes under
-          the name, so neither truncates to nothing. */}
       <div className="flex min-w-0 flex-1 flex-col py-1 font-mono text-[13px] @lg:flex-row @lg:items-center @lg:gap-3 @lg:py-0">
         <code title={name} className="min-w-0 truncate @lg:max-w-[55%]">
           {name}

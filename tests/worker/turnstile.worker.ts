@@ -11,18 +11,7 @@ import {
 } from "./support";
 import { spendToken } from "../../src/worker/turnstile";
 
-/**
- * Turnstile in front of signup, password reset, the anonymous shortener and
- * the report form (#304). The browser side (script, iframe, CSP)
- * is asserted in tests/e2e/production/csp.pw.ts and exercised by every e2e
- * signup. What is left here is what a browser cannot show: a refused, wrong-
- * action, absent or unverifiable token is turned away, and an unset secret
- * switches the gate off.
- *
- * Cloudflare's siteverify is stubbed; the stub records what we sent it.
- */
-/** Turnstile on, with a real-looking (not Cloudflare's test) secret, so the
- * action check runs. APP_HOST is the host these requests go to. */
+// A real-looking (not Cloudflare's test) secret, so the action check runs.
 const ON = () =>
   overrideEnv({
     BETTER_AUTH_SECRET: "test-secret",
@@ -33,7 +22,6 @@ const ON = () =>
 
 let sent: URLSearchParams[] = [];
 
-/** Makes siteverify answer `answer`, or fail like an unreachable network. */
 type Siteverify = { success: boolean; action?: string; "error-codes"?: string[] };
 
 function siteverify(answer: Siteverify | Error | "not json") {
@@ -62,7 +50,6 @@ describe("spending a token", () => {
     expect(await spendToken(ON(), "signup", "good")).toBe(true);
     expect(sent[0]?.get("secret")).toBe("test-turnstile-secret");
     expect(sent[0]?.get("response")).toBe("good");
-    // No visitor address goes to Cloudflare.
     expect(sent[0]?.has("remoteip")).toBe(false);
   });
 
@@ -92,7 +79,6 @@ describe("spending a token", () => {
     expect(await spendToken(ON(), "signup", "no-action")).toBe(false);
   });
 
-  // Cloudflare's always-pass test secret, which dev, CI and e2e run on.
   const TEST_KEYS = () =>
     overrideEnv({
       TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
@@ -100,7 +86,6 @@ describe("spending a token", () => {
     });
 
   it("accepts Cloudflare's test secret, which never echoes an action", async () => {
-    // What siteverify really answers for that secret.
     siteverify({ success: true, "error-codes": [] });
     expect(await spendToken(TEST_KEYS(), "signup", "XXXX.DUMMY.TOKEN.XXXX")).toBe(true);
   });
@@ -142,7 +127,6 @@ describe("spending a token", () => {
   });
 });
 
-/** One guarded request per route, carrying `token` the way that form does. */
 const post = (path: string, body: Record<string, string>, headers: Record<string, string> = {}) =>
   fetchWorker(
     new Request(`http://localhost${path}`, {
@@ -261,7 +245,6 @@ describe("a site key with no secret", () => {
 
   it("refuses the guarded forms and logs why", async () => {
     siteverify({ success: true, action: "report" });
-    // On the request's wide event, which evlog prints outside production.
     const printed = (["log", "info", "warn", "error"] as const).map((m) =>
       vi.spyOn(console, m).mockImplementation(() => {}),
     );

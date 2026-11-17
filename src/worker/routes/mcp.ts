@@ -20,33 +20,16 @@ import { orgRoutes } from "./orgs";
 import { isValidHttpUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 
-// Mounted at /api/mcp, inside the same `api` sub-app as everything else
-// (withSession + enforceSignedApiRateLimit already ran, so c.var.user is
-// resolved from either a session cookie or a scoped API key, see
-// session.ts). This is the remote MCP server (#139): the tools below are the
-// chatbot-connector surface, a different consumer than the WebMCP tools in
-// src/app/components/webmcp-*.tsx (browser-only, session-cookie-only, left
-// untouched — people are testing those right now).
+// The remote MCP server (#139): the chatbot-connector surface, separate from the browser-only
+// WebMCP tools in src/app/components/webmcp-*.tsx.
 
-/**
- * Dispatches a tool call into the real route handler, in-process. Every
- * mutating tool goes through this instead of a second copy of the route's
- * logic (same-destination matching, quota checks, KV/storage sync): the
- * plan caps, role checks and error shapes are the API's, not re-implemented
- * here (see #139 "Scopes are enforced by the API, not re-implemented in the
- * tool layer"). withSession runs again on this inner request because a
- * fresh `app.request()` call starts a fresh Hono context; it re-resolves the
- * same key or session the outer request already authenticated.
- */
+// Dispatches a tool call into the real route handler in-process, so plan caps, role checks and
+// error shapes are the API's (#139). withSession runs again: a fresh app.request() starts a fresh
+// Hono context.
 const internal = new Hono<AppEnv>();
-// Unrestricted: this app is never reachable by a real inbound request (its
-// own paths carry no /api prefix at all), only by dispatch() below, so an
-// OAuth token authenticates here exactly as it did at the public /api/mcp
-// route that already checked it once (#242).
-// A refusal keeps its words. Hono's default answers an HTTPException as plain
-// text, which ok() below cannot read, so the agent got "Request failed with
-// status 422" instead of "another link shortener". Anything else is rethrown
-// to the tool call's own catch, which logs it and answers generically.
+// Unrestricted: only dispatch() reaches this app, never a real request, so an OAuth token
+// authenticates as it did at the public /api/mcp route (#242). A refusal keeps its words: Hono
+// answers an HTTPException as plain text ok() cannot read. Anything else is rethrown.
 internal.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ message: err.message }, err.status);
   if (EvlogError.isEvlogError(err))
@@ -65,9 +48,7 @@ interface DispatchResult {
   json: JsonValue | null;
 }
 
-/** Hono's own `ExecutionContext` (from `c.executionCtx`), not the ambient
- * Workers-runtime one: the two are structurally different, and `internal.
- * request()` below wants the former. */
+/** Hono's own `ExecutionContext` (`c.executionCtx`), not the Workers-runtime one: `internal.request()` wants this one. */
 type ExecCtx = Context<AppEnv>["executionCtx"];
 
 async function dispatch(
@@ -95,8 +76,6 @@ async function dispatch(
 
 const errorBodySchema = v.object({ message: v.string() });
 
-/** A dispatched call's JSON body, once its status confirms success — the
- * shape every tool wants back rather than the raw {status, json} pair. */
 function ok(result: DispatchResult): JsonValue {
   if (result.status >= 200 && result.status < 300) return result.json ?? {};
   const parsed = v.safeParse(errorBodySchema, result.json);
@@ -121,13 +100,8 @@ function errorResult(message: string): CallToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
-/** Parses a tool's raw arguments without throwing: `v.parse`'s ValiError,
- * left to propagate up through the MCP SDK's own request-dispatch promise
- * chain, surfaces there as an unhandled rejection even once our own
- * try/catch in mcpRoutes.all() has already turned it into a clean
- * CallToolResult (security-audit finding, #139) — safeParse and an
- * early-return keeps a bad tool argument from ever being a thrown
- * exception in the first place. */
+// safeParse and an early return: a thrown ValiError propagating through the MCP SDK's dispatch
+// chain surfaces as an unhandled rejection even after our try/catch made a clean result (#139).
 function parseArgs<T>(
   schema: v.GenericSchema<unknown, T>,
   raw: JsonValue | undefined,
@@ -137,8 +111,6 @@ function parseArgs<T>(
   return { ok: false, result: errorResult(parsed.issues[0]?.message ?? "Invalid arguments.") };
 }
 
-/* ---------------- org resolution ---------------- */
-
 async function userOrgs(db: DB, userId: string): Promise<{ id: string; name: string }[]> {
   return db
     .select({ id: schema.orgs.id, name: schema.orgs.name })
@@ -147,10 +119,7 @@ async function userOrgs(db: DB, userId: string): Promise<{ id: string; name: str
     .where(eq(schema.orgMembers.userId, userId));
 }
 
-/** Every tool takes an optional `org_id`, since the person may belong to
- * more than one organization. Absent, and there is exactly one, that one is
- * assumed (the common case); absent with more than one, the tool asks
- * rather than guessing which the person meant. */
+/** Absent `org_id` with more than one organization: the tool asks rather than guessing. */
 async function resolveOrg(db: DB, user: SessionUser, orgId: string | undefined): Promise<string> {
   if (orgId) {
     if (!(await orgRole(db, user, orgId)))
@@ -180,9 +149,6 @@ async function resolveOrg(db: DB, user: SessionUser, orgId: string | undefined):
   });
 }
 
-/** "my domain" as a hostname resolves to the org's active custom domain id,
- * the way create_link's `domainId` field expects it — a person naming a
- * domain thinks of it as "rdyrct.com" (well, their own), not a row id. */
 async function resolveDomainId(db: DB, orgId: string, hostname: string): Promise<string> {
   const rows = await db
     .select({ id: schema.domains.id, status: schema.domains.status })
@@ -205,8 +171,6 @@ async function resolveDomainId(db: DB, orgId: string, hostname: string): Promise
     });
   return row.id;
 }
-
-/* ---------------- finding a link by what a person would say ---------------- */
 
 interface LinkSummary {
   id: string;
@@ -248,10 +212,7 @@ async function searchLinks(
   return page.items;
 }
 
-/** Resolves "the link at that slug" or "the link pointing to that URL" to
- * one id, the way a person would refer to it in a sentence rather than by
- * database id. Throws with the candidates named when more than one link
- * matches, rather than silently acting on the wrong one. */
+/** Throws with the candidates named when more than one link matches, rather than acting on the wrong one. */
 async function findOneLink(
   env: Env,
   ctx: ExecCtx,
@@ -289,8 +250,6 @@ async function findOneLink(
   }
   return matches[0]!;
 }
-
-/* ---------------- tool schemas ---------------- */
 
 const orgIdField = v.optional(v.string());
 
@@ -342,32 +301,18 @@ const inviteArgs = v.object({
 // the url reaches the qrcode library's own proportional-cost encoding work.
 const qrArgs = v.object({ url: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2048)) });
 
-/* ---------------- tool list (protocol-facing JSON Schema) ---------------- */
-
-/** Every tool but generate_qr_code takes this, and resolveOrg() explains it. */
 const ORG_ID_PROPERTY = {
   type: "string",
   description:
     "The organization's id. Leave it out when the person belongs to one organization. With more than one, the tool answers with each one's name and id; pass the id they mean.",
 };
 
-/** How a tool finds a link, for update_link and delete_link (findOneLink). */
 const FIND_BY_SLUG = {
   type: "string",
   description:
     'The link\'s slug: the part of the short link after the domain, "promo" in a short link ending /promo. list_links returns the slug of each link it finds.',
 };
 
-/**
- * Hints for the client, read off each handler below:
- * - readOnlyHint: the handler only reads (GET routes, orgPlan, or no I/O).
- * - destructiveHint: it deletes or overwrites something the person cannot
- *   get back through these tools.
- * - idempotentHint: a second call with the same arguments changes nothing
- *   further.
- * - openWorldHint: it reaches past the organization's own data (an email to
- *   an outside address).
- */
 const READ_ONLY = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -587,9 +532,6 @@ const TOOLS: Tool[] = [
   },
 ];
 
-/* ---------------- server info (the initialize handshake) ---------------- */
-
-/** How an agent should use the tools, sent once in the initialize reply. */
 const SERVER_INSTRUCTIONS = [
   "rdyrct makes short links, counts their clicks, and makes QR codes.",
   "Every tool but generate_qr_code acts on one organization. Leave org_id out when the person belongs to one; if they belong to more, the tool answers with each one's name and id, and you call it again with the id they mean.",
@@ -598,9 +540,7 @@ const SERVER_INSTRUCTIONS = [
   "A tool refuses what the person's role or plan does not allow, and says why. Pass that on rather than retrying.",
 ].join("\n");
 
-/** The server's own description of itself. Its URLs come from APP_URL, so a
- * self-hosted copy points at itself, not rdyrct.com. Both icons are in
- * public/, which a self-hosted build keeps (scripts/self-host-files.ts). */
+/** Its URLs come from APP_URL, so a self-hosted copy points at itself. Both icons are in public/. */
 function serverInfo(env: Env): Implementation {
   return {
     name: "rdyrct",
@@ -616,11 +556,6 @@ function serverInfo(env: Env): Implementation {
   };
 }
 
-/* ---------------- tool handlers ---------------- */
-
-/** Everything a tool handler needs, bundled once instead of threaded through
- * six positional parameters each (the switch this replaced was flagged HIGH
- * complexity: one function holding every tool's logic inline). */
 interface ToolCtx {
   env: Env;
   ctx: ExecCtx;
@@ -680,19 +615,13 @@ async function listLinksTool(t: ToolCtx): Promise<CallToolResult> {
   const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const links = await searchLinks(t.env, t.ctx, t.authorization, orgId, args.query ?? "");
-  // SAFETY: a round trip, not a cast on the original value — LinkSummary
-  // (built by v.parse in searchLinks) is already plain JSON, but as a named
-  // interface it has no index signature, so TS never considers it a
-  // structural JsonValue; JSON.parse's return is genuinely one. Not a deep
-  // clone: structuredClone would preserve LinkSummary's exact (non-JsonValue)
-  // type instead of widening it, which is the whole point of the round trip.
+  // SAFETY: a round trip, not a cast: LinkSummary is plain JSON, but a named interface has no
+  // index signature so TS rejects it as a JsonValue; JSON.parse's return is one. structuredClone
+  // would keep the narrow type.
   // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
   return textResult(JSON.parse(JSON.stringify(links)) as JsonValue);
 }
 
-/** What get_link_stats' description promises: clicks and where they came
- * from. The chart data LinkStats also carries (a year of daily series,
- * deltas, rangeDays) is for the dashboard, not this tool. */
 type LinkStatsSummary = Pick<
   LinkStats,
   | "slug"
@@ -708,8 +637,6 @@ type LinkStatsSummary = Pick<
   | "devices"
 >;
 
-/** What get_org_stats' description promises: total/recent clicks, top
- * links, dead links. Same trim as LinkStatsSummary above. */
 type OrgStatsSummary = Pick<
   OrgStats,
   "totalClicks" | "totalLinks" | "clicks7d" | "topLinks" | "deadLinks"
@@ -735,9 +662,7 @@ async function getLinkStats(t: ToolCtx): Promise<CallToolResult> {
   // above, and turns the trimmed object below back into a JsonValue.
   // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
   const s = JSON.parse(JSON.stringify(stats)) as LinkStats;
-  // The dashboard's chart data (a year of daily series, deltas, rangeDays)
-  // has no use here: the tool promises clicks and where they came from, and
-  // the full DTO was ~370 lines of mostly zeros for a fresh link.
+  // Dashboard chart data is dropped: the full DTO was ~370 lines of mostly zeros for a fresh link.
   const summary: LinkStatsSummary = {
     slug: s.slug,
     domain: s.domain,
@@ -768,8 +693,6 @@ async function getOrgStats(t: ToolCtx): Promise<CallToolResult> {
   // same round trip as getLinkStats above.
   // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
   const s = JSON.parse(JSON.stringify(stats)) as OrgStats;
-  // Same trim as getLinkStats: the daily/hourly series, UTM breakdowns and
-  // heatmap are dashboard chart data the tool's description never promised.
   const summary: OrgStatsSummary = {
     totalClicks: s.totalClicks,
     totalLinks: s.totalLinks,
@@ -807,14 +730,9 @@ async function inviteMember(t: ToolCtx): Promise<CallToolResult> {
   return textResult(result);
 }
 
-/**
- * pngjs's defaults cost ~1.7s of CPU per 512px code in workerd: it tries all
- * five PNG filters on every one of the 512 RGBA scanlines to pick the best,
- * then deflates with the run-length strategy. A QR code needs no search: its
- * rows repeat in blocks of one module, so the "Up" filter turns every
- * repeated row into zeros and plain deflate takes the rest. ~145ms, and the
- * file comes out smaller (2.8 KB against 3.6 KB for a short URL).
- */
+// pngjs's defaults cost ~1.7s CPU per 512px code in workerd (all five filters per scanline). QR
+// rows repeat in module-sized blocks, so the Up filter plus plain deflate takes ~145ms and a
+// smaller file.
 const QR_PNG_OPTS = { filterType: 2, deflateStrategy: 0 };
 
 async function generateQrCode(t: ToolCtx): Promise<CallToolResult> {
@@ -851,8 +769,6 @@ async function handleTool(name: string, t: ToolCtx): Promise<CallToolResult> {
   return TOOL_HANDLERS[name as keyof typeof TOOL_HANDLERS](t);
 }
 
-/* ---------------- wiring ---------------- */
-
 export const mcpRoutes = new Hono<AppEnv>();
 mcpRoutes.use("*", jsonBodyLimit());
 
@@ -862,14 +778,8 @@ mcpRoutes.all("/", async (c) => {
   const user = c.var.user;
   const authorization = c.req.header("authorization");
   if (!user || !authorization) {
-    // withSession (session.ts) already tried a cookie, an API key, and an
-    // OAuth access token and found none of them; requireMcpAuth's own
-    // independent re-check exists here only to build the RFC 9728
-    // WWW-Authenticate challenge correctly (the resource-metadata URL, the
-    // realm) rather than hand-rolling that header. Its handler firing would
-    // mean it accepted a token session.ts just rejected — session.ts and
-    // this call verify the same signature/issuer/audience, so that would be
-    // a real bug, not a race; treated as the same 401 either way.
+    // withSession already rejected the token; requireMcpAuth re-runs only to build the RFC 9728
+    // WWW-Authenticate challenge. Its handler firing would be a real bug: both verify the same token.
     return requireMcpAuth(
       getAuth(c.env),
       () => {
@@ -913,15 +823,9 @@ mcpRoutes.all("/", async (c) => {
         rawArgs: request.params.arguments as JsonValue | undefined,
       });
     } catch (err) {
-      // A tool failure is not a protocol error: the agent gets a readable
-      // reason back (an over-cap quota, an ambiguous slug, a bad role) and
-      // can explain it or retry, rather than the connection dying (#139
-      // "an agent hitting the link cap should get an error it can explain").
-      // Only HTTPException and createError() messages are app-authored and
-      // safe to show as-is; anything else (a raw driver error, an
-      // unexpected runtime exception) gets a fixed generic message instead
-      // of leaking internal detail to the caller, and is logged server-side
-      // so it is still visible.
+      // A tool failure is not a protocol error: the agent gets a readable reason it can explain (#139).
+      // Only HTTPException and createError() messages are shown as-is; anything else gets a generic
+      // message and is logged server-side.
       if (err instanceof HTTPException) return errorResult(err.message);
       if (EvlogError.isEvlogError(err)) return errorResult(err.message);
       log.error(err instanceof Error ? err : new Error(String(err)));

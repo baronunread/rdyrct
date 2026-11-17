@@ -65,14 +65,12 @@ import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
 
-/** The table's sort keys, as the API names them. */
 const API_SORT = {
   createdAt: "created",
   slug: "slug",
   clicks: "clicks",
 } satisfies Record<string, "created" | "slug" | "clicks">;
 
-/** Which facet count belongs to which chip. */
 const FACET_OF = {
   all: "all",
   attention: "attention",
@@ -81,10 +79,8 @@ const FACET_OF = {
 
 const READ_ONLY = "This organization is read-only";
 
-/** Newest first, the order the table opens in. */
 const DEFAULT_SORT: Sort = { key: "createdAt", dir: -1 };
 
-/** The page of rows the table's controls ask for. */
 function rowsQuery(
   q: string,
   domain: string,
@@ -103,9 +99,6 @@ function rowsQuery(
   };
 }
 
-/** Everything the Links page's first frame reads (see lib/route-preload.ts):
- * the first page of rows as the table opens, the chip counts, the quota, the
- * creator names and the domains the toolbar filters by. */
 export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
   return settle([
     qc.ensureQueryData(linkRowsQuery(orgId, rowsQuery("", "all", "all", DEFAULT_SORT, null))),
@@ -116,29 +109,21 @@ export function preload(qc: QueryClient, orgId: string, { org, user }: PageConte
   ]);
 }
 
-/** The table's controls, the cursor stack that lets Previous be a step back
- * rather than a re-walk from the top, and the ticked rows. */
 function useLinkPage(orgId: string) {
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState<string>("all");
   const [filter, setFilter] = useState<LinkFilter>("all");
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
-  // Index 0 is the first page, whose cursor is nothing. Next pushes the
-  // cursor the server handed back; Previous pops.
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
-  // Ticked rows belong to the page on screen: a selection that outlived a
-  // page change would act on rows nobody can see.
+  // Ticked rows belong to the page on screen: a selection outliving a page change would act on rows nobody can see.
   const [selection, setSelection] = useState<Set<string>>(new Set());
 
-  // The term reaches the server now, so it waits for a pause in typing.
   const q = useDebounced(search);
   const page = cursors.length - 1;
 
   const links = useLinkRows(orgId, rowsQuery(q, domainFilter, filter, sort, cursors[page]));
 
-  // Any change to what is being asked for starts the walk again: a cursor
-  // belongs to one ordering and one filter, and carrying it across means
-  // resuming somebody else's list.
+  // A cursor belongs to one ordering and one filter, so any change restarts the walk.
   const restart =
     <T,>(set: (v: T) => void) =>
     (value: T) => {
@@ -159,14 +144,10 @@ function useLinkPage(orgId: string) {
     links,
     rows: links.data?.items ?? [],
     page,
-    // Searching or picking one domain narrows past what the facet counts
-    // describe, so only the plain list has a total to show.
     narrowed: !!q || domainFilter !== "all",
     selection,
     setSelection,
-    // While the next page is in flight the query still holds the previous
-    // one (keepPreviousData), so its cursor is the one already on the stack.
-    // Offering Next again would push it twice: same rows, higher page number.
+    // While the next page is in flight the query still holds the previous one, so offering Next again would push its cursor twice.
     hasNext: !links.isPlaceholderData && !!links.data?.nextCursor,
     onNext: () => {
       setSelection(new Set());
@@ -182,9 +163,6 @@ function useLinkPage(orgId: string) {
   };
 }
 
-/** The editor's onSave on this page: creating lives in the New link dialog
- * (NewLinkHost), so here it only ever saves an edit. A rejected save bumps
- * the editor's shake counter so its Save button flags the failure. */
 function buildOnSave({
   editing,
   update,
@@ -221,12 +199,6 @@ function buildOnSave({
   };
 }
 
-/**
- * What the links counter says when it is worth saying something (#163).
- *
- * "Over" and "at" used to read the same, so an org holding 500 links on a
- * 30-link plan was told to "upgrade for more" as though it were one short.
- */
 function linkLimitHint(count: number, limit: number): string | undefined {
   if (count > limit)
     return `This plan allows ${limit} links. The extras still work, and you can delete some or upgrade.`;
@@ -234,11 +206,6 @@ function linkLimitHint(count: number, limit: number): string | undefined {
   return undefined;
 }
 
-/** "199 short links of 3,000 on your plan", or "199 short links" on a
- * self-hosted instance, which has no cap to count against (its limit is a
- * placeholder of a billion). "Short links", not "links": the plan counts
- * every address, a link's extra ones included, so this runs ahead of the
- * All chip's count of links and has to say why. */
 function LinkCountLabel({
   count,
   limit,
@@ -260,11 +227,6 @@ function LinkCountLabel({
   );
 }
 
-/**
- * Which dialog is open, and what it is open about (#45): the editor, the QR
- * preview, the alias dialog, the delete confirmation, and the shake that
- * fires when a save fails. One named thing the page reads off.
- */
 function useLinkDialogs() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
@@ -272,8 +234,6 @@ function useLinkDialogs() {
   const [aliasLink, setAliasLink] = useState<LinkDTO | null>(null);
   const [deleting, setDeleting] = useState<LinkDTO[] | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
-  // A save the server refused for the destination or the slug: the editor
-  // marks that field with it instead of a toast.
   const [saveError, setSaveError] = useState<Error | null>(null);
 
   return {
@@ -317,21 +277,17 @@ export function LinksPage() {
   const routerNavigate = useNavigate();
   const navigate = (to: string) => void routerNavigate({ href: to });
 
-  // Links used against the plan cap, not the number of rows in the table: a
-  // link plus its kept-forever aliases each count. See useLinkQuotaUsage.
+  // Links used against the plan cap, not table rows: a link's kept aliases each count (useLinkQuotaUsage).
   const linkCount = quotaUsage.data?.count ?? 0;
   const limitHint = linkLimitHint(linkCount, limits.links);
 
   const dialogs = useLinkDialogs();
   const list = useLinkPage(orgId);
 
-  // The cached shell may know the organization before /user confirms the
-  // current role and plan. Do not briefly offer a stale create control.
+  // The cached shell may know the org before /user confirms role and plan: do not offer a stale create control.
   if (currentUser.isLoading) return <LinksSkeleton />;
   if (!org) return <NoOrgState />;
 
-  // A read-only org is one whose role would allow writing: its New link and
-  // Import stay on screen, greyed, and say why. A viewer is offered neither.
   const readOnly = !!org.locked && org.role !== "viewer";
 
   const onSave = buildOnSave({
@@ -363,8 +319,6 @@ export function LinksPage() {
             orgId={orgId}
             canWrite={canWrite}
             readOnly={readOnly}
-            // Nothing to export and the empty state offers the import, so
-            // the header keeps New link alone.
             empty={quotaUsage.data?.count === 0}
             onNewLink={openNewLink}
           />
@@ -406,8 +360,6 @@ export function LinksPage() {
   );
 }
 
-/** A control the org's lock switched off: on screen, greyed, and saying why
- * on hover or focus, rather than gone without a word. */
 function ReadOnlyButton({
   variant,
   children,
@@ -415,9 +367,7 @@ function ReadOnlyButton({
   variant: "primary" | "ghost";
   children: ReactNode;
 }) {
-  // aria-disabled rather than disabled, the way the dashboard's New link
-  // does it: a disabled button takes no hover or focus, so its tooltip
-  // could never say why.
+  // aria-disabled, not disabled: a disabled button takes no hover or focus, so its tooltip could never say why.
   return (
     <Tooltip content={READ_ONLY}>
       <Button
@@ -433,12 +383,6 @@ function ReadOnlyButton({
   );
 }
 
-/**
- * Import, Export and New link. One primary button; Import and Export are
- * quiet beside it on a wide screen and share a menu on a phone, where the
- * header has room for New link alone. Export stays for a viewer and in a
- * locked org: it is how people take their links with them.
- */
 function LinksActions({
   orgId,
   canWrite,
@@ -514,11 +458,6 @@ function LinksActions({
   );
 }
 
-/**
- * The filters, the table and its paging, or the empty state that stands in
- * for all three. Split out so the page itself is the header, the dialogs and
- * this.
- */
 function LinksBrowser({
   list,
   orgId,
@@ -545,12 +484,8 @@ function LinksBrowser({
 
   const filtered =
     !!list.search || list.domainFilter !== "all" || list.filter !== "all" || list.page > 0;
-  // An empty first page with nothing typed is an organization with no
-  // links. An empty page with a search behind it is a search that found
-  // nothing, and the toolbar has to stay on screen to be cleared.
-  // Only the list itself says so: the quota count can be a moment stale, and
-  // while the first page loads the toolbar and skeleton hold the table's place.
-  // A failed list is neither: it says so, with the toolbar still there.
+  // An empty first page with nothing typed is an org with no links; with a search behind it, a search that found nothing.
+  // A failed list is neither.
   const failed = list.links.isError && !list.links.data;
   const empty = !filtered && !failed && !list.links.isLoading && list.rows.length === 0;
 
@@ -613,8 +548,6 @@ function LinksBrowser({
   );
 }
 
-/** What stands where the table goes: the failure, the skeleton, "nothing
- * found", or the table itself (`children`). */
 function LinkRowsState({
   list,
   failed,
@@ -637,8 +570,6 @@ function LinkRowsState({
   return children;
 }
 
-/** Rows standing in for the first page, in the table's own shape: a card,
- * a thumbnail, two lines, a number. */
 function LinkRowsSkeleton() {
   return (
     <div
@@ -675,9 +606,6 @@ function NothingFound() {
   );
 }
 
-/** The first screen of an empty organization: what will appear, one way to
- * make it appear, and the other way for somebody arriving from another
- * shortener. No search box: there is nothing to search. */
 function NoLinksYet({ onCreate }: { onCreate?: () => void }) {
   return (
     <div className="flex flex-col items-center gap-2.5 rounded-xl px-4 py-12 text-center smooth-shadow-ring-xs sm:px-6">
@@ -705,9 +633,6 @@ function NoLinksYet({ onCreate }: { onCreate?: () => void }) {
   );
 }
 
-/** Filter chips on the left, search and domain on the right; on a phone the
- * search goes full width with the chips scrolling under it. The row is the
- * bulk bar's height, so swapping the two never moves the table. */
 function LinksToolbar({
   list,
   facets,
@@ -774,13 +699,6 @@ function LinksToolbar({
   );
 }
 
-/**
- * Every dialog the links page can open (#45).
- *
- * They are separate concerns that happen to share a parent, and holding
- * them in the page meant every one of their conditions counted against the
- * page's own complexity. The page now says "and the dialogs", once.
- */
 function LinkDialogStack({
   dialogs,
   orgId,
@@ -818,8 +736,6 @@ function LinkDialogStack({
         orgQr={orgQr}
         shakeKey={dialogs.shakeKey}
         saveError={dialogs.saveError}
-        // The editor's footer Delete hands over to the same confirmation the
-        // row menu opens, so there is one way a link gets deleted.
         onDelete={
           editing
             ? () => {
@@ -853,8 +769,6 @@ function LinkDialogStack({
   );
 }
 
-/** Every link in the org as a CSV the import reads back (#75). Any member
- * can export, a locked org included: it is how people take their data out. */
 function useExportLinks(orgId: string) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);

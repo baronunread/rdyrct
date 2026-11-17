@@ -14,13 +14,6 @@ import {
 } from "./support";
 import { PLAN_LIMITS, type CurrentUser, type JsonValue } from "../../src/shared/types";
 
-/**
- * Custom limits per account: a platform admin may raise any limit for one
- * user by hand (Enterprise). The effective value of each limit is the higher
- * of the plan's and the override, and migration 0051 grandfathers whoever
- * already owned several orgs.
- */
-
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();
@@ -36,7 +29,6 @@ const call = (cookie: string, method: string, path: string, body?: JsonValue) =>
     }),
   );
 
-/** The stored rows for a user, by key. */
 const rowsOf = async (userId: string) =>
   (
     await env.DB.prepare(
@@ -50,7 +42,6 @@ const setPlan = (plan: string) =>
   env.DB.prepare("update user set plan = ? where id = 'free-1'").bind(plan).run();
 
 describe("migration 0051 grandfathers multi-org owners", () => {
-  /** The migration's data statements, less the CREATE TABLE: the table is already there. */
   async function replay() {
     const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0051"));
     expect(migration, "migration 0051 is missing from the test bundle").toBeTruthy();
@@ -103,7 +94,6 @@ describe("migration 0051 grandfathers multi-org owners", () => {
       },
     ]);
     expect(await rowsOf("one")).toEqual([]);
-    // One unlocked org, one locked, one being deleted: only the first counts.
     expect(await rowsOf("mixed")).toEqual([]);
   });
 });
@@ -139,7 +129,6 @@ describe("effective limits", () => {
       analyticsDays: 90,
       trackedClicks: 90_000,
       qrCustom: true,
-      // Not overridden: the plan's own.
       links: PLAN_LIMITS.hobby.links,
     });
     const me = await jsonBody<CurrentUser>(await call(cookie, "GET", "/user"));
@@ -206,14 +195,12 @@ describe("the limits on the routes that enforce them", () => {
       call(cookie, "POST", "/orgs/org-1/links", {
         destination: `https://example.com/${Math.random()}`,
       });
-    // The plan's links are used: the next two fit the custom count, the third does not.
     expect((await create()).status).toBe(201);
     expect((await create()).status).toBe(201);
     expect((await create()).status).toBe(402);
   });
 });
 
-/** The free-1 account, owning three orgs. */
 async function ownerOfThreeOrgs() {
   await freeOwnerCookie();
   await env.DB.batch([
@@ -226,7 +213,6 @@ async function ownerOfThreeOrgs() {
   ]);
 }
 
-/** The ids of the orgs that are read-only. */
 const locked = async () =>
   (
     await env.DB.prepare("select id from orgs where locked_at is not null order by id").all<{
@@ -261,7 +247,6 @@ describe("PUT /api/admin/users/:id/limits", () => {
       { limit_key: "orgs", value: 3, note: "Acme, $199/mo", set_by: "admin-1" },
       { limit_key: "qr_custom", value: 1, note: "Acme, $199/mo", set_by: "admin-1" },
     ]);
-    // A second save replaces the rows, it does not add to them.
     await put(cookie, "free-1", { links: 200, orgs: 3, qrCustom: true }, "Acme, $199/mo");
     expect((await rowsOf("free-1")).map((r) => r.value)).toEqual([200, 3, 1]);
     const audit = await env.DB.prepare(
@@ -286,7 +271,6 @@ describe("PUT /api/admin/users/:id/limits", () => {
 
     expect((await put(cookie, "free-1", null)).status).toBe(200);
     expect(await rowsOf("free-1")).toEqual([]);
-    // An empty object is the same as none.
     await put(cookie, "free-1", { orgs: 2 });
     await put(cookie, "free-1", {});
     expect(await rowsOf("free-1")).toEqual([]);
@@ -334,7 +318,6 @@ describe("PUT /api/admin/users/:id/limits", () => {
         method === "POST" ? { plan: "pro", reason: "test" } : undefined,
       );
 
-    // Free ignores the override: saving it changes nothing for the account.
     await put(cookie, "free-1", { orgs: 3 });
     expect(await locked()).toEqual(["org-2", "org-3"]);
 
@@ -343,7 +326,6 @@ describe("PUT /api/admin/users/:id/limits", () => {
 
     expect((await comp("DELETE")).status).toBe(200);
     expect(await locked()).toEqual(["org-2", "org-3"]);
-    // The rows were never touched.
     expect((await rowsOf("free-1")).map((r) => [r.limit_key, r.value])).toEqual([["orgs", 3]]);
 
     expect((await comp("POST")).status).toBe(200);
@@ -367,7 +349,6 @@ describe("PUT /api/admin/users/:id/limits", () => {
 
     await call(cookie, "DELETE", "/admin/users/free-1/comp");
     expect(await tiers()).toEqual(["free", "free"]);
-    // Saved, not counted.
     expect((await rowsOf("free-1")).length).toBe(1);
   });
 });

@@ -1,9 +1,6 @@
 /**
- * The MCP tab's setup card (#139 follow-up): pick an assistant, follow its
- * steps, and say when it is added. A token cannot be minted without the
- * person finishing the browser consent screen, so there is no separate
- * "prove it works" step: the grant showing up in the Connected list is that
- * proof, which is what the waiting state polls for.
+ * A token needs the person to finish the browser consent screen, so the grant
+ * showing up in the Connected list is the proof; the waiting state polls for it (#139).
  */
 import type { ReactNode } from "react";
 import { cn } from "../ui/cn";
@@ -79,7 +76,6 @@ function AssistantTile({
   );
 }
 
-/** A value to copy, in its own field: the URL, a command or a JSON config. */
 function CopyField({
   value,
   label,
@@ -88,9 +84,7 @@ function CopyField({
 }: {
   value: string;
   label: string;
-  /** Several lines of code rather than one line. */
   block?: boolean;
-  /** A command that may run over several lines on a phone, rather than scroll. */
   wrap?: boolean;
 }) {
   const toast = useToast();

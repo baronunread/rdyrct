@@ -1,18 +1,3 @@
-/**
- * QR codes for one job each: /wifi-qr-code, /vcard-qr-code and
- * /whatsapp-qr-code.
- *
- * People search for the job ("wifi qr code generator", 2,900 US searches a
- * month; "qr code business card", 9,900; "whatsapp qr code", 1,600), not for
- * a generator that happens to take a string. Each page asks for the fields
- * that job needs, builds the text a phone expects (lib/qr-payloads.ts), and
- * hands it to the same card the main generator uses. Nothing is sent
- * anywhere, as on that page.
- *
- * A PDF page is deliberately missing: rdyrct does not host files, so it
- * could only ask for a link to a PDF hosted elsewhere, which the main
- * generator already does.
- */
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { MarketingPage } from "../components/marketing-page";
 import { Field, Input } from "../ui/field";
@@ -55,7 +40,6 @@ function QrTypePage({
   title: string;
   intro: string;
   encoded: string;
-  /** The code's accessible name, when its text is not for reading aloud. */
   label?: string;
   name: string;
   values: QrValues;
@@ -107,9 +91,8 @@ export function WifiQrPage() {
       path="/wifi-qr-code"
       title="WiFi QR code generator"
       intro="Make a QR code that joins your WiFi network when a guest points a phone camera at it. No typing the password, no account, and the password never leaves your browser."
-      // The name as typed, edge spaces included: a network called " Home"
-      // is not "Home". The image is named for the network, since the code
-      // holds the password and a screen reader would read it out.
+      // The name as typed: a network called " Home" is not "Home". The image is named for the network,
+      // since the code holds the password and a screen reader would read it out.
       encoded={wifiPayload({ ssid, password, security, hidden })}
       label={`QR code to join ${ssid.trim()}`}
       name="wifi-qr"

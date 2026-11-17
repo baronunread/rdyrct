@@ -1,15 +1,11 @@
 /**
- * The canvases for lib/hero-gpu.ts. This module is only ever loaded lazily,
- * and only when `hasWebGpu()` (lib/webgpu.ts) said yes, so TypeGPU never
- * reaches a browser that cannot use it. Each canvas fades in once its first
- * frame is drawn, and stays transparent if the GPU refuses: decoration that
- * fails shows nothing, never an error.
+ * Loaded lazily, and only when `hasWebGpu()` said yes, so TypeGPU never reaches a
+ * browser that cannot use it. A GPU that refuses leaves the canvas transparent.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../ui/cn";
 import { startEdgeLight, startHeroBackdrop } from "../lib/hero-gpu";
 
-/** Runs `start` against the canvas once mounted, and its stop on unmount. */
 function useGpuEffect(
   start: (canvas: HTMLCanvasElement) => Promise<() => void> | null,
 ): [React.RefObject<HTMLCanvasElement | null>, boolean] {
@@ -29,7 +25,6 @@ function useGpuEffect(
           setRunning(true);
         }
       })
-      // A GPU that will not start leaves the canvas transparent.
       .catch(() => {});
     return () => {
       unmounted = true;
@@ -44,10 +39,7 @@ function startBackdrop(canvas: HTMLCanvasElement) {
   return title ? startHeroBackdrop(canvas, title) : null;
 }
 
-/** The wash of colour behind the hero, reaching up under the header and out
- *  to both edges of the window, past the page column. 100vw counts the
- *  scrollbar, so styles.css clips the page sideways (`[data-hero]`) rather
- *  than let it scroll. */
+/** 100vw counts the scrollbar, so styles.css clips the page sideways (`[data-hero]`). */
 export function HeroBackdrop(): React.ReactElement | null {
   const [ref, running] = useGpuEffect(startBackdrop);
   return (
@@ -62,7 +54,6 @@ export function HeroBackdrop(): React.ReactElement | null {
   );
 }
 
-/** How far the edge light's canvas overhangs its frame, for the halo. */
 const EDGE_INSET = 40;
 
 export type EdgeLightProps = {
@@ -70,8 +61,6 @@ export type EdgeLightProps = {
   radius: number;
 };
 
-/** The light along the screenshot frame's edge. Place it inside the frame's
- *  positioned parent; `frame` is the element whose edge it lights. */
 export function EdgeLight({ frame, radius }: EdgeLightProps): React.ReactElement | null {
   const start = useCallback(
     (canvas: HTMLCanvasElement) =>

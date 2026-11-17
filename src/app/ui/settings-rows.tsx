@@ -1,12 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
 
-/**
- * Settings as rows, not cards with footers (rdyrct-design, "The app's
- * surfaces"): what it is on the left, the control on the right, one card per
- * group under a small muted heading. On a phone the control drops under its
- * label.
- */
 export function SettingsGroup({
   title,
   hint,
@@ -15,11 +9,8 @@ export function SettingsGroup({
   children,
 }: {
   title?: string;
-  /** One line beside the heading, for the whole group. */
   hint?: string;
-  /** One quiet link or note at the right end of the heading row. */
   action?: ReactNode;
-  /** Outlined in the danger colour: for "Delete organization" and the like. */
   danger?: boolean;
   children: ReactNode;
 }) {
@@ -67,8 +58,6 @@ export function SettingsRow({
   children,
 }: {
   label: string;
-  /** At most one short line. A paragraph here means the setting needs a
-   *  better name, not more words. */
   hint?: ReactNode;
   children: ReactNode;
 }) {

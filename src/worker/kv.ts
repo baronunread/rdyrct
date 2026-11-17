@@ -1,41 +1,26 @@
 import type { Env } from "./env";
 import { buildDestination, EMPTY_UTM, type UtmFields } from "./util";
 
-/**
- * KV holds the hot path. D1 stays the source of truth.
- *   slug:{slug}            -> KVSlugValue (shared default domain)
- *   slug:{hostname}:{slug} -> KVSlugValue (custom domain)
- *   domain:{hostname}      -> KVDomain    (active custom domains)
- */
+// slug:{slug} (shared domain) and slug:{hostname}:{slug} (custom domain) -> KVSlugValue; domain:{hostname} -> KVDomain.
+// D1 stays the source of truth.
 export interface KVLink {
   linkId: string;
-  // The specific address this key resolves for (primary or an alias):
-  // carried through to the click event for per-address attribution.
   addressId: string;
   orgId: string;
   url: string;
-  // Epoch ms; null = never expires. The redirect path compares this against
-  // Date.now() to lazily stop resolving an expired temporary alias without a
-  // D1 read (see index.ts's redirect middleware).
+  // Epoch ms; null = never expires. Compared against Date.now() so an expired temporary alias stops resolving with no D1 read.
   expiresAt: number | null;
-  // #344: show the destination host and a Continue button before sending the
-  // visitor on. Absent on every value written before it existed, and on every
-  // link without a warning, which both mean "redirect straight away".
+  // Absent means redirect straight away (older values and unwarned links).
   warn?: true;
 }
 
-/**
- * A held (suspended) link's key (#344). The key stays in KV so the redirect
- * path can answer "under review" with no D1 read, where it used to delete the
- * key and answer 404. It carries no destination: nothing on the redirect path
- * may send anyone to a held link's URL, and a value with no URL in it cannot.
- */
+// A held link keeps a KV key so the redirect path answers under review with no D1 read. It carries no destination:
+// a value with no URL cannot send anyone to a held link (#344).
 export interface KVHeldLink {
   held: true;
   linkId: string;
   expiresAt: number | null;
-  // The owner was banned: the decision is made, so the page says "disabled"
-  // rather than "under review". Absent means held for review.
+  // Owner banned: the page says disabled, not under review. Absent means held for review.
   disabled?: true;
 }
 
@@ -49,24 +34,13 @@ export interface KVDomain {
   domainId: string;
   orgId: string;
   rootRedirect: string;
-  /**
-   * Epoch ms this host stops resolving, or null/absent for "keeps serving"
-   * (#159).
-   *
-   * A downgraded org's extra domains keep working for 30 days, and the
-   * redirect path has to know that without a D1 read, so the deadline rides
-   * in the value rather than being looked up per request. Reconciliation
-   * writes it; nothing rewrites it when the day arrives, because a stored
-   * deadline needs no cron to expire.
-   */
+  // Epoch ms this host stops resolving (#159). The deadline rides in the value so the redirect path needs no D1 read, and no cron is needed to expire it.
   servesUntil?: number | null;
-  // The org's owner was banned: every path on the host answers "disabled",
-  // root redirect included. Absent means serving.
+  // Owner banned: every path on the host answers disabled, root redirect included.
   disabled?: true;
 }
 
-/** Whether a custom domain still resolves. A value written before
- * `servesUntil` existed has it undefined, which means "keeps serving". */
+// undefined means keeps serving (a value written before servesUntil existed).
 export function domainServing(domain: KVDomain, now = Date.now()): boolean {
   return domain.servesUntil == null || domain.servesUntil > now;
 }
@@ -96,12 +70,7 @@ export async function publishLink(
   await env.LINKS.put(slugKey(hostname, link.slug), JSON.stringify(value));
 }
 
-/**
- * An anonymous link's key (Direction A of #96), with the row's own id in
- * both slots and no org: `orgId: ""` is what tells the redirect path not to
- * record a click, since there is no link and no org for one to belong to.
- * Carries the warning when reports put one on it (#488).
- */
+// orgId empty tells the redirect path not to record a click: there is no link and no org for one (#96, #488).
 export async function publishAnonLink(
   env: Env,
   anon: { id: string; slug: string; destination: string; expiresAt: number; warned: boolean },

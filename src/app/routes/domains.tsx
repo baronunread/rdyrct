@@ -73,15 +73,12 @@ const monthDay = (ts: number) => MONTH_DAY.format(new Date(ts));
 const transitional = (status: DomainDTO["status"]) =>
   status === "checking_dns" || status === "issuing_tls";
 
-/** The house curve (rdyrct-design, motion) for the row and its setup. */
 const EASE = [0.32, 0.72, 0, 1] as const;
 
 function canManageDomains(isPlatformAdmin: boolean, role: OrgRole): boolean {
   return isPlatformAdmin || role === "owner" || role === "admin";
 }
 
-/** Everything the domains page's first frame reads (see
- * lib/route-preload.ts), for whoever gets the list. Config is already in. */
 export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
   return canManageDomains(user.user.isAdmin, org.role)
     ? settle([qc.ensureQueryData(domainsQuery(orgId))])
@@ -93,13 +90,6 @@ export function DomainsPage() {
   const orgId = org?.id ?? "";
   const currentUser = useCurrentUser();
 
-  // The full skeleton only for somebody who is going to get the full page.
-  // A member sees one line saying they have no access, so drawing a domain
-  // list for them promises controls that the page then takes away. A free
-  // plan gets the same page as a paid one (its Add domain offers the plan),
-  // so it gets the same skeleton. The role is already in hand: the only
-  // thing still loading is whether this is a platform admin, and that is a
-  // handful of people.
   if (currentUser.isLoading)
     return org && canManageDomains(false, org.role) ? (
       <DomainsPageSkeleton />
@@ -108,8 +98,6 @@ export function DomainsPage() {
     );
   if (!org) return <NoOrgState />;
 
-  // A plan without domains says so to everyone, whoever may manage them:
-  // the lock is about the plan, and the plan is the owner's to change.
   const canManage = canManageDomains(!!currentUser.data?.user.isAdmin, org.role);
   if (!canManage && org.limits.domains === 0)
     return (
@@ -156,8 +144,6 @@ function DeleteDomainDialog({
   );
 }
 
-/** A refusal the field can own (rdyrct-design, form errors), or null for
- * one that goes to a toast. */
 function fieldReason(e: Error): string | null {
   if (!(e instanceof ApiError)) return null;
   if (e.status === 409) return "Already in use";
@@ -165,11 +151,6 @@ function fieldReason(e: Error): string | null {
   return null;
 }
 
-/**
- * Every write the domains page can make, with its toast and its analytics
- * event. Split out of the page so that component is about what it shows and
- * this is about what its buttons do.
- */
 function useDomainActions({
   mutations: { add, refresh, retry: retryMutation, setRootRedirect, remove, setDefault },
   toast,
@@ -183,7 +164,6 @@ function useDomainActions({
 }) {
   const copy = (text: string) => copyToClipboard(text, toast);
 
-  /** Adds a domain. A refusal about the name comes back for the field. */
   const addDomain = (hostname: string, onAdded: () => void, onFieldError: (r: string) => void) =>
     add.mutate(hostname, {
       onSuccess: (d) => {
@@ -214,8 +194,6 @@ function useDomainActions({
       onError: withErrorToast(toast),
     });
 
-  /** Saves a root redirect. A refusal about the address comes back for the
-   * field in the row. */
   const saveRedirect = (
     d: DomainDTO,
     rootRedirect: string,
@@ -235,8 +213,6 @@ function useDomainActions({
           );
         },
         onError: (e) => {
-          // The same refusals a link's destination gets (#488), in the
-          // same words.
           const field = linkFieldError(e);
           if (field?.field === "destination") onFieldError(field.reason);
           else if (e instanceof ApiError && e.status === 400) onFieldError("Not a web address");
@@ -245,7 +221,6 @@ function useDomainActions({
       },
     );
 
-  /** Makes a domain the default, or the shared domain with null. */
   const makeDefault = (id: string | null, hostname: string) =>
     setDefault.mutate(id, {
       onSuccess: () => {
@@ -281,11 +256,8 @@ function useDomainsModel(orgId: string, limits: PlanLimits) {
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
   const actions = useDomainActions({ mutations, toast, deleting, setDeleting });
 
-  // A plan with no domains still lists the ones the org already has (#159).
-  // Hiding them was the bug: an owner who downgrades and finds an upgrade
-  // pitch where their domains used to be concludes we deleted them.
+  // A plan with no domains still lists existing ones (#159): an upgrade pitch where they were reads as deleted.
   const hasDomains = !!domains.data?.length;
-  // A locked org accepts no writes from anyone, its owner included (#160).
   const canWrite = !org?.locked;
 
   return {
@@ -312,21 +284,11 @@ function useDomainsModel(orgId: string, limits: PlanLimits) {
 
 type DomainsModel = ReturnType<typeof useDomainsModel>;
 
-/** Why a typed hostname cannot be added, before asking the server. */
 function hostnameReason(hostname: string): string | null {
   if (!hostname) return "Type a domain";
   return v.safeParse(hostnameSchema, { hostname }).success ? null : "Not a domain";
 }
 
-/**
- * Add domain, which widens into its own field where it was clicked
- * (rdyrct-design, "Adding one value grows in place"). Enter or Add submits;
- * the button never greys out, and a bad name says why inside the field and
- * shakes it once. Esc, or a click away with nothing typed, puts the button
- * back. A plan without domains gets none: with no domains the page is the
- * locked state, and an org that kept domains past a downgrade (#159), or a
- * read-only one (#160), has its rows and the notice above the page.
- */
 function AddDomainField({ model }: { model: DomainsModel }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
@@ -334,8 +296,7 @@ function AddDomainField({ model }: { model: DomainsModel }) {
   const [shakes, setShakes] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  // After a shake remounts the form, so focus lands in the new input rather
-  // than falling to the page with the one that left.
+  // After a shake remounts the form, so focus lands in the new input.
   useEffect(() => {
     if (shakes) input.current?.focus();
   }, [shakes]);
@@ -375,7 +336,6 @@ function AddDomainField({ model }: { model: DomainsModel }) {
         type="button"
         onClick={() => {
           setOpen(true);
-          // After the field is in the tree and visible.
           setTimeout(() => input.current?.focus(), 120);
         }}
         aria-hidden={open}
@@ -394,8 +354,7 @@ function AddDomainField({ model }: { model: DomainsModel }) {
         noValidate
         onKeyDown={(e) => {
           if (e.key !== "Escape") return;
-          // Back to the button the field grew from, before the field goes
-          // inert, so keyboard focus stays where it was.
+          // Back to the button before the field goes inert, so keyboard focus stays.
           trigger.current?.focus();
           close();
         }}
@@ -440,7 +399,6 @@ function AddDomainField({ model }: { model: DomainsModel }) {
   );
 }
 
-/** Domains on a plan without them, before any exist: one locked state. */
 function DomainsLocked({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
   const owner = useOwnerLabel(orgId);
   return (
@@ -490,7 +448,6 @@ function DomainsSection({
   );
 }
 
-/** The host new links start on: the org's default domain, or the shared one. */
 function defaultHostOf(
   org: UserOrg | null,
   domains: DomainDTO[] | undefined,
@@ -500,21 +457,15 @@ function defaultHostOf(
   return domains?.find((d) => d.id === id)?.hostname ?? linkHost;
 }
 
-/** The default new links really start on: the stored one while it serves
- *  (active and unlocked), otherwise none, which is the shared domain. The
- *  link editor's rule (resolveDefaultDomainId), so the page never marks a
- *  domain new links will not use. */
 function servingDefaultId(org: UserOrg | null, domains: DomainDTO[] | undefined): string | null {
   const serving = (domains ?? []).filter((d) => d.status === "active" && d.lockedAt === null);
   return resolveDefaultDomainId(org?.defaultDomainId, serving);
 }
 
-/** The list, the shared domain last, or the lock before the first domain. */
 function DomainsBody({ model }: { model: DomainsModel }) {
   const { domains, org } = model;
   if (domains.isLoading) return <DomainsSkeleton />;
-  // Before the upsell: a plan with no domains whose list failed may still
-  // have some (#159), and an outage must not read as "you have none".
+  // Before the upsell: a failed list on a plan with no domains may still hold some (#159); an outage must not read as none.
   if (domains.isError && !domains.data)
     return (
       <LoadError
@@ -531,7 +482,6 @@ function DomainsBody({ model }: { model: DomainsModel }) {
     <SettingsGroup>
       <MotionConfig reducedMotion="user">
         <LazyMotion features={domAnimation}>
-          {/* Rows already here render still; a new one enters at the top. */}
           <AnimatePresence initial={false}>
             {list.map((d) => (
               <m.div
@@ -559,11 +509,6 @@ function DomainsBody({ model }: { model: DomainsModel }) {
   );
 }
 
-/**
- * "2 of 5 · new links start on rdyr.cc" under the title. A plan with no
- * domains that still has some (#159) says why there is no Add domain instead:
- * the notice above the page and each row's status say the rest.
- */
 function domainsSubtitle(
   plan: OrgPlan,
   cap: number,
@@ -572,7 +517,6 @@ function domainsSubtitle(
 ): ReactNode {
   if (count === undefined) return undefined;
   if (cap === 0) return count > 0 ? "Custom domains need a paid plan." : undefined;
-  // A self-hosted instance has no cap to count against.
   const used =
     plan === "unlimited" ? (count === 1 ? "1 domain" : `${count} domains`) : `${count} of ${cap}`;
   return (
@@ -589,20 +533,16 @@ function domainsSubtitle(
   );
 }
 
-/** A state the app is not checking: over the plan, or failed. */
 function StillStatus({ tone, label }: { tone: Tone; label: string }) {
   return (
     <span className="inline-flex items-center gap-2 text-[13px] whitespace-nowrap tnum">
-      {/* The dot carries the colour; the word stays in ink, because the
-          state colours are under AA as small text on light grounds. */}
+      {/* The state colours are under AA as small text on light grounds, so the word stays in ink. */}
       <span aria-hidden className={cn("size-2 rounded-full bg-current", TONE_CLASS[tone])} />
       {label}
     </span>
   );
 }
 
-/** Where a domain stands, on the right of its row. DNS and the certificate
- * are checked by the app, so they are a live status that settles on Live. */
 function DomainStatus({
   domain: d,
   graceEndsAt,
@@ -633,9 +573,7 @@ function DomainStatus({
 
 type RowAction = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean };
 
-/** A row's actions, always behind "…" so every row ends in the same place. */
 function RowActions({ hostname, items }: { hostname: string; items: RowAction[] }) {
-  // Keeps the column when there is nothing to offer, so the statuses align.
   if (items.length === 0) return <div className="w-8" />;
   const safe = items.filter((item) => !item.danger);
   const danger = items.filter((item) => item.danger);
@@ -666,11 +604,6 @@ function RowActions({ hostname, items }: { hostname: string; items: RowAction[] 
   );
 }
 
-/**
- * The marker at the start of a row (rdyrct-design, "The default is a
- * marker"): filled in the accent with a check on the default, an empty ring
- * on hover for any other domain that can take it.
- */
 function DefaultMarker({
   hostname,
   isDefault,
@@ -678,8 +611,6 @@ function DefaultMarker({
 }: {
   hostname: string;
   isDefault: boolean;
-  /** Absent when this row cannot be the default (still checking, over the
-   * plan, a read-only org). */
   onPick?: () => void;
 }) {
   const ring = (
@@ -723,22 +654,10 @@ function DefaultMarker({
   );
 }
 
-/**
- * One domain: its default marker, the hostname over one line saying where
- * it stands, its live status, and what you can do with it. A domain still
- * waiting on DNS opens its record under the row, which folds away once the
- * check finds it.
- */
-/** The default row's tint: the accent fading out across its first half. */
 const DEFAULT_TINT =
   "bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_7%,transparent),transparent_45%)]";
 
-/** What a domain row's "…" offers. Re-checking is a read, so it stays in a
- * locked org; only writes go. The default is only offered on a domain that
- * is actually serving (#69): preselecting one still waiting on DNS would
- * hand every new link an address that resolves nowhere. */
-/** Re-check a domain still checking; try again on one whose check gave up
- * (its links may use it, so deleting it is no way out). */
+/** A domain still waiting on DNS is not offered as default (#69): new links would get an address that resolves nowhere. */
 function checkActions(d: DomainDTO, { canWrite, pending, actions }: DomainsModel): RowAction[] {
   if (transitional(d.status))
     return [
@@ -765,14 +684,8 @@ function domainRowActions(d: DomainDTO, model: DomainsModel, isDefault: boolean)
   return items;
 }
 
-/** The record under a domain still waiting on DNS. Once the check finds it
- * the status settles first, then this folds. */
 function SetupFold({ open, children }: { open: boolean; children: ReactNode }) {
-  // Rows from 0fr to 1fr (as the phone menu grows), not a height tween: it
-  // reaches the content's own height without animating a layout property.
-  // The setup stays mounted until the fold has shut (its 900ms wait and
-  // 300ms close), then goes, so its records query stops with it. A timer
-  // rather than transitionend, which never fires under reduced motion.
+  // Rows from 0fr to 1fr, not a height tween. A timer rather than transitionend, which never fires under reduced motion.
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) setMounted(true);
   useEffect(() => {
@@ -831,7 +744,6 @@ function DomainRow({ domain: d, model }: { domain: DomainDTO; model: DomainsMode
   );
 }
 
-/** The shared domain, last: always live, the default when nothing else is. */
 function SharedDomainRow({ model }: { model: DomainsModel }) {
   const { org, canWrite, pending, actions, linkHost } = model;
   const isDefault = servingDefaultId(org, model.domains.data) === null;
@@ -866,8 +778,6 @@ function DetailLine({ children, className }: { children: ReactNode; className?: 
   return <p className={cn("mt-0.5 text-xs text-pretty text-muted", className)}>{children}</p>;
 }
 
-/** The one muted line under a hostname. A live domain's is its root
- * redirect, which edits in place. Exactly one state renders per domain. */
 function DomainLine({
   domain: d,
   locked,
@@ -899,11 +809,6 @@ function DomainLine({
   return <DetailLine>Added {relativeDate(d.createdAt)}</DetailLine>;
 }
 
-/**
- * Where a live domain goes with no slug, as its second line (rdyrct-design,
- * "A single value edits in place"). Clicking it turns the line into a small
- * field: Enter saves, Esc puts the line back, an empty field means a 404.
- */
 function RootRedirectLine({ domain: d, model }: { domain: DomainDTO; model: DomainsModel }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(d.rootRedirect);
@@ -911,8 +816,6 @@ function RootRedirectLine({ domain: d, model }: { domain: DomainDTO; model: Doma
   const canEdit = model.canWrite;
   const view = useRef<HTMLButtonElement>(null);
   const wasEditing = useRef(false);
-  // When the field closes (saved, or Esc), focus goes back to the line it
-  // replaced rather than falling to the page with the input that left.
   useEffect(() => {
     if (wasEditing.current && !editing) view.current?.focus();
     wasEditing.current = editing;
@@ -947,7 +850,6 @@ function RootRedirectLine({ domain: d, model }: { domain: DomainDTO; model: Doma
   );
 }
 
-/** The redirect as it is: "go.acme.com/ → acme.com", or the 404 note. */
 function RootRedirectView({
   domain: d,
   canEdit,
@@ -963,7 +865,6 @@ function RootRedirectView({
     <button
       ref={buttonRef}
       type="button"
-      // The address as stored: the line drops the scheme and a trailing slash.
       title={d.rootRedirect || undefined}
       disabled={!canEdit}
       onClick={onEdit}
@@ -998,8 +899,6 @@ function RootRedirectView({
   );
 }
 
-/** The redirect as a small field in the row: Enter saves, Esc puts the
- * line back, a refusal says why inside it. */
 function RootRedirectForm({
   domain: d,
   model,
@@ -1023,9 +922,7 @@ function RootRedirectForm({
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        // One save at a time: a second PATCH could land after a newer one
-        // and put back the older address. Save stays pressable (it never
-        // greys out); it shows the spinner instead.
+        // One save at a time: a second PATCH could land after a newer one and restore the older address.
         if (model.pending.savingRedirect) return;
         model.actions.saveRedirect(d, value.trim(), onDone, onReason);
       }}
@@ -1067,12 +964,6 @@ function RootRedirectForm({
   );
 }
 
-/**
- * The record a domain still needs, under its row: one line saying where it
- * goes, then the record on one line with one copy button that copies it as
- * a message for whoever manages the DNS. A domain moving from another
- * service (#383) lists its TXT records instead.
- */
 function DomainSetup({ domain: d, model }: { domain: DomainDTO; model: DomainsModel }) {
   const parent = parentDomain(d.hostname);
   if (d.validation === "txt")

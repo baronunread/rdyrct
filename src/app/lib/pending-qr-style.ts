@@ -1,15 +1,6 @@
-/**
- * A QR style tried on Free, kept across the trip to checkout.
- *
- * Organization lets a free org try every QR default, and "Upgrade to save"
- * goes to Polar. The style waits here in sessionStorage (the tab that left
- * is the tab that comes back) and is saved to the org the first time the
- * app sees that org on a plan that may keep it: on /billing as the webhook
- * lands, or on /organization.
- *
- * A logo tried on Free never left the browser (the API refuses it), so it
- * travels as a data URL and is uploaded at save time.
- */
+// A logo tried on Free never left the browser (the API refuses it), so it travels
+// as a data URL and is uploaded at save time. The style waits in sessionStorage:
+// the tab that left for checkout is the tab that comes back.
 import { useEffect } from "react";
 import * as v from "valibot";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -45,7 +36,6 @@ export function keepPendingQrStyle(pending: Pending): void {
   }
 }
 
-/** The style waiting for `orgId`, if any. Leaves it in place. */
 export function readPendingQrStyle(orgId: string): QrValues | null {
   try {
     const raw = sessionStorage.getItem(KEY);
@@ -60,18 +50,15 @@ export function readPendingQrStyle(orgId: string): QrValues | null {
 function clearPendingQrStyle(): void {
   try {
     sessionStorage.removeItem(KEY);
-  } catch {
-    // Nothing to clear.
-  }
+  } catch {}
 }
 
-/** A data URL back into the file it was read from, with no fetch. */
 function fileFromDataUrl(dataUrl: string): File {
   const [head, body = ""] = dataUrl.split(",");
   const type = head.slice("data:".length).split(";")[0] || "image/webp";
   const binary = atob(body);
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-  // "image/png" → png, "image/svg+xml" → svg. The upload reads the type, not the name.
+  // The upload reads the type, not the name.
   return new File([bytes], `qr-logo.${type.slice("image/".length).replace("+xml", "")}`, { type });
 }
 
@@ -93,7 +80,6 @@ async function saveStyle(orgId: string, values: QrValues): Promise<void> {
   });
 }
 
-/** Saves a waiting style once its org is on a plan that keeps QR styles. */
 export function useSavePendingQrStyle(): void {
   const currentUser = useCurrentUser();
   const qc = useQueryClient();

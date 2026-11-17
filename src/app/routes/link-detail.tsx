@@ -58,11 +58,8 @@ import { Tooltip } from "@/app/ui/tooltip";
 
 const LINK_RANGES = [PRESET_7D, PRESET_30D, PRESET_365D] as const;
 
-/** The list search that finds this link's row: there is no single-link read. */
 const rowSearch = (slug: string) => ({ q: slug, limit: 100 });
 
-/** Everything a link's first frame reads (see lib/route-preload.ts): its
- * stats, then the row and other addresses the stats name. */
 export function preload(qc: QueryClient, orgId: string, page: PageContext) {
   const slug = page.params.slug ?? null;
   const domain = new URLSearchParams(page.searchStr).get("domain");
@@ -78,24 +75,14 @@ export function preload(qc: QueryClient, orgId: string, page: PageContext) {
   return settle([stats, preloadOrgDomains(qc, page.org, page.user)]);
 }
 
-/**
- * The link as the links list knows it, for the editor and the QR dialog.
- * The stats answer carries no QR look, UTM tags or pause state, and there is
- * no single-link read, so this searches the list by slug and picks the row
- * by id. Null until it loads, or if the search somehow misses it: then the
- * page simply offers no Edit or QR code.
- */
+/** The stats answer carries no QR look, UTM tags or pause state, and there is no single-link read,
+ * so this searches the list by slug. */
 function useLinkRow(orgId: string, s: LinkStats | undefined): LinkDTO | null {
-  // An empty org id holds the query until the stats name the slug.
   const links = useLinks(s ? orgId : "", rowSearch(s?.slug ?? ""));
   if (!s) return null;
   return links.data?.items.find((l) => l.id === s.id) ?? null;
 }
 
-/** The link's own QR code, small, as the page's picture of it. Opens the
- * full-size code with its downloads. The rounding is on a tile of the code's
- * own background around it, so the corners never cut into the finder
- * squares. */
 function QrThumb({
   url,
   link,
@@ -122,10 +109,6 @@ function QrThumb({
   );
 }
 
-/** Everything that acts on the link rather than its stats: editing it, its
- * QR code, opening it, another address, and deleting it. The header itself
- * matches Analytics (range and Export CSV), since this is the link's
- * analytics. */
 function LinkMenu({
   s,
   link,
@@ -282,8 +265,6 @@ function LinkDetailHeader({
   );
 }
 
-/** Where, across the page under the chart; from what and on what, side by
- * side under that. */
 function LinkPanels({ s }: { s: LinkStats }) {
   return (
     <div className="flex flex-col gap-6">
@@ -332,15 +313,12 @@ function LinkPanels({ s }: { s: LinkStats }) {
   );
 }
 
-/** The editor and the QR dialog, open on the link this page shows. */
 function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [aliasOpen, setAliasOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
-  // A save the server refused for the destination or the slug: the editor
-  // marks that field with it instead of a toast.
   const [saveError, setSaveError] = useState<Error | null>(null);
   const { update } = useLinkMutations(orgId);
   const qc = useQueryClient();
@@ -354,8 +332,7 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
       {
         onSuccess: () => {
           posthog.capture("link_updated", linkFeatures(data));
-          // The mutation refreshes the list and the org's stats, not this
-          // page's: the destination and title here come from linkStats.
+          // The mutation refreshes the list and the org's stats, not this page's: destination and title come from linkStats.
           void qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
           setEditorOpen(false);
           toast("Link updated");
@@ -385,13 +362,9 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
   };
 }
 
-/** The range a link's page opens on: 30 days, or the plan's whole window
- * when that is shorter. */
 const defaultRange = (maxDays: number) => (maxDays >= 30 ? PRESET_30D : PRESET_7D);
 
-/** The figures over the chart, for the range the API answered. */
 function linkFigures(s: LinkStats) {
-  // On the 7-day range the week is the range, and would only repeat Clicks.
   const week =
     s.rangeDays > 7
       ? [{ label: "Last 7 days", value: formatNumber(s.clicks7d), delta: s.clicks7dDelta }]
@@ -408,7 +381,6 @@ export function LinkDetailPage() {
   const { slug } = useParams({ strict: false });
   const [searchParams] = useSearchParams();
   const domain = searchParams.get("domain");
-  // So the way back to Links morphs into this link's row (lib/link-morph.ts).
   useEffect(() => {
     if (slug) setMorphLink(morphKey({ slug, domain }));
   }, [slug, domain]);

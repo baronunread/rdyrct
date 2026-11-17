@@ -5,9 +5,6 @@ import { UserAvatar } from "./user-avatar";
 import { AvatarPictureDialog } from "./avatar-picture-dialog";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/** The account form's picture control: a big avatar with a pencil overlay.
- * The pencil opens a dialog to upload/crop or remove. Nothing reaches the
- * server here; a chosen crop (or a removal) is handed up and applied on Save. */
 export function AvatarInput({
   user,
   pendingUrl,
@@ -17,11 +14,8 @@ export function AvatarInput({
   size = 128,
 }: {
   user: User;
-  /** 40 in a settings row. */
   size?: number;
-  /** Data URL of a not-yet-saved crop. */
   pendingUrl?: string;
-  /** The saved picture is marked for deletion. */
   pendingRemove?: boolean;
   onPick: (blob: Blob) => void;
   onRemove: () => void;

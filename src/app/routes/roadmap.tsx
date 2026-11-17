@@ -1,26 +1,5 @@
-/**
- * The public roadmap.
- *
- * It exists because the landing page claims rdyrct is built for marketing
- * teams *and* developers, and most of the twelve feature cards under that
- * claim are a marketer's feature. API keys, a scoped REST API and a remote
- * MCP server (#131, #132, #139) back the developer half now; what is left
- * here is what still makes that story incomplete.
- *
- * Laid out as a board, the way the public roadmaps worth copying are: a
- * column per stage, each saying what the stage means and how much is in it,
- * and one card per item tagged with the part of the product it touches.
- *
- * Every planned item is a real open issue, linked. No dates: a date is what
- * turns a roadmap into a liability, and this one is maintained by one person.
- * The issue is the promise, and anybody can go read it, argue with it, or
- * send the patch themselves.
- *
- * A page rather than a band on the homepage, for the same reason /pricing is
- * a page: somebody looking for it is looking for it on purpose, a search
- * result can deep-link a page and not a scroll position, and the homepage
- * already runs long enough that a ninth section costs more than it returns.
- */
+/** The public roadmap. Every planned item is a real open issue, linked.
+ * No dates: a date turns a roadmap into a liability. */
 import type { ComponentType, ReactNode } from "react";
 import { ArrowUpRight, Check, Clock, Lightbulb } from "@/app/ui/icons";
 import { useAudience } from "../lib/audience";
@@ -33,7 +12,6 @@ import { MarketingLink } from "../components/marketing-link";
 
 type Item = { issue?: number; area: string; title: string; body?: ReactNode };
 
-/** Being built next, each one an open issue. */
 const NEXT: Item[] = [
   {
     issue: 77,
@@ -51,8 +29,6 @@ const NEXT: Item[] = [
     issue: 133,
     area: "API",
     title: "An OpenAPI document",
-    // The path is an identifier, so it takes the mono face, same rule as a
-    // slug. Everything around it is prose and stays in the sans.
     body: (
       <>
         Served at <span className="font-mono">/openapi.json</span>, so a client generates itself
@@ -90,7 +66,6 @@ const NEXT: Item[] = [
   },
 ];
 
-/** Wanted and written up, not started. */
 const LATER: Item[] = [
   {
     issue: 254,
@@ -118,13 +93,6 @@ const LATER: Item[] = [
   },
 ];
 
-/**
- * What already works, so the page is a roadmap and not a wishlist.
- *
- * A roadmap made only of things that do not exist reads as a product that
- * does not exist. One line each and no link: the detail lives on the
- * homepage, and repeating it here would be a second feature grid.
- */
 const SHIPPED: Item[] = [
   { area: "Links", title: "Short links with a built-in UTM builder, on every plan" },
   { area: "Links", title: "Custom domains with automatic TLS, and any slug you like (paid)" },
@@ -171,7 +139,6 @@ function Area({ children }: { children: string }) {
   );
 }
 
-/** A planned item: the whole card is the link to its issue. */
 function IssueCard({ issue, area, title, body }: Item) {
   return (
     <a
@@ -193,7 +160,6 @@ function IssueCard({ issue, area, title, body }: Item) {
   );
 }
 
-/** A shipped item: one line, a tick, its area. */
 function ShippedRow({ area, title }: Item) {
   return (
     <div className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm">
@@ -241,7 +207,6 @@ export function RoadmapPage() {
       title="What we are building"
       intro="rdyrct is built in the open. Every planned item is an issue you can read, argue with, or send a patch to. No dates: one person maintains this, so any date would be a guess."
     >
-      {/* The hero closes its own frame; this one starts on the same line. */}
       <div className="-mt-px mb-16 border-x border-border/70">
         <FrameRow className="p-4 sm:p-6">
           <div className="grid items-start gap-4 lg:grid-cols-3">

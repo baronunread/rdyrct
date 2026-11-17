@@ -16,25 +16,18 @@ import { EmailChips } from "./email-chips";
 import { ROLE_OPTIONS, isEmail, splitEmails } from "../lib/members-data";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/** What each role can do, said once, where the role is chosen. Without it
- * "viewer" and "member" look like the same word twice. */
 const ROLE_HINT = {
   viewer: "Viewers see links and analytics, and change nothing.",
   member: "Members create and edit links and see analytics.",
   admin: "Admins manage links, domains and members.",
 } satisfies Record<InvitableRole, string>;
 
-/** `resend` mails addresses that already hold an open invite too; without
- * it the server mails only the new ones. */
 export type EmailInvites = { emails: string[]; role: InvitableRole; resend: boolean };
 
-/** "Send invite", or "Send 3 invites" once there is more than one. */
 function sendLabel(count: number): string {
   return count > 1 ? `Send ${count} invites` : "Send invite";
 }
 
-/** Why the addresses cannot go yet, or undefined when they can. Short, for
- * the label row. */
 function emailsError(emails: string[], needed: number, seatsLeft: number, limited: boolean) {
   if (emails.length === 0) return "Add an email";
   return badEmailsError(emails) ?? (limited ? seatsError(needed, seatsLeft) : undefined);
@@ -51,16 +44,12 @@ function seatsError(count: number, seatsLeft: number): string | undefined {
   return seatsLeft === 1 ? "Only 1 seat free" : `Only ${seatsLeft} seats free`;
 }
 
-/** "2 of 18 free seats on your plan." while addresses are in the box. */
 function seatsLine(count: number, left: number): string {
   if (count === 0)
     return left === 1 ? "1 free seat on your plan." : `${left} free seats on your plan.`;
   return `${count} of ${left} free ${left === 1 ? "seat" : "seats"} on your plan.`;
 }
 
-/** "Invite people": any number of addresses at once, or a single-use link
- * for the same role. Opened from the Members header, never parked on the
- * page. */
 export function InvitePeopleDialog({
   open,
   onOpenChange,
@@ -85,12 +74,9 @@ export function InvitePeopleDialog({
   const [draft, setDraft] = useState("");
   const [role, setRole] = useState<InvitableRole>("member");
   const [error, setError] = useState<string | undefined>();
-  // Set once a send fails: Send then retries those same invites.
   const retrying = useRef(false);
-  // No limit to explain on a self-hosted instance.
   const limited = org.plan !== "unlimited";
   const all = [...emails, ...splitEmails(draft)];
-  // A retry after a failed email reuses its invite and takes no new seat.
   const needed = all.filter((e) => !seats.invited.has(e.toLowerCase())).length;
 
   const close = (next: boolean) => {
@@ -115,16 +101,13 @@ export function InvitePeopleDialog({
       return;
     }
     sendEmailInvites.mutate(
-      // An address that already has an invite was typed on purpose: send it
-      // again. So is a retry after a failed send.
+      // An address with an open invite was typed on purpose: send it again.
       { emails: all, role, resend: retrying.current || needed < all.length },
       {
         onSuccess: ({ failed, reused }) => {
           const sent = all.length - failed.length - reused.length;
           if (sent > 0) toast(sent > 1 ? `${sent} invites sent` : "Invite sent");
           if (failed.length === 0) return close(false);
-          // Their invites exist; sending again reuses them. Keep only these
-          // addresses in the field, marked, so Send retries just them.
           setEmails(failed);
           retrying.current = true;
           setError(

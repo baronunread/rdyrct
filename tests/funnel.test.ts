@@ -11,7 +11,6 @@ import {
   USER_SIGNED_UP,
 } from "../src/app/lib/funnel";
 
-/** Minimal stand-ins for the two globals landingContext() reads. */
 function browser({ search = "", referrer = "", host = "rdyrct.com" } = {}) {
   installBrowserGlobals({
     window: { location: { search, hostname: host } },
@@ -45,11 +44,9 @@ describe("isFunnelEvent", () => {
     expect(isFunnelEvent("")).toBe(false);
   });
 
-  // Not funnel-shaped itself, but fired from the same call site as
-  // verificationCompleted right after OTP verification. Without this, a
-  // visitor who hadn't yet answered the consent banner at that moment had
-  // this event dropped while verificationCompleted survived, undercounting
-  // signups relative to completed verifications.
+  // Fired from the same call site as verificationCompleted. Without it, a
+  // visitor who had not answered the consent banner had this event dropped
+  // while verificationCompleted survived, undercounting signups.
   test("holds user_signed_up too, so it doesn't undercount against verificationCompleted", () => {
     expect(isFunnelEvent(USER_SIGNED_UP)).toBe(true);
   });
@@ -76,8 +73,7 @@ describe("landingContext", () => {
   });
 
   test("drops an over-long parameter rather than truncating it", () => {
-    // Truncation was the old rule and it was the wrong one: the first 200
-    // characters of an email address are still an email address.
+    // Truncating is wrong: the first 200 characters of an email are still an email.
     browser({ search: `?utm_campaign=${"x".repeat(500)}` });
     expect(landingContext().utm_campaign).toBeUndefined();
   });
@@ -86,7 +82,6 @@ describe("landingContext", () => {
     browser({ search: "?utm_campaign=alice@example.com&utm_source=newsletter" });
     const ctx = landingContext();
     expect(ctx.utm_campaign).toBeUndefined();
-    // The clean parameter alongside it still comes through.
     expect(ctx.utm_source).toBe("newsletter");
   });
 
@@ -111,9 +106,6 @@ describe("landingContext", () => {
   });
 });
 
-// A Google signup never touches the form or the code screen, so before this
-// it was missing from the funnel entirely: six Google starts in 60 days and
-// no way to tell which ones made an account.
 describe("Google signups", () => {
   function at(href: string) {
     const replaced: string[] = [];

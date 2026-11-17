@@ -36,7 +36,6 @@ function webpBody(bytes: number): Uint8Array {
   return webp;
 }
 
-/** Posts a logo as a given content type and hands back the response. */
 async function uploadLogo(cookie: string, contentType: string, body: Uint8Array) {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
@@ -62,21 +61,14 @@ describe("request body size limit (#19)", () => {
   });
 
   it("lets a QR logo through that is larger than the JSON ceiling", async () => {
-    // The bug this pins: /orgs/:orgId/qr-logo sits under the org router, so
-    // the org router's JSON limit (32 KB) ran first and answered "Request
-    // body too large" for a perfectly ordinary logo. A 512x512 WebP is
-    // routinely bigger than that, which made every logo upload fail.
+    // The org router's 32 KB JSON limit used to run first and fail every logo.
     const res = await uploadLogo(await freeOwnerCookie(), "image/webp", webpBody(64 * 1024));
     expect(res.status).not.toBe(413);
   });
 
   it("holds a mixed-case JSON content type to the JSON ceiling", async () => {
-    // `Application/JSON` is valid, and the check used to ask whether the raw
-    // header contained "json", case-sensitively. It did not, so the request
-    // was treated as a file and got 260 KB instead of 32: a caller could opt
-    // out of the JSON limit by changing the case of their own header. It
-    // asks whether the type is an image now, so anything unrecognized falls
-    // to the tighter ceiling rather than the looser one.
+    // A case-sensitive "json" check let a caller opt out of the limit by
+    // changing the case of their own header.
     const cookie = await freeOwnerCookie();
     const ctx = createExecutionContext();
     const res = await worker.fetch(
@@ -161,12 +153,9 @@ describe("invite creation request validation (#19)", () => {
   });
 });
 
+// A scalar is valid JSON, so the parse never fails; it names no fields, so the
+// route's own 400 is right, not a ValiError 500.
 describe("a JSON body that is not an object (#122)", () => {
-  // `"foo"` and `42` are valid JSON, so the `.catch()` around `req.json()`
-  // never fires, and the schemas are objects, so parsing threw a ValiError
-  // that reached the error handler as a 500. A caller who sends a scalar
-  // named none of the fields, which is what an empty body means: the route's
-  // own answer is the right one.
   it.each([
     ['"foo"', "a string"],
     ["42", "a number"],

@@ -1,4 +1,4 @@
-/** Local dev and built previews must never send events to the production project. */
+// Local dev and built previews must never send events to the production project.
 export function posthogTokenForHost(
   hostname: string,
   productionToken: string | undefined,

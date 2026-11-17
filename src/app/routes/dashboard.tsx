@@ -48,13 +48,10 @@ import {
 import { InsightsRow } from "../components/dashboard-insights";
 import { settleSetup } from "../lib/setup-arrive";
 
-/** The dashboard's ranges: a glance, not a report. Analytics adds 365d. */
 const DASHBOARD_RANGES = [PRESET_24H, PRESET_7D, PRESET_30D] as const;
 const DEFAULT_RANGE = PRESET_7D;
-/** The newest links on the team activity tab. */
 const RECENT_LINKS = { limit: 5 };
 
-/** Everything the dashboard's first frame reads (see lib/route-preload.ts). */
 export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
   return settle([
     qc.ensureQueryData(insightStatsQuery(orgId, DEFAULT_RANGE.days, DEFAULT_RANGE.bucket)),
@@ -68,16 +65,12 @@ export function preload(qc: QueryClient, orgId: string, { org, user }: PageConte
   ]);
 }
 
-/** Link rows carry only the creator's user id; names come from the roster. */
 function creatorNameFrom(memberNames: Map<string, string>, id: string | null): string {
   return (id && memberNames.get(id)) || "A former member";
 }
 
-/** Loads and shapes every data source the dashboard renders from. */
 function useDashboardData(orgId: string, range: RangePreset) {
   const stats = useInsightStats(orgId, range.days, range.bucket);
-  // Five, from the server, rather than every link the org owns sorted in the
-  // browser: this card only ever showed the newest handful.
   const links = useLinks(orgId, RECENT_LINKS);
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
@@ -91,7 +84,6 @@ function useDashboardData(orgId: string, range: RangePreset) {
   return {
     isLoading: [stats, links, members, clicks].some((q) => q.isLoading),
     stats: stats.data,
-    /** The figures on screen are the last range's while the new one loads. */
     updating: stats.isPlaceholderData,
     recentLinks,
     creatorName: (id: string | null) => creatorNameFrom(memberNames, id),
@@ -101,7 +93,6 @@ function useDashboardData(orgId: string, range: RangePreset) {
 
 type DashboardData = ReturnType<typeof useDashboardData>;
 
-/** The four figures over the chart. */
 function dashboardFigures(s: OrgStats) {
   const top = s.countries[0];
   return [
@@ -115,11 +106,6 @@ function dashboardFigures(s: OrgStats) {
   ];
 }
 
-/**
- * The dashboard once there is something to count: the range's clicks over
- * the chart, then two panels (rdyrct-design, "Panels hold lists behind
- * tabs"). The full report is Analytics.
- */
 function DashboardBody({
   stats: s,
   data,
@@ -134,8 +120,6 @@ function DashboardBody({
     ...s.deadLinks.map((l) => ({ ...l, suffix: "No clicks in 30 days" })),
   ];
   const hourly = s.bucket === "hour";
-  // Before any link has a click in the range, the newest links stand in at
-  // zero: a link made a moment ago is on the page, not missing from it.
   const topLinks: (StatsLinkRef & { clicks: number })[] = s.topLinks.length
     ? s.topLinks.slice(0, 6)
     : data.recentLinks.map((l) => ({ ...l, clicks: 0 }));
@@ -145,9 +129,6 @@ function DashboardBody({
       className={`flex flex-col gap-6 transition-opacity duration-200 ease-out ${data.updating ? "opacity-60" : ""}`}
     >
       <StatsChart figures={dashboardFigures(s)}>
-        {/* Keyed on the range the data covers: a new range crossfades in
-            once it arrives, instead of the line morphing between two
-            different sets of days. */}
         <div key={`${s.rangeDays}-${s.bucket}`} className="chart-in">
           <AreaChart
             data={hourly ? s.hourSeries : s.series}
@@ -211,15 +192,11 @@ function DashboardBody({
   );
 }
 
-/** Nothing to show until there is an organization and its numbers have
- * arrived. Separated from the page itself so the page is about the page. */
 export function Dashboard() {
   const { org, orgId, currentUser } = useOrgLimits();
   const [range, setRange] = useState<RangePreset>(DEFAULT_RANGE);
   const data = useDashboardData(orgId, range);
-  // Asked for alongside the stats rather than when the banner mounts, so it
-  // has its (much cheaper) answer by the time the page draws and the banner
-  // does not push the page down after it.
+  // Asked alongside the stats so the banner does not push the page down after it draws.
   useClickUsage(orgId);
   switch (dashboardView(currentUser.isLoading, !!org, data.isLoading, !!data.stats)) {
     case "userLoading":
@@ -242,8 +219,6 @@ export function Dashboard() {
   }
 }
 
-/** The header's New link: live, greyed out for a read-only org, or absent
- * for somebody who could never make one. */
 function NewLinkAction({
   canCreate,
   locked,
@@ -261,8 +236,6 @@ function NewLinkAction({
   );
 }
 
-/** New link, greyed out, for an organization nobody can write to: the
- * button stays where people look for it and says why it does nothing. */
 function ReadOnlyNewLinkButton() {
   return (
     <Tooltip content="This organization is read-only">
@@ -296,14 +269,6 @@ function DashboardScreen({
   const { org, limits, canWrite } = useOrgLimits();
   const { openNewLink, canCreate, busy } = useNewLink();
 
-  // First run. An organization exists from the first session, so what is
-  // missing is the link. The page keeps its header, the way Resend, Linear
-  // and Stripe keep theirs, and one plain panel takes the place of the cards
-  // with one button: three zeroes, four empty cards and a flat chart would
-  // teach somebody the product is empty. The button opens the same New link
-  // form as everywhere else, and once its "Link created" dialog closes the
-  // dashboard fills in. Only for somebody who can make that link: a
-  // read-only org or a viewer gets the dashboard as it is.
   const firstRun = useHeldFirstRun(s.totalLinks === 0 && canWrite, busy);
 
   return (
@@ -311,9 +276,6 @@ function DashboardScreen({
       <PageHeader
         title="Dashboard"
         action={
-          // The range sits left of New link on a desktop, where the eye
-          // ends on the primary action; on a phone New link comes first.
-          // No range before the first link: there is nothing to range over.
           <div className="flex flex-wrap items-center gap-2">
             <NewLinkAction canCreate={canCreate} locked={!!org?.locked} onOpen={openNewLink} />
             {!firstRun && (
@@ -344,27 +306,17 @@ function DashboardScreen({
   );
 }
 
-/**
- * Whether the page still shows the first run. Held while the first link is
- * being made and its "Link created" dialog is open, so the layout never
- * changes under the dialog; then it settles into the dashboard in one
- * transition (settleSetup). Going back to empty swaps the same way.
- */
 function useHeldFirstRun(firstRun: boolean, holding: boolean): boolean {
   const [shown, setShown] = useState(firstRun);
   useEffect(() => {
     if (shown === firstRun || holding) return;
-    // After the dialog's own exit, so the transition never freezes it
-    // half faded into its first frame.
+    // After the dialog's own exit, so the transition never freezes it half faded.
     const id = window.setTimeout(() => settleSetup(() => setShown(firstRun)), 220);
     return () => window.clearTimeout(id);
   }, [shown, firstRun, holding]);
   return shown;
 }
 
-/** A new account's dashboard under its header: one plain panel with a
- * title, one line and one button, the way an empty page looks in Resend or
- * Stripe. No feature list, no stand-in rows. */
 function FirstRun({ onCreate }: { onCreate: () => void }) {
   return (
     <section className="flex flex-col items-center rounded-xl bg-surface px-5 py-14 text-center smooth-shadow-ring-xs sm:py-20">
@@ -459,8 +411,6 @@ function TeamActivity({
   );
 }
 
-/** Links whose clicks fell by half this week, then links nobody clicked in
- * 30 days. */
 function AttentionList({ rows }: { rows: (StatsLinkRef & { suffix: string })[] }) {
   if (!rows.length)
     return (

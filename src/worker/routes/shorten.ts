@@ -1,22 +1,6 @@
-/**
- * The anonymous shortener on the landing page (Direction A of #96).
- *
- * A visitor with no account can paste a URL and get a working short link
- * back. It lasts 24 hours, and signing up keeps it: the claim moves it into
- * the new org as a real link, so the first thing a new account contains is
- * the visitor's own work rather than an empty dashboard. That is the other
- * half of the activation cliff in #65.
- *
- * This is an unauthenticated write path, which is the most abused endpoint
- * shape there is, so it does not ship alone:
- *  - Turnstile (#304) on the "anon-link" scope, so a bot has to pass a challenge.
- *  - Its own rate-limit namespace, not the one guarding auth: a flood here
- *    must not lock anybody out of signing in.
- *  - Destination scoring (#68) after the response, same as a real link,
- *    and Google Web Risk (#341) before it: a listed site is refused.
- *  - Random slugs only, and a 24-hour life, so the shared namespace cannot
- *    be squatted or farmed.
- */
+// An unauthenticated write path, so it ships with Turnstile (#304) on "anon-link", its own rate-limit
+// namespace (a flood must not lock anybody out of sign-in), scoring (#68) and Web Risk (#341)
+// refusal, random slugs only, and a 24-hour life, so the shared namespace cannot be squatted.
 import { Hono } from "hono";
 import type { JsonValue } from "../../shared/types";
 import { optionalText, parseOptionalBody } from "../schemas";
@@ -42,10 +26,8 @@ import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
 import { spendAnonWebRiskLookup, WEB_RISK_NOTICE } from "../destination-check";
 
-/** How long an unclaimed link keeps working. */
 const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** What the anonymous shortener reads off its request body. */
 const shortenBodySchema = v.object({
   destination: optionalText,
   turnstileToken: optionalText,
@@ -57,9 +39,8 @@ shortenRoutes.use("*", jsonBodyLimit());
 shortenRoutes.post("/", async (c) => {
   const log = c.get("log");
   log.set({ route: "/api/shorten" });
-  // Its own namespace, not the auth one: a flood here must not lock anybody
-  // out of signing in. Keyed by the same HMAC the auth limiter uses, so no
-  // raw address reaches storage or logs.
+  // Its own namespace: a flood here must not lock anybody out of signing in. Keyed by the
+  // auth limiter's HMAC, so no raw address reaches storage or logs.
   const key = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
   if (
     !(await rateLimitAllows(c.env, "anon_link", `shorten:${key}`, {
@@ -77,8 +58,7 @@ shortenRoutes.post("/", async (c) => {
   );
 
   if (!(await spendToken(c.env, "anon-link", body.turnstileToken)))
-    // Coded so the browser can solve again and retry once, rather than
-    // showing somebody an error they cannot act on.
+    // Coded so the browser can solve again and retry once.
     throw new HTTPException(400, {
       message: "Could not verify you are human. Reload the page and try again.",
       cause: { code: TURNSTILE_FAILED_CODE },
@@ -92,21 +72,16 @@ shortenRoutes.post("/", async (c) => {
     throw new HTTPException(400, { message: "That does not look like a web address" });
   const db = drizzle(c.env.DB, { schema });
   await assertDestinationAllowed(c.env, db, destination);
-  // An anonymous link has no org, no owner and no human review, so a
-  // scam-shaped destination is refused outright rather than held. Signing up
-  // makes it a normal link, which is held for review instead.
+  // No org, owner or human review, so a scam-shaped destination is refused outright.
+  // Signing up makes it a normal link, which is held for review instead.
   if (holdReasonFor(destination))
     throw new HTTPException(422, {
       message:
         "That destination looks like a scam page, so it cannot be shortened without an account. Sign up and we will review it.",
     });
-  // And asked of Web Risk (#341) before anything is published, for the same
-  // reason: there is no org to hold, the redirect path never re-checks an
-  // anonymous link, and a report (#488) only puts a warning page in front, so
-  // a hit found after the key is live would change little. Up to three seconds, and a cached answer
-  // costs nothing; no key, or no answer, and the link is made as before.
-  // Each uncached URL also spends one of this caller's lookups for the day,
-  // so one caller cannot spend the site-wide day every org relies on.
+  // Web Risk (#341) is asked before publishing: there is no org to hold, and the redirect path
+  // never re-checks an anonymous link. Each uncached URL spends one of this caller's daily
+  // lookups, so one caller cannot spend the site-wide day every org relies on.
   const spendLookup = spendAnonWebRiskLookup(c.env.DB, key);
   const webRisk = await askWebRisk(c.env, destination, spendLookup);
   log.set({ webRisk: { outcome: webRisk.outcome } });
@@ -146,24 +121,12 @@ shortenRoutes.post("/", async (c) => {
   );
 });
 
-/** The header the maker's browser proves itself with when it asks for the
- * count. A header, not a query parameter, so the token stays out of logs. */
+/** A header, not a query parameter, so the token stays out of logs. */
 const CLAIM_TOKEN_HEADER = "x-claim-token";
 
-/**
- * How many clicks an anonymous link has had, for the browser that made it.
- *
- * Keyed by the claim token rather than the slug, so nobody can read the
- * count of a link they did not make. An unknown or expired token is a 404,
- * the same answer either way.
- *
- * Every token costs a D1 read, a made-up one included, so each caller is
- * limited before the read: the same namespace as making a link, under its
- * own `clicks:` key so polling never spends that budget. The landing page
- * asks every 15 seconds (useAnonClicks), four a minute, well under it; a
- * request with no token is answered before the limiter, since it costs
- * nothing.
- */
+// Keyed by the claim token, not the slug, so nobody reads another link's count. Unknown and
+// expired tokens are the same 404. Every token costs a D1 read, so callers are limited first,
+// under a `clicks:` key so polling never spends the link-making budget.
 shortenRoutes.get("/clicks", async (c) => {
   const token = c.req.header(CLAIM_TOKEN_HEADER);
   if (!token) throw new HTTPException(404, { message: "No such link" });
@@ -186,31 +149,17 @@ shortenRoutes.get("/clicks", async (c) => {
   return c.json({ clicks: row.clicks });
 });
 
-/**
- * Scores an anonymous destination, reusing the link scorer's write shape.
- *
- * Separate from `scoreAndRecord` only because the table differs; the verdict
- * and every failure rule are the same, which is why the score itself comes
- * from the same function.
- */
 async function scoreAnonLink(
   env: Env,
   id: string,
   destination: string,
   spendLookup: SpendLookup,
 ): Promise<void> {
-  // The caller's budget again: the answer above is usually cached, but one
-  // that was over budget or failed must not be asked here at the site's cost.
+  // The caller's budget again: an over-budget or failed answer must not be asked at the site's cost.
   await scoreAndRecord(env, id, destination, "anon_links", spendLookup);
 }
 
-/**
- * Hands an anonymous link to the org that just claimed it.
- *
- * Returns the created link row, or null when the token is unknown, already
- * spent, or expired. All three are the same answer on purpose: the caller
- * gets "that link is gone", and no probe learns which tokens exist.
- */
+// Unknown, spent and expired tokens give the same answer, so no probe learns which tokens exist.
 export async function claimAnonLink(
   env: Env,
   orgId: string,
@@ -224,8 +173,7 @@ export async function claimAnonLink(
     .where(eq(schema.anonLinks.claimToken, claimToken));
   const anon = rows[0];
   if (!anon || anon.expiresAt <= Date.now()) return null;
-  // The blocklist may have grown since the link was made, and claiming is
-  // creating a link in an org: it gets the same checks as any other.
+  // The blocklist may have grown since the link was made.
   const { plan, limits } = await orgPlan(db, orgId);
   if (await isBlockedHost(db, anon.destination)) return null;
   const hold = await holdIfSuspicious(env, db, orgId, plan, anon.destination);
@@ -252,21 +200,16 @@ export async function claimAnonLink(
     qrLogoSize: null,
     createdBy: userId,
     createdAt: Date.now(),
-    // The verdict travels with the link: it was scored on the same
-    // destination, so re-scanning it here would be work for its own sake.
     riskScore: anon.riskScore,
     riskReasons: anon.riskReasons,
     riskCheckedAt: anon.riskCheckedAt,
     riskProvider: anon.riskProvider,
-    // Held, like any new link, when the destination is scam-shaped.
     suspendedAt: hold?.suspendedAt ?? null,
     suspendedBy: null,
     suspendReason: hold?.suspendReason ?? null,
-    // Or warned, while the org is (#344).
     warnedAt: warning?.warnedAt ?? null,
     warnReason: warning?.warnReason ?? null,
-    // Unknown: the anonymous row has no such column, so the weekly rescan
-    // (#341) takes it first.
+    // Unknown: the anonymous row has no such column, so the weekly rescan (#341) takes it first.
     webRiskCheckedAt: null,
   };
   const address = {
@@ -282,36 +225,25 @@ export async function claimAnonLink(
     createdAt: Date.now(),
   };
 
-  // Through the same plan-guarded insert every other link goes through, not a
-  // raw one: claiming is still creating a link in somebody's organization,
-  // and an org one under its limit must not be able to take ten.
+  // Through the same plan-guarded insert as every link, so an org one under its limit
+  // cannot take ten.
   if (!(await insertLinkWithinLimit(db, env, link, address, limits.links, anon.id))) return null;
 
-  // Only once the link exists: an anon row deleted alongside a refused
-  // insert would take the slug down with it.
+  // Only once the link exists: deleting the anon row alongside a refused insert would take the slug down.
   await db.delete(schema.anonLinks).where(eq(schema.anonLinks.id, anon.id));
 
-  // Republish without the expiry, and now carrying the org, so clicks start
-  // being recorded against the link its owner can see. Through the sync, which
-  // reads the row: a claim that landed held or warned must serve that page,
-  // not the plain redirect publishLink would write.
+  // Republish without the expiry and with the org, through the sync (it reads the row):
+  // a claim that landed held or warned must serve that page.
   await enqueueStorage(env, [syncLinkMsg(link.slug, null)]);
 
-  // The verdict copied above can be empty. Scoring an anonymous link runs
-  // after its response, in waitUntil, and a claim landing first copies four
-  // nulls and then deletes the only row that background task knows how to
-  // update: the link stayed unscored for good, on the one table moderation
-  // reads. Scored here instead, against the row that now exists.
-  //
-  // A copied Web Risk hit is checked again too: on the anonymous row it held
-  // nothing, because there was no org to hold, and claiming must not be the
-  // way round that.
+  // The copied verdict can be empty: a claim landing before the background scoring (waitUntil)
+  // deletes the only row that task updates. Score here against the new row. A copied Web Risk
+  // hit is checked again: it held nothing on the anonymous row, and claiming must not bypass it.
   if (anon.riskCheckedAt === null || anon.riskReasons?.includes("web_risk_"))
     await checkLinkDestination(env, link);
   return link;
 }
 
-/** Daily: drop anonymous links nobody claimed, and their KV keys. */
 export async function sweepExpiredAnonLinks(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
   const expired = await db
@@ -321,34 +253,25 @@ export async function sweepExpiredAnonLinks(env: Env): Promise<number> {
     .limit(500);
 
   for (const row of expired) {
-    // Sequential on purpose: a daily sweep of up to 500 rows, each doing a
-    // KV delete and a D1 delete. Running them at once would open a thousand
-    // concurrent operations against two services to finish a job nothing is
-    // waiting on.
+    // Sequential on purpose: up to 500 rows, each a KV and a D1 delete, would open a thousand
+    // concurrent operations for a job nothing is waiting on.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await forgetAnonLink(env, row);
   }
   return expired.length;
 }
 
-/** Drops one anonymous link: its redirect key first, then its row. In that
- * order, so a failure between the two leaves a row the next sweep retries
- * rather than a slug that still resolves with nothing behind it. */
+/** Redirect key first, then the row, so a failure between leaves a row the next sweep retries. */
 async function forgetAnonLink(env: Env, row: { id: string; slug: string }): Promise<void> {
-  // Only if the key still belongs to this anonymous link. A claim landing
-  // between the sweep's select and here republishes the same slug under the
-  // organization link's id, and deleting that would leave somebody's link
-  // in D1 with nothing resolving it: the one state neither side can repair,
-  // because the row that would tell the next sweep to retry is gone too.
+  // Only if the key still belongs to this link. A claim landing between the select and here
+  // republishes the slug under the org link's id; deleting that would leave a link in D1
+  // that nothing resolves and no sweep retries.
   const published = await resolveSlug(env, row.slug, null);
   if (!published || published.linkId === row.id) await unpublishLink(env, row.slug, null);
   await env.DB.batch([
     env.DB.prepare("delete from anon_links where id = ?").bind(row.id),
-    // A link made without an account is temporary, slug included: once it
-    // expires unclaimed, its slug goes back to allocateSharedSlug. Nobody can
-    // choose a shared-domain slug, so it can only come back to a random draw.
-    // Not while an account's link holds it: a claim racing this sweep keeps
-    // the slug, and an account's slug is never handed out again.
+    // An expired anonymous link's slug returns to allocateSharedSlug's random draw. Not while
+    // an account's link holds it: a claim racing this sweep keeps the slug.
     env.DB.prepare(
       `delete from issued_slugs where slug = ?
          and not exists (select 1 from link_addresses where slug = ? and domain_id is null)`,

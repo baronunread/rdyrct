@@ -27,7 +27,6 @@ async function getInsights(cookie: string, days = 7): Promise<OrgInsights> {
   return jsonBody<OrgInsights>(res);
 }
 
-/** Free owner, link-1 ("sale") and room to write rollup rows by hand. */
 async function seeded() {
   const cookie = await freeOwnerCookie();
   const db = drizzle(env.DB, { schema });

@@ -1,11 +1,7 @@
 /**
- * The newsletter body as the admin editor sends it: a TipTap JSON document
- * (@react-email/editor), never HTML. This parses it against an allow-list of
- * the nodes and marks the email layout renders and turns it into the
- * layout's own `EmailBlock`s. Anything else is a 400 that names it.
- *
- * The editor in src/app/routes/admin/newsletter-editor.tsx is cut down to the
- * same list, so a refusal here means a client that is not that editor.
+ * A TipTap JSON document (@react-email/editor), never HTML, parsed against an
+ * allow-list of nodes and marks. The admin editor is cut down to the same list,
+ * so a refusal here means a client that is not that editor.
  */
 import * as v from "valibot";
 import type { EmailBlock, EmailInline } from "./email-layout";
@@ -14,15 +10,10 @@ import type { DocBlock, DocInline, DocMark, NewsletterDoc } from "@/shared/types
 
 export type { NewsletterDoc };
 
-/** Lists inside lists, at most this deep. */
 const MAX_LIST_DEPTH = 4;
-/** Every node in the document, text runs included. */
 const MAX_NODES = 5_000;
-/** All the text, as in the old plain body. */
 const MAX_TEXT = 20_000;
 
-/** The message for a type outside the allow-list: names it, so the 400 says
- * what to take out. `received` is the type, already quoted. */
 const notAllowed = (what: string) => (issue: v.BaseIssue<unknown>) =>
   `A newsletter cannot hold a ${issue.received} ${what}`;
 
@@ -53,8 +44,7 @@ const inlineSchema = v.variant(
 
 const inlineContent = v.optional(v.array(inlineSchema));
 
-// Annotated because a list holds blocks and a block may be a list, which
-// TypeScript cannot infer through v.lazy. The schema is that same union.
+// Annotated: TypeScript cannot infer a list of blocks that may be lists through v.lazy.
 const blockSchema: v.GenericSchema<DocBlock> = v.lazy(() =>
   v.variant(
     "type",
@@ -93,7 +83,6 @@ const listItemSchema = v.object({
   content: v.pipe(v.array(blockSchema), v.minLength(1, "A list item is empty")),
 });
 
-/** Every text run, in reading order. */
 function inlineRuns(blocks: DocBlock[]): DocInline[] {
   return blocks.flatMap((block): DocInline[] => {
     if (block.type === "bulletList" || block.type === "orderedList") {
@@ -108,7 +97,6 @@ const docText = (doc: NewsletterDoc) =>
     .map((run) => (run.type === "text" ? run.text : ""))
     .join("");
 
-/** How deep a document's lists go, and how many nodes it has in all. */
 interface DocSize {
   depth: number;
   nodes: number;
@@ -138,7 +126,6 @@ const buttonLabel = (content: DocInline[] | undefined) =>
     .join("")
     .trim();
 
-/** Each button, for the check that it has a label and an http(s) link. */
 function buttons(blocks: DocBlock[]): Extract<DocBlock, { type: "button" }>[] {
   return blocks.flatMap((block) => {
     if (block.type === "button") return [block];
@@ -185,12 +172,9 @@ function toInline(run: DocInline): EmailInline {
   };
 }
 
-/** A paragraph or heading with no text: the blank lines between blocks,
- * which the layout's own margins already provide. */
 const blank = (content: DocInline[] | undefined) =>
   !content?.some((run) => run.type === "text" && run.text.trim());
 
-/** A paragraph's or heading's runs, or nothing for a blank one. */
 const runsOf = (content: DocInline[] | undefined): EmailInline[] | null =>
   content && !blank(content) ? content.map(toInline) : null;
 
@@ -223,7 +207,6 @@ function toBlock(block: DocBlock): EmailBlock[] {
   }
 }
 
-/** The parsed document as the layout's blocks. */
 export function docToBlocks(doc: NewsletterDoc): EmailBlock[] {
   return doc.content.flatMap(toBlock);
 }

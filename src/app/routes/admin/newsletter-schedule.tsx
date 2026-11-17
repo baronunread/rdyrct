@@ -1,8 +1,3 @@
-/**
- * Schedule, beside Send now: a date and time in the admin's own time zone,
- * said back in words before it is set. The send itself waits in a Cloudflare
- * Workflow (worker/newsletter-send.ts) until then.
- */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { buttonClass } from "../../ui/button-class";
@@ -18,7 +13,6 @@ const WHEN = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
-/** "Thursday 6 November at 09:00". */
 export function whenWords(at: number): string {
   const parts = WHEN.formatToParts(new Date(at));
   const part = (type: Intl.DateTimeFormatPartTypes) =>
@@ -28,12 +22,10 @@ export function whenWords(at: number): string {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** A local time as a datetime-local input holds it. */
 function inputValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** Tomorrow at 9 in the morning, local: where the picker starts. */
 function tomorrowMorning(): string {
   const date = new Date();
   date.setDate(date.getDate() + 1);
@@ -43,7 +35,6 @@ function tomorrowMorning(): string {
 
 const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-/** The input's value as epoch ms, read as local time; null when empty. */
 function parseLocal(value: string): number | null {
   if (!value) return null;
   const at = new Date(value).getTime();
@@ -58,9 +49,7 @@ export function SchedulePicker({
 }: {
   disabled: boolean;
   busy: boolean;
-  /** Checks the issue; false keeps the picker shut so the marked fields show. */
   onOpen: () => boolean;
-  /** Schedules the send; resolves true once it is stored. */
   onSchedule: (at: number) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);

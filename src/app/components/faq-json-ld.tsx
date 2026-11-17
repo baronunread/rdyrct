@@ -1,21 +1,9 @@
 import type { ReactNode } from "react";
 
-/**
- * FAQPage structured data, from the same questions the page renders.
- *
- * Shared by the landing page and the QR generator so the answers a search
- * result shows are the answers on the page, and so the escaping is written
- * once: a "</script>" inside any value would close the tag early, so every
- * "<" goes out as <.
- */
+// "<" is escaped as < so a "</script>" inside a value cannot close the tag.
 export interface Faq {
   q: string;
-  /** Plain-text answer: what a search result shows, and what renders when
-   *  `aNode` is absent. */
   a: string;
-  /** Rendered answer, for the rare one that needs an inline link `a` alone
-   *  can't carry. Schema still reads `a`, since a link's destination means
-   *  nothing to a search snippet. */
   aNode?: ReactNode;
 }
 

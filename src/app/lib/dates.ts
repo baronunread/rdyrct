@@ -1,5 +1,3 @@
-/** Date formatting on `Intl`, which every target browser ships. */
-
 const SHORT_DATE = new Intl.DateTimeFormat("en", {
   month: "short",
   day: "numeric",
@@ -8,8 +6,6 @@ const SHORT_DATE = new Intl.DateTimeFormat("en", {
 
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
-/** Largest unit first: the first one the gap fills is the one to say it in,
- * so 90 minutes reads "2 hours ago" rather than "90 minutes ago". */
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 365 * 86_400_000],
   ["month", 30 * 86_400_000],
@@ -30,7 +26,6 @@ export function relativeDate(ts: number | string | Date): string {
   return RELATIVE.format(Math.round(diff / 1000), "second");
 }
 
-/** "Oct 5" from "2026-10-05" (or the date part of an hourly bucket). */
 export const dayTick = (day: string) =>
   new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
@@ -38,5 +33,4 @@ export const dayTick = (day: string) =>
     timeZone: "UTC",
   });
 
-/** "14:00" from an hourly bucket. */
 export const hourTick = (day: string) => day.slice(11, 16);

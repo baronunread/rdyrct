@@ -29,9 +29,6 @@ beforeEach(async () => {
 
 const db = () => drizzle(env.DB, { schema });
 
-/** Give seedLink()'s `org-1` a free owner, so orgPlan() resolves to "free".
- * seedLink already created the orgs row, so this adds only the user and the
- * membership. */
 async function seedFreeOwner() {
   await env.DB.batch([
     env.DB.prepare(
@@ -49,15 +46,12 @@ async function seedNewOrg() {
   await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
 }
 
-/** An org past the 72-hour hold window but inside the seven-day new-org one:
- * it is flagged for review, not held. */
 async function seedFourDayOldOrg() {
   await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'")
     .bind(Date.now() - 4 * 86_400_000)
     .run();
 }
 
-/** `count` click rows for the sample link, all timestamped today. */
 async function seedClicksToday(count: number) {
   await env.DB.prepare(
     `insert into clicks (link_id, org_id, ts, country, referrer, device)
@@ -138,7 +132,6 @@ describe("suspendOrgLinks", () => {
     expect(first).toBe(1);
     expect(await suspendedCount()).toBe(1);
 
-    // An admin action is recorded for the automatic suspension.
     const action = await env.DB.prepare(
       "select action, actor_user_id from admin_actions where target_id = ?",
     )
@@ -216,7 +209,6 @@ describe("sweepAbusiveOrgs", () => {
     expect(admin).toHaveLength(1);
     expect(admin[0]?.subject).toMatch(/^Over the ceiling:/);
     expect(admin[0]?.text).toContain("Nothing was suspended");
-    // Nothing happened to the owner's links that they need to answer.
     expect(mail.sent.some((m) => m.to === "owner@example.com")).toBe(false);
     alert.mockRestore();
     mail.restore();
@@ -263,7 +255,6 @@ describe("sweepAbusiveOrgs", () => {
 
     expect(await suspendedCount()).toBe(0);
     expect(await reviewFlag()).not.toBeNull();
-    // Its links keep working, behind the warning page (#344).
     expect(await warnedCount()).toBe(1);
     expect(
       mail.sent.some((m) => m.to === "admin@example.com" && m.subject.startsWith("Needs review")),
@@ -372,7 +363,6 @@ describe("sweepAbusiveOrgs", () => {
     await sweepAbusiveOrgs(testEnv);
     expect(await warnedCount()).toBe(1);
 
-    // What the admin "Mark reviewed" does: flag off, warnings off, cleared.
     await env.DB.prepare("update links set warned_at = null, warn_reason = null").run();
     await env.DB.prepare("update orgs set cleared_at = ?, review_flagged_at = null")
       .bind(Date.now())
@@ -469,11 +459,9 @@ describe("sweepAbusiveOrgs", () => {
   });
 
   it("alerts but does not suspend an established org over the ceiling", async () => {
-    // A flood aimed at any org's public link can clear the ceiling in
-    // minutes (the click rate limit allows 600/min), so raw volume alone
-    // cannot be trusted to suspend an org that isn't new: that would make
-    // our own abuse control a way to take down a stranger's links. seedLink
-    // dates org-1 at epoch 0, well past the new-org window.
+    // A flood at any public link clears the ceiling in minutes, so volume
+    // alone must not suspend an established org: strangers could take down
+    // its links.
     await seedLink();
     await seedFreeOwner();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);

@@ -43,9 +43,7 @@ import { isAppPage, SETUP_ARRIVE, SETUP_FLOW } from "../lib/setup-arrive";
 import { loadShell } from "../lib/shell-loader";
 import { loadWelcome } from "../lib/welcome-loader";
 
-/** Admin routes 404 in-app for non-admins, so a stale `next` pointed at
- * `/admin` (e.g. someone bookmarked it while logged out) shouldn't strand a
- * regular user there right after they sign in. */
+/** Admin routes 404 for non-admins, so a stale `next` of `/admin` must not strand someone after sign-in. */
 function sanitizeNext(next: string, isAdmin: boolean): string {
   return next.startsWith("/admin") && !isAdmin ? "/dashboard" : next;
 }
@@ -82,7 +80,6 @@ function ForgotView({
     defaultValues: { email: initialEmail },
   });
 
-  // A bad address marks the field (react-hook-form focuses it); nothing toasts.
   const onFormSubmit = handleSubmit((data) => onSubmit(data.email));
 
   return (
@@ -94,7 +91,6 @@ function ForgotView({
             If that account exists, we sent a reset link to{" "}
             <span className="font-mono text-text">{getValues("email")}</span>.
           </p>
-          {/* Same young-domain junk filtering as the sign-in code. */}
           <p className="text-xs text-muted">Not there? Check your spam folder.</p>
         </div>
       ) : (
@@ -179,7 +175,6 @@ function VerifyOtpView({
                 onChange={field.onChange}
                 onComplete={(v) => {
                   field.onChange(v);
-                  // `runVerify` reports its own failures.
                   void onComplete(v, clearOtp);
                 }}
                 disabled={busy}
@@ -195,8 +190,7 @@ function VerifyOtpView({
           className={cn(
             "h-10",
             shake.className,
-            // `disabled` keeps the button inert through the fade, but its
-            // own opacity-50 was washing the checkmark's green out.
+            // `disabled` keeps the button inert through the fade, but its opacity-50 washed out the checkmark's green.
             verified && "!bg-accent-2 disabled:opacity-100 saturate-150",
           )}
           onAnimationEnd={shake.end}
@@ -205,7 +199,6 @@ function VerifyOtpView({
             Verify and continue
           </BusyContent>
         </Button>
-        {/* Microsoft and others junk mail from young domains, so say where to look. */}
         <p className="-mb-2 text-center text-xs text-muted">Not there? Check your spam folder.</p>
         <p className="text-center text-xs text-muted">
           {resent ? (
@@ -246,12 +239,6 @@ const AUTH_MODE_COPY = {
   },
 };
 
-/**
- * One line under "Create an account", only when the visitor arrived with
- * context to carry through: a link waiting to be claimed, or a checkout
- * they were mid-way into. A cold visitor gets nothing, and neither does
- * "Sign in": somebody who already has an account does not need a pitch.
- */
 function SignupSubtitle({ next }: { next: string }) {
   const body = storedAnonLinks().length
     ? "Sign up to keep your link and its clicks."
@@ -262,7 +249,6 @@ function SignupSubtitle({ next }: { next: string }) {
   return <p className="-mt-2 text-center text-xs text-pretty text-muted">{body}</p>;
 }
 
-/** Step 3a (#64), once per mount of the signup form. */
 function SignupViewed() {
   useEffect(() => {
     posthog.capture(FUNNEL.signupViewed);
@@ -270,12 +256,7 @@ function SignupViewed() {
   return null;
 }
 
-/**
- * The password, with "Forgot it?" on the right of its label line on sign-in
- * (where somebody looks the moment they are stuck) and the strength meter
- * under it on sign-up. Its own label row rather than Field's, because a
- * button inside a <label> would hand its clicks to the input.
- */
+/** Its own label row, because a button inside a <label> would hand its clicks to the input. */
 function PasswordField({
   mode,
   password,
@@ -285,7 +266,6 @@ function PasswordField({
 }: {
   mode: "login" | "signup";
   password: string;
-  /** Why the password is wrong: on the label line, like Field's. */
   error?: string;
   onForgot: () => void;
   input: (id: string, aria: InvalidAria) => ReactNode;
@@ -307,7 +287,6 @@ function PasswordField({
           )}
         </span>
       </div>
-      {/* The input is the peer: its aria-invalid shows the ×. */}
       <span className="relative block">
         {input(id, invalidAria(error, reasonId))}
         <InvalidMark className="hidden peer-aria-invalid:block" />
@@ -321,7 +300,6 @@ function PasswordField({
   );
 }
 
-/** Email and password, each marked with its own reason when it is wrong. */
 function CredentialFields({
   mode,
   register,
@@ -366,11 +344,6 @@ function CredentialFields({
   );
 }
 
-/**
- * The Google sign-in control. A plain button by default; when this browser
- * last signed in with Google and we kept the address, it becomes a
- * one-click "continue as you@…" row instead.
- */
 function GoogleButton({
   email,
   onClick,
@@ -420,8 +393,7 @@ function GoogleEntry(props: { email?: string; onClick: () => void; disabled: boo
   return (
     <>
       <GoogleButton {...props} />
-      {/* The reason, for a screen reader: title is not announced, and a
-          disabled button cannot take focus to show anything else. */}
+      {/* title is not announced and a disabled button cannot take focus, so the reason is for a screen reader. */}
       {props.disabled && (
         <span id="google-off" className="sr-only">
           {GOOGLE_OFF}
@@ -431,7 +403,6 @@ function GoogleEntry(props: { email?: string; onClick: () => void; disabled: boo
   );
 }
 
-/** Inline Google "G" mark (no remote image, CSP-safe). */
 function GoogleG() {
   return (
     <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -471,20 +442,14 @@ function AuthFormView({
   next: string;
   onSubmit: (email: string, password: string) => void;
   onForgot: (email: string) => void;
-  /** Starts the Turnstile challenge (#304). Idempotent, so a per-keystroke
-   * handler is fine; it fires once and the work overlaps the typing. */
+  /** Idempotent, so a per-keystroke handler is fine (#304). */
   onFirstInput: () => void;
-  /** Sign-up's Turnstile challenge. Login never starts it, so it never shows. */
   challenge: TurnstileChallenge;
 }) {
   const copy = AUTH_MODE_COPY[mode];
   const button = guardedButton(busy, challenge);
   const config = useConfig();
-  // Read once on mount: a returning visitor who last signed in with Google
-  // gets a one-click "continue as you" row.
   const [lastUsed] = useState(lastAuth);
-  // Step 3b (#64): what separates "reached the form" from "typed in it".
-  // Signup only; the login form is not a funnel.
   const started = useRef(false);
   const onInput = () => {
     if (mode === "signup" && !started.current) {
@@ -507,12 +472,7 @@ function AuthFormView({
   const startGoogle = () => {
     setLastAuth("google");
     posthog.capture("user_google_signin_started");
-    // Full-page redirect to Google; returns to /api/auth/callback/google, then
-    // to `next`. Same flow on login and signup (account linking handles an
-    // existing email/password account). Bound for an app page, it comes back
-    // through /welcome, which draws this card again and hands it over to the
-    // app the way the email code does; the trip through Google is a full
-    // page load, so there is no card left to carry across otherwise.
+    // Full-page redirect: a bound-for-app user comes back through /welcome, since the trip through Google leaves no card to carry across.
     const back = isAppPage(next) ? `/welcome?via=google&next=${encodeURIComponent(next)}` : next;
     void authClient.signIn.social({
       provider: "google",
@@ -527,7 +487,6 @@ function AuthFormView({
     (errors) => {
       if (mode === "signup")
         posthog.capture(SIGNUP_FAILED, { reason: `invalid_${Object.keys(errors).join("_")}` });
-      // The fields carry the reasons; react-hook-form focuses the first.
       shake.start();
     },
   );
@@ -539,8 +498,6 @@ function AuthFormView({
         {mode === "signup" && <SignupSubtitle next={next} />}
         <InviteBanner next={next} />
         {mode === "signup" && <SignupViewed />}
-        {/* Keep the Google row in place while configuration loads. Enable it
-            only when this server has Google credentials. */}
         <GoogleEntry
           email={lastUsed?.method === "google" ? lastUsed.email : undefined}
           onClick={startGoogle}
@@ -592,10 +549,8 @@ interface Pending {
 function readPending(): Pending | null {
   try {
     const raw = sessionStorage.getItem(PENDING_KEY);
-    // SAFETY: this key is written by writePending() a few lines below and
-    // nowhere else. A value that is not JSON leaves through the catch; one
-    // that is JSON but not a Pending shows an empty address on the code form,
-    // which the next submit corrects.
+    // SAFETY: written only by writePending() below. A value that is not JSON leaves through the catch;
+    // JSON that is not a Pending shows an empty address, which the next submit corrects.
     return raw ? (JSON.parse(raw) as Pending) : null;
   } catch {
     return null;
@@ -619,8 +574,6 @@ function clearPending() {
 const morphsInto = (href: string) => !!SETUP_ARRIVE && isAppPage(href);
 const intoFlow = (href: string) => !!SETUP_FLOW && href.startsWith("/welcome?via=email");
 
-/** Leaves the sign-in card for where it was going: into the app as the card
- * becoming the org switcher (lib/setup-arrive.ts), anywhere else plainly. */
 function arriveAt(navigate: ReturnType<typeof useNavigate>, href: string) {
   if (intoFlow(href)) void navigate({ href, replace: true, viewTransition: SETUP_FLOW });
   else if (morphsInto(href)) void navigate({ href, replace: true, viewTransition: SETUP_ARRIVE });
@@ -633,7 +586,6 @@ interface SubmitDeps {
   qc: QueryClient;
   navigate: ReturnType<typeof useNavigate>;
   next: string;
-  /** Runs a Turnstile-guarded request, re-solving once if the token is refused. */
   turnstileGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
 }
 
@@ -659,10 +611,7 @@ async function trySignUp(
   password: string,
   deps: SubmitDeps & { emailEnabled: boolean },
 ) {
-  // Turnstile token (#304). Solved while the visitor was typing,
-  // spent here, and required by the Worker before an account exists. Through
-  // the guard, so a token the server has forgotten is solved again rather
-  // than shown to somebody as an error.
+  // Turnstile token (#304), solved while typing. Through the guard, so a forgotten token is re-solved, not shown as an error.
   const { data: signup, error: signUpError } = await deps.turnstileGuarded((headers) =>
     authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
   );
@@ -670,12 +619,8 @@ async function trySignUp(
     posthog.capture(SIGNUP_FAILED, { reason: signUpError.code ?? `http_${signUpError.status}` });
     deps.failSubmit(friendlyAuthError(signUpError));
   } else {
-    // Funnel step 4 (#64), at the boundary that actually means "an account
-    // was accepted". Before goVerify, so a failure to send the code cannot
-    // lose the signup that already happened.
+    // Before goVerify, so a failed code send cannot lose the signup that already happened.
     captureEmailSignup((event, props) => posthog.capture(event, props), signup);
-    // No email provider: there is no code to send, so the account is already
-    // usable. Sign in with what was just typed.
     if (deps.emailEnabled) await deps.goVerify(email);
     else await trySignIn(email, password, deps);
   }
@@ -689,10 +634,6 @@ interface VerifyDeps {
   toast: ReturnType<typeof useToast>;
 }
 
-/** After OTP verification, better-auth may or may not have already created a
- * session. If not, sign in with the password cached during submit, or, if
- * there's none (e.g. a page reload lost it), send the user to log in by
- * hand. Returns false when it already handled navigation itself. */
 async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   const sess = await authClient.getSession();
   if (sess?.data) {
@@ -717,12 +658,6 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   return true;
 }
 
-/** The stretch after the code is accepted and a session exists: a beat on the
- * green checkmark so acceptance registers, then the card fades before the
- * page changes. Out here because none of it is state, it is a sequence, and
- * it was the bulk of what made runVerify hard to read. */
-/** Where to go when the preload never answered: the same href, worked out
- * from whatever user the cache holds by then. */
 function fallbackHref(qc: ReturnType<typeof useQueryClient>, next: string): string {
   const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
   return sanitizeNext(next, isAdmin);
@@ -732,14 +667,10 @@ async function finishVerifiedSignIn(deps: {
   next: string;
   qc: ReturnType<typeof useQueryClient>;
   navigate: ReturnType<typeof useNavigate>;
-  /** Loads a page's data ahead of going there (the route's own loader). */
   preload: (href: string) => Promise<void>;
   setVerifyPhase: (phase: "idle" | "success" | "leaving") => void;
 }) {
   deps.setVerifyPhase("success");
-  // The beat on the checkmark doubles as the wait for the page behind it:
-  // the user, then that page's data, so the card hands over to a page
-  // already drawn rather than to its skeleton.
   const ready = deps.qc.refetchQueries({ queryKey: ["user"] }).then(() => {
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     const href = sanitizeNext(deps.next, isAdmin);
@@ -748,8 +679,7 @@ async function finishVerifiedSignIn(deps: {
       .catch(() => {})
       .then(() => href);
   });
-  // Never longer than a few seconds: a stalled preload only costs the
-  // hand-over its drawn page, not the sign-in.
+  // A stalled preload costs only the drawn page, not the sign-in.
   const bounded = Promise.race([
     ready,
     new Promise<string>((resolve) =>
@@ -757,13 +687,8 @@ async function finishVerifiedSignIn(deps: {
     ),
   ]);
   const [dest] = await Promise.all([bounded, new Promise((resolve) => setTimeout(resolve, 900))]);
-  // A new account bound for the app goes by /welcome, where its card
-  // becomes the organization card of the setup flow; the page decides
-  // whether the org gets one.
   const href = isAppPage(dest) ? `/welcome?via=email&next=${encodeURIComponent(dest)}` : dest;
   clearPending();
-  // Into the app the card itself travels, so it stays put; anywhere else it
-  // fades before the page changes.
   if (!morphsInto(href) && !intoFlow(href)) {
     deps.setVerifyPhase("leaving");
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -771,8 +696,6 @@ async function finishVerifiedSignIn(deps: {
   arriveAt(deps.navigate, href);
 }
 
-/** The password-reset flow, which shares nothing with the rest of the page
- * but the view it switches to and the toast it complains through. */
 function useForgotPassword(
   setView: (view: View) => void,
   toast: ReturnType<typeof useToast>,
@@ -788,8 +711,7 @@ function useForgotPassword(
     }
     setForgotBusy(true);
     try {
-      // Cheap to abuse and it sends mail, which is why #50 needed a
-      // per-recipient cap. Turnstile gates the attempt instead (#304).
+      // Cheap to abuse and sends mail (#50): Turnstile gates the attempt (#304).
       const { error: resetError } = await resetTurnstile.guarded((headers) =>
         authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
       );
@@ -807,19 +729,13 @@ function useForgotPassword(
   return { forgotBusy, submitForgot, resetChallenge: resetTurnstile.challenge };
 }
 
-/** Landing on /login or /signup while already signed in. Only a fallback:
- * during the OTP success/leaving sequence runVerify owns the redirect, and
- * this would race ahead of it the moment the `user` query refetch resolves,
- * skipping the transition entirely. */
+/** A fallback only: runVerify owns the redirect after the code, and this would race ahead of it. */
 function useRedirectWhenSignedIn(deps: {
   verifyPhase: "idle" | "success" | "leaving";
   next: string;
 }) {
   const { data: user, isPending } = useCurrentUser();
   const [authHint] = useState(readAuthHint);
-  // Taken here rather than passed in: useNavigate returns the same thing
-  // wherever it is called, and an effect calling a navigate it was handed
-  // reads as a child pushing data back up to its parent.
   const navigate = useNavigate();
   const { verifyPhase, next } = deps;
   useEffect(() => {
@@ -830,8 +746,6 @@ function useRedirectWhenSignedIn(deps: {
   return verifyPhase === "idle" && (!!user || (authHint && isPending));
 }
 
-/** Login/signup state machine: view transitions, the OTP/password-reset
- * flows, and the post-auth redirect. Everything AuthPage's views need. */
 function useAuthFlow(mode: "login" | "signup") {
   const navigate = useNavigate();
   const router = useRouter();
@@ -848,12 +762,9 @@ function useAuthFlow(mode: "login" | "signup") {
   const [busy, setBusy] = useState(false);
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
   const shake = useShake();
-  // Two scopes, two tokens: one minted for signup must not be spendable on a
-  // password reset, so the scope is bound into the token (Turnstile action). The reset one
-  // lives in useForgotPassword, which is the only thing that spends it.
+  // One token per scope: a signup token must not be spendable on a password reset.
   const signupTurnstile = useTurnstile("signup");
-  // Treated as on until the config answers: the only wrong guess is showing a
-  // code screen, which the server never sends to, and config is cached.
+  // Treated as on until config answers: the only wrong guess shows a code screen the server never sends to.
   const emailEnabled = useConfig().data?.emailEnabled ?? true;
 
   const [prevMode, setPrevMode] = useState(mode);
@@ -869,12 +780,8 @@ function useAuthFlow(mode: "login" | "signup") {
 
   const [resent, setResent] = useState(false);
 
-  // RequireAuth bounces a signed-out visitor to /login?next=<path>, so the
-  // query string is the only source for where to send them back. Read once:
-  // the moment sign-in navigates to `next` the query string is gone, and this
-  // page renders once more before it unmounts. Read live, `next` fell back to
-  // /dashboard on that render and useRedirectWhenSignedIn replaced the page
-  // the visitor had just been sent to (an invite was never accepted).
+  // Read once: after sign-in navigates to `next` the query is gone, and a live read fell back to /dashboard
+  // and replaced the page the visitor was sent to (an invite was never accepted).
   const [next] = useState(() => {
     const raw = readPending()?.next ?? params.get("next") ?? "/dashboard";
     return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
@@ -892,23 +799,13 @@ function useAuthFlow(mode: "login" | "signup") {
       email,
       type: "email-verification",
     });
-    // No EMAIL_VERIFIED branch: the server answers an already-verified
-    // address exactly as it answers a fresh one, so an anonymous caller
-    // cannot tell them apart (#53). The account's owner is told by email.
+    // No EMAIL_VERIFIED branch: the server answers a verified address like a fresh one, so callers cannot tell them apart (#53).
     if (error) failSubmit(error.message ?? "Could not send the verification code");
-    // Funnel step 5a (#64). Only when a code really went out. Step 4 does not
-    // belong here: goVerify is also reached from trySignIn's
-    // EMAIL_NOT_VERIFIED branch, so counting a signup here would count every
-    // returning unverified user as a new one.
+    // Step 4 does not belong here: goVerify is also reached from EMAIL_NOT_VERIFIED, so it would count returning users as new.
     else posthog.capture(FUNNEL.verificationSent, { resend: false });
 
-    // The code screen either way, error or not. By the time we get here the
-    // account exists, and a failed send is usually the email rate limit
-    // (#50), which clears in a minute. Staying on the signup form told
-    // somebody the opposite: it looks like the signup failed, so they submit
-    // again, which spends another send and puts them back here. The code
-    // screen is the honest place to be stranded, because it has the resend
-    // button that gets them out.
+    // The code screen either way: the account exists, and a failed send is usually the email rate limit (#50).
+    // Staying on the form looks like a failed signup and spends another send.
     setAuthEmail(email);
     writePending({ email, next });
     setView("verify-otp");
@@ -952,24 +849,12 @@ function useAuthFlow(mode: "login" | "signup") {
       });
       if (verifyError) {
         failSubmit(verifyError.message ?? "That code is invalid or expired");
-        // Clear before `finally` flips `busy` back to false, so OtpInput's
-        // re-enable effect focuses an already-empty field instead of the
-        // last-filled digit.
+        // Clear before `finally` flips `busy`, so OtpInput's re-enable effect focuses an empty field.
         onInvalid?.();
         return false;
       }
-      // Fire here, not after establishSessionAfterVerify: the account is
-      // created and verified at this point regardless of whether we can
-      // also sign them in (e.g. authPasswordRef was lost to a reload).
-      //
-      // Not gated on `mode`: goVerify is only ever reached while the account
-      // is unverified (trySignUp fresh, or trySignIn's EMAIL_NOT_VERIFIED
-      // retry), so a successful verifyEmail here is always that account's
-      // one-time activation, whether the visitor is currently on /signup or
-      // came back through /login to finish an abandoned signup. Gating on
-      // `mode === "signup"` undercounted exactly that second case.
+      // Not gated on `mode`: goVerify is only reached while the account is unverified, so a successful verify here is always a one-time activation.
       posthog.capture(USER_SIGNED_UP, { method: "email" });
-      // Funnel step 5b (#64).
       posthog.capture(FUNNEL.verificationCompleted);
       const established = await establishSessionAfterVerify({
         authEmail,
@@ -983,9 +868,6 @@ function useAuthFlow(mode: "login" | "signup") {
         next,
         qc,
         navigate,
-        // The shell's code (main.tsx loads it lazily), and the dashboard's
-        // data: where nearly everybody lands, and the page the card hands
-        // over to with the setup list on it.
         preload: async (href) => {
           await Promise.all([
             loadShell(),
@@ -997,8 +879,6 @@ function useAuthFlow(mode: "login" | "signup") {
       });
       return true;
     } catch {
-      // A dropped connection, not a wrong code: say so, and leave the code in
-      // place so pressing Verify again retries it.
       failSubmit("Could not check the code. Try again.");
       return false;
     } finally {
@@ -1037,10 +917,7 @@ function useAuthFlow(mode: "login" | "signup") {
     resendOtp,
     submitForgot,
     backToForm,
-    /** Hung on the forms' first interaction so the Turnstile challenge runs while
-     * the visitor types, instead of stalling the submit. Signup only: a
-     * password reset is rare enough that a short wait on submit is fine, and
-     * priming it would tax everyone who came to log in. */
+    /** Signup only: a password reset is rare, and priming it would tax everyone who came to log in. */
     primeSignupTurnstile: signupTurnstile.prime,
     signupChallenge: signupTurnstile.challenge,
     resetChallenge,

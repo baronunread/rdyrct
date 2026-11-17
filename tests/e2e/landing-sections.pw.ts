@@ -1,8 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The landing below the hero: a section for each thing you get, and each
-// detail in a card of its own with a short loop of the product doing it.
-
 const section = (page: Page, name: string) =>
   page.locator("section").filter({ has: page.getByRole("heading", { name }) });
 
@@ -20,8 +17,6 @@ test("each detail is a card that says what it is, and its loop shows it", async 
   for (const scene of await scenes.all())
     await expect(scene).toHaveAttribute("aria-hidden", "true");
 
-  // Campaign tags are on every plan, so they sit with the analytics, not
-  // under a button about plans with a domain.
   const analytics = section(page, "See which post paid off.");
   const tags = analytics
     .getByRole("listitem")
@@ -35,11 +30,8 @@ test("the QR section asks for an account, and its free card opens the generator"
   await page.goto("/");
   const qr = section(page, "Print once. Change it later.");
   await qr.scrollIntoViewIfNeeded();
-  // The code is the app's own QR component, loaded once the card is near.
   await expect(qr.locator("[data-scene]").first().locator("svg, canvas").first()).toBeVisible();
 
-  // The section sells codes you can edit, which need an account; the free
-  // generator makes fixed ones, so it is its own card, not the button.
   await expect(qr.getByRole("link", { name: "Make a QR code you can edit" })).toHaveAttribute(
     "href",
     "/signup",
@@ -48,9 +40,6 @@ test("the QR section asks for an account, and its free card opens the generator"
   await expect(page).toHaveURL(/\/qr-code-generator$/);
 });
 
-// The colours card used to redraw its code with new options every step, and
-// the library empties the code before drawing it again: a blank frame every
-// 700ms. Its codes are drawn once now and the loop only fades between them.
 test("the colours card plays through without drawing its code again", async ({ page }) => {
   await page.goto("/");
   const scene = section(page, "Print once. Change it later.")
@@ -58,7 +47,6 @@ test("the colours card plays through without drawing its code again", async ({ p
     .filter({ has: page.getByRole("heading", { name: "Your logo and colors" }) })
     .locator("[data-scene]");
   await scene.scrollIntoViewIfNeeded();
-  // One code per colour, all drawn, before the count starts.
   await expect(scene.locator("[role=img] svg")).toHaveCount(3);
   await expect(scene.locator("[role=img] svg path").first()).toBeAttached();
   await scene.evaluate((el) => {
@@ -81,8 +69,6 @@ test("the colours card plays through without drawing its code again", async ({ p
   await expect(scene).toHaveAttribute("data-redraws", "0");
 });
 
-// Comparisons belong on the comparison pages. The sections sell what you get
-// without naming anybody else.
 test("the landing sections name no competitor", async ({ page }) => {
   await page.goto("/");
   for (const name of [
@@ -95,8 +81,6 @@ test("the landing sections name no competitor", async ({ page }) => {
   }
 });
 
-// A card plays its loop while it is on screen, from the finished state the
-// page arrives in; under reduced motion it stays finished.
 const linkScene = async (page: Page) => {
   const scene = section(page, "Branded short links.").locator("[data-scene]").nth(1);
   await scene.scrollIntoViewIfNeeded();
@@ -120,8 +104,7 @@ test("the cards play while they are on screen", async ({ page }) => {
   const scene = await linkScene(page);
   const first = await scene.getAttribute("data-step");
   expect(first).not.toBeNull();
-  // The first change comes one step (700ms) after the card hydrates and is
-  // half on screen; on the dev server that took about 1.5s.
+  // The first change comes a step (700ms) after hydration; about 1.5s on dev.
   await expect(scene).not.toHaveAttribute("data-step", first!, { timeout: 5_000 });
 });
 

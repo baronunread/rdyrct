@@ -5,20 +5,14 @@ import { exportCsvFrom } from "./download";
 
 const password = "test-password-123";
 
-/**
- * The export is built in the browser from data already on the page (#78), so
- * the only honest check is the one a user performs: click the button and open
- * what lands.
- */
+// #78: built in the browser from data on the page, so the check is clicking the button
+// and opening what lands.
 test("an owner can export the analytics view as a CSV (#78)", async ({ page }) => {
   await signUpAndVerify(page, `export-${Date.now()}@gmail.com`, password);
 
-  // One link, so the org has something to report on.
   await createQuickLink(page, "example.com/export");
   await page.keyboard.press("Escape");
-  // An org that never had a click gets the "No clicks yet" card, which has no
-  // export. Saying it had one, and one country row, is enough for the report
-  // and its button.
+  // A "No clicks yet" card has no export, so claim a click and one country row.
   await page.route("**/api/orgs/*/stats**", async (route) => {
     const response = await route.fetch();
     // SAFETY: this route is the stats endpoint, whose response always has
@@ -34,11 +28,9 @@ test("an owner can export the analytics view as a CSV (#78)", async ({ page }) =
 
   const { filename, text } = await exportCsvFrom(page, "/analytics");
 
-  // Named so a folder of exports sorts and reads without opening any of them.
   expect(filename).toMatch(/^rdyrct-analytics-\d+d-\d{4}-\d{2}-\d{2}\.csv$/);
 
-  // The BOM is what makes Excel read this as UTF-8 rather than mangling every
-  // non-ASCII country name.
+  // The BOM makes Excel read UTF-8 instead of mangling non-ASCII country names.
   expect(text.startsWith("﻿")).toBe(true);
   expect(text.split("\r\n")[0]).toBe("﻿section,key,clicks");
   // A fresh org has a series but no clicks, so the date rows are what prove

@@ -2,11 +2,8 @@ import { beforeEach, expect, it } from "vitest";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
 
-/**
- * No RESEND_API_KEY: nothing can send a code, so sign-up must not ask for one.
- * Its own file for the same reason as cap-disabled: getAuth() memoizes one
- * auth instance per isolate, built from the env of the first request.
- */
+// Its own file: getAuth() memoizes one auth instance per isolate, built from
+// the env of the first request.
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();

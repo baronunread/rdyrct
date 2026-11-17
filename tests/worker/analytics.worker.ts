@@ -22,8 +22,7 @@ async function getStats(cookie: string, orgId = "org-1"): Promise<Response> {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// freeOwnerCookie() already seeds "org-1"; this adds link-1/addr-1 on top of
-// it (unlike seedLink(), which also inserts "org-1" and would collide).
+// freeOwnerCookie() already seeds "org-1"; seedLink() would collide on it.
 async function seedLinkOnExistingOrg() {
   const db = drizzle(env.DB, { schema });
   await db.batch([
@@ -47,7 +46,6 @@ async function seedClicks(db: ReturnType<typeof drizzle>, timestamps: number[]) 
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
-/** The org, link and clock the range tests below both start from. */
 async function seededOrg() {
   return { cookie: await freeOwnerCookie(), db: await seedLinkOnExistingOrg(), t: Date.now() };
 }
@@ -56,13 +54,9 @@ describe("GET /orgs/:orgId/stats: totalClicks vs totalClicksDelta (#24)", () => 
   it("only counts clicks inside the selected range, not every click ever", async () => {
     const { cookie, db, t } = await seededOrg();
 
-    // Free plan's analyticsDays is 7: "current period" is the last 7 days,
-    // "previous period" the 7 days before that, both equal-length.
     const currentPeriod = [t - 1 * DAY_MS, t - 2 * DAY_MS, t - 3 * DAY_MS]; // 3 clicks
     const previousPeriod = [t - 8 * DAY_MS, t - 9 * DAY_MS]; // 2 clicks
-    // Clicks from long before either window: with the old unbounded query
-    // these leaked into "totalClicks", making its delta against
-    // totalClicksPrev (a real 7-day window) meaningless.
+    // Clicks from long before either window leaked into "totalClicks" when the query was unbounded.
     const ancient = [
       t - 100 * DAY_MS,
       t - 200 * DAY_MS,
@@ -134,7 +128,6 @@ describe("GET /orgs/:orgId/links/stats/:slug?days=", () => {
     const { cookie, db, t } = await seededOrg();
     await seedClicks(db, [t - 2 * DAY_MS, t - 20 * DAY_MS]);
 
-    // Free keeps 7 days.
     const body = await linkStats(cookie, 365);
     expect(body.rangeDays).toBe(7);
     expect(body.totalClicks).toBe(1);
@@ -158,8 +151,11 @@ describe("GET /orgs/:orgId/stats: the links lists", () => {
     ]);
     const db = drizzle(env.DB, { schema });
     await db.insert(schema.clicks).values([
-      // Busy, but before the free plan's 7 days.
-      ...Array.from({ length: 5 }, () => ({ linkId: "old", orgId: "org-1", ts: t - 20 * DAY_MS })),
+      ...Array.from({ length: 5 }, () => ({
+        linkId: "old",
+        orgId: "org-1",
+        ts: t - 20 * DAY_MS,
+      })),
       { linkId: "new", orgId: "org-1", ts: t - 2 * DAY_MS },
       { linkId: "gone", orgId: "org-1", ts: t - 40 * DAY_MS },
     ]);
@@ -191,14 +187,12 @@ describe("GET /orgs/:orgId/stats: links clicked and countries", () => {
       "insert into links (id, org_id, slug, destination, created_at) values ('link-2', 'org-1', 'two', 'https://example.com', 0)",
     ).run();
     await db.insert(schema.clicks).values([
-      // This week: both links, one of them twice.
       { linkId: "link-1", orgId: "org-1", ts: t - 1 * DAY_MS, country: "IT" },
       { linkId: "link-1", orgId: "org-1", ts: t - 2 * DAY_MS, country: "FR" },
       { linkId: "link-2", orgId: "org-1", ts: t - 3 * DAY_MS, country: "IT" },
       // Edge could not place these: not a country.
       { linkId: "link-2", orgId: "org-1", ts: t - 3 * DAY_MS, country: "" },
       { linkId: "link-2", orgId: "org-1", ts: t - 3 * DAY_MS, country: "XX" },
-      // The week before: one link.
       { linkId: "link-1", orgId: "org-1", ts: t - 9 * DAY_MS, country: "DE" },
     ]);
     await rebuildClickRollups();
@@ -254,7 +248,6 @@ describe("GET /orgs/:orgId/links/stats/:slug: countries and campaigns", () => {
       { linkId: "link-1", orgId: "org-1", ts: t - 1 * DAY_MS, country: "IT" },
       { linkId: "link-1", orgId: "org-1", ts: t - 2 * DAY_MS, country: "US" },
       { linkId: "link-1", orgId: "org-1", ts: t - 2 * DAY_MS, country: "" },
-      // Outside the free plan's 7 days.
       { linkId: "link-1", orgId: "org-1", ts: t - 20 * DAY_MS, country: "JP" },
     ]);
     await rebuildClickRollups();

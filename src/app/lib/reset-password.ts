@@ -4,9 +4,6 @@ import { friendlyAuthError } from "./auth-errors";
 
 export type ResetErrors = { password?: string; confirm?: string };
 
-/** Same in-field-order checks as the sign-up form. Returns the reason each
- * field is wrong, short enough for its label line, or null when both are
- * ready to submit. */
 export function validateResetPassword(password: string, confirm: string): ResetErrors | null {
   if (!password) return { password: "Required" };
   if (password.length < 8) return { password: "At least 8 characters" };
@@ -29,9 +26,7 @@ export async function submitResetPassword({
   token: string;
   toast: (message: string) => void;
   navigate: ReturnType<typeof useNavigate>;
-  /** A field is wrong: mark it rather than toast. */
   markFields: (errors: ResetErrors) => void;
-  /** Anything no one field owns, such as an expired link. */
   failSubmit: (message: string) => void;
   setBusy: (busy: boolean) => void;
 }) {

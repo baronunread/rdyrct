@@ -6,12 +6,9 @@ import { buttonClass, type Size, type Variant } from "./button-class";
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
-  /** Disables the active:scale press feedback, for controls where it'd distract. */
   static?: boolean;
 }
 
-/** The button proper. An anchor that should look like one takes
- * `buttonClass()` instead, so the two share this look without nesting. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant, size, static: staticProp, className, type, ...props }, ref) => (
     <button
@@ -25,14 +22,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Used for both aria-label and the tooltip — icon-only buttons must name their action. */
   label: string;
   danger?: boolean;
-  /** Disables the active:scale press feedback, for controls where it'd distract. */
   static?: boolean;
 }
 
-/** Icon-only action button with consistent hover/focus and a tooltip. */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   ({ label, danger, static: staticProp, className, type, ...props }, ref) => (
     <Tooltip content={label}>

@@ -1,18 +1,3 @@
-/**
- * The hero card for somebody who already has an account (#96).
- *
- * The anonymous shortener exists to prove the product to a stranger. Showing
- * it to a signed-in visitor is worse than useless: it offers to make a link
- * that expires in 24 hours, counts against a three-per-browser ceiling they
- * have no reason to have, and then offers to "keep" it by signing up for the
- * account they are signed into.
- *
- * Who actually lands here is somebody who typed the bare domain, followed an
- * old bookmark, or came back from the blog, and the likeliest reason is a
- * link to make. So the slot is the anonymous card's bar with the
- * organization as its prefix (hero-link-bar.tsx), making a real link there on
- * its default domain, with one line of how the week went under it.
- */
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
@@ -36,8 +21,6 @@ import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import type { LinkDTO } from "@/shared/types";
 
-/** No organization yet, so there are no numbers to show and exactly one
- * useful thing to do. */
 function NoOrgYet() {
   return (
     <div className={cn(HERO_CARD, "flex flex-col gap-3 p-5")}>
@@ -55,11 +38,8 @@ function NoOrgYet() {
   );
 }
 
-/** The name the card greets: the first word of it, as people say hello. */
 const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? "";
 
-/** The organization as the bar's prefix: its initial on a tinted square,
- *  its name, and a chevron when there is another to pick. */
 function OrgChipFace({ name, menu }: { name: string; menu: boolean }) {
   return (
     <span
@@ -80,19 +60,11 @@ function OrgChipFace({ name, menu }: { name: string; menu: boolean }) {
   );
 }
 
-/**
- * Which organization the link goes into, because a link in the wrong one is
- * the one mistake this card could make quietly. With more than one, the chip
- * opens the app's own list, and picking makes that the current organization
- * everywhere, as the switcher does.
- */
 function OrgChip() {
   const { org, orgs, setOrg } = useCurrentOrg();
   if (!org) return null;
   if (orgs.length < 2) return <OrgChipFace name={org.name} menu={false} />;
   return (
-    // The menu's trigger is a box of its own; rounding it keeps the focus
-    // ring on the chip's shape.
     <span className="inline-block min-w-0 shrink-0 [&>div]:rounded-md">
       <Menu
         label="Choose the organization for new links"
@@ -104,7 +76,6 @@ function OrgChip() {
   );
 }
 
-/** The chip and the slash the slug would follow, as the bar's prefix. */
 function OrgPrefix() {
   return (
     <>
@@ -127,26 +98,20 @@ function DashboardLink({ children }: { children: string }) {
 const clicksThisWeek = (n: number) =>
   `${formatNumber(n)} ${n === 1 ? "click" : "clicks"} this week`;
 
-/** "Welcome back, Mara · 577 clicks this week": the line before a link. */
 function WeekLine({ name, orgId }: { name: string; orgId: string }) {
   const { data } = useInsightStats(orgId);
-  // The name arrives with the /user query, and the card can render before it
-  // does: the signed-in hint comes from storage. Without the guard that first
-  // paint reads "Welcome back, ."
+  // The card can render before /user answers (the hint comes from storage); guard "Welcome back, ."
   const first = firstName(name);
   const parts = [first ? `Welcome back, ${first}` : "Welcome back"];
   if (data) parts.push(clicksThisWeek(data.clicks7d));
   return <span className="tnum">{parts.join(" · ")}</span>;
 }
 
-/** Where the dashboard keeps a link, for the Edit button under a new one. */
 const linkHref = (link: LinkDTO) =>
   link.domain
     ? `/links/${link.slug}?domain=${encodeURIComponent(link.domain)}`
     : `/links/${link.slug}`;
 
-/** The link just made, or the one that already went there, with its QR,
- *  and a footer saying it is kept. */
 function Made({ link, existing, orgName }: { link: LinkDTO; existing: boolean; orgName: string }) {
   return (
     <>
@@ -171,9 +136,6 @@ function Made({ link, existing, orgName }: { link: LinkDTO; existing: boolean; o
   );
 }
 
-/** Making the link: the dashboard's quick create, on the org's default
- *  domain. A destination that already has a link gets that link back rather
- *  than a second one, said as much. */
 function useQuickCreate(orgId: string, domainId: string | null) {
   const toast = useToast();
   const { create } = useLinkMutations(orgId);
@@ -216,8 +178,6 @@ const LIMIT_TITLE = "Link limit reached: upgrade for more links";
 const isBlank = (value: string | undefined) => !value?.trim();
 const atLinkLimit = (count: number | undefined, cap: number) => (count ?? 0) >= cap;
 
-/** The bar for an account: the organization as its prefix, dead while the
- *  field is empty or the plan is full, and saying which. */
 function QuickBar({
   orgId,
   form,
@@ -249,8 +209,6 @@ function QuickBar({
   );
 }
 
-/** The card for somebody who can add links: the bar with the organization
- *  as its prefix, then either the week or the link it just made. */
 function QuickForm({ name, orgId }: { name: string; orgId: string }) {
   const { org, defaultDomainId } = useOrgLimits();
   const { form, submit, made, pending } = useQuickCreate(orgId, defaultDomainId);
@@ -269,12 +227,9 @@ function QuickForm({ name, orgId }: { name: string; orgId: string }) {
   );
 }
 
-/** A viewer can read the org but not add to it: the bar's place says so,
- *  with the chip still there to pick an organization they can add to. */
 function QuickLink({ name, orgId }: { name: string; orgId: string }) {
   const { canWrite } = useOrgLimits();
-  // Keyed by the org, so a link made for one organization does not linger
-  // under the form once another is picked.
+  // Keyed by the org, so a link made for one does not linger once another is picked.
   if (canWrite) return <QuickForm key={orgId} name={name} orgId={orgId} />;
   return (
     <div className={HERO_CARD}>
@@ -291,12 +246,9 @@ function QuickLink({ name, orgId }: { name: string; orgId: string }) {
   );
 }
 
-/** The same card while /user is on its way: the bar and the line under it,
- *  so nothing moves when it lands. */
 function QuickSkeleton() {
   return (
-    // The status wrapper is the flex item the hero centres, so it carries the
-    // card's width: without it the card's w-full measures its own contents.
+    // The status wrapper is the flex item the hero centres, so it carries the card's width.
     <SkeletonStatus label="Loading your account…" className="w-full max-w-xl">
       <div className={HERO_CARD}>
         <Skeleton className="h-11 rounded-xl" />
@@ -311,9 +263,7 @@ function QuickSkeleton() {
 export function HeroSignedIn({ name }: { name: string }) {
   const currentUser = useCurrentUser();
   const { org } = useCurrentOrg();
-  // The card renders before /user answers, because the signed-in hint comes
-  // from storage. Until it does, "you have no organization yet" is a guess,
-  // and the wrong one for everybody who has one.
+  // Renders before /user answers (the hint comes from storage), so "no organization" would be a guess.
   if (currentUser.isPending) return <QuickSkeleton />;
   if (!org) return <NoOrgYet />;
   return <QuickLink name={name} orgId={org.id} />;

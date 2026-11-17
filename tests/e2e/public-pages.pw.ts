@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { visitLegalPages } from "./pages";
 
-/** Scroll to the analytics section, whose first panel draws with the lazy
- * charts bundle, then wait for the chart itself. */
-/** Down to the last landing section, so every section has mounted. */
 async function openTourAnalytics(page: import("@playwright/test").Page) {
   await page.locator("#analytics").scrollIntoViewIfNeeded();
   await expect(
@@ -22,10 +19,6 @@ test("landing page keeps the main sign-up path", async ({ page }) => {
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// The hero used to spend its second button sending the warmest visitor on the
-// page to GitHub (#96), and after that a button that only scrolled a few
-// hundred pixels. It has one CTA now, and the self-host link has to still
-// exist, further down, under pricing.
 test("the hero has one CTA and self-hosting sits under pricing", async ({ page }) => {
   await page.goto("/");
 
@@ -37,22 +30,14 @@ test("the hero has one CTA and self-hosting sits under pricing", async ({ page }
     /\/signup/,
   );
 
-  // Self-hosting keeps its own section after pricing, never a column inside it.
-  // The pill used to end on a star count, which is the wrong number to make
-  // the largest fact in the section that answers "will this still be here next
-  // year": a low count reads as a weekend project to the exact reader the band
-  // is for. No number belongs in it now.
+  // No star count in the pill: a low one reads as a weekend project to the
+  // exact reader this band is for.
   const selfHost = page.locator("#self-host");
   const pill = selfHost.getByRole("link", { name: /github/i });
   await expect(pill).toHaveAttribute("href", /github\.com/);
   await expect(pill).not.toContainText(/\d|star/i);
 });
 
-// The homepage used to carry the full four-column table, word for word the
-// same one on /pricing: two copies of the same content competing for the
-// same search result. It now teases three prices and sends the down-funnel
-// visitor to /pricing for the table (and self-hosting, and the feature
-// breakdown), same split Stripe, Linear and Vercel all draw.
 test("the homepage teases three prices and points at the full comparison", async ({ page }) => {
   await page.goto("/");
 
@@ -60,16 +45,10 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser).not.toContainText(/self-hosted/i);
   await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
   await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
-  // "Best value", which the limits back; never "Most popular", which
-  // nothing does.
   await expect(teaser.getByText("Best value")).toBeVisible();
   await expect(teaser.getByText("Most popular")).toHaveCount(0);
   await expect(teaser.locator("table")).toHaveCount(0);
 
-  // The free plan has to say the generous part and the catch in the same
-  // breath: three members is the strongest free thing here, and random
-  // slugs is the fact somebody feels lied to about if they only meet it
-  // after signing up.
   const free = teaser.getByText("Free", { exact: true }).locator("xpath=ancestor::div[1]");
   await expect(free).toContainText(/members/i);
   await expect(free).toContainText(/always random/i);
@@ -81,17 +60,13 @@ test("the homepage teases three prices and points at the full comparison", async
 test("header navigation and sign-up remain usable on desktop and phone", async ({ page }) => {
   await page.goto("/");
 
-  // The header the entry chunk paints first is swapped for the page's own
-  // once the homepage chunk arrives, and the new one mounts closed. Opening
-  // Product on the stand-in raced that swap: the panel shut under the test.
-  // The heading comes with the page, so after it the header stays put.
+  // The entry chunk's header is swapped for the page's own, which mounts closed:
+  // opening Product before the swap raced it.
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const header = page.locator("header");
   const nav = header.getByRole("navigation", { name: "Main" });
   await expect(nav.getByRole("link", { name: "Pricing" })).toBeVisible();
 
-  // Product is a disclosure: its panel holds the pages that used to be
-  // reachable only from the footer, and Escape hands focus back.
   const product = nav.getByRole("button", { name: "Product" });
   await product.click();
   await expect(product).toHaveAttribute("aria-expanded", "true");
@@ -112,10 +87,8 @@ test("header navigation and sign-up remain usable on desktop and phone", async (
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// Hovering Product opens its panel, and the panel has to survive the trip to
-// a link in its far corner: that path leaves the button sideways, over the
-// nav's padding, before it reaches the panel. Moving along the nav instead
-// means somebody went for another item, and the panel gets out of the way.
+// The path to a link in the panel's far corner leaves the button sideways over
+// the nav padding. Moving along the nav means another item, so it closes.
 test("the Product panel stays open on the way to its far corner, not along the nav", async ({
   page,
 }) => {
@@ -149,14 +122,11 @@ test("the Product panel stays open on the way to its far corner, not along the n
   await expect(product).toHaveAttribute("aria-expanded", "false");
 });
 
-// On a phone the pill opens into a card with every page in it; before this
-// the only way to Pricing on a phone was the footer.
 test("the phone menu opens, leads somewhere, and closes", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto("/");
 
-  // The header the entry chunk paints first is swapped for the page's own
-  // once the page arrives; wait for that, so the menu is the one that stays.
+  // Wait for the header swap, so the menu is the one that stays.
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const header = page.locator("header");
   const menu = header.getByRole("navigation", { name: "Menu" });
@@ -165,7 +135,6 @@ test("the phone menu opens, leads somewhere, and closes", async ({ page }) => {
   await header.getByRole("button", { name: "Open menu" }).click();
   await expect(menu).toBeVisible();
   await expect(header.getByRole("link", { name: "Get started" })).toBeVisible();
-  // The page under the card holds still while it is open.
   expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("hidden");
 
   await page.keyboard.press("Escape");
@@ -179,11 +148,8 @@ test("the phone menu opens, leads somewhere, and closes", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("");
 });
 
-// The homepage is a lazy chunk, so there is a moment before it arrives. What
-// fills that moment used to be the cookie banner alone on an empty screen,
-// which read as the whole site. The header comes from the entry chunk now and
-// is on screen for all of it. Held here on the route module the dev server
-// serves the page from; the assertions run while it is still in flight.
+// The homepage is a lazy chunk: held on the dev server's route module so the
+// assertions run while it is in flight.
 test("the header is on screen before the homepage chunk arrives", async ({ page }) => {
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -200,21 +166,13 @@ test("the header is on screen before the homepage chunk arrives", async ({ page 
   const header = page.locator("header");
   await expect(header.getByRole("link", { name: "Pricing" })).toBeVisible();
   await expect(header.getByRole("link", { name: "Sign up" })).toBeVisible();
-  // The page itself is still on its way, so this is the fallback, not the
-  // real header arriving early.
   await expect(page.getByRole("heading", { level: 1 })).toBeHidden();
 
   release();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  // One header, and it never moved: the fallback uses the page's own wrapper.
   await expect(header).toHaveCount(1);
 });
 
-// The pricing table used to live only on "/", reachable by an anchor. The
-// standalone page carries the real thing, deep-linkable from a search
-// result. No self-host section here: that stays a homepage trust signal
-// (see the test above), not something a buying page argues against itself
-// with.
 test("the standalone pricing page has the full table and no self-host pitch", async ({ page }) => {
   await page.goto("/pricing");
 
@@ -230,9 +188,6 @@ test("the standalone pricing page has the full table and no self-host pitch", as
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// Most products put a screenshot in the hero because you cannot use them
-// logged out; ours works with no account, so the real shortener sits under the
-// pitch, with the one primary CTA above it.
 test("the hero keeps its shortener and primary path usable on desktop and phone", async ({
   page,
 }) => {
@@ -250,19 +205,12 @@ test("the hero keeps its shortener and primary path usable on desktop and phone"
   await expect(page.getByRole("button", { name: "Shorten it" })).toBeDisabled();
 });
 
-// Marketing navigation swaps the content where you stand and then rides the
-// new page up to its top, which is the order resend.com uses. Nothing asserts
-// the ride any more. The three tests that did sampled requestAnimationFrame
-// and demanded six distinct positions to call a scroll a scroll, which a
-// loaded CI runner cannot supply: they measured the runner's frame rate, not
-// the app, and went red for it. If this needs a guard again, assert where the
-// page ends up rather than how many frames it took to get there.
+// Nothing asserts the scroll-to-top ride: the old tests sampled
+// requestAnimationFrame and measured the CI runner's frame rate. If it needs a
+// guard again, assert where the page ends up, not frame counts.
 
-/**
- * Click Pricing with its chunk held open, so the navigation is still in
- * flight. Returns the release, plus the wait for the load actually landing:
- * asserting on a timeout instead lets a slow runner pass a regression.
- */
+/** Holds the pricing chunk so navigation is in flight. Waits for the load to
+ * land: a timeout would let a slow runner pass a regression. */
 async function pricingClickInFlight(page: import("@playwright/test").Page) {
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -275,8 +223,8 @@ async function pricingClickInFlight(page: import("@playwright/test").Page) {
   );
 
   await page.locator("header nav").getByRole("link", { name: "Pricing" }).click();
-  // The hold is what makes this a race at all: if the route ever stops
-  // matching, the test would pass while exercising nothing.
+  // The hold makes this a race: if the route stops matching, the test would
+  // pass while exercising nothing.
   await expect(page).not.toHaveURL(/\/pricing$/);
 
   return async () => {
@@ -285,27 +233,21 @@ async function pricingClickInFlight(page: import("@playwright/test").Page) {
   };
 }
 
-// Two links clicked before the first one commits. The commit waits for the
-// route to load, so the first load can settle after the second has already
-// navigated: without a guard its `.finally()` sent the visitor to the page
-// they gave up on. Holding the pricing chunk is what makes the race certain
-// rather than a matter of timing.
+// Two links clicked before the first commits: its `.finally()` used to send the
+// visitor to the page they gave up on. Holding the chunk makes the race certain.
 test("a second marketing link wins over one still loading", async ({ page }) => {
   await page.goto("/");
   const settleTheAbandonedLoad = await pricingClickInFlight(page);
   await page.locator("footer").getByRole("link", { name: "QR generator" }).click();
   await expect(page).toHaveURL(/\/qr-code-generator$/);
 
-  // The abandoned load finishing must not steal the page back.
   await settleTheAbandonedLoad();
   await expect(page).toHaveURL(/\/qr-code-generator$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(/QR code/i);
 });
 
-// Same race, but the thing that interrupts is not another marketing link.
-// The click counter cannot see those, so the commit checks the location has
-// not moved: clicking Pricing on a cold chunk and then Sign up used to drop
-// the visitor back on /pricing with a half-filled form behind them.
+// The click counter cannot see non-marketing interruptions, so the commit checks
+// the location has not moved: Pricing then Sign up used to land on /pricing.
 test("a stale marketing load cannot pull you off the page you moved to", async ({ page }) => {
   await page.goto("/");
   const settleTheAbandonedLoad = await pricingClickInFlight(page);
@@ -320,9 +262,8 @@ test("legal pages retain their baseline headings", async ({ page }) => {
   await visitLegalPages(page);
 });
 
-// A first-time visitor on a light operating system must land on light. The
-// toggle then has to flip the page and survive a reload, which is the part
-// that breaks if the inline bootstrap and lib/theme.ts disagree on the default.
+// The toggle must survive a reload: that breaks if the inline bootstrap and
+// lib/theme.ts disagree on the default.
 test("landing page opens light and the toggle switches and sticks", async ({ browser }) => {
   const context = await browser.newContext({ colorScheme: "light" });
   const page = await context.newPage();
@@ -331,7 +272,6 @@ test("landing page opens light and the toggle switches and sticks", async ({ bro
   await page.goto("/");
   await expect(html).toHaveAttribute("data-theme", "light");
 
-  // The control lives in the footer, not the header, so it is below the fold.
   await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(html).toHaveAttribute("data-theme", "dark");
 
@@ -341,8 +281,6 @@ test("landing page opens light and the toggle switches and sticks", async ({ bro
   await context.close();
 });
 
-// The stored choice wins over the operating system in both directions, so a
-// dark-preferring visitor who picked light keeps light.
 test("a dark operating system still opens dark by default", async ({ browser }) => {
   const context = await browser.newContext({ colorScheme: "dark" });
   const page = await context.newPage();
@@ -361,18 +299,12 @@ test("a signed-out visitor still gets the anonymous shortener, not a dashboard c
   await expect(page.getByText(/Welcome back/)).toHaveCount(0);
 });
 
-// The page claims it serves developers, and every feature card on it is a
-// marketer's feature: there is no API in the product yet. The roadmap page is
-// what makes the claim honest, so it has to exist, it has to point at real
-// open issues, and both the developers tab and the footer have to lead there.
 test("the developer claim is backed by a roadmap of real issues", async ({ page }) => {
   await page.goto("/roadmap");
   await expect(
     page.getByRole("heading", { level: 1, name: /what we are building/i }),
   ).toBeVisible();
 
-  // Every planned card links to the issue that promises it. None of it is
-  // built, so the issue is the only evidence the page has.
   const issues = page.locator('a[href*="/issues/"]');
   await expect(issues).not.toHaveCount(0);
   for (const href of await issues.evaluateAll((links) =>
@@ -381,9 +313,6 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
     expect(href).toMatch(/^https:\/\/github\.com\/baronunread\/rdyrct\/issues\/(new|\d+)$/);
   }
 
-  // A board, one column per stage, each saying how much is in it. A roadmap
-  // made only of things that do not exist reads as a product that does not
-  // exist, so the shipped column has to be there too.
   for (const stage of ["Next", "Later", "Shipped"]) {
     const column = page.getByRole("region", { name: new RegExp(`^${stage}`) });
     await expect(column).toBeVisible();
@@ -394,8 +323,6 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
   }
 });
 
-// The landing sells an API and MCP server that ship today, so it points at
-// their docs, not at the roadmap.
 test("the docs are reachable from the landing, the roadmap from the footer", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: /API and MCP docs/i }).click();
@@ -406,9 +333,6 @@ test("the docs are reachable from the landing, the roadmap from the footer", asy
   await expect(page).toHaveURL(/\/roadmap$/);
 });
 
-// Between the hero and the pricing cards the page runs about 6,200px on a
-// phone with nothing to click. The analytics preview ends on the one ask in
-// that stretch, placed where somebody has just been shown the payoff.
 test("the analytics preview ends on an ask", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto("/");
@@ -420,22 +344,16 @@ test("the analytics preview ends on an ask", async ({ page }) => {
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// A cold signup is bare (no subtitle), but arriving with context keeps it:
-// a link waiting to be claimed, or a checkout the visitor was mid-way into.
 test("signup carries context across the door", async ({ page }) => {
   await page.goto("/signup");
   await expect(page.getByText(/then check out/i)).toBeHidden();
 
   await page.goto("/signup?next=%2Fwelcome%3Fplan%3Dpro");
   await expect(page.getByText(/then check out/i)).toBeVisible();
-  // A pricing link from before /welcome still says so.
   await page.goto("/signup?next=%2Fbilling%3Fplan%3Dpro");
   await expect(page.getByText(/then check out/i)).toBeVisible();
 });
 
-// The cookie policy is a section of the privacy page, not a page of its own:
-// two documents saying the same thing drift. It still needs its own address,
-// because that is what people (and the scanners that audit for one) look for.
 test("the footer has a cookie policy that lands on the cookie section", async ({ page }) => {
   await page.goto("/");
   await page.locator("footer").getByRole("link", { name: "Cookies" }).click();
@@ -444,9 +362,7 @@ test("the footer has a cookie policy that lands on the cookie section", async ({
   await expect(page.locator("#cookies")).toBeInViewport();
 });
 
-// The footer groups its links under Product, Compare and Company. The Compare
-// links point into the blog, which is a separate Worker, so they have to be
-// real addresses rather than SPA routes.
+// The Compare links go to the blog, a separate Worker: real addresses, not SPA routes.
 test("the footer groups its links and the compare links lead to the comparison pages", async ({
   page,
 }) => {
@@ -465,8 +381,6 @@ test("the footer groups its links and the compare links lead to the comparison p
   );
 });
 
-// The changelog is CHANGELOG.md rendered, so the release in the file has to be
-// the release on the page, and the pricing page has to lead to the comparisons.
 test("the changelog shows the latest release and pricing links to the comparisons", async ({
   page,
 }) => {
@@ -478,7 +392,6 @@ test("the changelog shows the latest release and pricing links to the comparison
   await expect(page).toHaveURL(/\/compare$/);
 });
 
-// The index behind "All comparisons" lists every tool and links to its page.
 test("the compare index lists each tool and opens its comparison", async ({ page }) => {
   await page.goto("/");
   await page.locator("footer").getByRole("link", { name: "All comparisons" }).click();
@@ -498,9 +411,6 @@ test("the compare index lists each tool and opens its comparison", async ({ page
   await expect(page).toHaveURL(/\/dub-alternative$/);
 });
 
-// Each comparison page names the other tool, shows both columns of the
-// table, and says where the other tool wins: a page that only flatters
-// rdyrct is the page nobody believes.
 for (const { path, name } of [
   { path: "/bitly-alternative", name: "Bitly" },
   { path: "/rebrandly-alternative", name: "Rebrandly" },
@@ -524,11 +434,9 @@ for (const { path, name } of [
   });
 }
 
-// serveSpa gives the unhashed static files an hour-long cache. This same
-// fallback is what the Vite dev server answers /@vite/client and every source
-// module through, and caching those means the browser keeps running the code
-// you just edited: the app looks broken and a reload does not fix it. Guarded
-// by import.meta.env.DEV, which only this project can see.
+// The Vite dev server answers /@vite/client and every source module through
+// serveSpa's fallback: caching those keeps the browser running stale code.
+// Guarded by import.meta.env.DEV.
 test("the dev server never hands out a long cache for a source module", async ({ request }) => {
   for (const path of ["/@vite/client", "/src/app/main.tsx"]) {
     const res = await request.get(path);
@@ -537,24 +445,18 @@ test("the dev server never hands out a long cache for a source module", async ({
   }
 });
 
-// Every single-segment path reaches the /:slug handler, misses, and lands in
-// serveSpa asking for a 404. Only the shell may actually become one: the rest
-// are real files. /@react-refresh is the one that hurts, because it is the
-// React Refresh runtime the dev server injects into index.html, and a 404
-// there means React never mounts and every page renders the hidden crawler
-// block instead. The production suite could not see it: that path only exists
-// while Vite is serving.
+// A 404 for /@react-refresh (the runtime the dev server injects) means React
+// never mounts and the hidden crawler block shows instead. Only the shell may
+// become a 404. The production suite cannot see it.
 test("the single-segment files the dev server owns are not 404s", async ({ request }) => {
   for (const path of ["/@react-refresh", "/favicon.svg", "/og.png", "/llms.txt"]) {
     expect((await request.get(path)).status(), path).toBe(200);
   }
 });
 
-// The check the two above exist for. index.html ships a hidden block of real
-// copy for crawlers, so a page whose JavaScript never ran still answers with
-// an h1 and looks alive to anything reading the HTML. That is exactly what
-// made a totally dead app hard to spot: assert the router mounted, by asking
-// for something only the app renders.
+// index.html ships a hidden block of crawler copy, so a page whose JavaScript
+// never ran still has an h1. Assert the router mounted by asking for something
+// only the app renders.
 test("the app actually mounts, rather than leaving the crawler block on screen", async ({
   page,
 }) => {
@@ -563,33 +465,20 @@ test("the app actually mounts, rather than leaving the crawler block on screen",
   await expect(
     page.getByRole("heading", { level: 1, name: /what we are building/i }),
   ).toBeVisible();
-  // The crawler block is clipped to 1px and has no header; the app has one.
   await expect(page.locator("header").getByRole("link", { name: "Sign up" })).toBeVisible();
 });
 
-// Every page owes a screen-reader user one main landmark: it is what "skip to
-// content" skips to, and without it the only way past the header and its nav
-// is to walk them link by link, on every page, every visit. The app shell has
-// had one all along; the public pages, which are the ones strangers land on,
-// had none.
-//
-// Exactly one, not at least one: two mains is the same as none, since neither
-// is then "the content".
+// Exactly one main, not at least one: two is the same as none.
 test("every public page has one main landmark", async ({ page }) => {
   for (const path of ["/", "/qr-code-generator", "/pricing", "/roadmap", "/privacy", "/terms"]) {
     await page.goto(path);
-    // The header renders before the page chunk, so wait for the page itself.
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
     await expect(page.getByRole("main"), `main landmark on ${path}`).toHaveCount(1);
   }
 });
 
-// A stranger has no session, so asking /user who they are could only ever come
-// back 401, and the browser logs every one of those as a page error. First
-// visit to the homepage, which is the visit that matters most, opened the
-// console on an error. The header still has to come out right, which is the
-// second half of this test: skipping the request must not make a signed-out
-// visitor look signed in.
+// A stranger has no session, so /user could only 401 and log a page error.
+// Skipping the request must not make a signed-out visitor look signed in.
 test("a first visit does not ask who it is", async ({ page }) => {
   const userCalls: string[] = [];
   page.on("request", (r) => {
@@ -598,19 +487,16 @@ test("a first visit does not ask who it is", async ({ page }) => {
 
   await page.goto("/");
   await expect(page.locator("header").getByRole("link", { name: "Sign up" })).toBeVisible();
-  // The header paints before the rest of the page has even mounted, so
-  // asserting here caught nothing: the first version of this test passed
-  // against a build that still made the call. Every section has to have
-  // mounted, down to the analytics cards. Waiting for network
-  // idle is wrong here: product analytics can keep an unrelated request open.
+  // The header paints before the page mounts, so asserting there passed against
+  // a build that still made the call: wait for every section. Not network idle:
+  // product analytics can keep an unrelated request open.
   await openTourAnalytics(page);
 
   expect(userCalls, "a browser that was never signed in has nothing to ask").toEqual([]);
 });
 
-// The charts bundle is 117 KB, the largest single thing the app has. The
-// homepage drew one chart with it once; its analytics cards are plain markup
-// now, so a visitor who reads the whole page never downloads it.
+// The charts bundle is 117 KB: a visitor who reads the whole page must not
+// download it.
 test("the homepage never asks for the charts bundle", async ({ page }) => {
   const charts: string[] = [];
   page.on("request", (r) => {
@@ -623,10 +509,8 @@ test("the homepage never asks for the charts bundle", async ({ page }) => {
   expect(charts).toEqual([]);
 });
 
-// #137: a public page points at what describes it (RFC 8288), so an agent
-// that fetches one learns where the machine-readable copy lives instead of
-// guessing at well-known paths. Only the pages we describe carry it: the app
-// behind the login wants no such traffic.
+// #137: a public page points at its machine-readable copy (RFC 8288). The app
+// behind the login does not.
 test("public pages point at their machine-readable description", async ({ request }) => {
   for (const path of ["/", "/pricing", "/qr-code-generator", "/privacy", "/terms"]) {
     const res = await request.get(path);
@@ -640,8 +524,6 @@ test("public pages point at their machine-readable description", async ({ reques
   expect(dashboard.headers()["link"] ?? "").toBe("");
 });
 
-// A keyboard user's first Tab on the homepage lands on a way past the header,
-// and following it puts them in the main landmark rather than on the nav.
 test("the homepage's first Tab is a skip link into main", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
@@ -656,9 +538,6 @@ test("the homepage's first Tab is a skip link into main", async ({ page }) => {
   await expect(page.getByRole("main")).toHaveAttribute("id", "main");
 });
 
-// The Hop mark sits next to the name in the header and the footer. The mark is
-// decoration, so the link still reads as the bare name to a screen reader and
-// to every test that finds it by "rdyrct".
 test("header and footer carry the logo, named by the word alone", async ({ page }) => {
   await page.goto("/");
 

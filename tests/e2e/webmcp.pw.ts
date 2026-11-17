@@ -11,7 +11,6 @@ declare global {
   }
 }
 
-/** Installs the browser API before the app runs, as a supporting browser does. */
 async function supportWebMcp(page: Page) {
   await page.addInitScript(() => {
     const tools: Window["webMcpTools"] = [];
@@ -66,8 +65,7 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
     page.getByRole("img", { name: /QR code for https:\/\/example.com\/agent-qr/ }),
   ).toBeVisible();
 
-  // An agent cannot read a browser file download, so the image must come back
-  // inline as a data URL it can show or attach.
+  // An agent cannot read a browser download, so the image must come back inline as a data URL.
   const image = await page.evaluate(async () => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "get_qr_code");
     return tool?.execute({ format: "png" }, { signal: new AbortController().signal });
@@ -183,8 +181,6 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   expect(created).toMatch(/Created rdyr\.cc\//);
   expect(windowTextLength(created)).toBeLessThanOrEqual(1_500);
   await expect(page).toHaveURL(/\/links$/);
-  // The table splits a destination into host and path; the full URL is the
-  // cell's link target.
   await expect(page.locator(`a[href="${destination}"]`)).toBeVisible();
 
   const found = await page.evaluate(async () => {

@@ -8,10 +8,6 @@ import { readableUrl } from "../lib/display-url";
 import type { LinkStats } from "@/shared/types";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 
-/** Every other address that still leads to this link: aliases and the 48h
- * one a rename leaves behind. Nothing at all when there are none. An
- * address on the link's own host shows only its slug; the host is in the
- * page header, and repeating it pushed the slugs out of line. */
 function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string; url: string }) {
   const host = new URL(url).host;
   const toast = useToast();
@@ -42,9 +38,6 @@ function OtherAddresses({ orgId, linkId, url }: { orgId: string; linkId: string;
   );
 }
 
-/** One line under a link's title: where it goes, and where else it answers.
- * Nothing more: who made it and its last click were noise on a page about
- * its numbers. */
 export function LinkFacts({ orgId, stats: s }: { orgId: string; stats: LinkStats }) {
   return (
     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">

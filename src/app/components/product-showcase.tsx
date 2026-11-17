@@ -1,13 +1,3 @@
-/**
- * The app itself, right under the hero: three real screenshots behind a
- * segmented control, in the visitor's theme, with a phone-sized set below
- * 640px. The tabs advance on their own every few seconds until the visitor
- * picks one, hovers or focuses the section, or asked for less motion.
- *
- * The screenshots are taken from the seeded dev data by
- * scripts/showcase-shots.ts. Only the pictures for the current theme and
- * screen size are fetched (the others stay display:none and lazy).
- */
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from "react";
 import type { EdgeLightProps } from "./hero-gpu-effects";
 import { ChartIcon, GridIcon, LinkIcon } from "../ui/nav-icons";
@@ -44,7 +34,6 @@ const VIEWS = [
   },
 ] as const;
 
-/** How long each view stays before the next, when nobody has chosen one. */
 const ADVANCE_MS = 7000;
 const FRAME_RADIUS = 18;
 
@@ -65,8 +54,7 @@ export function ProductShowcase() {
   return (
     <section
       aria-label="The rdyrct app"
-      // Clips the canvas light at the screen edge, not at the column: the negative
-      // margin cancels page-column padding (1.5rem) so the glow reaches the sides.
+      // Clips the glow at the screen edge: the negative margin cancels the column's 1.5rem padding.
       className="relative -mx-6 px-6 pt-4 pb-6 [overflow-x:clip] md:pt-8"
       onPointerEnter={() => setHeld(true)}
       onPointerLeave={() => setHeld(false)}
@@ -89,8 +77,6 @@ export function ProductShowcase() {
   );
 }
 
-/** The segmented control. The current tab carries a line that fills while
- *  the views advance on their own. */
 function ShowcaseTabs({
   index,
   rotating,
@@ -136,8 +122,6 @@ function ShowcaseTabs({
   );
 }
 
-/** The screenshots in their frame, with the glow behind, the fade into the
- *  page below, and (where WebGPU exists) the light along the edge. */
 function ShowcaseFrame({ index, lit }: { index: number; lit: boolean }) {
   const frame = useRef<HTMLDivElement>(null);
   const view = VIEWS[index] ?? VIEWS[0];
@@ -180,8 +164,6 @@ function ShowcaseFrame({ index, lit }: { index: number; lit: boolean }) {
   );
 }
 
-/** One view's screenshots: dark and light, phone and desktop. CSS shows the
- *  one that matches; the rest are lazy and display:none, so never fetched. */
 function ShowcaseImage({ name, label }: { name: string; label: string }) {
   return (
     <>

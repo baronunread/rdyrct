@@ -1,14 +1,5 @@
-/**
- * The landing page's two WebGPU effects, written with TypeGPU: a slow wash
- * of the brand colours behind the hero, and a light along the edge of the
- * product screenshot. Decoration only. Nothing here is loaded unless the
- * browser has WebGPU (components/hero-backdrop.tsx decides), and a browser
- * without it simply shows the page without them.
- *
- * The shaders are raw WGSL inside TypeGPU's typed shells, so no build plugin
- * is needed. One GPU device serves both, and each loop pauses while its
- * canvas is off screen or the tab is hidden.
- */
+// Decoration only. The shaders are raw WGSL inside TypeGPU's typed shells, so no build
+// plugin is needed. Each loop pauses while its canvas is off screen or the tab is hidden.
 import tgpu, { common, d, type TgpuRoot } from "typegpu";
 import { currentTheme } from "./theme";
 
@@ -21,7 +12,6 @@ function gpuRoot(): Promise<TgpuRoot> {
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dark = () => (currentTheme() === "dark" ? 1 : 0);
 
-/** Keeps the drawing buffer at the canvas's size, at most 2x density. */
 function fit(canvas: HTMLCanvasElement): number {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.round(canvas.clientWidth * dpr);
@@ -33,8 +23,6 @@ function fit(canvas: HTMLCanvasElement): number {
   return dpr;
 }
 
-/** Runs `draw` once a frame while `canvas` is on screen and the tab is
- *  visible, or once if the visitor asked for less motion. Returns stop. */
 function loop(canvas: HTMLCanvasElement, draw: (now: number) => void): () => void {
   let visible = true;
   let frame = 0;
@@ -79,11 +67,6 @@ const BackdropParams = d.struct({
   dpr: d.f32,
 });
 
-/**
- * The hero's background: three soft blobs of lavender, pink and violet,
- * pushed around by noise so slowly that it reads as still at a glance. It
- * thins out behind the headline, at both sides and towards the bottom.
- */
 export async function startHeroBackdrop(
   canvas: HTMLCanvasElement,
   title: HTMLElement,
@@ -155,16 +138,8 @@ const EdgeParams = d.struct({
   dpr: d.f32,
 });
 
-/**
- * A light along the edge of the screenshot frame. At rest it sits on the top
- * edge and moves along it as the frame scrolls into view; under the pointer
- * a second light follows the cursor. The two cross-fade rather than one
- * light travelling between them, which would cross the frame's middle
- * where it shows nothing and seem to jump.
- *
- * `canvas` overhangs the frame by `inset` px on every side, so the halo
- * outside the edge has somewhere to draw.
- */
+// The two lights cross-fade rather than one travelling between them, which would cross
+// the frame's middle where it shows nothing and seem to jump.
 export async function startEdgeLight(
   canvas: HTMLCanvasElement,
   frame: HTMLElement,
@@ -234,11 +209,6 @@ export async function startEdgeLight(
 const within = (p: { x: number; y: number }, r: DOMRect) =>
   p.x > r.left && p.x < r.right && p.y > r.top && p.y < r.bottom;
 
-/**
- * Where the edge light under the pointer is, in the canvas's pixels, and how
- * strongly it shows. It eases towards the cursor while the cursor is over
- * the frame, and fades out where it was once the cursor leaves.
- */
 function cursorLight() {
   const pointer = { x: -1e4, y: -1e4 };
   const onMove = (event: PointerEvent) => {

@@ -10,7 +10,6 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
 
   await page.getByRole("link", { name: "API" }).click();
   await expect(page.getByRole("heading", { name: "API" })).toBeVisible();
-  // "API keys" is the default tab, so no click needed to land on it.
 
   await page.getByRole("button", { name: "Create key" }).click();
   const dialog = page.getByRole("dialog", { name: "New API key" });
@@ -23,14 +22,11 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
   if (!key) throw new Error("Minted key was never shown");
   expect(key).toMatch(/^rdyrct_live_/);
 
-  // A key is not only for MCP: the dialog offers the key itself, nothing
-  // that assumes an MCP client.
   await expect(page.getByRole("button", { name: "Copy key" })).toBeVisible();
   await expect(page.getByRole("dialog").getByRole("button", { name: /MCP/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("row", { name: /Playwright key/ })).toBeVisible();
-  // The reference opens beside the app, from the tab row.
   await expect(page.getByRole("link", { name: /Docs/ })).toHaveAttribute("target", "_blank");
 
   const mcpHeaders = (bearer: string) => ({

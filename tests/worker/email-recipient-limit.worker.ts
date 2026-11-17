@@ -15,12 +15,9 @@ import type { JsonValue } from "../../src/shared/types";
 
 const RESET_PATH = "/api/auth/email-otp/request-password-reset";
 
-/**
- * One password-reset request. `callerIp` fills cf-connecting-ip, which is
- * the only input to the per-caller key: without it every request in a test
- * looks like the same caller, and a limiter that keyed on the caller by
- * mistake would pass the distributed-caller cases below.
- */
+// `callerIp` fills cf-connecting-ip, the only input to the per-caller key.
+// Without it every request looks like one caller, and a limiter keyed on the
+// caller by mistake would pass the distributed-caller cases below.
 async function requestReset(
   testEnv: Env,
   email: JsonValue,
@@ -81,10 +78,8 @@ describe("recipient-keyed email rate limit (#50)", () => {
       }),
     );
 
-    // One recipient, two callers. Recording both budgets' keys is what makes
-    // this an assertion rather than a coincidence: the callers have to come
-    // out different for "the recipient key is the same anyway" to mean
-    // anything.
+    // The callers' keys have to differ for "the recipient key is the same
+    // anyway" to mean anything.
     await requestReset(testEnv, "victim@example.com", "203.0.113.7");
     await requestReset(testEnv, "VICTIM@Example.com  ", "198.51.100.4");
 
@@ -95,9 +90,6 @@ describe("recipient-keyed email rate limit (#50)", () => {
   });
 
   it("stops a second caller once the recipient's budget is gone", async () => {
-    // The behaviour the key assertion above implies, spelled out: a fresh
-    // caller with its own untouched per-caller budget still gets refused,
-    // because the budget that ran out belongs to the address.
     const spent = new Set<string>();
     const recipientBudgetOfOne: RateLimit = {
       limit: async (options) => {
@@ -158,9 +150,8 @@ describe("recipient-keyed email rate limit (#50)", () => {
   });
 
   it("leaves the body readable for the auth handler downstream", async () => {
-    // The limiter clones the request to look at `email`. If it consumed the
-    // original stream instead, BetterAuth would receive an empty body and
-    // this would not reach its "user not found" path at all.
+    // The limiter clones the request to read `email`; consuming the original
+    // would hand BetterAuth an empty body and skip its "user not found" path.
     const res = await requestReset(authEnv(), "nobody@example.com");
 
     expect(res.status).toBeLessThan(500);

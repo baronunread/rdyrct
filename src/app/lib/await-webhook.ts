@@ -4,18 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 const WEBHOOK_POLL_MS = 2000;
 const WEBHOOK_POLL_TRIES = 5;
 
-/**
- * Waits for a Polar webhook to land, by asking the server again.
- *
- * Polar sends the browser back before it delivers the webhook, so both
- * returns (from checkout and from the subscription portal) read the row as it
- * was. One refetch races the delivery, so keep asking while `waiting` until
- * `arrived`, then give up rather than poll forever.
- *
- * The callbacks live in a ref: they close over state setters that change
- * every render, and re-running the interval on each of those would reset the
- * try count and make "give up" unreachable.
- */
+// Polar sends the browser back before it delivers the webhook, so one refetch races the
+// delivery. Callbacks live in a ref: re-running the interval each render would reset the try count.
 export function useAwaitWebhook({
   waiting,
   arrived,

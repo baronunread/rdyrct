@@ -8,9 +8,6 @@ import {
   type StateInput,
 } from "./link-state";
 
-/** Danger for what stops or condemns a link, butter for caution, mint for a
- * checked link, muted for one nobody has looked at. The word always rides
- * with the dot. */
 const TONE = {
   blocked: "bad",
   suspended: "bad",
@@ -21,9 +18,7 @@ const TONE = {
   unscored: "quiet",
 } as const satisfies Record<LinkState, StateTone>;
 
-/** The row's worst state, as a dot and a word. A button so a keyboard can
- * reach its tooltip; its accessible name is the detail, for a screen reader
- * that skips tooltips (the detail opens with the state: "Suspended: …"). */
+/** Its accessible name is the detail, for a screen reader that skips tooltips. */
 export function LinkStateBadge({ link }: { link: StateInput }) {
   const state = linkState(link);
   const detail = linkStateDetail(link);

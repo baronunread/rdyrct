@@ -8,15 +8,12 @@ import { orgPlan } from "../plan";
 import { uid, qrLogoUrl, QR_LOGO_FILE_RE } from "../util";
 import { QR_LOGO_MAX_BYTES } from "@/shared/types";
 
-// Mounted at /api/orgs/:orgId/qr-logo. Both upload and serving are gated to
-// org members: a logo is only ever fetched by the signed-in app (QR previews
-// and downloads bake the image in client-side, nothing fetches it later).
+// Gated to org members: QR previews and downloads bake the image in client-side,
+// so nothing else ever fetches a logo.
 export const qrLogoRoutes = new Hono<AppEnv>();
 
-// A generous margin over QR_LOGO_MAX_BYTES (the real business limit,
-// enforced below once the org's plan is known): this is just a coarse,
-// cheap-to-check ceiling so an oversized upload is rejected before the
-// handler even runs (see issue #19).
+// Coarse, cheap ceiling so an oversized upload is rejected before the handler
+// runs (#19). The real limit is QR_LOGO_MAX_BYTES, enforced below.
 qrLogoRoutes.use(
   "*",
   bodyLimit({
@@ -44,8 +41,6 @@ function isSvg(body: ArrayBuffer) {
   return /^\s*(?:<\?xml[^>]*\?>\s*)?<svg(?:\s|>)/i.test(text);
 }
 
-/** Validates an uploaded logo's declared type, size, and that its bytes
- * actually match that type. Returns the file extension to store it under. */
 function validateQrLogoBody(type: string, body: ArrayBuffer): string {
   const ext = lookup(EXT_BY_TYPE, type);
   if (!ext)
@@ -60,22 +55,13 @@ function validateQrLogoBody(type: string, body: ArrayBuffer): string {
   return ext;
 }
 
-/** Logos uploaded but not yet saved anywhere, on top of one per link: the
- * orphan sweep removes those after a day. */
 const QR_LOGO_UNSAVED_HEADROOM = 100;
 
-/**
- * The most logo objects one org may keep in R2 (#18): one for every link it
- * may have, one for its own default, and a day of uploads nobody saved. Each
- * upload is a new object, so without it a member looping uploads wrote
- * objects without end until the daily sweep.
- */
+/** Most logo objects one org may keep in R2 (#18). Each upload is a new object, so without it a looping member wrote objects until the daily sweep. */
 export function qrLogoCap(limits: { links: number }): number {
   return limits.links + 1 + QR_LOGO_UNSAVED_HEADROOM;
 }
 
-/** Whether the org already keeps `cap` objects under its prefix. Stops
- * listing once it has seen that many, so a small org costs one list call. */
 async function qrLogoCapReached(bucket: R2Bucket, orgId: string, cap: number): Promise<boolean> {
   let seen = 0;
   let cursor: string | undefined;
@@ -88,9 +74,7 @@ async function qrLogoCapReached(bucket: R2Bucket, orgId: string, cap: number): P
   }
 }
 
-/** Store an upload, then close the window between the route middleware's
- * state read and R2. If teardown won that race, remove the new object before
- * reporting the refusal. */
+/** If teardown won the race with the middleware's state read, remove the new object. */
 export async function putQrLogoIfOrgWritable(
   db: DB,
   bucket: R2Bucket,
@@ -106,7 +90,6 @@ export async function putQrLogoIfOrgWritable(
 }
 
 qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
-  // A logo is QR customization: a paid feature.
   const { limits } = await orgPlan(c.var.db, c.req.param("orgId")!);
   if (!limits.qrCustom)
     throw new HTTPException(402, {
@@ -132,10 +115,9 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   return c.json({ url: qrLogoUrl(orgId, file) }, 201);
 });
 
-// Logo objects are immutable (a new upload gets a new key), so the browser
-// may cache them forever; `private` keeps them out of shared caches. The CSP
-// header keeps an SVG logo from running scripts if the URL is opened directly.
-// Unauthorized access always returns 404 so the URL leaks nothing.
+// Immutable (a new upload gets a new key); `private` keeps them out of shared caches.
+// The CSP header stops an SVG logo running scripts if its URL is opened directly.
+// Unauthorized access returns 404 so the URL leaks nothing.
 qrLogoRoutes.get("/:file", async (c) => {
   const log = c.get("log");
   const file = c.req.param("file");

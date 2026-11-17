@@ -1,15 +1,5 @@
-/**
- * The platform-admin figures that follow the range the Usage page picks, and
- * the per-row extras the Organizations and Users lists carry.
- *
- * Clicks read the rollups (#26), never raw `clicks`: a range costs the
- * link-days in it rather than the clicks, and both are kept 400 days
- * (rollups.ts, ROLLUP_RETENTION_DAYS, and the raw sweep in scheduled()), so
- * the longest range here, 90 days, is always whole.
- *
- * Windows are whole UTC days, the same days fillSeries draws, so a total is
- * always the sum of its bars.
- */
+// Clicks read the rollups (#26), never raw clicks; both are kept 400 days, so the longest range, 90 days, is always whole.
+// Windows are whole UTC days, the same days fillSeries draws, so a total is the sum of its bars.
 import { and, desc, eq, gte, isNotNull, isNull, sql, type SQLWrapper } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB } from "./env";
@@ -19,7 +9,6 @@ import { parseOver } from "./reconcile";
 import { avatarUrl } from "./storage";
 import { isOverLimit, orgPlanOf, type AdminUsage, type OrgPlan } from "@/shared/types";
 
-/** The ranges the Usage page offers; anything else reads as 30. */
 const USAGE_RANGES = [7, 30, 90] as const;
 type UsageRange = (typeof USAGE_RANGES)[number];
 
@@ -27,9 +16,7 @@ export function usageRange(param: string | undefined): UsageRange {
   return USAGE_RANGES.find((days) => String(days) === param) ?? 30;
 }
 
-// An org's effective plan is its owner's plan (billing is per-user). A single
-// correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
-// so it must stay quoted here.
+// Quote user: it is a SQL keyword.
 export const ownerPlan = sql<OrgPlan>`coalesce((
   select "user".plan from org_members
   join "user" on "user".id = org_members.user_id
@@ -37,29 +24,19 @@ export const ownerPlan = sql<OrgPlan>`coalesce((
   limit 1
 ), 'free')`;
 
-/**
- * Leaves out orgs a ban disabled (`orgs.disabled_at`): a spam campaign's
- * clicks are not usage, and counting them made the platform figures say the
- * product was busier than it is. Their rows stay until the purge deletes the
- * org (purgeBannedOrgs); the anomaly checks and each org's own row still see
- * them.
- */
+// Leaves out orgs a ban disabled: a spam campaign clicks are not usage. Anomaly checks and each org own row still see them.
 export function fromLiveOrg(orgId: SQLWrapper) {
   return sql`${orgId} not in (select id from orgs where disabled_at is not null)`;
 }
 
-/** People a ban has not removed: the platform figures count only them. */
 export const liveUser = eq(schema.user.banned, false);
-/** Orgs a ban has not disabled. */
 export const liveOrg = isNull(schema.orgs.disabledAt);
 
 const daily = schema.clickDaily;
 const dims = schema.clickDailyDims;
 const clickSum = sql<number>`sum(${daily.clicks})`;
-// Unqualified: each query using it reads one table.
 const createdDay = sql<string>`date(created_at / 1000, 'unixepoch')`;
 
-/** The fields of the usage answer that follow `days`. */
 type RangeFigures = Pick<
   AdminUsage,
   | "days"
@@ -152,11 +129,7 @@ export async function usageForRange(db: DB, days: UsageRange): Promise<RangeFigu
   };
 }
 
-/* ─────────── organizations list ─────────── */
-
-/** The columns the org list adds for an org's plan state. Literal `orgs.id`
- * inside the subqueries: interpolated columns render unqualified there and
- * bind to the wrong table. */
+// Literal orgs.id inside the subqueries: interpolated columns render unqualified there and bind to the wrong table.
 export function orgPlanStateColumns(since30: string) {
   return {
     clicks: sql<number>`(
@@ -175,13 +148,7 @@ export function orgPlanStateColumns(since30: string) {
   };
 }
 
-/**
- * Over plan, when the grace ends, and when a locked domain stopped serving.
- *
- * A locked domain serves until the org's grace ends, or from the moment it
- * was locked when there is no grace (storage.ts, `servesUntil`), so that is
- * the moment it stopped, once it has passed.
- */
+// A locked domain serves until the org grace ends, or from the moment it was locked when there is no grace (storage.ts servesUntil).
 export function orgPlanState(
   row: {
     overJson: string | null;
@@ -197,10 +164,6 @@ export function orgPlanState(
   return { overPlan, graceEndsAt, domainStoppedAt: stops !== null && stops <= now ? stops : null };
 }
 
-/* ─────────── users list ─────────── */
-
-/** Links each person made, across every org, in one pass over `links`
- * rather than a count per user. */
 export async function linksByCreator(db: DB): Promise<Map<string, number>> {
   const rows = await db
     .select({ userId: schema.links.createdBy, n: sql<number>`count(*)` })
@@ -210,11 +173,7 @@ export async function linksByCreator(db: DB): Promise<Map<string, number>> {
   return new Map(rows.flatMap((r) => (r.userId ? [[r.userId, r.n] as const] : [])));
 }
 
-/** Where an admin's browser fetches somebody's picture, or null for the
- * generated one. `user.image` holds the owner's own serving URL
- * (`/api/user/avatar?v=…`), which answers only that account; the admin
- * route serves the same object by id, and keeps the version stamp so a new
- * upload is a new URL here too. */
+// user.image holds the owner serving URL, which answers only that account; the admin route serves the same object by id and keeps the version stamp.
 export function adminAvatarUrl(userId: string, image: string | null): string | null {
   if (!image?.startsWith(avatarUrl())) return null;
   const version = image.slice(avatarUrl().length);

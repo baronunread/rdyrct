@@ -1,14 +1,3 @@
-/**
- * The QR editor's rows, shared by the link editor's QR view and the
- * organization's QR defaults (rdyrct-design, "Creating is a dialog": "QR
- * defaults on Organization use the same editor rows").
- *
- * Each row is a setting: its name and current value on the left, the control
- * on the right. Shapes are small drawings of the shape, colours are chips
- * that open a picker, the logo is a file with its size. Callers
- * hand in what the code renders with (already resolved over any defaults)
- * and get back a patch in the link/org field names.
- */
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Button } from "../ui/button";
 import { IconCheck, IconAlertTriangle, IconX } from "@tabler/icons-react";
@@ -46,11 +35,9 @@ const CORNER_NAMES = {
   classy: "Classy",
 } satisfies Record<CornerStyle, string>;
 
-/** A small action in a row's second line (Replace, Remove). */
 const TEXT_ACTION =
   "cursor-pointer text-muted underline decoration-from-font underline-offset-2 [@media(hover:hover)]:hover:text-text";
 
-/** The four logo sizes, as the share of the code the logo covers. */
 const LOGO_SIZES = [
   { id: "0.25", label: "S" },
   { id: "0.35", label: "M" },
@@ -59,7 +46,6 @@ const LOGO_SIZES = [
 ] as const;
 type LogoSizeId = (typeof LOGO_SIZES)[number]["id"];
 
-/** The nearest of the four sizes, for a value saved before there were four. */
 function logoSizeId(size: number): LogoSizeId {
   let best: LogoSizeId = "0.35";
   for (const s of LOGO_SIZES) {
@@ -68,8 +54,6 @@ function logoSizeId(size: number): LogoSizeId {
   return best;
 }
 
-/** A rect path with its own radius per corner: top left, top right, bottom
- * right, bottom left. */
 function roundedRect(
   x: number,
   y: number,
@@ -98,7 +82,6 @@ function dotPath(style: DotStyle, x: number, y: number, z: number) {
   }
 }
 
-/** Five modules in an X, drawn in the style: enough to tell them apart. */
 function DotGlyph({ style }: { style: DotStyle }) {
   const cells = [
     [0, 0],
@@ -114,7 +97,6 @@ function DotGlyph({ style }: { style: DotStyle }) {
   );
 }
 
-/** A finder pattern (the "eye") in the style. */
 function CornerGlyph({ style }: { style: CornerStyle }) {
   const radii = {
     square: [0, 0],
@@ -140,8 +122,6 @@ function CornerGlyph({ style }: { style: CornerStyle }) {
   );
 }
 
-/** Mutually exclusive icon tiles, each named for a screen reader and on
- * hover. Radii nest: a 10px track, 3px of padding, 7px tiles. */
 function IconPicker<V extends string>({
   label,
   options,
@@ -187,8 +167,6 @@ function IconPicker<V extends string>({
   );
 }
 
-/** One row: the name and what it is set to on the left, the control on the
- * right. On a narrow screen the control wraps under the name. */
 function QrRow({
   title,
   sub,
@@ -221,10 +199,7 @@ function QrRow({
   );
 }
 
-/** The logo row: which file it is, with Replace and Remove, and its size;
- * or an Upload button when there is none. A drop on the row sets it. No
- * on/off switch: switching off threw the file away, so switching back on
- * meant uploading it again. */
+/** No on/off switch: switching off threw the file away, so switching back on meant uploading it again. */
 function LogoRow({
   logo,
   logoSize,
@@ -236,25 +211,18 @@ function LogoRow({
 }: {
   logo: string;
   logoSize: number;
-  /** Read the picked image in the browser and never upload it. */
   localOnly?: boolean;
-  /** What to call the logo in the row: a file name, or whose it is. */
   name: string;
-  /** Why the logo can't be removed here, when it can't. */
   lockedOn?: string;
   disabled?: boolean;
   onChange: (patch: QrPatch, fileName?: string) => void;
 }) {
-  // A logo kept in the browser needs no org, and the free generator has a
-  // visitor with no account to ask about.
   const { org } = useCurrentOrg(!localOnly);
   const toast = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Where a picked file goes: kept in the browser, or the org's bucket once
-  // the org is known.
   const prepare = localOnly
     ? readPreparedQrLogo
     : org && ((file: File) => uploadPreparedQrLogo(org.id, file));
@@ -357,12 +325,6 @@ function LogoRow({
   );
 }
 
-/**
- * Every QR setting, as rows.
- *
- * `inherited` marks the values that come from the organization rather than
- * the link itself, so the row can say so.
- */
 export function QrEditorRows({
   look,
   onChange,
@@ -375,11 +337,9 @@ export function QrEditorRows({
   look: QrLookValue;
   onChange: (patch: QrPatch, fileName?: string) => void;
   inherited?: Partial<Record<"dot" | "corner", boolean>>;
-  /** The logo's file name, when this session knows it. */
   logoName?: string;
   logoLockedOn?: string;
   disabled?: boolean;
-  /** A picked logo stays in the browser: the preview only, no upload. */
   localLogo?: boolean;
 }) {
   const seeThrough = hasTransparency(look.bg);
@@ -462,9 +422,7 @@ export function QrEditorRows({
   );
 }
 
-/** A see-through background: a small checkbox under "Colours", where the
- * row has room on every screen (beside the chips it pushed them onto two
- * lines on a phone). */
+/** A checkbox under "Colours": beside the chips it pushed them onto two lines on a phone. */
 function TransparentToggle({
   on,
   onChange,
@@ -488,13 +446,11 @@ function TransparentToggle({
   );
 }
 
-/** "Strong contrast, scans well", or what is wrong with the colours. */
 export function QrContrastNote({
   look,
   short,
 }: {
   look: Pick<QrLookValue, "dotColor" | "cornerColor" | "bg">;
-  /** Two words, for the narrower preview on Organization. */
   short?: boolean;
 }) {
   const { level } = qrContrast({

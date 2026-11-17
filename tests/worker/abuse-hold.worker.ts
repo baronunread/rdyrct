@@ -21,11 +21,7 @@ import {
 } from "./support";
 import type { ApiInit } from "./support";
 
-/**
- * What puts links on hold, and what an admin's abuse decision does (the
- * 2026-10-18 follow-up): a scam-shaped destination is created on hold, a
- * blocked host cannot be linked. Bans have their own spec (ban.worker.ts).
- */
+// Bans have their own spec (ban.worker.ts).
 
 const SCAM = "https://phonepewheel-production.up.railway.app/";
 
@@ -59,9 +55,8 @@ beforeEach(async () => {
   await applyTestMigrations();
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
-    // An answer the scorer reads as "no verdict", not a throw: the scoring
-    // runs after the response, and a rejection landing once the test has
-    // ended is an unhandled error.
+    // "No verdict", not a throw: scoring runs after the response, and a late
+    // rejection is an unhandled error.
     if (url.startsWith("https://security.cloudflare-dns.com"))
       return new Response("", { status: 503 });
     return realFetch(input, init);
@@ -82,7 +77,6 @@ describe("a scam-shaped destination", () => {
 
     expect(res.status).toBe(201);
     await syncKv(link.slug);
-    // Held (#344): the key answers "under review" and has no destination in it.
     expect(await env.LINKS.get(`slug:${link.slug}`)).toBe(
       JSON.stringify({ held: true, linkId: link.id, expiresAt: null }),
     );
@@ -242,7 +236,6 @@ describe("the anonymous shortener", () => {
 
     expect(link?.suspendedAt).not.toBeNull();
     expect(link?.suspendReason).toContain("phonepe");
-    // And KV serves the hold, not the plain redirect the anonymous link had.
     expect(await env.LINKS.get("slug:stok1", "json")).toMatchObject({ held: true });
     mail.restore();
   });

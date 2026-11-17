@@ -1,10 +1,5 @@
 import { cn } from "./cn";
 
-/**
- * Inline busy indicator for in-flight buttons: sized to sit where the label
- * was, drawn in the button's own text color. Page-level loading states use
- * the skeletons in `components/skeletons.tsx`, not this.
- */
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
@@ -17,12 +12,6 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-/**
- * Wraps a button label and transitions it to a spinner (or `icon`, e.g. a
- * checkmark once an action succeeds) on busy: the text blurs then shrinks
- * away while the replacement fades in a moment later. The text stays in the
- * DOM (invisible during busy) so the button does not shrink.
- */
 export function BusyContent({
   busy,
   icon,

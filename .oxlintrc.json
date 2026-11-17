@@ -1,8 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": ["dist/", ".wrangler/", ".agents/**", ".claude/**", ".oxlint/anti-slop/**"],
-  "jsPlugins": [{ "name": "anti-slop", "specifier": "./.oxlint/anti-slop/index.ts" }],
+  "jsPlugins": [
+    { "name": "anti-slop", "specifier": "./.oxlint/anti-slop/index.ts" },
+    { "name": "rdyrct", "specifier": "./.oxlint/rdyrct/index.ts" }
+  ],
   "rules": {
+    "rdyrct/max-comment-lines": "error",
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-known-value-widening": "error",
@@ -23,6 +27,7 @@
     {
       "files": [".oxlint/anti-slop/**"],
       "rules": {
+        "rdyrct/max-comment-lines": "off",
         "anti-slop/no-chained-type-assertions": "off",
         "anti-slop/no-conditional-empty-object-spread": "off",
         "anti-slop/no-known-value-widening": "off",

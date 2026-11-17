@@ -3,32 +3,15 @@ import type { DB, Env } from "./env";
 import type { ClickMessage } from "./clicks";
 
 /**
- * Clicks dropped past a plan's monthly cap, kept as a count for the abuse
- * sweep (#387).
- *
- * Past its cap an org's clicks are not stored (withinClickCaps), so anything
- * that counts rows in `clicks` reads zero for that org until the 1st. The
- * abuse checks (abuse.ts: the 24-hour ceiling, the one-hour burst, the
- * busy new link) would go blind exactly when an org's traffic is largest. So
- * the flush counts what it drops into `click_overflow`, per link per minute,
- * and the checks below add it to what `clicks` holds.
- *
- * Cost: one upsert per link-minute in a flush (a flush is ten seconds of
- * clicks), however many clicks it drops. A minute, not an hour, so the
- * sweep's windows still start within a minute of where they say: an
- * hour-wide bucket would let the one-hour burst check count two hours.
- *
- * Not deduped: a redelivered flush counts its dropped clicks again. That can
- * only overstate an org that is already past its cap, which is the side to
- * be wrong on for an abuse signal.
+ * Past its cap an org's clicks are not stored, so the abuse sweep would go blind when traffic
+ * is largest (#387). Not deduped: a redelivered flush can only overstate an org already past
+ * its cap, the safe side for an abuse signal.
  */
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
-/** Twice the longest window the sweep reads. */
 const KEEP_MS = 2 * DAY_MS;
 
-/** The upsert that counts `dropped`, or null when there is nothing to count. */
 export function overflowStatement(
   d1: D1Database,
   dropped: ClickMessage[],
@@ -48,13 +31,8 @@ export function overflowStatement(
     .bind(payload);
 }
 
-/** The first minute bucket that overlaps a window starting at `since`. */
 const fromMinute = (since: number) => since - (since % MINUTE_MS);
 
-/**
- * Every org with at least `min` redirects since `since`, and its count:
- * the clicks stored plus the clicks dropped past a cap.
- */
 export function redirectsByOrg(db: DB, since: number, min: number) {
   return db.all<{ orgId: string; n: number }>(sql`
     select org_id as orgId, sum(n) as n from (
@@ -67,10 +45,6 @@ export function redirectsByOrg(db: DB, since: number, min: number) {
     having sum(n) >= ${min}`);
 }
 
-/**
- * Every link made since `linksSince` with at least `min` redirects since
- * `since`, stored or dropped, with its org and its count.
- */
 export function newLinksWithRedirects(db: DB, since: number, linksSince: number, min: number) {
   return db.all<{ orgId: string; linkId: string; n: number }>(sql`
     select org_id as orgId, link_id as linkId, sum(n) as n from (
@@ -88,8 +62,6 @@ export function newLinksWithRedirects(db: DB, since: number, linksSince: number,
     having sum(n) >= ${min}`);
 }
 
-/** The org's link with the most redirects since `since`, stored or dropped,
- * or null. */
 export async function busiestLinkSince(
   db: DB,
   orgId: string,

@@ -1,15 +1,5 @@
-/**
- * Cross-org link moderation (#67).
- *
- * The screen somebody opens with an abuse report in front of them. It is
- * built around that: one search box that takes either a slug or a destination,
- * because those are the two things a report contains, and one action that
- * stops a link without touching anything else the organization owns.
- *
- * Anonymous links (#96) are listed here too rather than in a tab of their
- * own. A report naming a slug does not know which table it came from, and
- * two places to search is one place too many at 2am.
- */
+/** Cross-org link moderation (#67). Anonymous links (#96) are listed here too:
+ * a report naming a slug does not say which table it came from. */
 import { settle } from "../../lib/route-preload";
 import { useRef, useState } from "react";
 import { useScrollFade } from "../../ui/scroll-fade";
@@ -68,9 +58,6 @@ import { BusyContent, Spinner } from "../../ui/spinner";
 import { OverflowTip } from "@/app/ui/overflow-tip";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/** The two columns both tables open with. Destination has no width of its
- * own: every other column is sized, so it takes what is left, which is the
- * most room on the screen for the longest value in the row. */
 function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: Sort) => void }) {
   return (
     <>
@@ -80,13 +67,10 @@ function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: S
   );
 }
 
-/** Column widths both link tables share. The short columns are fixed, so a
- * badge or a date never takes room the destination needs. */
 const COL = {
   check: "w-11 pr-0",
   link: "w-[24%]",
   org: "w-[17%]",
-  // Fits the longest word, "Flagged by Google", with its dot.
   state: "w-40",
   reports: "w-[5.25rem] pl-2 text-right",
   clicks: "w-[4.5rem] pl-2 text-right",
@@ -94,19 +78,14 @@ const COL = {
   actions: "w-12 px-2",
 } as const;
 
-/** The id a mutation is currently working on, for the row that should show
- * itself as busy. */
 function pendingId(mutation: { isPending: boolean; variables?: string }): string | null {
   return mutation.isPending ? (mutation.variables ?? null) : null;
 }
 
-/** The same, for a mutation that takes the whole row. */
 function pendingLinkId(mutation: { isPending: boolean; variables?: AdminLinkRow }) {
   return pendingId({ isPending: mutation.isPending, variables: mutation.variables?.id });
 }
 
-/** What a row can be told to do. One type because the row, its menu, and the
- * table all pass the same five things down. */
 type RowActions = {
   selected: boolean;
   onSelect: (l: AdminLinkRow) => void;
@@ -119,8 +98,6 @@ type RowActions = {
   warning: boolean;
 };
 
-/** The actions menu both tables hang off a row: same trigger, same first
- * item, different endings. */
 function RowMenu({
   slug,
   destination,
@@ -129,15 +106,12 @@ function RowMenu({
 }: {
   slug: string;
   destination: string;
-  /** The row state in words, for a touch screen that cannot hover the badge. */
   note: string;
   children: React.ReactNode;
 }) {
   return (
     <Menu align="end" label={`Actions for ${slug}`} trigger={<RowMenuTrigger />}>
       <MenuNote>
-        {/* One fact a line: the tooltip joins them with " · ", which wraps
-            badly in a menu this narrow. */}
         {note.split(" · ").map((fact) => (
           <span key={fact} className="block">
             {fact}
@@ -153,9 +127,7 @@ function RowMenu({
   );
 }
 
-/** A search term and the page it resets. Typing narrows the results, so
- * paginate() would otherwise clamp you to the last page of a smaller set and
- * leave you wondering where everything went. */
+/** paginate() would otherwise clamp to the last page of a smaller result set. */
 function useTableSearch() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -166,8 +138,6 @@ function useTableSearch() {
   return { query, search, page, setPage };
 }
 
-/** The delete confirmation both tables raise. The consequence differs, so it
- * is the caller's to write. */
 function DeleteLinkDialog({
   link,
   pending,
@@ -198,9 +168,6 @@ function DeleteLinkDialog({
   );
 }
 
-/** The title names the link, "Suspend rdyrct.com/cbycdcr?", so nobody has to
- * read a second line to know which one they are about to stop. The last link
- * is kept while the dialog fades out, so the title does not change under it. */
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
   const named = useHeld(link);
   return (
@@ -209,15 +176,11 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
       onOpenChange={(open) => !open && onClose()}
       title={named ? `Suspend ${linkDisplayTitle(named.url)}?` : "Suspend this link?"}
     >
-      {/* Keyed so the next suspension starts from an empty, unmarked form. */}
       {link && <SuspendForm key={link.id} link={link} onClose={onClose} />}
     </Dialog>
   );
 }
 
-/** The reason is required, and the button still works without one: pressing
- * it marks the field and moves focus there instead of greying out with no
- * word as to why (rdyrct-design, "Submit stays enabled"). */
 function SuspendForm({ link, onClose }: { link: AdminLinkRow; onClose: () => void }) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -283,8 +246,6 @@ function SuspendForm({ link, onClose }: { link: AdminLinkRow; onClose: () => voi
   );
 }
 
-/** Put a warning page in front of a link, or take it off (#344). A suspended
- * link serves nothing, so there is nothing to warn about. */
 function WarnMenuItem({
   link,
   warning,
@@ -303,8 +264,6 @@ function WarnMenuItem({
   );
 }
 
-/** Open reports, as a count like Clicks. A dash rather than 0, so the rows
- * that have any stand out down the column. */
 function ReportsCell({ count }: { count: number }) {
   if (count === 0)
     return (
@@ -347,14 +306,10 @@ function LinkRow({
       </Td>
       <OverflowTip content={link.destination}>
         <Td className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0">
-          {/* https is the default, so it is the one scheme left unsaid; an
-            http:// destination keeps its scheme, which is worth seeing. */}
           {link.destination.replace(/^https:\/\//, "")}
         </Td>
       </OverflowTip>
       <Td className={`truncate ${PHONE.meta} max-sm:max-w-full max-sm:before:content-none`}>
-        {/* Straight to that organization's links, which is the next question
-            after "who owns this". */}
         <OverflowTip content={link.orgName}>
           <HrefLink
             href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
@@ -378,11 +333,6 @@ function LinkRow({
   );
 }
 
-/**
- * Suspend, restore, delete. A menu rather than a row of buttons, matching
- * every other table here, and because a destructive action sitting in the
- * open next to a date is one mis-click from an outage.
- */
 function LinkActions({
   link,
   onSuspend,
@@ -433,7 +383,6 @@ function LinksTable({
   onSelect,
   onSelectAll,
 }: {
-  /** Ticks for bulk restore, only where there is something to restore. */
   selectable: boolean;
   selectedIds: Set<string>;
   onSelect: (l: AdminLinkRow) => void;
@@ -450,17 +399,12 @@ function LinksTable({
   onWarn: (l: AdminLinkRow) => void;
   warningId: string | null;
 }) {
-  // Rows only: this sits below the real header and the real search box,
-  // and the page-level skeleton would draw a second one of each.
   if (isPending) return <TableSkeleton rows={6} testId="admin-links-rows-skeleton" />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No links match that.</p>;
 
   return (
-    // Fixed layout. In an auto-layout table a long destination sets the
-    // column width and pushes everything past the card, and `max-w` on the
-    // cell is ignored. The minimum fits the admin column on a laptop, so the
-    // actions menu is on screen there; narrower than that, the card scrolls.
+    // Fixed layout: in an auto-layout table a long destination sets the column width and pushes past the card, and `max-w` on the cell is ignored.
     <Table fixed minWidth={`sm:min-w-[48rem] ${PHONE.table}`}>
       <thead className={PHONE.head}>
         <tr>
@@ -525,14 +469,6 @@ function LinksTable({
   );
 }
 
-/** Links made on the landing page with no account. No org, no owner, and
- * they expire on their own, so deleting is the only action worth having. */
-/** The anonymous list itself. The owned table's columns in the same order,
- * so moving between the two tabs does not mean re-reading the header row.
- * An anonymous link has no organization and records no clicks; those cells
- * say so rather than being left out. Reports are not counted per anonymous
- * link, so that column is the one left out; the reports list shows them
- * (#488). */
 function AnonymousLinksTable({
   rows,
   isPending,
@@ -546,8 +482,6 @@ function AnonymousLinksTable({
   onSort: (s: Sort) => void;
   onDelete: (l: AdminAnonLinkRow) => void;
 }) {
-  // Rows only: this sits below the real header and the real search box,
-  // and the page-level skeleton would draw a second one of each.
   if (isPending) return <TableSkeleton rows={6} testId="admin-links-rows-skeleton" />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
@@ -556,8 +490,6 @@ function AnonymousLinksTable({
       <thead className={PHONE.head}>
         <tr>
           <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
-          {/* Always "none" here, so it gets a short column, not the owned
-              table's wide one. */}
           <Th className="w-28">Organization</Th>
           <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
           <Th className={COL.clicks}>Clicks</Th>
@@ -593,8 +525,6 @@ function AnonymousLinksTable({
                 {link.destination}
               </Td>
             </OverflowTip>
-            {/* Nobody owns it, and no click is recorded against it: both
-                    are the product boundary, not missing data. */}
             <Td className={`text-muted ${PHONE.hide}`}>none</Td>
             <Td className="pr-2 max-sm:order-3 max-sm:border-0 max-sm:p-0">
               <LinkStateBadge link={link} />
@@ -646,8 +576,6 @@ function AnonymousLinks() {
     onError: withErrorToast(toast),
   });
 
-  // Filtered here rather than on the server: the whole table is at most a
-  // day of anonymous links, so it is already small enough to hold.
   const term = query.trim().toLowerCase();
   const all = sortRows(
     (data ?? []).filter(
@@ -696,8 +624,6 @@ function AnonymousLinks() {
   );
 }
 
-/** The org a report landed on, the fact that it named an anonymous link, or
- * the fact that the address matched no link. */
 function ReportOrg({ report: r }: { report: AdminReportRow }) {
   if (!r.orgId && r.anonymous)
     return (
@@ -744,7 +670,6 @@ function ReportRow({
       <Td className={`truncate ${PHONE.meta} max-sm:before:content-none`}>
         <ReportOrg report={r} />
       </Td>
-      {/* The category a reporter picked: an attribute, so plain text. */}
       <Td className={`first-letter:uppercase ${PHONE.meta} max-sm:before:content-none`}>
         {r.reason}
       </Td>
@@ -772,8 +697,6 @@ function ReportRow({
   );
 }
 
-/** Open public reports. Newest first, with the way to the reported org's
- * links and a way to close one that needs nothing. */
 function Reports() {
   const { data, isPending } = useAdminReports();
   const toast = useToast();
@@ -795,9 +718,6 @@ function Reports() {
     <Table fixed minWidth={`sm:min-w-[56rem] ${PHONE.table}`}>
       <thead className={PHONE.head}>
         <tr>
-          {/* Note has no width: it is the free text, so it takes what the
-              sized columns leave. The last column fits the Dismiss button,
-              which a 6% column clipped behind the card's edge. */}
           <Th className="w-[14%]">Link</Th>
           <Th className={COL.org}>Organization</Th>
           <Th className="w-28">Reason</Th>
@@ -818,13 +738,6 @@ function Reports() {
   );
 }
 
-/**
- * Restore, delete and re-check, with the toasts they answer with.
- *
- * Out of the component because three mutations, their success messages and
- * the cache they all invalidate are one subject, and inline they were most
- * of what OwnedLinks appeared to be about.
- */
 function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -865,8 +778,6 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
     onError: withErrorToast(toast),
   });
 
-  /** No confirmation: it reads a destination and writes a score, and the
-   * worst it can do is tell you something you did not want to hear. */
   const rescore = useMutation({
     mutationFn: (id: string) =>
       api<{ scored: boolean; score: number | null }>(`/admin/links/${id}/rescore`, {
@@ -879,7 +790,6 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
     onError: withErrorToast(toast),
   });
 
-  /** One click either way, no confirmation: the link keeps working. */
   const warn = useMutation({
     mutationFn: (link: AdminLinkRow) =>
       api<{ warned: boolean }>(`/admin/links/${link.id}/warning`, {
@@ -900,17 +810,13 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
   return { restore, restoreMany, remove, rescore, warn };
 }
 
-/** What a re-check has to say. "Unscored" is reported as such, never as
- * clean: the provider was unreachable or said something we do not
- * recognise (#68). */
+/** "Unscored" is reported as such, never as clean: the provider was unreachable or unrecognised (#68). */
 function rescoreResult(result: { scored: boolean; score: number | null }): [string, "error"?] {
   if (!result.scored) return ["No answer from the checker. The link is still unscored.", "error"];
   if (result.score && result.score >= 100) return ["Checked: the destination is blocked."];
   return ["Checked: nothing known against the destination."];
 }
 
-/** Undoes a suspension, which is the whole point of suspending rather than
- * deleting. */
 function RestoreLinkDialog({
   link,
   pending,
@@ -939,13 +845,9 @@ function RestoreLinkDialog({
   );
 }
 
-/** Shown while the list is scoped to one organization, which is where a
- * click on an owner's name lands you. */
 function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear: () => void }) {
   const label = `Clear filter: ${orgName ?? "one organization"}`;
   return (
-    // Names the organization once, as the chip, so the row says what it is
-    // narrowed to. The same height as the search box and the select beside it.
     <Button variant="outline" onClick={onClear} aria-label={label} className="max-w-60">
       <span className="truncate">{orgName ?? "Organization"}</span>
       <X size={14} className="shrink-0 text-muted" />
@@ -953,11 +855,8 @@ function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear:
   );
 }
 
-/** The column sort. State sorts worst first (linkStateRank), and unscored
- * ranks below clean: nobody has looked at it, which is not the same as clean. */
 function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
-  // No org filter here: the query applies it, so its 200-row cap counts that
-  // organization's links rather than every organization's.
+  // The query applies the org filter, so its 200-row cap counts that org's links.
   return sortRows(data ?? [], sort, {
     slug: (l) => l.slug,
     destination: (l) => l.destination,
@@ -969,8 +868,6 @@ function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
   });
 }
 
-/** Which rows are ticked. A set of ids, so a tick survives the sort or page
- * changing under it. */
 function useSelection() {
   const [ids, setIds] = useState<Set<string>>(new Set());
   return {
@@ -987,7 +884,6 @@ function useSelection() {
   };
 }
 
-/** Appears once something restorable is ticked. */
 function RestoreSelectedBar({
   count,
   pending,
@@ -1015,13 +911,9 @@ function RestoreSelectedBar({
   );
 }
 
-/** The filters over the link list, then the other lists an abuse report can
- * send somebody to. One row: the filters narrow one table, the lists replace
- * it, and a hairline between them says which is which. */
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "reported", label: "Reported" },
-  // Short so the row fits beside the search; the hover says whose flag.
   { id: "flagged", label: "Flagged", title: "Flagged by Google Web Risk" },
   { id: "suspended", label: "Suspended" },
   { id: "warned", label: "Warning" },
@@ -1045,14 +937,12 @@ function ViewRow({
 }: {
   view: View;
   onView: (view: View) => void;
-  /** From /admin/links/counts; undefined until it answers. */
   counts: Partial<Record<AdminLinkFilter, number>>;
   lists: Partial<Record<List, number>>;
 }) {
   return (
     <div role="group" aria-label="Link lists" className="flex w-max items-center gap-0.5 px-1">
       {FILTERS.map((f) =>
-        // Warning has no place in the mock's row; it shows once a link has one.
         f.id === "warned" && !counts.warned && view !== "warned" ? null : (
           <FilterPill
             key={f.id}
@@ -1078,7 +968,6 @@ function ViewRow({
   );
 }
 
-/** The org chip and the search box, on the right of the filters. */
 function LinkSearch({
   query,
   onSearch,
@@ -1106,7 +995,6 @@ function LinkSearch({
   );
 }
 
-/** The cross-org list under one filter. */
 function OwnedLinks({
   filter,
   rowsData,
@@ -1130,7 +1018,6 @@ function OwnedLinks({
 
   const all = sortOwnedLinks(rowsData, sort);
   const { rows, totalPages, safePage } = paginate(all, page);
-  // Only suspended links can be restored, so only that list has ticks.
   const selectable = filter === "suspended";
   const restorable = all.filter((l) => selection.has(l.id) && l.suspendedAt).map((l) => l.id);
 
@@ -1185,8 +1072,6 @@ function OwnedLinks({
   );
 }
 
-/** The links page's first frame (see lib/route-preload.ts): every link,
- * or one org's from ?org=, and the counts on the other tabs. */
 export const preload = (qc: QueryClient, searchStr: string) => {
   const org = new URLSearchParams(searchStr).get("org") ?? "";
   return settle([
@@ -1206,12 +1091,10 @@ export function AdminLinksPage() {
   const [query, setQuery] = useState("");
   const pills = useRef<HTMLDivElement>(null);
   useScrollFade(pills);
-  // The term reaches the server, so it waits for a pause in typing. Without
-  // this, "testing" was eight requests.
+  // Waits for a pause in typing, since the term reaches the server.
   const search = useDebounced(query);
   const filter = isFilter(view) ? view : "all";
   const shown = useAdminLinksData({ q: search, filter, org: orgFilter });
-  // Every pill's count, past the list's 200-row cap.
   const counts = useAdminLinkCounts({ q: search, org: orgFilter });
   const reports = useAdminReports();
   const anon = useAdminAnonLinks();
@@ -1224,7 +1107,6 @@ export function AdminLinksPage() {
   };
   const panel = isFilter(view) ? (
     <OwnedLinks
-      // A new filter starts on its first page with nothing ticked.
       key={view}
       filter={view}
       rowsData={shown.data}
@@ -1243,9 +1125,6 @@ export function AdminLinksPage() {
     <div>
       <SectionHeading>Links</SectionHeading>
       <div className="flex flex-col gap-4">
-        {/* One row: the pills scroll sideways when the row runs short, and
-            the search keeps its place on the right instead of wrapping onto
-            a line of its own. On a phone the search sits above the pills. */}
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div
             ref={pills}

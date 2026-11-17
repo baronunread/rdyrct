@@ -1,11 +1,4 @@
-/**
- * A ZIP archive with no compression ("stored"), enough to hand somebody a
- * folder of QR codes as one download.
- *
- * PNGs are already compressed, so deflating them again saves next to
- * nothing, and storing them keeps this to a CRC and two headers per file
- * rather than a dependency. Names are UTF-8 (general purpose flag bit 11).
- */
+// "Stored" because PNGs are already compressed. Names are UTF-8 (general purpose flag bit 11).
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -23,7 +16,6 @@ function crc32(bytes: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** MS-DOS date and time, which is what a ZIP header stores. */
 function dosDateTime(date: Date) {
   return {
     time: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
@@ -45,9 +37,9 @@ export function zipStored(files: { name: string; data: Uint8Array }[]): Blob {
 
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
-    local.setUint16(4, 20, true); // version needed
-    local.setUint16(6, 0x0800, true); // UTF-8 names
-    local.setUint16(8, 0, true); // stored
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(8, 0, true);
     local.setUint16(10, time, true);
     local.setUint16(12, day, true);
     local.setUint32(14, crc, true);
@@ -59,8 +51,8 @@ export function zipStored(files: { name: string; data: Uint8Array }[]): Blob {
 
     const entry = new DataView(new ArrayBuffer(46));
     entry.setUint32(0, 0x02014b50, true);
-    entry.setUint16(4, 20, true); // version made by
-    entry.setUint16(6, 20, true); // version needed
+    entry.setUint16(4, 20, true);
+    entry.setUint16(6, 20, true);
     entry.setUint16(8, 0x0800, true);
     entry.setUint16(10, 0, true);
     entry.setUint16(12, time, true);

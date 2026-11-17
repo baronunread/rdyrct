@@ -1,28 +1,6 @@
-/**
- * The header every public page shares, built the way getopen.so builds
- * theirs. At the top of the page it is part of the page: no fill, no edge.
- * Once the page moves it shrinks into a frosted pill a little below the top
- * edge, narrower and shorter, everything easing together over 700ms, so the
- * nav stays in reach without looking like a second surface over the opening.
- *
- * The logo and the nav sit together on the left, the nav as plain text
- * links; the actions sit on the right. The pill is the one floating,
- * translucent element on the marketing pages (rdyrct-design, Layout).
- * "Product" opens a panel that hangs off the pill, so the pages that used to
- * be reachable only from the footer (the QR generator, the comparisons, the
- * roadmap) have a way in from the top.
- *
- * Pricing links to its own page, not a fragment on "/": a bare anchor only
- * works on the page that has that section, and did nothing from any other
- * public page.
- *
- * `data-marketing-pill` pairs with the `viewTransition` links: a
- * navigation between marketing pages runs as a view transition (see
- * styles.css), and the attribute gives the pill its own transition
- * group so it stays visually still instead of crossfading with the content,
- * which is what makes the navigation read as one page continuing rather
- * than a new one loading.
- */
+/** `data-marketing-pill` pairs with the `viewTransition` links: it gives the pill its own
+ * transition group so it stays still instead of crossfading with the content (styles.css).
+ * Pricing links to its own page: a bare anchor does nothing from other public pages. */
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronDown, Github } from "../ui/icons";
@@ -55,10 +33,8 @@ export function LandingHeader({ authed }: { authed: boolean }) {
       <header
         data-marketing-header
         data-auth={hydrated ? auth : undefined}
-        // The open phone menu needs the pill's fill, wherever the page is.
         data-floating={flag(scrolled || menuOpen)}
-        // flow-root: the pill's top margin stays inside the header rather
-        // than collapsing through it and moving the whole header down.
+        // flow-root keeps the pill's top margin inside the header instead of collapsing through it.
         className="group/header sticky top-0 z-30 -mx-6 flow-root px-3 sm:px-6"
       >
         <MenuScrim open={menuOpen} />
@@ -71,8 +47,6 @@ export function LandingHeader({ authed }: { authed: boolean }) {
               <MainNav />
             </div>
             <div className="flex items-center gap-1.5">
-              {/* The open menu carries its own Get started, so the pill's
-                Sign up steps aside rather than say it twice. */}
               <div className="in-data-open:max-md:hidden">
                 <AuthActions />
               </div>
@@ -90,10 +64,8 @@ export function LandingHeader({ authed }: { authed: boolean }) {
   );
 }
 
-/** A boolean data attribute: present and empty, or absent. */
 const flag = (on: boolean) => (on ? "" : undefined);
 
-/** Past this many pixels the header leaves the page and floats. */
 const FLOAT_AFTER = 8;
 const pageMoved = () => window.scrollY > FLOAT_AFTER;
 function subscribeScroll(onChange: () => void) {
@@ -101,25 +73,16 @@ function subscribeScroll(onChange: () => void) {
   return () => removeEventListener("scroll", onChange);
 }
 
-/**
- * Transparent at the top, as wide as a reading column and as tall as the
- * row needs. Floating (scrolled, or holding the phone menu): 12px down from
- * the edge, narrower, shorter, and frosted: a translucent fill with a strong
- * blur, a faint edge, a light inset rim and a soft shadow. Size, spacing and
- * surface all ease on one curve, so the shrink reads as one movement.
- */
 const PILL = cn(
   "relative mx-auto max-w-5xl rounded-[1.75rem] border border-transparent px-1 py-3 sm:px-4",
   "transition-[max-width,margin,padding,background-color,border-color,box-shadow] duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
   "group-data-floating/header:mt-3 group-data-floating/header:max-w-[calc(100%-1.5rem)] group-data-floating/header:px-2 group-data-floating/header:py-1.5 md:group-data-floating/header:max-w-3xl sm:group-data-floating/header:px-2.5",
   "group-data-floating/header:border-border/60 group-data-floating/header:bg-surface/70 group-data-floating/header:backdrop-blur-xl group-data-floating/header:backdrop-saturate-150",
   "group-data-floating/header:shadow-[inset_0_1px_0_rgb(255_255_255/0.35),inset_0_-1px_0_rgb(255_255_255/0.12),0_1px_1px_rgb(0_0_0/0.06),0_8px_24px_rgb(0_0_0/0.1)]",
-  // The open phone menu keeps the full width: its rows need it.
   "data-open:bg-surface data-open:pb-2 group-data-floating/header:data-open:max-w-full",
 );
 
-/** The page behind the open phone menu, blurred. A sibling of the pill, not a
- *  child: the pill's backdrop filter would make "fixed" mean fixed to it. */
+/** A sibling of the pill, not a child: its backdrop filter would make "fixed" mean fixed to it. */
 function MenuScrim({ open }: { open: boolean }) {
   return (
     <div
@@ -130,14 +93,10 @@ function MenuScrim({ open }: { open: boolean }) {
   );
 }
 
-/** The main links, as plain text: muted until pointed at, focused, or the
- *  page you are on. Hidden on phones, where the menu holds them. */
 function MainNav() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const current = currentNavKey(pathname);
   return (
-    // relative: the Product panel hangs from the nav's foot. self-stretch,
-    // so that foot is the row's and the panel clears the pill's content.
     <nav
       aria-label="Main"
       className="relative hidden items-center gap-6 self-stretch text-sm md:flex"
@@ -153,8 +112,7 @@ function MainNav() {
           {link.label}
         </MarketingLink>
       ))}
-      {/* /blog is served by the Worker's reverse proxy, not the SPA
-          router, so this is a real navigation, not a <Link>. */}
+      {/* /blog is served by the Worker's reverse proxy, so this is a real navigation. */}
       <a href="/blog" className={NAV_ITEM}>
         Blog
       </a>
@@ -165,12 +123,6 @@ function MainNav() {
 const NAV_ITEM =
   "rounded-sm text-muted transition-colors duration-150 hover:text-text focus-visible:text-text aria-[current=page]:text-text";
 
-/**
- * A disclosure, not a menu: the panel holds ordinary links, so Tab walks
- * through them and screen readers read them as links. Opens on click, or on
- * hover where there is a pointer that can hover; closes on Escape, on a
- * click or focus outside, and once a link in it is followed.
- */
 function ProductMenu({ current }: { current: boolean }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -220,14 +172,8 @@ function ProductMenu({ current }: { current: boolean }) {
           className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")}
         />
       </button>
-      {/* Rendered closed rather than not at all: the links are in the HTML
-          a crawler reads, and opening does not wait on a render. `inert`
-          keeps the closed panel out of the tab order. The top padding is
-          part of the panel, so the pointer crosses no gap on the way down,
-          and useSafeHover keeps it open on a diagonal one.
-
-          It grows down out of the pill (origin-top), and leaves quicker and
-          with less travel than it came, blurring as it goes. */}
+      {/* Rendered closed, not omitted: the links are in the HTML a crawler reads. `inert`
+          keeps the closed panel out of the tab order. */}
       <div
         ref={panelRef}
         id="product-panel"
@@ -270,8 +216,6 @@ function PanelLink({
   );
 }
 
-/** Close on Escape (focus back on the button), and on a click or focus that
- *  lands outside `root`. */
 function useDismiss(
   open: boolean,
   root: React.RefObject<HTMLElement | null>,
@@ -302,12 +246,7 @@ function useDismiss(
 function AuthActions() {
   return (
     <div className="flex items-center gap-1 text-sm">
-      {/* The hero never says the product is open source, and it is one of
-          the page's strongest claims. It asks for a star but shows no
-          count: a low number reads as a weekend project (see
-          SelfHostSection). Words from lg up, where the floating pill has
-          room beside the nav; an icon below, on a phone too, since the
-          footer drops its GitHub links there. */}
+      {/* No star count: a low number reads as a weekend project (see SelfHostSection). */}
       <a
         href={GITHUB_URL}
         target="_blank"
@@ -322,8 +261,6 @@ function AuthActions() {
         <PillCta to="/dashboard">Dashboard</PillCta>
       </span>
       <span data-auth-control="out" className="flex items-center gap-1">
-        {/* On a phone Log in waits in the menu, which leaves the pill room
-            for the one thing a first visit is for. */}
         <Link
           to="/login"
           className="hidden rounded-full px-3 py-2 whitespace-nowrap text-muted transition-colors hover:text-text sm:block"

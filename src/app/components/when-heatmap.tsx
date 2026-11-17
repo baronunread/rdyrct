@@ -6,15 +6,13 @@ import { shade } from "./country-map";
 import { lookup } from "@/shared/lookup";
 import type { HeatmapRow } from "@/shared/types";
 
-/** Hours per label and per total, so 24 columns stay readable at 390px: the
- * labels and the totals row both work in blocks of this many hours. */
+// Hours per label and per total, so 24 columns stay readable at 390px.
 const BLOCK = 3;
 const BLOCKS = HOURS.filter((h) => h % BLOCK === 0);
 
 const hh = (hour: number) => `${String(hour % 24).padStart(2, "0")}:00`;
 const clicksWord = (n: number) => `${formatNumber(n)} ${n === 1 ? "click" : "clicks"}`;
 
-/** [days, hours] each arrow key moves. */
 const ARROWS = {
   ArrowUp: [-1, 0],
   ArrowDown: [1, 0],
@@ -27,8 +25,6 @@ interface CellAt {
   hour: number;
 }
 
-/** One hour of one weekday: shaded by its share of the busiest cell, with
- * the tooltip and the ring on hover or keyboard focus. */
 function HeatCell({
   day,
   position,
@@ -41,7 +37,6 @@ function HeatCell({
   position: CellAt;
   clicks: number;
   max: number;
-  /** The one cell the grid's Tab key lands on. */
   tabStop: boolean;
   onFocus: (at: CellAt) => void;
 }) {
@@ -69,14 +64,8 @@ function HeatCell({
   );
 }
 
-/**
- * When clicks happen: weekday by hour of the day, in UTC (the rollups bucket
- * by UTC hour). Cells shade from --surface-2 (none) to the accent on a square
- * root, as the country map does. Totals are plain muted figures: one at the
- * end of each day, and one under every three hours (a 9px column cannot hold
- * a number). The grid is one tab stop; arrow keys move between cells, and a
- * focused cell shows the same tooltip as a hovered one.
- */
+// UTC, because the rollups bucket by UTC hour. A 9px column cannot hold a number,
+// so totals sit under every three hours.
 export function WhenHeatmap({ data }: { data: HeatmapRow[] }) {
   const grid = useMemo(() => heatmapGrid(data), [data]);
   const [at, setAt] = useState({ day: 0, hour: 0 });
@@ -105,8 +94,7 @@ export function WhenHeatmap({ data }: { data: HeatmapRow[] }) {
         className="grid grid-cols-[auto_repeat(24,minmax(0,1fr))_auto] gap-0.5"
       >
         <div role="row" className="contents">
-          {/* An empty cell over the day names; sr-only would take it out of
-              the grid and shift every column. */}
+          {/* sr-only would take this out of the grid and shift every column. */}
           <span role="columnheader" aria-label="Day" />
           {BLOCKS.map((h) => (
             <span

@@ -16,13 +16,10 @@ import {
 import { requestUrl } from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
-// Env with a token present and the dev fake off, so the real get-or-create
-// path runs against a mocked global fetch.
 const realCfEnv = () =>
   overrideEnv({ CF_ZONE_ID: "zone", CF_API_TOKEN: "tok", CF_DEV_ENV: undefined });
 
-// CF_DEV_ENV=simulated, independent of whatever CF_API_TOKEN/CF_DEV_ENV happen
-// to be in the ambient .dev.vars, so the CF fake is used on its timer.
+// Independent of whatever CF_API_TOKEN/CF_DEV_ENV the ambient .dev.vars sets.
 const fakeCfEnv = () => overrideEnv({ CF_DEV_ENV: "simulated" });
 
 const cfJson = (body: JsonValue) =>
@@ -31,8 +28,6 @@ const cfJson = (body: JsonValue) =>
     headers: { "content-type": "application/json" },
   });
 
-/** Whether a mocked fetch call matches one of the three custom-hostname
- * routes this test double stands in for. */
 function matchesRoute(method: string, url: string, target: "GET" | "POST" | "DELETE"): boolean {
   if (method !== target) return false;
   if (target === "GET") return url.includes("/custom_hostnames?hostname=");
@@ -125,9 +120,7 @@ describe("ensureHostname: get-or-create idempotency", () => {
   });
 
   it("after a create succeeds but the persist is lost, a retry reuses the existing hostname (no duplicate)", async () => {
-    // The row has no id yet (the persist was lost), but the hostname already
-    // lives on the zone from the first attempt. get-or-create must find it, not
-    // create a second one.
+    // The row has no id (the persist was lost) but the hostname already lives on the zone.
     await seedDomain();
     let creates = 0;
     mockCustomHostnames({
@@ -150,7 +143,6 @@ describe("ensureHostname: get-or-create idempotency", () => {
     mockCustomHostnames({
       get: () => cfJson({ result: [] }),
       post: async () => {
-        // The user deletes the domain in the window between create and persist.
         await env.DB.prepare("delete from domains where id = 'domain-1'").run();
         return cfJson({ result: { id: "cf-orphan" } });
       },
@@ -189,8 +181,6 @@ describe("ensureHostname: get-or-create idempotency", () => {
 
 describe("probeDomain: one durable step at a time", () => {
   it("advances checking_dns to issuing_tls, then to active (fake CF)", async () => {
-    // createdAt 21s ago: the fake reports DNS + TLS as ready, and it is well
-    // under the 24h deadline.
     await seedDomain({ createdAt: Date.now() - 21_000 });
 
     const first = await probeDomain(fakeCfEnv(), "domain-1");
@@ -255,10 +245,7 @@ describe("probeDelaySeconds", () => {
   });
 });
 
-// GET / and POST /:id/refresh must be read-only now that the workflow owns
-// activation. Seed a domain old enough that the previous on-read code would have
-// advanced it, then assert these routes leave the status untouched and never
-// call Cloudflare.
+// GET / and POST /:id/refresh are read-only: the workflow owns activation.
 describe("domain reads do not mutate", () => {
   async function call(request: Request): Promise<Response> {
     const ctx = createExecutionContext();
@@ -269,7 +256,7 @@ describe("domain reads do not mutate", () => {
 
   it("GET list and POST refresh leave status alone and never call Cloudflare", async () => {
     const cookie = await adminCookie();
-    // 10s old: the old on-read pipeline would have advanced this past checking_dns.
+    // Old enough that an on-read pipeline would have advanced it.
     await seedDomain({ cfHostnameId: "cf-1", createdAt: Date.now() - 10_000 });
 
     const cfCalls = vi
@@ -293,7 +280,6 @@ describe("domain reads do not mutate", () => {
     expect(refresh.status).toBe(200);
     expect((await statusOf("domain-1"))?.status).toBe("checking_dns");
 
-    // No call reached the Cloudflare API from either read route.
     for (const c of cfCalls.mock.calls)
       expect(requestUrl(c[0])).not.toContain("api.cloudflare.com");
   });
@@ -341,7 +327,6 @@ describe("trying a failed domain again", () => {
     expect(row?.status).toBe("checking_dns");
     expect(row?.status_reason).toBe("");
     expect(row?.checking_since).toBeGreaterThanOrEqual(before);
-    // Looked up again by the new activation, in case Cloudflare dropped it.
     expect(row?.cf_hostname_id).toBeNull();
   });
 
@@ -373,9 +358,8 @@ describe("trying a failed domain again", () => {
 });
 
 describe("adding a domain rejects either of this app's own hosts", () => {
-  // Well-formed hostnames (the ambient "localhost"/"short.localhost" test
-  // bindings would fail the format check first, never reaching the check
-  // this describes).
+  // Well-formed hostnames: the ambient "localhost" bindings would fail the
+  // format check first.
   const ownHostsEnv = () =>
     overrideEnv({ APP_HOST: "app.example.com", SHARED_LINK_HOST: "short.example.com" });
 
@@ -390,8 +374,7 @@ describe("adding a domain rejects either of this app's own hosts", () => {
     const cookie = await adminCookie();
     await env.DB.batch([
       env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
-      // Admin owns it (pro plan), so assertDomainQuota's paid-feature check
-      // passes before the hostname is even looked at.
+      // Pro plan, so the paid-feature check passes before the hostname is looked at.
       env.DB.prepare(
         "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'admin-1', 'owner', 0)",
       ),
@@ -410,8 +393,8 @@ describe("adding a domain rejects either of this app's own hosts", () => {
 });
 
 describe("PATCH /domains/:id root redirect (#488)", () => {
-  // It answers for the bare host and every slug the host does not know, so
-  // it goes through the rules a link's destination does.
+  // It answers for the bare host and every unknown slug, so it follows the
+  // rules a link's destination does.
   async function setRoot(rootRedirect: string) {
     const cookie = await freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
     return fetchWorker(

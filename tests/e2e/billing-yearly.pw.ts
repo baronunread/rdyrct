@@ -4,12 +4,6 @@ import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
 
-/**
- * The billing page's monthly/yearly switch decides two things: what the
- * upgrade button says, and which `interval` the checkout request carries.
- * Yearly is a separate Polar product, so getting the interval onto the
- * request is what makes a yearly subscription possible at all.
- */
 test("the yearly toggle drives the checkout interval and the button price", async ({ page }) => {
   const email = `billing-yearly-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
@@ -24,7 +18,6 @@ test("the yearly toggle drives the checkout interval and the button price", asyn
   await page.goto("/billing");
 
   const proButton = page.getByRole("button", { name: /Upgrade to Pro/ });
-  // The price sits on the card, above the button: the button only says where it goes.
   const proCard = page
     .locator("div")
     .filter({ has: page.getByRole("heading", { name: "Pro", exact: true }) })
@@ -39,8 +32,6 @@ test("the yearly toggle drives the checkout interval and the button price", asyn
   await expect.poll(() => checkoutBody).toEqual({ plan: "pro", interval: "year" });
 });
 
-/** Somebody on a paid plan has to be able to tell which cycle they are on,
- * and where to change it: the plan line says it, Change plan is where. */
 test("a subscriber sees their billing cycle and where to change it", async ({ page }) => {
   const email = `billing-cycle-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
@@ -52,9 +43,6 @@ test("a subscriber sees their billing cycle and where to change it", async ({ pa
   await expect(page.getByRole("button", { name: "Change plan" })).toBeVisible();
 });
 
-/** On the plan you are on, the other cycle is a way to move: Pro monthly
- * flips the switch to Yearly and gets "Switch to yearly", which opens the
- * portal, where yearly is a plan change like any other. */
 test("a monthly subscriber can switch the same plan to yearly", async ({ page }) => {
   const email = `billing-to-yearly-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);

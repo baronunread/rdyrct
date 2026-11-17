@@ -1,47 +1,20 @@
-/**
- * The links somebody made on the landing page before they had an account
- * (Direction A of #96).
- *
- * They live in localStorage, not just in React state, so a reload does not
- * throw them away. A short link nobody wrote down is worthless, and the most
- * likely moment to lose one is exactly when somebody navigates off to read
- * about pricing and comes back.
- *
- * The whole record is kept, not only the claim token: the short URL and the
- * address it came from are what the hero renders, and re-deriving them would
- * mean asking the server for links it deliberately does not let anyone list.
- * All of it is the visitor's own data, in their own browser, and it never
- * leaves it except as the claim at signup.
- *
- * Every failure here is silent. A browser with storage disabled must still
- * be able to shorten a link and sign up; it just cannot keep them across a
- * reload.
- */
+// Kept in localStorage so a reload does not lose a link nobody wrote down. The whole record
+// is kept: the server deliberately lets nobody list links, so the hero could not re-derive it.
+// Every failure is silent: a browser with storage disabled must still shorten and sign up.
 import * as v from "valibot";
 import { api } from "./api";
 import type { AnonLink } from "./shorten-anon";
 
-/** Bumped from v2, which stored bare claim tokens. An old value parses as
- * junk and is discarded, which costs a visitor links that were about to
- * expire anyway. */
+// An old value parses as junk and is discarded: v2 stored bare claim tokens.
 const KEY = "rdyrct:anon-links:v3";
 
-/**
- * How many links one browser may make without an account.
- *
- * A product limit, not a security one: abuse is already handled by Turnstile
- * and the anon_link rate limit, both of which a browser cannot talk its
- * way past. One link is enough to show that shortening works, and the second
- * one is where trying it becomes signing up. It frees up as the link expires,
- * and claiming at signup clears it entirely.
- */
+// A product limit, not a security one: Turnstile and the anon_link rate limit handle abuse.
+// The second link is where trying it becomes signing up. It frees as the link expires.
 export const MAX_ANON_LINKS = 1;
 
 const storedAnonLinkSchema = v.object({
   slug: v.string(),
   url: v.string(),
-  /** The address it was made from: the question that appears once there is
-   * more than one on screen. */
   source: v.string(),
   claimToken: v.string(),
   expiresAt: v.number(),
@@ -49,9 +22,6 @@ const storedAnonLinkSchema = v.object({
 
 export type StoredAnonLink = v.InferOutput<typeof storedAnonLinkSchema>;
 
-/** Everything under our key that is still a link, in the order stored. A
- * browser holding junk there contributes nothing rather than shaping what
- * signup does. */
 const storedListSchema = v.pipe(
   v.array(v.unknown()),
   v.transform((entries) =>
@@ -62,37 +32,28 @@ const storedListSchema = v.pipe(
   ),
 );
 
-/**
- * Everything still worth showing, newest first.
- *
- * Expired records are dropped on read rather than on a timer: nothing here
- * runs while the tab is closed, and the server has forgotten them anyway, so
- * a link past its 24 hours would render as a URL that 404s.
- */
+// Expired records are dropped on read, not on a timer: the server has forgotten them,
+// so a link past its 24 hours would render as a URL that 404s.
 export function storedAnonLinks(): StoredAnonLink[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     // Anything unexpected is discarded rather than repaired: a browser
-    // holding junk under our key must not be able to shape what signup does.
+    // holding junk under our key must not shape what signup does.
     const parsed = v.safeParse(storedListSchema, JSON.parse(raw));
     if (!parsed.success) return [];
     const now = Date.now();
-    // Sliced on the way out as well as on the way in: a browser that made
-    // three links before the cap became one still holds all three, and the
-    // hero must not show more than it now lets anyone make.
+    // Sliced on the way out as well as in: a browser that made three links before the
+    // cap dropped still holds all three, and the hero must not show more than the cap.
     return parsed.output.filter((link) => link.expiresAt > now).slice(0, MAX_ANON_LINKS);
   } catch {
     return [];
   }
 }
 
-/** Fired on window whenever this tab records a link. The `storage` event
- * only reaches other tabs, and the landing page's link bar lives in this one. */
+// The `storage` event only reaches other tabs, and the landing page's link bar lives in this one.
 const ANON_LINKS_CHANGED = "rdyrct:anon-links";
 
-/** The raw stored value, for useSyncExternalStore: a string compares by
- * value, so an unchanged store never looks like a new snapshot. */
 export function anonLinksSnapshot(): string | null {
   try {
     return localStorage.getItem(KEY);
@@ -101,7 +62,6 @@ export function anonLinksSnapshot(): string | null {
   }
 }
 
-/** Calls back when this tab records a link or another tab changes the store. */
 export function subscribeAnonLinks(onChange: () => void): () => void {
   window.addEventListener(ANON_LINKS_CHANGED, onChange);
   window.addEventListener("storage", onChange);
@@ -115,13 +75,9 @@ function write(links: StoredAnonLink[]): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(links.slice(0, MAX_ANON_LINKS)));
     window.dispatchEvent(new Event(ANON_LINKS_CHANGED));
-  } catch {
-    // Private mode, or storage disabled. The links still work for 24 hours.
-  }
+  } catch {}
 }
 
-/** Records a new link at the front, and returns the list as it now stands so
- * the caller renders exactly what was kept. */
 export function rememberAnonLink(link: AnonLink, source: string): StoredAnonLink[] {
   const existing = storedAnonLinks().filter((l) => l.slug !== link.slug);
   const next = [
@@ -141,32 +97,18 @@ export function rememberAnonLink(link: AnonLink, source: string): StoredAnonLink
 function forgetAnonLinks(): void {
   try {
     localStorage.removeItem(KEY);
-  } catch {
-    /* nothing to clean up if we could not write in the first place */
-  }
+  } catch {}
 }
 
-/**
- * Hands every kept link to a freshly created org, and reports how many
- * landed.
- *
- * Best-effort in every direction: no links is the common case, and a
- * rejected claim means the link expired, somebody already took it, or the
- * org is at its cap. None of that is worth a message, because the person
- * came here to make an organization and that already worked.
- *
- * Together rather than one after another: these are independent requests and
- * somebody is waiting on the org they just made. They are forgotten before
- * the first request, so a claim that cannot be spent does not follow anyone
- * around forever.
- */
+// Best-effort: a rejected claim means the link expired, was taken, or the org is at its
+// cap, and none of that is worth a message. Claims run together and are forgotten
+// before the first request, so a claim that cannot be spent does not follow anyone around.
 export async function claimPendingLinks(orgId: string): Promise<number> {
   try {
     const links = storedAnonLinks();
     if (links.length === 0) return 0;
     forgetAnonLinks();
 
-    // allSettled, not all: one refused claim must not stop the others landing.
     const results = await Promise.allSettled(
       links.map(({ claimToken }) =>
         api(`/orgs/${orgId}/links/claim`, { method: "POST", body: { claimToken } }),
@@ -174,12 +116,9 @@ export async function claimPendingLinks(orgId: string): Promise<number> {
     );
     return results.filter((r) => r.status === "fulfilled").length;
   } catch {
-    // Best-effort here means it cannot throw, not that its callers remember
-    // to catch. Both of them ran this inside the try that creates the
-    // organization, so a browser refusing localStorage (private mode, a
-    // blocked third-party context) reported "could not create your
-    // organization" for one that exists, and skipped the switch and the
-    // redirect that come after.
+    // Best-effort here means it cannot throw: callers run this inside the try that creates the
+    // org, so a browser refusing localStorage reported "could not create your organization"
+    // for one that exists, and skipped the switch and redirect after it.
     return 0;
   }
 }

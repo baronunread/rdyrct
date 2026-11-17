@@ -51,7 +51,6 @@ function toolResult(message: string): string {
   return message.slice(0, 1_500);
 }
 
-/** Browser-agent tools available only after the signed-in answer is current. */
 export function WebMcpLinkTools() {
   const currentUser = useCurrentUser();
   const { org } = useCurrentOrg();
@@ -69,8 +68,7 @@ export function WebMcpLinkTools() {
         queryClient.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] }),
       ]);
 
-    // Agents hold a slug, not the internal id the API keys on, so every
-    // per-link tool resolves one through the same search the list page uses.
+    // Agents hold a slug, not the internal id the API keys on: resolve one through the list search.
     const linkBySlug = async (slug: string, signal?: AbortSignal): Promise<LinkDTO | null> => {
       const result = await api<{ items: LinkDTO[] }>(
         `/orgs/${orgId}/links?${linkSearchParams(slug)}`,
@@ -79,8 +77,6 @@ export function WebMcpLinkTools() {
       return result.items.find((link) => link.slug === slug) ?? null;
     };
 
-    // Parse a slug-keyed input, resolve the link, and hand both to the tool
-    // body. Keeps get/update/delete free of the same three guard clauses.
     const withLink = async <T extends { slug: string }>(
       schema: SlugSchema<T>,
       input: JsonValue,
@@ -127,8 +123,7 @@ export function WebMcpLinkTools() {
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input, options) =>
           withLink(getLinkInput, input, options?.signal, async (link) =>
-            // Counts first: a very long destination in conciseLink would
-            // otherwise push them past the toolResult length cap.
+            // Counts first: a very long destination would push them past the toolResult length cap.
             toolResult(
               `${link.clicks} clicks, ${link.addressCount} addresses. ${conciseLink(link)}`,
             ),
@@ -183,8 +178,7 @@ export function WebMcpLinkTools() {
             async (link, { destination, title }) => {
               if (destination === undefined && title === undefined)
                 return "Give a new destination or title to change.";
-              // undefined keys drop out of the JSON body, so this is a true
-              // partial patch: an untouched field keeps its stored value.
+              // Undefined keys drop out of the JSON body, so an untouched field keeps its stored value.
               const body: Partial<LinkInput> = { destination, title };
               const updated = await api<WithQuotaUsage<LinkDTO>>(
                 `/orgs/${orgId}/links/${link.id}`,

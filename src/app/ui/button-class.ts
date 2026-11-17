@@ -1,27 +1,13 @@
-/**
- * A button's look, without a button.
- *
- * For the CTAs that navigate: those are links, and a `<button>` inside an
- * `<a>` is invalid interactive content. The nesting works by accident in a
- * mouse browser and stops working as soon as anything reads the page
- * seriously: the anchor and the button both claim focus, so Tab stops twice
- * on one control, and Enter and Space disagree about which of the two they
- * belong to. Give the anchor these classes instead and there is one control.
- *
- * Its own module rather than a second export from `button.tsx`, because a
- * file that exports both a component and a plain function loses Fast
- * Refresh: editing either one full-reloads the page instead of preserving
- * state.
- */
+// For CTAs that navigate: a `<button>` inside an `<a>` is invalid interactive content (Tab
+// stops twice, Enter and Space disagree). Its own module because a file exporting a
+// component and a plain function loses Fast Refresh.
 import { cn } from "./cn";
 
 export type Variant = "primary" | "outline" | "ghost" | "danger";
 export type Size = "sm" | "md";
 
-// Depth from shadows, not borders (rdyrct-design, "The app's surfaces"):
-// the outline variant is lifted by a ring shadow, and the primary carries a
-// hairline of light along its top edge. Hover styles only where there is
-// hover, so a tap on a phone does not leave a button stuck highlighted.
+// Hover styles only where there is hover, so a tap on a phone does not leave a button
+// stuck highlighted.
 const variants = {
   primary:
     "bg-accent text-bg font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.18)] [@media(hover:hover)]:hover:brightness-110 active:brightness-95",
@@ -29,9 +15,6 @@ const variants = {
     "bg-surface text-text font-medium smooth-shadow-ring-xs [@media(hover:hover)]:hover:bg-surface-2",
   ghost:
     "text-muted [@media(hover:hover)]:hover:text-text [@media(hover:hover)]:hover:bg-surface-2",
-  // One danger button everywhere, the row, the page and the confirm dialog
-  // alike (as GitHub's): red text in a faint red ring at rest, filled red
-  // under the pointer, so it only looks loud when it is about to be pressed.
   danger:
     "bg-surface text-danger font-medium shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_40%,transparent)] [@media(hover:hover)]:hover:bg-danger [@media(hover:hover)]:hover:text-surface [@media(hover:hover)]:hover:shadow-[0_0_0_1px_var(--danger)] active:brightness-95",
 } satisfies Record<Variant, string>;
@@ -49,7 +32,6 @@ export function buttonClass({
 }: {
   variant?: Variant;
   size?: Size;
-  /** Disables the active:scale press feedback, for controls where it'd distract. */
   static?: boolean;
   className?: string;
 } = {}): string {

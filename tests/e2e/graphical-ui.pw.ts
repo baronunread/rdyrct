@@ -31,7 +31,6 @@ test("link stats keep their layout while loading (#174)", async ({ page }) => {
 
 test("the country map is not a keyboard focus target (#175)", async ({ page }) => {
   await signUpAndVerify(page, `map-focus-${Date.now()}@gmail.com`, password);
-  // An org with no links gets one empty state on Analytics, not the panels.
   await createQuickLink(page, "https://example.com/map");
   await page.keyboard.press("Escape");
 
@@ -49,7 +48,6 @@ test("the country map is not a keyboard focus target (#175)", async ({ page }) =
   });
 
   await page.goto("/analytics");
-  // The map sits beside the countries list in one card, no tab to open.
   await expect(page.getByRole("tab", { name: "Map", exact: true })).toHaveCount(0);
   const map = page.getByLabel("Clicks by country");
   await expect(map).toBeVisible();

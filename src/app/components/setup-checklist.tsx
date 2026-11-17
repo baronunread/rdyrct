@@ -18,18 +18,6 @@ import { MenuItem } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { LiveStatus } from "../ui/live-status";
 
-/**
- * What is left of a new organization's setup, in the sidebar above the
- * account, the way Linear and Vercel keep theirs: a count, a bar and the next
- * step; open it for the rest. Each step reads live data, so it ticks itself
- * (a click lands, DNS goes live, a teammate joins), and the card goes once
- * all are done or the owner hides it (Setup guide in the account menu brings
- * it back). Free has no domain step: it could never be done there. Only for
- * an org whose setup flow started in this browser (lib/setup.ts): an account
- * that was already in use never sees it.
- */
-/** "Setup guide" in the account menu, while the list is hidden and has
- * something left to do: it brings the list back. */
 export function SetupGuideItem({ org }: { org: UserOrg | null }) {
   const setup = useOrgSetup(org?.id ?? "");
   if (!org || org.role !== "owner" || org.locked || !setup?.listHidden) return null;
@@ -65,9 +53,8 @@ interface Step {
 function useSteps(org: UserOrg): Step[] | null {
   const paid = org.plan !== "free";
   const links = useLinkQuotaUsage(org.id);
-  // Clicks reach the dashboard in batches, about every 10 seconds
-  // (worker/click-buffer.ts), so while the first is awaited this asks more
-  // often than the dashboard does.
+  // Clicks reach the dashboard in batches (worker/click-buffer.ts), so ask more often
+  // than it does while the first is awaited.
   const clicks = useQuery({
     ...recentClicksQuery(org.id),
     refetchInterval: (q) => (q.state.data?.length ? 30_000 : 5_000),
@@ -113,7 +100,6 @@ function clickStep(latest: RecentClick | undefined): Step {
   };
 }
 
-/** Done once anybody is asked: whether they accept is up to them. */
 function teamStep(others: { name: string }[], invited: number): Step {
   const title = "Bring your team";
   if (others.length > 0) return { title, done: true, detail: `${others[0].name} joined` };
@@ -159,13 +145,10 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
   const next = steps.find((s) => !s.done);
   return (
     <div className="px-3 pb-1">
-      {/* Keyed on the page, so following a link in the list closes it. */}
       <Popover.Root key={pathname}>
         <Popover.Trigger
           data-setup-checklist
-          // Hover lightens the surface rather than swapping shadows: the two
-          // ring shadows have different layer counts, which cannot animate
-          // between and made the edge flicker.
+          // Hover lightens the surface: the two ring shadows have different layer counts and cannot animate.
           className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[10px] bg-surface px-3 py-2.5 text-left smooth-shadow-ring-xs transition-[background-color,scale] duration-150 ease-out active:scale-[0.98] [@media(hover:hover)]:hover:bg-surface-2"
         >
           <span className="flex items-baseline justify-between gap-2 text-sm font-semibold">
@@ -211,9 +194,6 @@ function Checklist({ org, phone }: { org: UserOrg; phone?: boolean }) {
   );
 }
 
-/** One bar filled as far as the count, as Vercel's and Stripe's are: steps
- * finish in any order, and segments lit out of order read as which ones,
- * not how far. */
 function Progress({ done, total }: { done: number; total: number }) {
   return (
     <span className="h-1 overflow-hidden rounded-full bg-border" aria-hidden>

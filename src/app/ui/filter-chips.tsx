@@ -3,14 +3,6 @@ import { cn } from "./cn";
 import { useScrollFade } from "./scroll-fade";
 import { StableLabel } from "./stable-label";
 
-/**
- * A row of filters with their counts ("All 199 · Needs attention 3"), the
- * filter row rdyrct-design puts above a long table. One is always on.
- *
- * Pressed buttons rather than tabs: each narrows the same table below
- * rather than swapping in a different panel. On a phone the row scrolls
- * sideways instead of wrapping, so the table never moves down a line.
- */
 export function FilterChips<Id extends string>({
   items,
   value,

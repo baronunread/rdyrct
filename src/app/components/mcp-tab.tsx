@@ -15,9 +15,6 @@ import {
   type AssistantId,
 } from "./mcp-connect-wizard";
 
-/** The open assistant, kept in the URL (?client=cursor) beside ?tab=mcp so a
- * reload, or a link to a teammate, lands on the same steps. The default has
- * no param of its own. */
 function useAssistant(): [AssistantId, (id: AssistantId) => void] {
   const [params, setParams] = useSearchParams();
   const raw = params.get("client");
@@ -31,9 +28,7 @@ function useAssistant(): [AssistantId, (id: AssistantId) => void] {
   return [assistant, setAssistant];
 }
 
-/** Waits for a new grant to appear in the Connected list: there is no webhook
- * for "finished the OAuth flow in your AI tool", so a new id showing up in
- * this query, polled while waiting, is the only signal there is. */
+/** No webhook fires when the OAuth flow ends, so a new grant id in this polled query is the only signal. */
 function useWaitForConnection() {
   const toast = useToast();
   const [waiting, setWaiting] = useState(false);
@@ -59,9 +54,6 @@ function useWaitForConnection() {
   };
 }
 
-/** The hero: what the connection is for, over one soft glow of the accent in
- * a corner. The glow is decoration, so it is hidden from assistive tech and
- * never sits behind more than the title. */
 function McpHero() {
   return (
     <section className="relative isolate overflow-hidden rounded-2xl bg-surface-2 p-5 sm:p-6">
@@ -80,8 +72,6 @@ function McpHero() {
   );
 }
 
-/** The client's own mark when its name says which assistant it is, else
- * its initial. */
 function ClientMark({ name }: { name: string }) {
   const mark = markForClient(name);
   return (
@@ -169,9 +159,6 @@ function useDisconnect() {
   return { target, setTarget, confirm, pending: revokeApp.isPending };
 }
 
-/** The MCP tab: the hero, the assistants already connected (per user, open
- * to every member: authorizing one is a session action, not minting a
- * standing credential), and how to connect another. */
 export function McpTab() {
   const [assistant, setAssistant] = useAssistant();
   const { apps, waiting, start, cancel } = useWaitForConnection();

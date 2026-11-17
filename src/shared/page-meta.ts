@@ -1,21 +1,7 @@
-/**
- * What each public page calls itself in a search result and a link preview.
- *
- * Shared because two places need the same strings and must not drift: the
- * Worker writes them into the HTML it serves (src/worker/page-meta.ts), and
- * the SPA re-applies them on client-side navigation, where no new document is
- * fetched and the head would otherwise still describe the page somebody
- * arrived on.
- *
- * The homepage opens with the brand, as Dub, Bitly and Short.io do, then
- * says what it is: "URL shortener" and "QR code generator" are the searches.
- * The tool pages lead with the search itself. None says "free": a free plan
- * is a fact for the page to state, not a title.
- */
+/** Shared so the Worker's HTML and the SPA's client-side navigation never drift. */
 export interface PageMeta {
   title: string;
   description: string;
-  /** A hand-written representation for clients that prefer Markdown. */
   markdown?: string;
 }
 
@@ -45,13 +31,8 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/report",
 ]);
 
-/**
- * What index.html ships, and therefore what every page that has no entry of
- * its own should read. Kept here rather than left implicit in the HTML: the
- * client hook has to put this back when it leaves a public page, and
- * "restore whatever the document arrived with" is wrong for exactly the
- * visitor who arrived on the public page itself.
- */
+/** The client hook restores this on leaving a public page: "what the document arrived with" is wrong
+ * for a visitor who arrived on the public page itself. */
 export const DEFAULT_PAGE_META: PageMeta = {
   title: "rdyrct - URL shortener and QR code generator",
   description:

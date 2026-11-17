@@ -5,16 +5,8 @@ import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/t
 import { exactCount } from "@/shared/click-usage";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
-/**
- * Read-only WebMCP tools for the logged-out marketing pages. They hand a
- * browser agent the same plan numbers and product summary the pages show,
- * so it answers "what does rdyrct cost" from a value it was given rather
- * than by scraping the layout. First-party static copy, no API, no auth.
- *
- * `create_qr_code` is the one that navigates: it opens the QR generator with
- * the value, so the code renders on a page the person can see. A data URL in
- * the tool result is invisible to a chat-style caller.
- */
+/** Read-only tools for the logged-out pages. `create_qr_code` navigates to the generator: a data
+ * URL in the result is invisible to a chat-style caller. */
 
 const qrInput = v.object({
   value: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2_000)),
@@ -55,8 +47,6 @@ function marketingResult(message: string): string {
   return message.slice(0, 2_000);
 }
 
-/** Mounted on the landing page and every standalone marketing page, including
- * the QR generator and the legal pages. */
 export function WebMcpMarketingTools() {
   const navigate = useNavigate();
 
@@ -91,9 +81,8 @@ export function WebMcpMarketingTools() {
         execute: async (input) => {
           const parsed = v.safeParse(qrInput, input);
           if (!parsed.success) return "Provide a non-empty link or text of up to 2000 characters.";
-          // A data URL in the tool result is invisible to the caller, so this
-          // just opens the generator. The navigate must not reject, or the
-          // failure shows instead. generate_qr_code fills the form from there.
+          // A data URL in the result is invisible to the caller, so this opens the generator.
+          // The navigate must not reject, or the failure shows instead.
           await navigate({ to: "/qr-code-generator" }).catch(() => {});
           const url = `${window.location.origin}/qr-code-generator`;
           return `The QR generator is open at ${url}. Call generate_qr_code with value "${parsed.output.value}" to render the code on the page.`;

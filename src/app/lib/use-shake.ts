@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
-/** Red flash + shake for a submit button when a check fails. Put `className`
- *  and `onAnimationEnd={end}` on the button; call `start()` on failure.
- *  Reduced-motion users never get an animationend event, so a timer also
- *  clears the red flash. */
+// Reduced-motion users never get an animationend event, so a timer also
+// clears the red flash.
 export function useShake() {
   const [shaking, setShaking] = useState(false);
   useEffect(() => {

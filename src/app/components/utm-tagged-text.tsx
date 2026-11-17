@@ -2,8 +2,6 @@ import { UTM_KEYS } from "@/shared/utm";
 import type { UtmFields } from "@/shared/utm";
 import { cn } from "../ui/cn";
 
-/** Each parameter's colour, in the fields' order, shared by the tagged link
- *  so a value there reads as the field it came from. */
 const PARAM_TONE = {
   utmSource: "text-mint",
   utmMedium: "text-sky",
@@ -17,13 +15,9 @@ const tone = (param: string) => {
   return key ? PARAM_TONE[key] : "text-text";
 };
 
-/** A tagged link, each value in its field's colour. */
 export function TaggedText({ tagged }: { tagged: string }) {
   const { search, hash } = new URL(tagged);
-  // Split on the text itself rather than re-encoding the parameters, so
-  // what shows is exactly `tagged`, character for character: the address,
-  // the query (none for a link with no tags yet), then any #fragment, which
-  // URLs put after the query.
+  // Split on the text itself, not re-encoded params, so what shows is exactly `tagged`.
   const base = tagged.slice(0, tagged.length - search.length - hash.length);
   const pairs = search ? search.slice(1).split("&") : [];
   return (
@@ -37,8 +31,6 @@ export function TaggedText({ tagged }: { tagged: string }) {
   );
 }
 
-/** One `name=value` of the query: the name quiet, the value in its field's
- *  colour, keyed on the value so a changed one fades in. */
 function QueryPair({ pair, lead }: { pair: string; lead: string }) {
   // Split at the first "=" only: a value may hold another.
   const [name, value] = pair.split(/=(.*)/s);

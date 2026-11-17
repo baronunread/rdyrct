@@ -39,10 +39,6 @@ export function Badge({
   );
 }
 
-/** A row linking to a link's detail page by slug, with an optional title
- * suffix: the shape repeated across the dashboard's and analytics' link
- * lists (top links, decaying, dead). Truncates instead of wrapping or
- * overflowing; the full text still shows in a tooltip when it is cut off. */
 export function SlugLink({
   to,
   slug,
@@ -61,8 +57,6 @@ export function SlugLink({
         href={to}
         className={cn("min-w-0 max-w-full truncate text-accent hover:underline", className)}
       >
-        {/* Only the identifier wears the mono face, never the sentence it sits
-          in: the title beside it is prose and reads as prose. */}
         <span className="font-mono">/{slug}</span>
         {title && <span> · {title}</span>}
       </HrefLink>
@@ -86,22 +80,14 @@ export function Table({
 }: {
   children: ReactNode;
   fixed?: boolean;
-  /** For the wrapper: a marketing page lights its tables (`lit`). */
   className?: string;
-  /** Tailwind min-width for the table itself, e.g. "min-w-[64rem]". Use it
-   * when every column has to stay on screen and the wrapper should scroll
-   * rather than the columns shrinking into uselessness. */
   minWidth?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
-  // A table wider than a phone scrolls; the fade on the hidden edge says so.
   useScrollFade(scroller);
   return (
-    // overscroll-x-none, not -contain. `contain` only stops the scroll
-    // chaining to the page; the container still rubber-bands at each end,
-    // and that bounce drags the table off its own background so the page
-    // shows through beside it. `none` disables the bounce as well.
-    // The fade masks the inner box only, so the frame and its ring stay whole.
+    // overscroll-x-none, not -contain: `contain` still rubber-bands at each end, and that bounce
+    // drags the table off its own background. The fade masks the inner box only.
     <div className={cn("overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs", className)}>
       <div ref={scroller} className="overflow-x-auto overscroll-x-none">
         <table
@@ -152,11 +138,7 @@ export function EmptyState({
   );
 }
 
-/**
- * A list that failed to load, in the place its empty state would take. An
- * error is not an answer: drawn as "nothing here yet", an outage reads as
- * lost data (#487).
- */
+// An error is not an answer: drawn as "nothing here yet", an outage reads as lost data (#487).
 export function LoadError({
   title,
   hint = "Your data is fine. Try again in a moment, or check your connection.",

@@ -21,7 +21,6 @@ import {
 } from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
-/** A free-plan owner of "org-1", with an active custom domain "go.example.com". */
 const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
 
 async function apiWithEnv(
@@ -52,8 +51,6 @@ async function createLink(cookie: string, body: JsonValue): Promise<{ id: string
   return jsonBody<{ id: string }>(await api(cookie, "POST", "/links", body));
 }
 
-/** A custom-domain link renamed once, so it carries a live temp_alias: the
- * starting point for every test about what can be done to an alias. */
 async function renamedLink() {
   const cookie = await seed();
   return { cookie, ...(await createRenamedLink(cookie)) };
@@ -200,7 +197,6 @@ describe("addresses sub-resource", () => {
     const row = await addressById(aliasId);
     expect(row).toMatchObject({ kind: "permanent_alias", expiresAt: null, retiredAt: null });
 
-    // Still one link: keeping forever never creates a second links row.
     await expectLinkCount(1);
   });
 
@@ -305,8 +301,6 @@ describe("same-destination grouping", () => {
       slug: "on-custom-domain",
     });
 
-    // Same destination, but on the shared domain: no match, so this creates
-    // a genuinely separate link instead of offering to merge.
     const res = await api(cookie, "POST", "/links", { destination: "https://example.com/pricing" });
     expect(res.status).toBe(201);
 
@@ -334,8 +328,7 @@ describe("same-destination grouping", () => {
       destination: "https://example.com/pricing",
     });
 
-    // Someone else edits the target's destination between the client seeing
-    // the same_destination_match response and posting mergeIntoLinkId back.
+    // Someone edits the target between same_destination_match and the merge post.
     await api(cookie, "PATCH", `/links/${targetId}`, {
       destination: "https://example.com/somewhere-else",
     });
@@ -391,10 +384,8 @@ describe("DELETE /orgs/:orgId/links/:linkId", () => {
 });
 
 describe("plan limits (#38)", () => {
-  // Free plan allows 30 links; fill it with permanent addresses directly so
-  // the org sits at its cap without creating 30 real links. A caller that
-  // creates a link first before calling this ends up one over the cap,
-  // which is the point: it's testing that the next write is still rejected.
+  // Fills the free plan's 30 links with permanent addresses directly. A caller
+  // that creates a link first ends up one over the cap, which is the point.
   async function fillOrgToLimit() {
     const rows = Array.from({ length: 30 }, (_, i) =>
       rawLinkRow({
@@ -415,8 +406,7 @@ describe("plan limits (#38)", () => {
         createdAt: 0,
       }),
     );
-    // D1 caps bound parameters per statement, so chunk the inserts: ~20
-    // columns per links row and ~10 per address row.
+    // D1 caps bound parameters per statement: ~20 per links row, ~10 per address row.
     function chunk<T>(items: T[], size: number): T[][] {
       const out: T[][] = [];
       for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -456,9 +446,7 @@ describe("plan limits (#38)", () => {
     expect(addresses.some((a) => a.kind === "temp_alias")).toBe(true);
   });
 
-  // Both kinds leave the org holding one more counted address than it did:
-  // "permanent" makes the temp alias permanent, "primary" makes the old
-  // primary permanent. At the cap, neither has room.
+  // Both kinds leave the org holding one more counted address; at the cap, neither has room.
   it.each(["permanent", "primary"])("402s kind=%s on a temp alias at the limit", async (kind) => {
     const { cookie, linkId, aliasId } = await renamedLink();
     await fillOrgToLimit();

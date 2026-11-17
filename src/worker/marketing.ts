@@ -1,25 +1,7 @@
 /**
- * Marketing consent: the one place that reads or writes it.
- *
- * Two lists, each its own consent with its own time and source: product news
- * (`news_opt_in_*`) and offers (`offers_opt_in_*`), plus one
- * `marketing_asked_at` for both (migration 0053). Consent lives in our own
- * D1, never only at a provider, and the default is not opted in: no existing
- * account, and no new one that leaves a box unticked, is ever sent mail for
- * that list. A verified address is not consent (rdyrct-email skill).
- *
- * Three ways in (the last onboarding step, the one-time dialog, Settings)
- * share one rule: a "settings" answer always applies, while "onboarding" and
- * "prompt" apply only to an account that has not answered yet. That is what
- * stops a stale answer (a second tab, an old onboarding screen left open)
- * from overwriting a decision the person already made.
- *
- * The unsubscribe link carries an HMAC of the list and the user id, so it
- * needs no login and no cookie. The key is derived from BETTER_AUTH_SECRET under its own
- * label, which gives it a key unrelated to session signing without a second
- * secret to provision on every deploy and self-hosted copy. The cost: rotating
- * BETTER_AUTH_SECRET also breaks the links in mail already sent, so rotate it
- * only when you have to.
+ * Two lists, each its own consent, time and source (migration 0053). A verified address is
+ * not consent. "onboarding" and "prompt" answers apply only to an account that has not
+ * answered, so a stale one cannot overwrite a decision. Rotating BETTER_AUTH_SECRET breaks mailed unsubscribe links.
  */
 import { and, asc, eq, gt, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import * as schema from "./db/schema";
@@ -41,7 +23,6 @@ import {
 
 const TOKEN_LABEL = "rdyrct:newsletter-unsubscribe:v1";
 
-/** Where the public unsubscribe page lives, on APP_URL. */
 export const UNSUBSCRIBE_PATH = "/unsubscribe";
 
 const encoder = new TextEncoder();
@@ -65,17 +46,13 @@ function hmacKey(secret: Uint8Array, usage: "sign" | "verify"): Promise<CryptoKe
   return crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, [usage]);
 }
 
-/** The signing key: HMAC(BETTER_AUTH_SECRET, label), so it is not the secret. */
 async function derivedKey(env: Env, usage: "sign" | "verify"): Promise<CryptoKey> {
   const root = await hmacKey(encoder.encode(env.BETTER_AUTH_SECRET), "sign");
   const derived = await crypto.subtle.sign("HMAC", root, encoder.encode(TOKEN_LABEL));
   return hmacKey(new Uint8Array(derived), usage);
 }
 
-/** A token that names one user and one list, and cannot be made without the
- * secret. No expiry on purpose: an unsubscribe link in an old email must keep
- * working. The signed text is `list:userId`, so a token for one list cannot be
- * turned into one for the other. */
+/** No expiry: a link in an old email must keep working. `list:userId` is signed, so a token cannot switch lists. */
 export async function signUnsubscribeToken(
   env: Env,
   userId: string,
@@ -89,7 +66,6 @@ export async function signUnsubscribeToken(
 const isList = (text: string): text is MarketingList =>
   MARKETING_LISTS.some((list) => list === text);
 
-/** The user and the list a token names, or null for a tampered or malformed one. */
 export async function verifyUnsubscribeToken(
   env: Env,
   token: string | undefined,
@@ -119,7 +95,6 @@ export async function unsubscribeUrl(
   return url.toString();
 }
 
-/** The consent columns a state is read from. */
 interface ConsentRow {
   newsOptInAt: Date | null;
   offersOptInAt: Date | null;
@@ -145,12 +120,6 @@ export async function marketingState(db: DB, userId: string): Promise<MarketingS
   return row ? marketingStateOf(row) : { news: false, offers: false, asked: false };
 }
 
-/**
- * Records an answer and returns the state after it. Each list the answer
- * names gets its own time and source; a list it leaves out is untouched.
- * `applied` is false when the answer was ignored because the account had
- * already answered (see the rule at the top of this file).
- */
 export async function setMarketing(
   db: DB,
   userId: string,
@@ -177,11 +146,7 @@ export async function setMarketing(
   return { state: await marketingState(db, userId), applied: changed.length > 0 };
 }
 
-/** The unsubscribe link: off one list, or off both ("all"), and counted as
- * answered. Idempotent, and a repeat writes nothing: the row is only updated
- * while a list it names is still on or the account was never asked, since
- * the link is public and anyone holding it can send it again. True when it
- * changed something; false for a repeat or an account that is gone. */
+/** A repeat writes nothing: the link is public and anyone holding it can send it again. */
 export async function unsubscribeUser(
   db: DB,
   userId: string,
@@ -208,7 +173,6 @@ export async function unsubscribeUser(
   return changed.length > 0;
 }
 
-/** One list's columns. */
 const LIST_COLUMNS = {
   news: { at: schema.user.newsOptInAt, source: schema.user.newsOptInSource },
   offers: { at: schema.user.offersOptInAt, source: schema.user.offersOptInSource },
@@ -218,12 +182,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Literal "user".id: interpolated columns render unqualified inside a
 // correlated subquery and bind to the subquery's own table.
-/** The account has created at least one link (links.created_by). */
 const madeALink = sql`exists (select 1 from links where links.created_by = "user".id)`;
 
-/** The account's last visit, ms: its newest session, or user.last_seen_at,
- * which outlives the sessions a sign-out deletes. The same reading as the
- * admin users list's "Last seen". Null when it was never seen. */
+/** Newest session, or user.last_seen_at, which outlives the sessions a sign-out deletes. */
 const lastSeen = sql`(
   select max(t) from (
     select session.updated_at as t from session where session.user_id = "user".id
@@ -233,15 +194,9 @@ const lastSeen = sql`(
 )`;
 
 /**
- * The stages a send can be narrowed to, decided from D1 alone (never from
- * product analytics, which only see people who accepted them):
- *
- * - new: has not created a link yet.
- * - active: has created a link and was seen in the last ACTIVE_WITHIN_DAYS.
- * - slipping: has created a link and was not seen for ACTIVE_WITHIN_DAYS or
- *   more (or never, as far as the session record goes).
- *
- * `now` is a parameter so every batch of one request draws the same line.
+ * Decided from D1 alone, never from product analytics (which only see people
+ * who accepted them). `now` is a parameter so every batch of one request draws
+ * the same line.
  */
 function stageWhere(stage: AudienceStage, now: number): SQL | undefined {
   const cutoff = now - ACTIVE_WITHIN_DAYS * DAY_MS;
@@ -259,25 +214,19 @@ function stageWhere(stage: AudienceStage, now: number): SQL | undefined {
 
 const PAID_PLANS = ["hobby", "pro"] as const;
 
-/** Paid is Hobby or Pro. user.plan is the effective plan, comps included. */
 function planWhere(plan: AudiencePlan): SQL | undefined {
   if (plan === "any") return undefined;
   return plan === "free" ? eq(schema.user.plan, "free") : inArray(schema.user.plan, PAID_PLANS);
 }
 
-/** Every filter at once (AND). A new filter adds its clause here, and its
- * compare to `sameAudience`. */
 function audienceWhere(filter: AudienceFilter, now: number): SQL | undefined {
   return and(stageWhere(filter.stage, now), planWhere(filter.plan));
 }
 
-/** Whether two filters pick the same people. */
 export function sameAudience(a: AudienceFilter, b: AudienceFilter): boolean {
   return a.stage === b.stage && a.plan === b.plan;
 }
 
-/** Who a send to `list` reaches: opted in to it, address verified, not
- * banned, and inside the filter. */
 const reachable = (list: MarketingList, filter: AudienceFilter, now = Date.now()) =>
   and(
     isNotNull(LIST_COLUMNS[list].at),
@@ -286,13 +235,11 @@ const reachable = (list: MarketingList, filter: AudienceFilter, now = Date.now()
     audienceWhere(filter, now),
   );
 
-/** An account's answer about one list as one word, for the admin users list. */
 export function consentAnswerOf(at: Date | null, asked: Date | null): ConsentAnswer {
   if (at) return "on";
   return asked ? "off" : "unasked";
 }
 
-/** How every account has answered one list: one grouped read over the user table. */
 async function listAnswers(db: DB, list: MarketingList): Promise<NewsletterAnswers> {
   const { at, source } = LIST_COLUMNS[list];
   const rows = await db
@@ -318,7 +265,6 @@ async function listAnswers(db: DB, list: MarketingList): Promise<NewsletterAnswe
   return answers;
 }
 
-/** Both lists' answers. */
 export async function newsletterAnswers(db: DB): Promise<Record<MarketingList, NewsletterAnswers>> {
   const [news, offers] = await Promise.all([listAnswers(db, "news"), listAnswers(db, "offers")]);
   return { news, offers };
@@ -336,10 +282,6 @@ export async function countOptedIn(
   return row?.n ?? 0;
 }
 
-/** The next page of people a send to `list`, narrowed by `filter`, reaches,
- * by id after `after`. Read fresh for every batch, so somebody who
- * unsubscribes, or leaves the filter, while a send is running is left out of
- * the batches still to go. */
 export async function optedInRecipients(
   db: DB,
   list: MarketingList,
@@ -354,9 +296,6 @@ export async function optedInRecipients(
     .limit(limit);
 }
 
-/** Which of `ids` a send to `list`, narrowed by `filter`, still reaches:
- * the check a frozen batch runs again just before it goes, so somebody who
- * unsubscribed since it was picked is left out. */
 export async function stillReachable(
   db: DB,
   list: MarketingList,
@@ -367,8 +306,7 @@ export async function stillReachable(
   const rows = await db
     .select({ id: schema.user.id })
     .from(schema.user)
-    // One bound JSON array rather than one parameter per id: D1 takes at
-    // most 100 parameters a query, and a batch is 100 people.
+    // One bound JSON array: D1 takes at most 100 parameters a query.
     .where(
       and(
         reachable(list, filter, now),

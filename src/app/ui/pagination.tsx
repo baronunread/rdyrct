@@ -1,15 +1,8 @@
 import { Button } from "./button";
 import { cn } from "./cn";
 
-/**
- * Where you are in a cursor-paged list ("26 to 50 of 199") and the way to
- * the pages either side.
- *
- * The total is optional, because a cursor-paged endpoint does not count the
- * table to hand one over: that count is the expensive query the paging was
- * moved away from. A caller that has a cheap count (the filter chips' facets)
- * passes it; without one the line says the range alone.
- */
+// The total is optional: a cursor-paged endpoint does not count the table, and that count is
+// the expensive query the paging moved away from.
 export function CursorPager({
   page,
   pageSize,
@@ -22,7 +15,6 @@ export function CursorPager({
 }: {
   page: number;
   pageSize: number;
-  /** Rows on this page. */
   rows: number;
   total?: number;
   hasNext: boolean;

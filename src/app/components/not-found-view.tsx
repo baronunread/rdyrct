@@ -2,11 +2,8 @@ import type { ReactNode } from "react";
 import { ShortHostFrame } from "./short-host-frame";
 
 /**
- * The 404 screen, without the router, so the Worker can render the same
- * markup for rdyr.cc and custom domains (src/worker/not-found-page.tsx),
- * which never boot the app. `back` is the way out: a router link in the
- * app, a plain one there, nothing on a customer's own domain. Give it
- * `HOME_LINK` (not-found-home.ts) for its look.
+ * Renders without the router, so the Worker can serve the same markup on rdyr.cc
+ * and custom domains (src/worker/not-found-page.tsx), which never boot the app.
  */
 export function NotFoundView({ back, madeWith }: { back?: ReactNode; madeWith?: boolean }) {
   return (
@@ -29,8 +26,6 @@ export function NotFoundView({ back, madeWith }: { back?: ReactNode; madeWith?: 
   );
 }
 
-/** The mark's hop with nowhere to land: the dot leaves, the arc runs out
- *  dashed, and the landing is an empty ring. */
 function BrokenHop() {
   return (
     <svg

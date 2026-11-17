@@ -1,18 +1,3 @@
-/**
- * What somebody sees on an org-scoped page while they belong to no
- * organization.
- *
- * This is no longer the first-run screen. Every account owns an organization
- * from its first session (`ensureOrganization` in the Worker), so reaching
- * this means they deleted the last one they owned, or were removed from the
- * last one they were in. Whoever gets here knows what an organization is, so
- * it asks the plain question with a name field and says nothing about how
- * they arrived: they did it on purpose, and narrating it back is either
- * obvious or wrong.
- *
- * The name is prefilled from their email the same way the automatic one is,
- * so the fast path is one click.
- */
 import { useCallback } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
@@ -34,8 +19,6 @@ import { ORG_LIMIT_MESSAGE } from "@/shared/support";
 
 type OrgNameForm = { name: string };
 
-/** The org-limit refusal points at Enterprise; everything else says what the
- * server said. */
 function createErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError && cause.code === "org_limit") return ORG_LIMIT_MESSAGE;
   return errorMessage(cause);
@@ -63,9 +46,7 @@ export function NoOrgState() {
         posthog.capture("organization_created");
         posthog.capture(FUNNEL.orgCreated, { from: "no_org" });
         setOrg(org.id);
-        // Somebody can still arrive here holding links made on the landing
-        // page: they signed up, deleted the organization those went to, and
-        // shortened more before making another.
+        // Can still hold links made on the landing page before this org existed.
         await claimPendingLinks(org.id);
         await qc.refetchQueries({ queryKey: ["user"] });
       } catch (err) {

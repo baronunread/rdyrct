@@ -2,18 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 import { isTurnstileFailure, retryOnTurnstileFailure } from "@/app/lib/turnstile-retry";
 
-/**
- * The second go at a refused Turnstile token (#304).
- *
- * A token is single use and short lived, so a refusal is routine: it expired,
- * the server already burned it, or it forgot it. The visitor did none of that
- * and should never read about it, so the request re-solves and runs once more.
- *
- * The bug this covers: the check only ever read a *returned* `{ error }`,
- * which is better-auth's shape. api() rejects instead, so the retry was dead
- * code on every route that used it, and the anonymous shortener showed "could
- * not verify you are human" to somebody shortening a second link.
- */
+// The bug this covers (#304): the check only read a returned `{ error }`
+// (better-auth's shape), but api() rejects, so the retry was dead code.
 
 class ApiError extends Error {
   constructor(readonly code: string) {
@@ -64,7 +54,6 @@ describe("running a Turnstile-guarded request", () => {
     const { run, headers, sent } = refusals(new ApiError(TURNSTILE_FAILED_CODE), { slug: "abc" });
 
     expect(await retryOnTurnstileFailure(run, headers)).toEqual({ slug: "abc" });
-    // A fresh token, not the one the server already spent.
     expect(sent).toEqual(["token-1", "token-2"]);
   });
 

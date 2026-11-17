@@ -23,7 +23,6 @@ import { PanelTabs } from "../ui/tabs";
  * them to a million or more, which a meter would only make look absurd. */
 const UNCAPPED = 1_000_000;
 
-/** The most sentences the card tells. */
 const MAX_INSIGHTS = 4;
 
 type Tone = "up" | "down" | "first" | "warn";
@@ -42,14 +41,12 @@ interface Sentence {
   detail: string;
 }
 
-/** The earlier period, as the sentence names it. */
 function before(days: number): string {
   if (days <= 1) return "the day before";
   if (days === 7) return "last week";
   return `the ${days} days before`;
 }
 
-/** The period itself, for the line that says nothing moved. */
 function during(days: number): string {
   if (days <= 1) return "in the last day";
   if (days === 7) return "this week";
@@ -64,7 +61,6 @@ const MONTH_DAY = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 });
 
-/** "today", "Thursday" or "Oct 5": a UTC day as a person would say it. */
 function sinceLabel(day: string, now = Date.now()): string {
   const at = Date.parse(`${day}T00:00:00Z`);
   const ago = Math.floor((now - at) / 86_400_000);
@@ -77,7 +73,6 @@ const Ident = ({ children }: { children: ReactNode }) => (
   <span className="font-mono">{children}</span>
 );
 
-/** One server insight as a sentence and its supporting line. */
 function sentenceOf(item: OrgInsight, days: number): Sentence {
   if (item.kind === "country") {
     const name = countryName(item.country);
@@ -123,7 +118,6 @@ function sentenceOf(item: OrgInsight, days: number): Sentence {
   };
 }
 
-/** A custom domain that stopped working, or is still waiting for its DNS. */
 function domainSentence(domains: DomainDTO[]): Sentence | null {
   const broken = domains.find((d) => d.status === "error");
   const waiting = domains.find((d) => d.status === "checking_dns");
@@ -145,8 +139,6 @@ function domainSentence(domains: DomainDTO[]): Sentence | null {
       };
 }
 
-/** Up to four sentences in priority order, or the biggest small move, or
- * nothing. The calm line is the card's to say. */
 function sentencesFor(answer: OrgInsights | undefined, domains: DomainDTO[]) {
   const days = answer?.days ?? 7;
   const rows = (answer?.insights ?? []).map((i) => sentenceOf(i, days));
@@ -171,7 +163,6 @@ function SentenceRow({ s }: { s: Sentence }) {
   );
 }
 
-/** Rows the size of the sentences, so the card does not move when they land. */
 function InsightsSkeleton() {
   return (
     <div className="flex flex-col gap-3" aria-hidden>
@@ -188,7 +179,6 @@ function InsightsSkeleton() {
   );
 }
 
-/** "What changed": what the range's numbers say against the range before. */
 function WhatChanged({
   orgId,
   days,
@@ -230,7 +220,6 @@ interface Meter {
   limit: number;
 }
 
-/** The share of a cap from which a meter turns to caution. */
 const METER_WARN = 0.8;
 
 function MeterRow({ label, count, limit }: Meter) {
@@ -269,12 +258,6 @@ const PLAN_TITLE = {
   unlimited: "",
 } satisfies Record<OrgPlan, string>;
 
-/**
- * The meters worth showing: one per limit the plan has, from what the app
- * already reads for Billing. A limit nobody can reach is left out, and so is
- * custom domains for somebody who may not list them (a member or viewer) or
- * on a plan with none.
- */
 function useMeters(orgId: string, limits: PlanLimits, domains: DomainDTO[] | undefined) {
   const links = useLinkQuotaUsage(orgId);
   const members = useMembers(orgId);
@@ -308,7 +291,6 @@ function MetersSkeleton() {
   );
 }
 
-/** "Your plan": how much of each limit the org has used. */
 function YourPlan({ plan, meters, pending }: { plan: OrgPlan; meters: Meter[]; pending: boolean }) {
   return (
     <PanelTabs
@@ -341,10 +323,8 @@ function YourPlan({ plan, meters, pending }: { plan: OrgPlan; meters: Meter[]; p
   );
 }
 
-/** The dashboard's last row: what changed beside the plan's meters. */
 export function InsightsRow({ days }: { days: number }) {
   const { org, orgId, limits, canListDomains, domains } = useOrgLimits();
-  // Only somebody who may list domains has the list to count or to warn from.
   const domainList = canListDomains ? domains.data : undefined;
   const { meters, pending } = useMeters(orgId, limits, domainList);
   const showPlan = org?.plan !== "unlimited" && (pending || meters.length > 0);

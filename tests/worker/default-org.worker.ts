@@ -4,15 +4,6 @@ import { reset } from "cloudflare:test";
 import { applyTestMigrations, authEnv, fetchWorker, signInCookie, TEST_PASSWORD } from "./support";
 import { hashPassword } from "../../src/worker/password";
 
-/**
- * Every account owns an organization from its first session.
- *
- * The empty state used to make it, which meant the app had a state where a
- * signed-in person owned nothing and every org-scoped page had to know about
- * it. Now "no organization" is a state somebody chose by deleting their last
- * one, and the screen for it is a plain create form rather than onboarding.
- */
-
 async function seedUser(id: string, email: string, name = "Person") {
   await env.DB.batch([
     env.DB.prepare(
@@ -67,10 +58,8 @@ describe("the first session", () => {
   });
 
   it("gives a Pro account one organization, not one per concurrent sign-in", async () => {
-    // The read that skips this is a fast path, not the guard. Two sessions
-    // created at once both see no organization, and Pro is allowed three, so
-    // both had room and the account arrived with two: the switcher offered a
-    // choice nobody made, over an organization with nothing in it.
+    // The read that skips this is a fast path, not the guard: two sessions created
+    // at once both see no organization and, with Pro allowing three, both made one.
     await seedUser("u-pro", "pro@acme.com");
     await env.DB.prepare("update user set plan = 'pro' where id = 'u-pro'").run();
 
@@ -113,9 +102,8 @@ describe("deleting the account", () => {
   }
 
   it("takes the organizations nobody else is in with it", async () => {
-    // The reason this test exists: with an organization handed to every
-    // account, the old "you still own organizations" refusal would have made
-    // every account undeletable, including one that had done nothing.
+    // With an org handed to every account, the old "you still own organizations"
+    // refusal would have made every account undeletable.
     await seedUser("u-solo", "solo@acme.com");
     const cookie = await signInCookie("solo@acme.com", TEST_PASSWORD);
     expect(await ownedOrgs("u-solo")).toHaveLength(1);
@@ -123,8 +111,6 @@ describe("deleting the account", () => {
     const res = await deleteAccount(cookie);
     expect(res.status).toBe(200);
 
-    // Teardown runs as a workflow, so what this asserts is that it started:
-    // the org is flagged for deletion rather than left untouched.
     const { results } = await env.DB.prepare("select deleting_at from orgs").all<{
       deleting_at: number | null;
     }>();
@@ -135,11 +121,8 @@ describe("deleting the account", () => {
   });
 
   it("takes an owned organization that has other members in it too", async () => {
-    // It used to refuse this, which left the account undeletable until the
-    // owner emptied the org by hand. An org has no plan of its own (orgPlan
-    // reads its owner's), so one kept alive without an owner has no plan, no
-    // billing and nobody who can delete it. Settings names every org in the
-    // confirmation before it asks (#119).
+    // An org has no plan of its own (orgPlan reads its owner's), so one kept alive
+    // without an owner has no plan, billing or deleter. Settings names every org first (#119).
     await seedUser("u-lead", "lead@acme.com");
     await seedUser("u-mate", "mate@acme.com");
     const cookie = await signInCookie("lead@acme.com", TEST_PASSWORD);

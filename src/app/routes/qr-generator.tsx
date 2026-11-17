@@ -1,21 +1,5 @@
-/**
- * A standalone QR code generator (Direction D of #96).
- *
- * Its own page because "qr code generator" is a thing people search for, and
- * answering that search with a working generator is a better introduction
- * than a pitch. It needs no account and asks for nothing.
- *
- * It is the same form the app uses to style a link's QR code, minus the
- * parts that need an account: no domain, no slug, no saving. Same controls,
- * same preview, same downloads, and the logo stays in the browser as a data
- * URL rather than going to a bucket. Giving the whole thing away costs
- * nothing, because none of it runs on a server: what rdyrct sells is what a
- * printed square cannot do on its own, which is tell you it was scanned.
- *
- * The page makes no request of its own. The upsell is a plain offer at the
- * end rather than a button that quietly posts somewhere, which is the only
- * version of it that agrees with what the page says about itself.
- */
+/** The page makes no request of its own: the logo stays in the browser as a data URL.
+ * The upsell is a plain offer, not a button that posts somewhere. */
 import {
   useEffect,
   useRef,
@@ -44,7 +28,6 @@ import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 import { PageHero } from "../components/marketing-kit";
 
-/** Making a code, in the order the card asks for it. */
 const QR_STEPS = [
   ["Enter a link or text", "Paste the URL or text you want a phone to open."],
   ["Choose its look", "Pick dot styles and colors, then add an optional logo from your device."],
@@ -84,7 +67,6 @@ const qrAppearanceFields = [
   ["logoSize", "qrLogoSize"],
 ] as const;
 
-/** Changes only the appearance values an agent supplied, preserving the rest. */
 function qrAppearance(input: QrToolInput): Partial<QrValues> {
   // SAFETY: each tuple pairs a WebMCP input key with a QrValues key, and logoSize is the only numeric input.
   return Object.fromEntries(
@@ -127,8 +109,6 @@ const EMPTY_QR: QrValues = {
   qrLogoSize: "",
 };
 
-/** The free QR pages, each its own page for its own search. Linked from
- * under every generator, by the words people search for. */
 export const QR_TYPES = [
   { to: "/qr-code-generator", label: "QR code for a link or text" },
   { to: "/wifi-qr-code", label: "WiFi QR code" },
@@ -138,8 +118,6 @@ export const QR_TYPES = [
 
 export type QrTypePath = (typeof QR_TYPES)[number]["to"];
 
-/** The code on its stage, or the square it will fill, so typing the first
- * character changes nothing around it. */
 function CodeStage({
   encoded,
   values,
@@ -153,7 +131,6 @@ function CodeStage({
 }) {
   const props = qrPreviewProps(values);
   return (
-    // 14px inside the sheet's 20px, with its 6px of padding.
     <div className="flex flex-col items-center justify-center gap-4 rounded-[14px] bg-bg bg-[radial-gradient(120%_80%_at_50%_0%,color-mix(in_oklab,var(--accent)_12%,transparent),transparent_70%)] px-5 py-8 lg:col-start-2 lg:row-span-2 lg:row-start-1">
       {encoded ? (
         <QRPreview
@@ -179,15 +156,6 @@ function CodeStage({
   );
 }
 
-/**
- * The generator itself, on one raised sheet: the fields that say what goes
- * in the code, then the same rows the app's QR editor uses (dots, corners,
- * colours, logo), and the code on its stage beside them. On a phone the
- * stage sits between the fields and the rows, so a change shows without
- * scrolling back up. The QR type pages (routes/qr-types.tsx) bring their
- * own fields and share the rest, so there is one generator, not one per
- * type.
- */
 export function QrCard({
   encoded,
   values,
@@ -197,23 +165,16 @@ export function QrCard({
   label,
   children,
 }: {
-  /** What the code holds; empty until the fields say enough. */
   encoded: string;
   values: QrValues;
   setValues: Dispatch<SetStateAction<QrValues>>;
-  /** The downloaded file's name, without the extension. */
   name?: string;
-  /** Which of the QR pages this is, left out of the links under the card. */
   current: QrTypePath;
-  /** What a screen reader hears for the code, when its text is not for
-   *  reading aloud (a Wi-Fi password). The text it holds, otherwise. */
   label?: string;
   children: ReactNode;
 }) {
   const [logoName, setLogoName] = useState<string>();
   return (
-    // On a phone the sheet takes back most of the hero's 24px gutter: at
-    // its width the colour chips truncated their own hex values.
     <div className="flex w-full flex-col gap-4 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)]">
       <div className="grid w-full gap-1.5 rounded-[20px] bg-surface p-1.5 text-left smooth-shadow-ring-lg lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-[auto_1fr]">
         <div className="flex min-w-0 flex-col gap-3 px-3 pt-3 sm:px-4 sm:pt-4">{children}</div>
@@ -247,14 +208,7 @@ export function QrCard({
   );
 }
 
-/**
- * The upsell, kept out of the form and off the network.
- *
- * It used to sit under the input as a dashed box with a button that made an
- * anonymous short link, which put a POST in the middle of a page whose whole
- * claim is that nothing you type leaves the browser. It is a plain offer now:
- * the account is what tracks links, so the offer is the account.
- */
+/** Off the network: the page claims nothing you type leaves the browser, so no POST here. */
 function TrackingSection() {
   return (
     <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
@@ -288,13 +242,6 @@ function TrackingSection() {
   );
 }
 
-/**
- * What the tool is built on, and why it is free.
- *
- * Named libraries rather than a vague nod at open source: anyone weighing a
- * generator that draws codes in their browser deserves to know which code is
- * doing the drawing, and the people who wrote it deserve the credit.
- */
 function OpenSourceNote() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 border-t border-border pt-8 text-sm text-muted">
@@ -348,11 +295,6 @@ function OpenSourceNote() {
   );
 }
 
-/**
- * What people type into a search box before they land here, answered on the
- * page rather than in a blog post. The same list feeds the FAQPage data, so
- * the answers a result shows are the answers the page shows.
- */
 const qrFaqs = [
   {
     q: "Is this QR code generator really free?",
@@ -388,7 +330,6 @@ const qrFaqs = [
   },
 ];
 
-/** The QR questions, as every marketing FAQ is drawn (components/faq-list). */
 export function QrFaq({
   faqs = qrFaqs,
   title = "QR code questions",
@@ -404,9 +345,7 @@ export function QrFaq({
 }
 
 export function QrGeneratorPage() {
-  // The header has to know: hardcoding "signed out" showed somebody with a
-  // session the Log in and Sign up buttons, which then dropped them on the
-  // dashboard they were already entitled to.
+  // The header has to know: hardcoding "signed out" showed Log in and Sign up to somebody with a session.
   const { authed } = useAudience();
   useSeo("/qr-code-generator");
   useMarketingScroll();
@@ -493,8 +432,6 @@ export function QrGeneratorPage() {
       <WebMcpMarketingTools />
       <LandingHeader authed={authed} />
 
-      {/* The tool opens the page, inside the hero: the search was for a
-          generator, so the generator is the answer above the fold. */}
       <PageHero
         title="QR code generator with logo"
         intro="Add your logo and colors, then download a PNG or an SVG. No account, no watermark, no expiry, and nothing you type leaves your browser."

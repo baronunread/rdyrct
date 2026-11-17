@@ -6,21 +6,15 @@ import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody, recordingEnv }
 import { revalidateOnRedirect, scoreAndRecord } from "../../src/worker/risk";
 import type { JsonValue } from "../../src/shared/types";
 
-/**
- * Destination risk scoring end to end (#68).
- *
- * The resolver is stubbed here, so what these assert is the pipeline: that
- * scoring happens on the right triggers, writes the right columns, never
- * blocks or fails a write, and never reaches an org-scoped response. How the
- * resolver's answers are read is tests/risk.test.ts.
- */
+// The resolver is stubbed, so these assert the pipeline: triggers, columns
+// written, never blocking a write, never reaching an org-scoped response.
+// How answers are read: tests/risk.test.ts.
 
 const BLOCKED = "https://malware.example/x";
 const CLEAN = "https://example.com/x";
 
 const realFetch = globalThis.fetch;
 
-/** A resolver that refuses BLOCKED's host and resolves everything else. */
 function stubResolver(options: { fail?: boolean } = {}) {
   const calls: string[] = [];
   globalThis.fetch = async (input, init) => {
@@ -40,8 +34,6 @@ function stubResolver(options: { fail?: boolean } = {}) {
 async function call(path: string, init: RequestInit): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(new Request(`http://localhost${path}`, init), authEnv(), ctx);
-  // waitOnExecutionContext settles the waitUntil the scoring runs in, so the
-  // assertions below are not racing it.
   await waitOnExecutionContext(ctx);
   return res;
 }
@@ -53,8 +45,6 @@ const postLink = (cookie: string, body: JsonValue) =>
     body: JSON.stringify(body),
   });
 
-/** Creates a link through the API and returns its id: every test here starts
- * this way, and only cares about what scoring did to the row afterwards. */
 async function createLink(cookie: string, destination: string): Promise<string> {
   const res = await postLink(cookie, { destination });
   const { id } = await jsonBody<{ id: string }>(res);
@@ -111,8 +101,8 @@ describe("scoring on create", () => {
   });
 
   it("creates the link anyway when the resolver is down, and leaves it unscored", async () => {
-    // It scores, it does not block. A provider outage must never cost a user
-    // their link, and must not look like a clean bill of health either.
+    // It scores, it does not block. A provider outage must never cost a user their
+    // link, and must not look like a clean bill of health either.
     stubResolver({ fail: true });
     const cookie = await freeOwnerCookie();
     const res = await postLink(cookie, { destination: BLOCKED });
@@ -123,8 +113,7 @@ describe("scoring on create", () => {
   });
 
   it("never puts a score in the org-scoped response", async () => {
-    // Scores are admin-only (#67). Handing one back here would tell whoever
-    // created the link exactly which destinations pass.
+    // Scores are admin-only (#67): returning one would tell the creator which destinations pass.
     stubResolver();
     const cookie = await freeOwnerCookie();
     const body = await (await postLink(cookie, { destination: BLOCKED })).text();
@@ -137,8 +126,7 @@ describe("scoring on create", () => {
 
 describe("re-scoring on a destination edit", () => {
   it("re-scores when the destination changes", async () => {
-    // The attack this exists for: register something clean, pass the check,
-    // then swap it.
+    // The attack: register something clean, pass the check, then swap it.
     stubResolver();
     const cookie = await freeOwnerCookie();
     const linkId = await createLink(cookie, CLEAN);
@@ -149,9 +137,8 @@ describe("re-scoring on a destination edit", () => {
   });
 
   it("drops the old verdict in the same write, not after the re-scan", async () => {
-    // With the resolver down there is no new verdict to write, so this shows
-    // the clearing is done by the edit itself: a swapped link must not keep
-    // reading clean while the re-scan is pending or failing.
+    // With the resolver down there is no new verdict, so the edit itself must clear
+    // the old one while the re-scan is pending or failing.
     stubResolver();
     const cookie = await freeOwnerCookie();
     const linkId = await createLink(cookie, CLEAN);
@@ -166,14 +153,9 @@ describe("re-scoring on a destination edit", () => {
   });
 
   it("throws away a verdict for a destination the link no longer has", async () => {
-    // The lookup is slow and the edit is not. A scan of the old destination
-    // can still be in flight when the link is pointed somewhere else, and it
-    // used to land afterwards and label the new destination with the old
-    // one's verdict: swap a blocked link to something clean and the clean one
-    // inherits 100, or the reverse, which is the direction that matters.
-    //
-    // Called directly with a destination the row no longer has, which is
-    // exactly the state a late scan finishes in.
+    // A scan of the old destination can still be in flight when the link is
+    // repointed, and must not label the new destination with the old verdict.
+    // Called directly with a destination the row no longer has, the state a late scan finishes in.
     stubResolver();
     const cookie = await freeOwnerCookie();
     const linkId = await createLink(cookie, CLEAN);
@@ -197,13 +179,9 @@ describe("re-scoring on a destination edit", () => {
 });
 
 describe("re-checking on a click", () => {
-  // The nightly sweep is gone: a destination is re-checked when somebody
-  // actually visits it, and the answer is cached per hostname so ten
-  // thousand links pointing at one host cost one lookup a day between them.
   const clickOn = (linkId: string, url: string) =>
     revalidateOnRedirect(authEnv(), { linkId, orgId: "org-1", url });
 
-  /** A link on BLOCKED that has never been scored. */
   async function unscoredLink() {
     stubResolver();
     const linkId = await createLink(await freeOwnerCookie(), BLOCKED);
@@ -222,11 +200,9 @@ describe("re-checking on a click", () => {
   });
 
   it("records it for every link on the host, not just the one that warmed the cache", async () => {
-    // The cache is keyed by hostname and the write was keyed by link. A host
-    // scored 100 therefore marked whichever link happened to be clicked
-    // while the cache was cold, and left every other link pointing at it
-    // unscored. The admin table sorts by that score, so the rest hid in
-    // plain sight, which is the opposite of what scoring is for.
+    // The cache is keyed by hostname but the write was keyed by link, so a host
+    // scored 100 marked only the link clicked while the cache was cold and left the
+    // others unscored, hiding them from the admin table's sort.
     stubResolver();
     const cookie = await freeOwnerCookie();
     // Two paths on one host: an identical destination would be merged into
@@ -252,8 +228,7 @@ describe("re-checking on a click", () => {
   });
 
   it("sends D1 nothing for a second click on a link already stamped (#489)", async () => {
-    // The update's own condition made this a no-op, but it was still one D1
-    // statement per click on every org link.
+    // The update's own condition made it a no-op, yet it still cost a D1 statement per click.
     const linkId = await unscoredLink();
     await clickOn(linkId, BLOCKED);
     expect((await riskRow(linkId))?.risk_score).toBe(100);

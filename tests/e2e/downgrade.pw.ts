@@ -3,22 +3,8 @@ import { kvValue, makePlatformAdmin, queryRows } from "./db";
 import { signUpAndVerify } from "./resend";
 import { addActiveCustomDomain, createAdditionalOrg, createQuickLink, guestAccount } from "./orgs";
 
-/**
- * What a downgrade looks like from the account it happens to (#158 to #163).
- *
- * Driven through the admin comp routes, because those are the plan change
- * this suite can actually cause: granting one runs the same reconciliation
- * pass a Polar `subscription.active` does, and revoking it runs the one a
- * `subscription.revoked` does.
- *
- * The point of every assertion here is the same: nothing was deleted, the
- * app says so, and there is a way back on the screen.
- */
-
 const password = "test-password-123";
 
-/** Signs up an account that is also a platform admin, so it can move its own
- * plan through the admin screens. */
 async function adminAccount(page: Page, prefix: string) {
   const email = `${prefix}-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
@@ -26,9 +12,6 @@ async function adminAccount(page: Page, prefix: string) {
   return email;
 }
 
-/** Sets this account's own custom limit on organizations owned through
- * /admin/users, or clears it with null. The extra orgs lock or unlock in the
- * same request. */
 async function setOrgsLimit(page: Page, email: string, limit: number | null) {
   await page.goto("/admin/users");
   const row = page.getByRole("row", { name: new RegExp(email) });
@@ -42,8 +25,6 @@ async function setOrgsLimit(page: Page, email: string, limit: number | null) {
   ).toBeVisible();
 }
 
-/** Grants or revokes this account's own comp through /admin/users, which is
- * what triggers the reconciliation pass. */
 async function setComp(page: Page, email: string, action: "grant" | "revoke") {
   await page.goto("/admin/users");
   const row = page.getByRole("row", { name: new RegExp(email) });
@@ -66,15 +47,11 @@ test("losing the custom organization limit locks the extra org, says why, and le
   test.slow();
   const email = await adminAccount(page, "downgrade-orgs");
 
-  // Pro covers one org. The admin's custom limit is what lets a second exist,
-  // and the user's row says so once it is set.
   await setComp(page, email, "grant");
   await setOrgsLimit(page, email, 2);
   await page.goto("/admin/users");
   await expect(page.getByRole("row", { name: new RegExp(email) })).toContainText("enterprise");
 
-  // The account is Enterprise now, not Pro: billing says so, lists the limits,
-  // and offers nothing to buy.
   await page.goto("/billing");
   await expect(page.getByText("Enterprise", { exact: true })).toBeVisible();
   await expect(page.getByText("Change your limits")).toBeVisible();
@@ -87,7 +64,6 @@ test("losing the custom organization limit locks the extra org, says why, and le
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeHidden();
   await createAdditionalOrg(page, "Second org");
 
-  // Clearing the custom limits puts the cap back at the plan's one.
   await setOrgsLimit(page, email, null);
   await page.goto("/billing");
   await expect(page.getByText("Pro", { exact: true })).toBeVisible();
@@ -101,16 +77,13 @@ test("losing the custom organization limit locks the extra org, says why, and le
   await expect(page.getByText("your plan covers one organization")).toBeVisible();
   await expect(page.getByText(/Nothing was deleted/)).toBeVisible();
 
-  // Locked means read-only for its owner too: no create control anywhere.
   await page.goto("/links");
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeHidden();
 
-  // The locked org is still in the switcher, marked, rather than gone.
   await page.locator("[data-org-switcher]").first().click();
   await expect(page.getByRole("menuitem", { name: /Second org/ })).toContainText("Read-only");
   await page.keyboard.press("Escape");
 
-  // And the choice is a real one: keeping this org active frees the other.
   await page.getByRole("button", { name: "Use this one instead" }).click();
   await expect(page.getByText(/is active again/)).toBeVisible();
   await expect(readOnly).toBeHidden();
@@ -124,7 +97,6 @@ test("losing the custom organization limit locks the extra org, says why, and le
      where user.email = ? and org_members.role = 'owner'`,
     [email],
   );
-  // Two orgs, still. The lock never deletes one.
   expect(rows[0].n).toBe(2);
 });
 
@@ -148,14 +120,12 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   });
   expect(patched.ok()).toBe(true);
 
-  // The redirect path answers from KV alone. Before the downgrade the value
-  // carries no deadline, so "still serving" below means something.
+  // Before the downgrade the KV value has no deadline, so "still serving"
+  // below means something.
   const verdict = async () => {
     const value = await kvValue(page, `domain:${hostname}`);
-    // SAFETY: this key is written only by publishDomain/desiredKvValue, both
-    // of which stringify a KVDomain, so `servesUntil` is the number or null
-    // they put there. A missing key reads back as null, which is the same
-    // answer as "no deadline".
+    // SAFETY: only publishDomain/desiredKvValue write this key, as a stringified
+    // KVDomain, so `servesUntil` is a number or null. A missing key reads as null.
     return (value as { servesUntil?: number | null } | null)?.servesUntil ?? null;
   };
   expect(await verdict()).toBeNull();
@@ -163,16 +133,11 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   await setComp(page, email, "revoke");
   await page.goto("/domains");
 
-  // The domain is still listed. Hiding it behind an upgrade pitch is how an
-  // owner concludes we deleted it.
   await expect(page.getByText(hostname)).toBeVisible({ timeout: 15_000 });
-  // Its status says the day it stops, and the line under it until when it
-  // still redirects. No second card repeats the notice above the page.
   await expect(page.getByText(/^Stops [A-Z][a-z]{2} \d+$/)).toBeVisible();
   await expect(page.getByText(/Still redirecting until/)).toBeVisible();
   await expect(page.getByRole("heading", { name: /custom domains are locked/i })).toHaveCount(0);
 
-  // The row, the KV entry and the Cloudflare hostname all stay.
   const [domain] = await queryRows<{ locked_at: number | null; cf_hostname_id: string | null }>(
     page,
     "select locked_at, cf_hostname_id from domains where hostname = ?",
@@ -180,21 +145,12 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   );
   expect(domain.locked_at).not.toBeNull();
 
-  // And it is really still redirecting, which is the whole promise. A
-  // regression that failed to republish the grace-period KV value would stop
-  // the host dead while every assertion above still passed.
-  // The whole pipeline: reconciliation wrote the lock, the storage queue
-  // republished the key, and the value the Worker will read carries a
-  // deadline that is still ahead. A regression that skipped the republish
-  // leaves this null forever (serves forever) or already past (404s now).
-  // Polled, because the republish rides the storage queue and is consumed
-  // after the request that triggered it has already answered.
+  // A skipped republish leaves servesUntil null (serves forever) or already
+  // past (404s now) while every assertion above still passes. Polled, because
+  // the storage queue republishes after the request has answered.
   await expect.poll(verdict, { timeout: 20_000 }).not.toBeNull();
   expect(await verdict()).toBeGreaterThan(Date.now());
 
-  // And the banner names what is over, with a route out: one line of facts
-  // (the day the domain stops, never "Custom domains 1 of 0"), and the note
-  // under it.
   await expect(page.getByText("Over the Free plan", { exact: true })).toBeVisible();
   const fact = (label: string) =>
     page.locator("dl > div").filter({ has: page.getByText(label, { exact: true }) });
@@ -217,8 +173,6 @@ test("deleting the domain a downgrade put over the cap lifts the banner without 
   await expect(page.getByText(/^Stops [A-Z][a-z]{2} \d+$/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Over the Free plan", { exact: true })).toBeVisible();
 
-  // The owner does what the notice asks. Nothing else changes: no plan
-  // change, no reload.
   await page.getByRole("button", { name: `Actions for ${hostname}` }).click();
   await page.getByRole("menuitem", { name: "Delete domain" }).click();
   await page
@@ -256,12 +210,10 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   const guests = [];
   for (const prefix of ["seat-a", "seat-b", "seat-c"]) {
     await page.goto("/members");
-    // The chevron beside Invite makes a link for a role without the dialog.
     await page.getByRole("button", { name: "More ways to invite" }).click();
     await page.getByRole("menuitem", { name: "Member", exact: true }).click();
-    // The click only starts the request: poll until the row exists rather than
-    // reading straight after it (this read raced the write on a CI shard).
-    // The previous seat's invite was spent and deleted, so any row is this one.
+    // Poll: reading straight after the click raced the write on a CI shard. The
+    // previous invite was spent and deleted, so any row is this one.
     const latestInvite = async () =>
       (
         await queryRows<{ token: string }>(
@@ -283,8 +235,6 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
 
   await setComp(page, email, "revoke");
 
-  // Owner plus the two longest-standing keep their role; the newest is a
-  // viewer. Nobody is removed: four rows, still.
   const rows = await queryRows<{ email: string; role: string; previous_role: string | null }>(
     page,
     `select u.email, m.role, m.previous_role from org_members m
@@ -301,10 +251,8 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   expect(rows.map((r) => r.role)).toEqual(["owner", "member", "member", "viewer"]);
   expect(rows[3].previous_role).toBe("member");
 
-  // The owner sees the member kept in the table with their new viewer role,
-  // while the over-limit notice explains how to make room. A "demoted" marker
-  // would repeat that explanation in every row, so the UI deliberately does
-  // not render one.
+  // No "demoted" marker is rendered: it would repeat the over-limit notice in
+  // every row.
   await page.addInitScript(() => localStorage.setItem("rdyrct:consent:v2", "granted"));
   await page.goto("/members");
   await expect(
@@ -312,7 +260,6 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   ).toBeVisible();
   await expect(page.locator("tbody tr").filter({ hasText: "viewer" })).toHaveCount(1);
 
-  // And they really cannot write any more.
   const demoted = guests[2].page;
   await demoted.goto("/links");
   await expect(demoted.getByRole("button", { name: "New link" }).first()).toBeHidden();

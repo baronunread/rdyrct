@@ -18,7 +18,6 @@ const wcag = (fg: string, bg: string) => {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 };
 
-/** Composite a foreground over an opaque background at the given alpha. */
 const over = (fg: string, bg: string, alpha: number) => {
   const f = hex(fg),
     b = hex(bg);
@@ -105,7 +104,6 @@ for (const [name, t] of Object.entries(themes)) {
   }
 }
 
-// Only report what is actually used in the codebase or is body text.
 const used = new Set([20, 40, 50, 60, 70, 80, 85, 100]);
 const fails = rows.filter((r) => used.has(r.alpha * 100) && r.wcag < 4.5);
 

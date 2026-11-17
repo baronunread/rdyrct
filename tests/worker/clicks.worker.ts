@@ -47,15 +47,12 @@ beforeEach(async () => {
   await resetClicks();
 });
 
-/** A D1 binding whose every call fails, standing in for the database being
- * unavailable. The distinction insertClicks draws is "deleted link" against
- * "everything else", and a deleted link is the only per-row failure a test can
- * produce for real, so the other side needs the whole binding. */
+// insertClicks distinguishes "deleted link" from everything else, and a deleted
+// link is the only per-row failure a test can produce for real.
 function unavailableD1(): typeof env.DB {
-  // One rejected promise, marked handled once and handed out to every call. A
-  // fresh rejection per call leaks: drizzle's batch creates per-statement
-  // promises it abandons as soon as the batch itself fails, and each surfaces
-  // as an unhandled rejection that fails the run with every test green.
+  // One shared rejection, marked handled once. A fresh one per call leaks:
+  // drizzle's batch abandons per-statement promises when the batch fails, and
+  // each surfaces as an unhandled rejection that fails the run with every test green.
   const failure: Promise<never> = Promise.reject(new Error("D1_ERROR: network"));
   failure.catch(() => {});
   const reject = (): Promise<never> => failure;
@@ -88,7 +85,6 @@ describe("the click buffer", () => {
     await stub.add(clickMessage({ dedupeId: "a" }));
     expect(await clickCount()).toBe(0);
 
-    // The alarm the add() scheduled, run now rather than after 10 s.
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect(await clickCount()).toBe(1);
   });
@@ -111,8 +107,7 @@ describe("the click buffer", () => {
 
     await stub.add(message);
     await runDurableObjectAlarm(stub);
-    // The same dedupeId comes round again (an alarm that re-ran after a
-    // partial flush) and must not add a second row.
+    // An alarm that re-ran after a partial flush: must not add a second row.
     await stub.add(message);
     await runDurableObjectAlarm(stub);
 
@@ -123,8 +118,7 @@ describe("the click buffer", () => {
 describe("insertClicks", () => {
   it("writes a batch too big for one D1 statement as several", async () => {
     await seedLink();
-    // A click row binds 8 values, so 100 rows in one statement would bind 800
-    // parameters and exceed D1's cap of 100. insertClicks chunks internally.
+    // A click row binds 8 values, so 100 rows in one statement would exceed D1's cap of 100 parameters.
     const rows = Array.from({ length: 100 }, (_, i) => clickMessage({ dedupeId: `bulk-${i}` }));
 
     expect(await insertClicks(testEnv, rows)).toEqual({ retry: [], hadFailure: false });
@@ -140,9 +134,7 @@ describe("insertClicks", () => {
       clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
     ];
 
-    // Nothing to retry, and a deleted link is not a failure: the nine good
-    // rows landed and the tenth can never land, so it is dropped rather than
-    // returned.
+    // A deleted link is not a failure: its row can never land, so it is dropped, not retried.
     expect(await insertClicks(testEnv, rows)).toEqual({ retry: [], hadFailure: false });
 
     expect(await clickCount()).toBe(9);
@@ -167,10 +159,9 @@ describe("insertClicks", () => {
 
   it("defers rows past the per-row subrequest budget instead of attempting them, and that is not a failure", async () => {
     await seedLink();
-    // The batch attempt fails as a whole (one link is gone), so this falls
-    // back to per-row. With more good rows than the fallback's
-    // per-invocation budget, the rest come back as retry, unattempted --
-    // not as failures, and not counted toward the give-up threshold.
+    // With more good rows than the per-row fallback's per-invocation budget,
+    // the rest come back as retry, unattempted: not failures, and not counted
+    // toward the give-up threshold.
     const rows = [
       clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
       ...Array.from({ length: 60 }, (_, i) => clickMessage({ dedupeId: `n-${i}` })),
@@ -189,8 +180,7 @@ describe("insertClicks", () => {
     await insertClicks(testEnv, [shared]);
     expect(await clickCount()).toBe(1);
 
-    // The same row rides a later batch that falls back to per-row because a
-    // neighbour's link is gone. Dedupe has to survive the split.
+    // Dedupe has to survive a later batch splitting into per-row inserts.
     const { retry } = await insertClicks(testEnv, [
       shared,
       clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
@@ -208,7 +198,6 @@ describe("insertClicks", () => {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("sweepDedupeIds (#70)", () => {
-  /** One click row, straight into D1, at the age the test cares about. */
   async function seedClick(id: number, ageDays: number, dedupeId: string | null) {
     await env.DB.prepare(
       "insert into clicks (id, link_id, org_id, ts, country, referrer, device, dedupe_id) values (?, ?, ?, ?, '', '', '', ?)",
@@ -233,8 +222,7 @@ describe("sweepDedupeIds (#70)", () => {
   });
 
   it("finds what to clear through the live-id index, not the whole click history", async () => {
-    // Through idx_clicks_ts every loop walked each click older than a day, up
-    // to 400 days of them, including the last loop that clears nothing (#489).
+    // Through idx_clicks_ts every loop walked up to 400 days of clicks (#489).
     const plan = await env.DB.prepare(`explain query plan ${DEDUPE_SWEEP_SQL}`)
       .bind(Date.now() - DAY_MS, 1000)
       .all<{ detail: string }>();

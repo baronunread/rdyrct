@@ -3,12 +3,6 @@ import { signUpAndVerify } from "./resend";
 import { createQuickLink } from "./orgs";
 import { queryRows, rawSql } from "./db";
 
-/**
- * The dashboard, Analytics and a link's page after the redesign: a range
- * control on each, a read-only org that keeps its dashboard, and an
- * Analytics page that says "no clicks yet" once instead of ten times.
- */
-
 const password = "test-password-123";
 
 test("a read-only organization keeps its dashboard, with New link greyed out", async ({ page }) => {
@@ -24,7 +18,6 @@ test("a read-only organization keeps its dashboard, with New link greyed out", a
   });
   await page.goto("/dashboard");
 
-  // The dashboard, not the first-run form: nobody can make that first link.
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toHaveCount(0);
   const newLink = page.getByRole("button", { name: /New link/ });
@@ -36,12 +29,10 @@ test("a read-only organization keeps its dashboard, with New link greyed out", a
 test("the first-run page keeps the dashboard header around one plain panel", async ({ page }) => {
   await signUpAndVerify(page, `insights-first-${Date.now()}@gmail.com`, password);
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
-  // The page is still the dashboard: its title and New link, no range yet.
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("button", { name: /New link/ })).toBeVisible();
   await expect(page.getByRole("group", { name: "Range" })).toHaveCount(0);
 
-  // The panel's one button opens the same New link form as the header.
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(page.getByRole("dialog", { name: "New link" })).toBeVisible();
 });
@@ -66,7 +57,6 @@ test("the dashboard's range control switches the period and locks what the plan 
   for (const label of ["Clicks", "Top country", "Top source"])
     await expect(page.getByRole("term").getByText(label, { exact: true })).toBeVisible();
 
-  // Free shows seven days: 30d stays in the row, locked, and opens the plans.
   const locked = range.getByRole("button", { name: "30d" });
   await expect(locked).toHaveAttribute("aria-disabled", "true");
   // aria-disabled so it reads as unavailable, yet pressing it is the way to
@@ -102,17 +92,13 @@ test("a link's page has its QR code, a range and a menu in the header", async ({
 
   await expect(page.getByRole("button", { name: "Show QR code" })).toBeVisible();
   const range = page.getByRole("group", { name: "Range" });
-  // Free shows seven days, so that is where the page opens.
   await expect(range.getByRole("button", { name: "7d", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  // On seven days there is no separate "Last 7 days": it would repeat Clicks.
   for (const label of ["Clicks", "Countries", "Top source"])
     await expect(page.getByRole("term").getByText(label, { exact: true })).toBeVisible();
   await expect(page.getByRole("term").getByText("Last 7 days")).toHaveCount(0);
-  // The header matches Analytics (range, Export CSV); under the title only
-  // the destination, and devices get a panel beside countries and referrers.
   await expect(page.getByRole("link", { name: /example\.com\/insights-link/ })).toBeVisible();
   await expect(page.getByText(/^Last click /)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
@@ -176,10 +162,8 @@ test("Analytics counts clicked links and countries, the map zooms to them, Show 
     [email],
   );
   expect(link).toBeTruthy();
-  // Clicks take a redirect each and a flush; the stats read only the
-  // rollups, so the rollups carry them: ten countries, ten clicks from
-  // Italy down to one from Sweden, so the order is fixed. All of them
-  // European, so the map frames Europe.
+  // The stats read only the rollups. Counts run ten down to one, so the order
+  // is fixed; all countries are European, so the map frames Europe.
   const countries = ["IT", "FR", "DE", "ES", "PT", "NL", "BE", "AT", "CH", "SE"];
   const dims = countries.map((code, i) => [link.org_id, code, link.id, countries.length - i]);
   await rawSql(
@@ -205,13 +189,10 @@ test("Analytics counts clicked links and countries, the map zooms to them, Show 
   await expect(figure("Countries").getByRole("definition")).toHaveText("10");
   await expect(figure("Clicks per link").getByRole("definition")).toHaveText("45");
 
-  // The map is zoomed to Europe, and the whole world is one press away.
   await expect(page.getByLabel("Clicks by country")).toBeVisible();
   await page.getByRole("button", { name: "Show the world" }).click();
   await page.getByRole("button", { name: "Zoom to the clicks" }).click();
 
-  // The list beside the map scrolls past nine; Show all, in the card's
-  // corner, names the full count and opens every country with a search.
   await page.getByRole("button", { name: "Show all 10" }).click();
   const all = page.getByRole("dialog", { name: "Countries" });
   await expect(all.getByText("Sweden", { exact: true })).toBeVisible();
@@ -269,8 +250,6 @@ test("Analytics' When card shades clicks by weekday and UTC hour, with totals an
     "30",
   );
 
-  // The one busy cell names its day, its hour range and its clicks in a
-  // tooltip, not a native title.
   const busy = grid.getByRole("gridcell", { name: /to \d\d:00, 30 clicks$/ });
   await expect(busy).toHaveCount(1);
   await expect(busy).not.toHaveAttribute("title", /.*/);
@@ -282,7 +261,6 @@ test("the dashboard says what changed and how much of the plan is used", async (
   await signUpAndVerify(page, `insights-changed-${Date.now()}@gmail.com`, password);
   await createQuickLink(page, "example.com/insights-changed");
   await page.keyboard.press("Escape");
-  // The Worker answers from the rollup tables; the page is what is under test.
   await page.route("**/api/orgs/*/insights*", (route) =>
     route.fulfill({
       json: {
@@ -317,7 +295,6 @@ test("the dashboard says what changed and how much of the plan is used", async (
   await expect(changed.getByText("210 clicks last week")).toBeVisible();
   await expect(changed.getByText("got its first clicks from instagram.com")).toBeVisible();
 
-  // A free plan: links, clicks and members. No custom domains to count.
   const plan = page.getByRole("list", { name: "Your plan" });
   await expect(plan.getByRole("meter", { name: "Links" })).toBeVisible();
   await expect(plan.getByText("1 of 30")).toBeVisible();

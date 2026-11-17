@@ -3,14 +3,6 @@ import { queryRows } from "./db";
 import { guestAccount, ownerWithInviteLink } from "./orgs";
 import { signUpAndVerify, subjectsSentTo } from "./resend";
 
-/**
- * An accepted invite leaves no row behind (#103).
- *
- * The row held a live token and, for an email invite, the address it was sent
- * to. Nothing ever read that history: every reader filtered it back out, so
- * the retention bought nothing and cost an address belonging to somebody who
- * may never have signed up.
- */
 test("accepting an invite deletes it, token and all", async ({ page, browser }) => {
   const { owner, token } = await ownerWithInviteLink(page, "owner");
   const [{ name: ownerName }] = await queryRows<{ name: string }>(
@@ -21,7 +13,6 @@ test("accepting an invite deletes it, token and all", async ({ page, browser }) 
 
   const guest = await guestAccount(browser, "guest");
   await guest.page.goto(`/invite/${token}`);
-  // The join card says who sent it.
   await expect(guest.page.getByText(`${ownerName} invited you as`)).toBeVisible();
   await guest.page.getByRole("button", { name: "Accept invite" }).click();
   await expect(guest.page).toHaveURL(/\/dashboard$/);
@@ -38,8 +29,6 @@ test("accepting an invite deletes it, token and all", async ({ page, browser }) 
   await guest.page.goto(`/invite/${token}`);
   await expect(guest.page.getByText("This invite is invalid or has expired.")).toBeVisible();
 
-  // The owner's table has no invite row left either: it no longer filters
-  // accepted rows out, there are none to filter.
   await page.goto("/members");
   await expect(page.getByRole("button", { name: "Invite", exact: true })).toBeVisible();
   await expect(page.locator("tbody tr").filter({ hasText: "Invite link" })).toHaveCount(0);
@@ -47,13 +36,6 @@ test("accepting an invite deletes it, token and all", async ({ page, browser }) 
   await guest.context.close();
 });
 
-/**
- * The link says single-use, so it admits one person (#154).
- *
- * Two accounts open the same token. Whoever gets there first joins; the other
- * reads the same "invalid or expired" as somebody who invented a token, which
- * is the honest answer once the link has been spent.
- */
 test("a single-use invite link admits one person, not everybody who has it", async ({
   page,
   browser,
@@ -73,21 +55,12 @@ test("a single-use invite link admits one person, not everybody who has it", asy
 
   await second.page.getByRole("button", { name: "Accept invite" }).click();
   await expect(second.page.getByText("Invite not found or expired")).toBeVisible();
-  // And the card stops offering a button that cannot work.
   await expect(second.page.getByText("This invite is invalid or has expired.")).toBeVisible();
 
   await first.context.close();
   await second.context.close();
 });
 
-/**
- * Signing in from an invite comes back to the invite.
- *
- * "Sign in to accept" sends a signed-out visitor to /login?next=/invite/…, and
- * sign-in navigated there. But the login page rendered once more before it
- * unmounted, read the now-empty query string, and replaced the invite with
- * /dashboard, so the person never joined. Every `next` was lost the same way.
- */
 test("signing in from an invite lands back on the invite", async ({ page, browser }) => {
   const { token } = await ownerWithInviteLink(page, "next-owner");
 
@@ -113,17 +86,11 @@ test("signing in from an invite lands back on the invite", async ({ page, browse
     "select count(*) as n from org_members m join user u on u.id = m.user_id where u.email = ?",
     [email],
   );
-  // Their own org from sign-up, plus the one they were invited to.
   expect(rows[0].n).toBe(2);
 
   await context.close();
 });
 
-/**
- * Asking again for an address that already has an invite mails it again only
- * when the caller says so (#15). The dialog says so: typing a pending address
- * and pressing Send is a resend. A bare repeat of the request is not.
- */
 test("the dialog resends a pending invite; a repeated request does not", async ({ page }) => {
   const owner = `resend-owner-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, owner, "test-password-123");
@@ -158,7 +125,6 @@ test("the dialog resends a pending invite; a repeated request does not", async (
 
   await sendFromDialog();
   await expect.poll(invitesFor).toBe(2);
-  // Still one invite: the resend reuses it.
   const rows = await queryRows<{ n: number }>(
     page,
     "select count(*) as n from invites where email = ?",

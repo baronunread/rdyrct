@@ -9,93 +9,42 @@ import type { KVDomain, KVSlugValue } from "./kv";
 import { logFailure } from "./log-failure";
 
 /**
- * Storage recovery. D1 is the source of truth. KV serves redirects and R2
- * stores QR logos.
- *
- * **KV is written in the request.** `enqueueStorage` applies every `kv_sync`
- * itself, before the handler responds, and sends only what failed to the
- * queue. It used to send everything: the consumer's 5 s batch window meant a
- * new link 404'd for its first seconds, and a click in that window made KV
- * cache the miss at that edge for a further minute (measured in production,
- * 2026-10-05). Dub writes its redirect cache the same way, straight after
- * the database. R2 deletes still go through the queue; nobody waits on them.
- *
- * What follows describes the queue path, which is now the repair path for a
- * KV write that failed and the only path for R2. A request handler commits
- * its D1 change, then awaits a
- * send to the storage queue describing the KV or R2 follow-up: if the send
- * itself fails, the request fails too, so a producer-side drop is never
- * silent. Once a message is on the queue, Cloudflare Queues own the retry,
- * backoff, and dead-letter behavior.
- *
- * **The idempotency contract.** Every message is a self-healing instruction
- * the consumer may run any number of times, in any order, at any later
- * moment, and land on the right answer. A `kv_sync` names one KV key and
- * nothing else: the consumer reads the current D1 truth for that key and
- * writes or deletes to match, so it carries no value that could go stale
- * between the send and the apply. R2 deletes are naturally idempotent.
- *
- * That contract is what everything below is allowed to assume, so it is
- * tested rather than trusted: see `tests/worker/storage-outbox.worker.ts`.
- * Anything added to `StorageMessage` has to keep it. A message carrying the
- * value to write, rather than the key to look up, would break replay in a way
- * nothing else here would notice.
- *
- * **What repairs a gap.** Both holes are after the D1 commit, so neither can
- * be answered by failing the request (#118). A `sendBatch` that fails, and a
- * message that exhausts every delivery, both write a `storage_outbox` row,
- * and the daily drain applies it. Late rather than lost, and correct when it
- * lands because the contract above means the drain re-derives the value
- * instead of replaying an old one.
+ * D1 is the source of truth; KV serves redirects, R2 stores QR logos. KV is written in the request: queueing left a new link 404ing and KV caching the miss (2026-10-05).
+ * A StorageMessage must name a key, never carry a value, so replay is idempotent (tests/worker/storage-outbox.worker.ts).
+ * A failed send or exhausted message writes a `storage_outbox` row after the D1 commit (#118).
  */
 
 export type StorageMessage =
   | { op: "kv_sync"; key: string }
   | { op: "r2_delete"; key: string }
   | { op: "r2_delete_prefix"; prefix: string }
-  // Every KV key an org's links and domains resolve through. Names the org,
-  // not the keys, so it still holds when the request that wanted it died
-  // before it could read them.
+  // Names the org, not the keys, so it holds when the request that wanted it died before reading them.
   | { op: "org_sync"; orgId: string };
 
 const R2_LIST_LIMIT = 1_000;
 
-// A failure on this many deliveries dead-letters the message. Keep this equal
-// to the main queue's max_retries + 1 in wrangler.jsonc.
+// Keep equal to the main queue's max_retries + 1 in wrangler.jsonc.
 const STORAGE_MAX_DELIVERIES = 6;
-
-/* ---------------- key helpers ---------------- */
 
 const slugKey = (hostname: string | null, slug: string) =>
   hostname ? `slug:${hostname}:${slug}` : `slug:${slug}`;
 
 const domainKey = (hostname: string) => `domain:${hostname}`;
 
-/* ---------------- message builders ---------------- */
-
-/** Sync a link's KV key. Publishes when the row exists, deletes when it does not. */
 export function syncLinkMsg(slug: string, hostname: string | null): StorageMessage {
   return { op: "kv_sync", key: slugKey(hostname, slug) };
 }
 
-/** Sync a domain's KV key. Publishes an active domain, deletes anything else. */
 export function syncDomainMsg(hostname: string): StorageMessage {
   return { op: "kv_sync", key: domainKey(hostname) };
 }
 
-/** Delete one QR logo object by its stored URL. Foreign or empty URLs are skipped. */
 export function deleteQrLogoMsg(url: string): StorageMessage | null {
   const key = qrLogoKeyFromUrl(url);
   return key ? { op: "r2_delete", key } : null;
 }
 
-/* ---------------- producing messages ---------------- */
-
-/**
- * Send messages to the storage queue. Skips nulls so callers can inline
- * conditions. `inlineLimit` is how many `kv_sync`s may be applied in the
- * request before the whole batch goes to the queue instead.
- */
+/** `inlineLimit` is how many `kv_sync`s may be applied in the request before the whole batch goes to the queue. */
 export async function enqueueStorage(
   env: Env,
   messages: Array<StorageMessage | null>,
@@ -111,23 +60,16 @@ export async function enqueueStorage(
   try {
     await env.STORAGE_QUEUE.sendBatch(batch);
   } catch (error) {
-    // D1 is already committed by the time this runs, so a failed send used to
-    // leave KV serving the old value with nothing scheduled to fix it, and
-    // the caller holding an error for a mutation that succeeded (#118).
-    // Recording the work makes it late rather than lost.
+    // D1 is already committed: without the outbox KV would serve the old value with nothing scheduled to fix it (#118).
     const recorded = await recordOutbox(
       env,
       batch.map((entry) => entry.body),
       "send_failed",
-      // Narrowed here, where it arrives: a caught value is only ever a
-      // string worth keeping when it is an Error.
+      // Narrowed where it arrives: a caught value is a string worth keeping only when it is an Error.
       error instanceof Error ? error.message.slice(0, 500) : "",
     );
-    // A recorded row is the durable record the drain replays from: the work is
-    // late, not lost, and the caller's mutation did commit, so a 500 here would
-    // be a lie (#227). Alert anyway, so a queue outage is still visible in
-    // Sentry without a user meeting an error. Only rethrow when the outbox
-    // write failed too, because then the work really is gone.
+    // The outbox row is the durable record and the mutation did commit, so a 500 would be a lie (#227).
+    // Alert anyway. Rethrow only when the outbox write failed too: then the work is gone.
     if (recorded !== null) {
       captureAlert([
         {
@@ -142,24 +84,12 @@ export async function enqueueStorage(
   }
 }
 
-/** The most KV keys one request applies itself; more go to the queue. */
 const INLINE_KV_SYNC_LIMIT = 10;
 
 /**
- * Applies every `kv_sync` now and returns what is left for the queue: the
- * R2 work, and any KV write that failed. Same `kvSync` the consumer runs, so
- * the idempotency contract above still holds: each one re-reads D1 after the
- * caller's commit, and a failed one is retried by the queue from D1 again.
- *
- * Only for a small batch: one link and its aliases, which is what somebody
- * is waiting on. A bulk change (suspending an org, a plan reconciliation)
- * resyncs hundreds of keys, each a D1 read and a KV write, which would blow
- * the per-request subrequest budget; those stay on the queue, where a few
- * seconds cost nobody anything.
- *
- * ponytail: two requests editing one link at the same instant can finish
- * their KV writes out of order and leave the older value until the next
- * edit. Rare enough to accept; a per-link Durable Object would close it.
+ * Only for a small batch (one link and its aliases) somebody is waiting on; a bulk change
+ * would blow the subrequest budget. ponytail: two concurrent edits to one link can leave the
+ * older KV value; a per-link Durable Object would close it.
  */
 async function applyKvSyncs(
   env: Env,
@@ -174,24 +104,10 @@ async function applyKvSyncs(
   return [...rest, ...kv.filter((_, i) => results[i]?.status === "rejected")];
 }
 
-/* ---------------- outbox: work the queue did not take ---------------- */
-
 /**
- * Remembers storage work so the daily drain can apply it (#118).
- *
- * Never throws, but it does report. A caller on the request path is already
- * failing and has nothing better to do with a second error; the dead-letter
- * consumer is not, and must not acknowledge a message whose only remaining
- * record failed to persist.
- *
- * One pending row per target, because applying desired state twice is a
- * no-op: a repeat failure for the same key replaces the first rather than
- * queueing a duplicate drain. That replacement takes a fresh `id`, which is
- * what the drain's delete matches on, so a request arriving mid-drain is
- * never removed unapplied.
- *
- * Returns the row ids, in the order of `messages`, or null when the write
- * failed.
+ * Never throws, but reports: the dead-letter consumer must not acknowledge a message whose
+ * only remaining record failed to persist. A repeat failure replaces the pending row with a
+ * fresh `id`, so a request arriving mid-drain is never removed unapplied.
  */
 async function recordOutbox(
   env: Env,
@@ -202,11 +118,8 @@ async function recordOutbox(
   const now = Date.now();
   const ids = messages.map(() => uid());
   try {
-    // Neither `created_at` nor `attempts` is reset on conflict. Both are how
-    // the drain decides what to read, and a key that fails a send daily and
-    // fails its drain daily would otherwise look brand new every time: never
-    // sinking behind fresher work, and never accumulating the attempts that
-    // make a permanently broken row findable.
+    // Neither `created_at` nor `attempts` is reset on conflict: a key that fails daily would
+    // otherwise look brand new each time and never accumulate the attempts that make it findable.
     await env.DB.batch(
       messages.map((message, i) =>
         env.DB.prepare(
@@ -227,49 +140,24 @@ async function recordOutbox(
   }
 }
 
-/** How many outbox rows one drain will attempt. Bounded so a large backlog
- * costs several days rather than one cron run that times out. */
+/** Bounded so a large backlog costs several days rather than one cron run that times out. */
 const OUTBOX_DRAIN_LIMIT = 200;
 
-/** How much later each failed attempt makes a row sort, so a repeatedly
- * failing key yields to fresher work without ever being excluded outright.
- * A day per attempt: the ordering is by real time, so however often the drain
- * runs (queue-consume, the frequent cron, the daily batch), a row that failed
- * once still drops behind newer work for roughly a day before it climbs back. */
+/** A day per attempt: a row that failed once drops behind newer work for about a day, however often the drain runs. */
 export const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
 
-/**
- * Applies the storage work the queue never did, oldest first (#118).
- *
- * This re-derives the value rather than replaying a captured one, which is
- * what makes a late apply correct instead of merely late: `applyStorageMessage`
- * reads current D1 state and writes what it finds, so a key whose row changed
- * twice since the failure lands on the answer it should have now.
- *
- * Returns how many rows it cleared.
- */
+/** Re-derives the value rather than replaying a captured one, so a late apply is correct. Returns how many rows it cleared. */
 export async function drainStorageOutbox(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
-  // Oldest first, counting each failed attempt as a day of age it has not
-  // earned. Both plain orderings starve something: by age alone, 200 rows
-  // that always fail hold the whole limit forever and a later recovery never
-  // drains; by attempts alone, a steady 200 rows a day of new work means a
-  // row that failed once never comes up again even after KV recovers.
-  //
-  // Backing a row off by its attempts is neither. It drops behind fresher
-  // work for a while and climbs back as real time passes, so nothing is
-  // permanently excluded and a hot failure cannot monopolise the pass.
-  // Built once and reused for both the filter and the order below, so they
-  // cannot drift apart.
+  // Oldest first, each failed attempt counting as a day of age. By age alone, 200 rows that always fail
+  // hold the limit forever; by attempts alone, a row that failed once never comes up again.
+  // Built once for the filter and the order, so they cannot drift.
   const dueOrder = sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${sql.raw(String(OUTBOX_RETRY_BACKOFF))}`;
   const rows = await db
     .select()
     .from(schema.storageOutbox)
-    // A row not yet due for its backed-off retry is excluded, not merely
-    // sorted last. Without this, a small outbox (under OUTBOX_DRAIN_LIMIT)
-    // retries and re-alerts on a persistently failing row every drain --
-    // now several times an hour between the queue-consume and */10 crons --
-    // instead of respecting the day OUTBOX_RETRY_BACKOFF backed it off to.
+    // Excluded, not merely sorted last: otherwise a small outbox retries and re-alerts on a
+    // failing row every drain instead of respecting its backoff.
     .where(sql`${dueOrder} <= ${Date.now()}`)
     .orderBy(dueOrder)
     .limit(OUTBOX_DRAIN_LIMIT);
@@ -277,14 +165,11 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
   for (const row of rows) {
     try {
       await applyStorageMessage(env, db, outboxMessage(row));
-      // `id` is the revision: every re-record takes a fresh one, so a failure
-      // that arrived while this row was being applied does not match here and
-      // survives to be drained on its own terms.
+      // `id` is the revision: a failure that arrived mid-apply does not match and survives.
       await db.delete(schema.storageOutbox).where(eq(schema.storageOutbox.id, row.id));
       cleared++;
     } catch (error) {
-      // Left in place, with its attempt count, so a permanently broken row can
-      // be found rather than retried forever in silence.
+      // Left in place with its attempt count so a permanently broken row can be found.
       await db
         .update(schema.storageOutbox)
         .set({
@@ -305,7 +190,6 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
   return cleared;
 }
 
-/** An outbox row back as the message it stands for. */
 function outboxMessage(row: typeof schema.storageOutbox.$inferSelect): StorageMessage {
   switch (row.op) {
     case "r2_delete_prefix":
@@ -317,22 +201,15 @@ function outboxMessage(row: typeof schema.storageOutbox.$inferSelect): StorageMe
   }
 }
 
-/* ---------------- consuming messages ---------------- */
-
 function parseSlugKey(key: string) {
   const rest = key.slice("slug:".length);
   const sep = rest.indexOf(":");
-  // A slug never holds a colon and a hostname never holds a colon, so the first
-  // colon splits host from slug. No colon means the shared default host.
+  // A slug and a hostname never hold a colon, so the first colon splits host from slug.
   if (sep === -1) return { hostname: null, slug: rest };
   return { hostname: rest.slice(0, sep), slug: rest.slice(sep + 1) };
 }
 
-/**
- * The value a KV key should hold given the current D1 state, or null when the
- * key should not exist. This is the single definition of desired KV state,
- * shared by the queue consumer and reconciliation.
- */
+/** The single definition of desired KV state, shared by the queue consumer and reconciliation. */
 async function desiredKvValue(db: DB, key: string): Promise<string | null> {
   if (key.startsWith("slug:")) {
     const { hostname, slug } = parseSlugKey(key);
@@ -342,22 +219,14 @@ async function desiredKvValue(db: DB, key: string): Promise<string | null> {
   return desiredDomainValue(db, key);
 }
 
-/**
- * What `slug:{hostname}:{slug}` should hold, read from D1: the same answer the
- * queue consumer writes to KV, for the redirect path to use while that write
- * has not landed yet (see `resolveLink` in index.ts).
- */
+/** For the redirect path while the queue's write has not landed yet (see `resolveLink` in index.ts). */
 export async function desiredLink(
   db: DB,
   slug: string,
   hostname: string | null,
 ): Promise<KVSlugValue | null> {
-  // Resolved through link_addresses, not links directly: a slug key names
-  // one active address (primary or alias), which always answers with its
-  // parent link's effective destination, never one of its own. An
-  // already-expired-but-not-yet-swept temp_alias still resolves here (its
-  // retiredAt is still null) — the redirect path's own expiresAt check is
-  // what actually stops it resolving; see index.ts.
+  // Through link_addresses: a slug key names one active address, which answers with its parent link's
+  // destination. An expired-but-unswept temp_alias still resolves here: index.ts's expiresAt check stops it.
   const rows = await db
     .select({
       addressId: schema.linkAddresses.id,
@@ -373,7 +242,6 @@ export async function desiredLink(
       hostname: schema.domains.hostname,
       suspendedAt: schema.links.suspendedAt,
       warnedAt: schema.links.warnedAt,
-      // Null for an anonymous link, which has no org.
       orgDisabledAt: schema.orgs.disabledAt,
     })
     .from(schema.linkAddresses)
@@ -392,14 +260,9 @@ export async function desiredLink(
     .limit(1);
   const address = rows[0];
   if (!address) return null;
-  // Suspension is enforced here and nowhere else (#67). Every republish runs
-  // through this function, so a suspended link stays held through any later
-  // edit, rename, or alias change. A check in the suspend route alone would
-  // be undone by the next save. Held, not absent (#344): the key stays, with
-  // no destination in it, so the redirect path can say "under review"
-  // instead of 404 without reading D1.
-  // A banned owner's org outranks any one link's state: it is a decision,
-  // where a suspension may still be lifted.
+  // Suspension is enforced here and nowhere else (#67): every republish runs through this. Held,
+  // not absent (#344): the key stays with no destination so redirects can say "under review".
+  // A banned owner's org outranks a link's state: a ban is a decision, a suspension may be lifted.
   if (address.orgDisabledAt !== null)
     return { held: true, disabled: true, linkId: address.linkId, expiresAt: address.expiresAt };
   if (address.suspendedAt !== null)
@@ -410,13 +273,11 @@ export async function desiredLink(
     orgId: address.orgId,
     url: buildDestination(address.destination, address),
     expiresAt: address.expiresAt,
-    // The same rule for the warning: it rides in the value, so an edit
-    // cannot drop it and the redirect path needs no D1 read to show it.
+    // It rides in the value, so an edit cannot drop it and the redirect path needs no D1 read.
     ...(address.warnedAt !== null && { warn: true as const }),
   };
 }
 
-/** What an active domain's KV key holds, from its row and its org's. */
 function domainKvValue({
   domain,
   graceEndsAt,
@@ -427,14 +288,12 @@ function domainKvValue({
   orgDisabledAt: number | null;
 }): KVDomain {
   return {
-    // A banned owner's domain answers "disabled" on every path. Not null,
-    // which would hand the host to the app.
+    // Not null, which would hand the host to the app.
     ...(orgDisabledAt !== null && { disabled: true as const }),
     domainId: domain.id,
     orgId: domain.orgId,
     rootRedirect: domain.rootRedirect,
-    // A locked domain with no grace on file has already run out: the
-    // absence of a deadline must not read as "serves forever".
+    // No grace on file means it has run out: an absent deadline must not read as "serves forever".
     servesUntil: domain.lockedAt === null ? null : (graceEndsAt ?? domain.lockedAt),
   };
 }
@@ -442,10 +301,8 @@ function domainKvValue({
 async function desiredDomainValue(db: DB, key: string): Promise<string | null> {
   if (key.startsWith("domain:")) {
     const hostname = key.slice("domain:".length);
-    // The org's grace period rides along, because a locked domain's verdict
-    // is "serves until X" and the redirect path may not read D1 to find X
-    // (#159). Left join: an org that has never been reconciled has no row,
-    // and its domains serve.
+    // A locked domain "serves until X" and the redirect path may not read D1 to find X (#159).
+    // Left join: an org never reconciled has no row, and its domains serve.
     const rows = await db
       .select({
         domain: schema.domains,
@@ -462,7 +319,6 @@ async function desiredDomainValue(db: DB, key: string): Promise<string | null> {
     return JSON.stringify(domainKvValue(row));
   }
 
-  // Unknown prefix: never enqueued, so leave it alone.
   return null;
 }
 
@@ -472,7 +328,6 @@ async function kvSync(env: Env, db: DB, key: string): Promise<void> {
   else await env.LINKS.put(key, value);
 }
 
-/** Delete every R2 object under a prefix, one page at a time. */
 export async function deleteR2Prefix(env: Env, prefix: string): Promise<void> {
   for (;;) {
     const page = await env.MEDIA.list({ prefix, limit: R2_LIST_LIMIT });
@@ -481,32 +336,19 @@ export async function deleteR2Prefix(env: Env, prefix: string): Promise<void> {
   }
 }
 
-/* ---------------- user avatars ---------------- */
-
-// Generous margin for a Google-hosted photo pulled server-side; a Settings
-// upload is checked against the stricter shared AVATAR_MAX_BYTES in the route.
+// Margin for a Google-hosted photo pulled server-side; a Settings upload uses the stricter AVATAR_MAX_BYTES.
 const AVATAR_FETCH_MAX_BYTES = 2 * 1024 * 1024;
 export const AVATAR_PREFIX = "avatars/";
 const AVATAR_SERVING_PATH = "/api/user/avatar";
 
-/**
- * The serving URL stored in `user.image`. The route reads the object keyed by
- * the session user, so the path carries no id or secret. A `version` (upload
- * time) is appended so replacing the picture changes the URL and the browser
- * refetches instead of serving the old bytes.
- */
+/** A `version` (upload time) changes the URL on replacement, so the browser refetches. */
 export function avatarUrl(version?: string | number): string {
   return version === undefined
     ? AVATAR_SERVING_PATH
     : `${AVATAR_SERVING_PATH}?v=${encodeURIComponent(String(version))}`;
 }
 
-/**
- * Where another member of an org sees a user's picture: the same object and
- * the same `?v=` stamp as `user.image`, through a route that checks the
- * viewer shares the org. Null when the user has no stored picture (none, or
- * a Google URL not copied into R2 yet, which the CSP would block anyway).
- */
+/** Null when there is no stored picture (a Google URL not yet copied into R2 would be blocked by the CSP). */
 export function memberAvatarUrl(
   orgId: string,
   userId: string,
@@ -525,11 +367,7 @@ function tryUrl(value: string): URL | null {
   }
 }
 
-/**
- * Whether a profile-picture URL may be fetched: one of Google's avatar hosts
- * over https, or the local emulator's host in dev (which serves over http, so
- * the protocol check is relaxed for it).
- */
+/** Google's avatar hosts over https, or the dev emulator's host (http). */
 function avatarHostAllowed(url: URL, env: Env): boolean {
   const googleHost = /^lh[0-9a-z.-]*\.googleusercontent\.com$/i;
   const emulatorUrl = env.GOOGLE_EMULATOR_URL ? tryUrl(env.GOOGLE_EMULATOR_URL) : null;
@@ -539,12 +377,9 @@ function avatarHostAllowed(url: URL, env: Env): boolean {
 }
 
 /**
- * Download a Google profile picture to R2 and return its serving URL.
- *
- * Runs at Google link/re-login time (see better-auth.ts). Only Google's hosts
- * are accepted, and only raster JPEG/PNG (SVG is a script surface). A picture
- * that fails any check is skipped rather than throwing, so a bad profile can
- * never break sign-in. Returns null when nothing was stored.
+ * Runs at Google link/re-login (see better-auth.ts). Only raster JPEG/PNG (SVG is a
+ * script surface). A picture that fails any check is skipped, never thrown, so a bad
+ * profile cannot break sign-in.
  */
 export async function storeUserAvatar(
   env: Env,
@@ -559,7 +394,6 @@ export async function storeUserAvatar(
   try {
     resp = await fetch(pictureUrl);
   } catch {
-    // A failed download must never break sign-in; the blobatar stays.
     return null;
   }
   if (!resp.ok) return null;
@@ -582,40 +416,18 @@ export async function storeUserAvatar(
   return avatarUrl(Date.now());
 }
 
-/** Remove a user's avatar bytes (called on account deletion). */
 export async function deleteUserAvatar(env: Env, userId: string): Promise<void> {
   await env.MEDIA.delete(`${AVATAR_PREFIX}${userId}`);
   await enqueueStorage(env, [{ op: "r2_delete_prefix", prefix: `${AVATAR_PREFIX}${userId}` }]);
 }
 
-/**
- * How long an unreferenced logo is left alone (#49).
- *
- * The upload route writes the R2 object and hands back its URL; the row that
- * points at it is written by a later request. Between those two an object is
- * legitimately unreferenced, so anything younger than this is not an orphan,
- * it is an upload still in progress. A day is far longer than that gap and
- * far shorter than the cost of keeping the object forever.
- */
+/** Between upload and the row that references it an object is legitimately unreferenced: younger than this is an upload in progress (#49). */
 const QR_LOGO_ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Delete QR logos no row points at (#49).
- *
- * An upload creates an immutable R2 object before anything claims it, so an
- * abandoned upload (a client that never sends the follow-up, a retry with a
- * different image) leaves bytes with no owner, no quota and no delete path.
- * Replace, clear and delete all clean up after themselves; nothing cleaned
- * up after the uploads that never got that far.
- *
- * D1 stays the source of truth: this reads every logo URL still referenced,
- * then deletes the objects missing from that set. Being wrong in the safe
- * direction matters more than being thorough, so an object is only touched
- * once it is older than the grace period above.
- *
- * ponytail: reads every referencing row into memory, which is fine while a
- * logo is one short URL per link. If that stops being true, page the listing
- * against a per-org query instead.
+ * An abandoned upload leaves bytes with no owner, quota or delete path (#49). Only objects
+ * older than the grace period are touched. ponytail: reads every referencing row into memory;
+ * page against a per-org query if a logo stops being one short URL per link.
  */
 export async function sweepOrphanQrLogos(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
@@ -650,10 +462,7 @@ export async function sweepOrphanQrLogos(env: Env): Promise<number> {
   }
 }
 
-/**
- * Run one storage message. Throws on failure so the queue retries it. Every
- * branch is safe to run more than once.
- */
+/** Throws on failure so the queue retries it. */
 export async function applyStorageMessage(
   env: Env,
   db: DB,
@@ -687,16 +496,9 @@ function targetOf(message: StorageMessage): string {
 }
 
 /**
- * Consume a batch off the storage queue: ack on success, retry on failure.
- * Cloudflare Queues own the backoff and move a message to the dead-letter
- * queue once it runs out of deliveries. A message on its last delivery here
- * logs a `storage_message_dead_letter` line so `wrangler tail` shows what is
- * about to dead-letter, ahead of the dead-letter consumer below logging the
- * same message again once it actually lands there.
- *
- * Messages run concurrently: each acks or retries independently, and every
- * message is safe to apply in any order (see the top of this file), so there
- * is nothing sequential to preserve by awaiting them one at a time.
+ * A message on its last delivery logs `storage_message_dead_letter` so `wrangler tail`
+ * shows what is about to dead-letter. Messages run concurrently: each is safe to apply
+ * in any order.
  */
 export async function consumeStorageBatch(
   env: Env,
@@ -724,15 +526,7 @@ export async function consumeStorageBatch(
   );
 }
 
-/**
- * Consume the dead-letter queue: record the work, alert, then ack.
- *
- * A message reaching this point means Cloudflare Queues gave up on it after
- * every retry. It used to be alerted on and dropped, with only `op` and
- * `target` in the alert, so the change could not be replayed even by hand
- * (#118). It now goes to the outbox first, which is the same two fields plus
- * somewhere for the daily drain to find them.
- */
+/** Before the outbox (#118) a dead-lettered message was alerted and dropped with only `op` and `target`. */
 export async function logDeadLetterBatch(
   env: Env,
   batch: MessageBatch<StorageMessage>,
@@ -749,9 +543,8 @@ export async function logDeadLetterBatch(
       target: targetOf(message.body),
     })),
   );
-  // The outbox row is the only record left of this work, so acknowledging a
-  // message whose row did not persist discards it for good. A transient D1
-  // failure earns a redelivery instead.
+  // The outbox row is the only record left: acking a message whose row did not persist
+  // discards it for good. A transient D1 failure earns a redelivery.
   if (recorded === null) {
     batch.retryAll();
     return;
@@ -759,16 +552,7 @@ export async function logDeadLetterBatch(
   for (const message of batch.messages) message.ack();
 }
 
-/* ---------------- org teardown steps (driven by the workflow) ---------------- */
-
-/**
- * Read an org's Cloudflare hostname ids and KV keys before the org row leaves
- * D1. The workflow persists this so later steps still know what to clean up.
- * A link or domain created after this snapshot would miss this gather step,
- * but by the time this runs `deleteOrg` (routes/orgs.ts) has already marked
- * the org deleting, and every write route rejects on that before it can
- * happen.
- */
+/** A link or domain created after this snapshot is rejected: `deleteOrg` has already marked the org deleting. */
 export async function orgDeleteGather(
   db: DB,
   orgId: string,
@@ -778,8 +562,7 @@ export async function orgDeleteGather(
       .select({ hostname: schema.domains.hostname, cfHostnameId: schema.domains.cfHostnameId })
       .from(schema.domains)
       .where(eq(schema.domains.orgId, orgId)),
-    // Every active address (primary and alias), not just links: an alias
-    // has its own KV key that a links-only gather would miss.
+    // Aliases have their own KV key that a links-only gather would miss.
     db
       .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
       .from(schema.linkAddresses)
@@ -794,27 +577,16 @@ export async function orgDeleteGather(
   return { cfHostnameIds, kvKeys };
 }
 
-/** Delete a set of KV keys. Idempotent: deleting a missing key is a no-op. */
 export async function deleteKvKeys(env: Env, keys: string[]): Promise<void> {
   await Promise.all(keys.map((key) => env.LINKS.delete(key)));
 }
 
-/** Cloudflare caps a queue send at 100 messages. */
 const REPUBLISH_BATCH = 100;
 
 /**
- * Re-sync every KV key an org's links resolve through, in a fixed number of
- * round trips. Used after a bulk state change on the org's links (suspend from
- * the admin route, a hold or a warning from the abuse sweep): the consumer reads the
- * current row and writes what the key should be, so this does not need to know
- * which links actually changed.
- *
- * One query and one send per link does not survive the size of org this is
- * for. At the Pro cap of 3,000 links that was 3,002 D1 statements and 3,000
- * sends, past both D1's per-invocation query limit and the subrequest ceiling:
- * the request died partway, after the flag was already committed, leaving the
- * links whose messages never went out still redirecting. Every address in one
- * query, then sends of at most a hundred: 3,000 links become 31 round trips.
+ * Fixed round trips: one query and one send per link made a 3,000-link Pro org need
+ * 3,002 D1 statements, past D1's per-invocation limit and the subrequest ceiling,
+ * and the request died after the flag was committed. 3,000 links become 31 round trips.
  */
 export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promise<void> {
   const addresses = await db
@@ -831,8 +603,6 @@ export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promis
   await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
 }
 
-/** Re-sync an org's links and custom domains, after a change to the org that
- * every one of them carries (its owner's ban). */
 async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
   const domains = await db
     .select({ hostname: schema.domains.hostname })
@@ -849,15 +619,9 @@ async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
 }
 
 /**
- * An `org_sync` outbox row for every org `orgs` picks, built to go in the
- * same `db.batch` as the change that makes the org need one (a ban, an
- * unban). Then the change and the record of its unfinished KV work commit
- * together, or not at all, and a request that dies after the commit leaves
- * the drain something to finish. Place it before the change in the batch,
- * so `orgs` still sees the rows as they were.
- *
- * Returns the rows' ids for `publishOrgSyncs`, which deletes each one once
- * its org is published.
+ * Built to go in the same `db.batch` as the change, so the change and the record of
+ * its unfinished KV work commit together. Place it before the change so `orgs` still
+ * sees the rows as they were. Returns the ids for `publishOrgSyncs`.
  */
 export function queueOrgSyncs(db: DB, orgs: SQL | undefined) {
   return db
@@ -883,11 +647,7 @@ export function queueOrgSyncs(db: DB, orgs: SQL | undefined) {
     .returning({ id: schema.storageOutbox.id, orgId: schema.storageOutbox.target });
 }
 
-/**
- * Republish the orgs `queueOrgSyncs` recorded, now, and delete each row once
- * its org is done. Never throws: a row whose org failed stays for the drain,
- * and the change it follows has already committed.
- */
+/** Never throws: a failed row stays for the drain, and the change has already committed. */
 export async function publishOrgSyncs(
   env: Env,
   db: DB,
@@ -902,26 +662,13 @@ export async function publishOrgSyncs(
     await db
       .delete(schema.storageOutbox)
       .where(inArray(schema.storageOutbox.id, done))
-      .catch(() => {
-        // The drain republishes those orgs again, which changes nothing.
-      });
+      .catch(() => {});
 }
 
 /**
- * Re-sync every address one link answers to, after its suspension or warning
- * changed. A link with three aliases that only republished its primary would
- * keep its old state on the other two. Returns how many addresses it synced.
- *
- * Every address is written in the request, past INLINE_KV_SYNC_LIMIT (#101):
- * a suspension must not wait on a queue that may be stuck, and one link has
- * few addresses (a primary, five aliases, a rename's 48-hour aliases). The
- * queue still takes any write that fails.
- *
- * `recheck` sends the same keys to the queue again, delayed. An owner's edit
- * that read D1 just before the suspension committed can land its KV write
- * just after ours (see applyKvSyncs) and put the link back live; the
- * delayed sync reads D1 again and puts the hold back. It carries keys, not
- * values, so it can never write a stale one itself.
+ * Written in the request, past INLINE_KV_SYNC_LIMIT (#101): a suspension must not wait on a
+ * stuck queue. `recheck` queues the same keys again, delayed, since an owner's edit read
+ * just before the suspension could put the link back live. It carries keys, not values.
  */
 export async function republishLink(
   env: Env,
@@ -933,15 +680,7 @@ export async function republishLink(
   return synced.get(linkId) ?? 0;
 }
 
-/**
- * `republishLink` for many links at once (#14): one address query, then
- * sends of at most a hundred, the way republishOrgLinks does it, instead of
- * a query, KV writes and a queue send per link. Returns how many addresses
- * each link synced.
- *
- * Up to `inlineLimit` keys are written in the request; a bigger batch goes
- * to the queue, since a write per key would spend the subrequest budget.
- */
+/** One address query, then sends of at most a hundred. A bigger batch than `inlineLimit` goes to the queue. */
 export async function republishLinks(
   env: Env,
   db: DB,
@@ -958,7 +697,6 @@ export async function republishLinks(
     .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
     .where(
       and(
-        // One bound parameter however many ids: D1 allows 100 a query.
         sql`${schema.linkAddresses.linkId} in (select value from json_each(${JSON.stringify(linkIds)}))`,
         isNull(schema.linkAddresses.retiredAt),
       ),
@@ -982,7 +720,6 @@ export async function republishLinks(
       ),
     );
     const failed = sends.find((s) => s.status === "rejected");
-    // The write that matters already happened in the request.
     if (failed?.status === "rejected")
       captureAlert([
         {
@@ -995,23 +732,15 @@ export async function republishLinks(
   return synced;
 }
 
-/** How long after a suspension or restore the queue rewrites its keys. Past
- * KV's one-write-per-second limit for a key, and past any racing edit. */
+/** Past KV's one-write-per-second limit for a key, and past any racing edit. */
 const RECHECK_DELAY_SECONDS = 60;
 
-// Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one
-// sync message per expired row in a single sendBatch call below, so the page
-// size can't exceed that.
+// sendBatch caps at 100 messages and this sweep sends one per expired row.
 const ALIAS_SWEEP_BATCH_SIZE = 100;
 
 /**
- * Retire every rename alias past its 48-hour deadline, in bounded batches.
- * The redirect path (index.ts) already stops resolving an expired alias the
- * instant it's asked for, using only the expiry baked into its KV value: this
- * sweep just catches D1 and KV up afterward, so the slug frees for reuse and
- * the row stops looking active. Run daily (see scheduled() in index.ts); the
- * up-to-a-day gap between "stopped resolving" and "freed for reuse" is
- * accepted slop, not a correctness issue.
+ * The redirect path already stops resolving an expired alias (the expiry is in its KV
+ * value): this sweep catches D1 and KV up so the slug frees for reuse.
  */
 export async function sweepExpiredAliases(env: Env, db: DB): Promise<void> {
   for (;;) {
@@ -1042,8 +771,7 @@ export async function sweepExpiredAliases(env: Env, db: DB): Promise<void> {
           expired.map((a) => a.id),
         ),
       );
-    // Re-sync each freed key: desiredKvValue now finds no active row for it
-    // (the update above just retired it), so this converges to a delete.
+    // desiredKvValue now finds no active row, so this converges to a delete.
     await enqueueStorage(
       env,
       expired.map((a) => syncLinkMsg(a.slug, a.hostname)),

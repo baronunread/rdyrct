@@ -1,28 +1,15 @@
-/**
- * What the held and warning pages say (#344). The React views
- * (src/app/components/link-state-views.tsx) are baked into the build by
- * scripts/prerender-404.tsx, and the Worker serves a plain fallback when that
- * build is missing (dev, the worker tests). Both read the words from here so
- * they cannot drift.
- *
- * Neither page names the rule that put it there: a page that said "reported"
- * or "too much traffic" would teach the next scammer what to avoid. A
- * customer's own domain shows these pages too, so neither names rdyrct.
- */
+/** Shared by the React views and the Worker fallback so they cannot drift. Neither page names the rule
+ * that fired (it would teach the next scammer what to avoid), nor rdyrct: a customer's own domain shows them too. */
 export const HELD_PAGE = {
   title: "Under review",
   heading: "This link is under review.",
   body: "We paused it while we check where it leads. Try again later.",
 } as const;
 
-/** A link whose owner was banned: decided, not under review. It still names
- * no rule, for the same reason as above. */
 export const DISABLED_PAGE = {
   title: "Link disabled",
   heading: "This link has been disabled.",
-  // Modelled on Bitly's page for a suspended account: why the link is dead,
-  // then what the visitor can do. "Our" names nobody, so it reads right on a
-  // customer's own domain too.
+  // "Our" names nobody, so it reads right on a customer's own domain too.
   body: "The account that made this link was suspended for breaking our rules. You can close this page.",
 } as const;
 
@@ -35,11 +22,7 @@ export const WARN_PAGE = {
   action: "Continue",
 } as const;
 
-/** The markers the Worker fills in on the warning page. */
 export const WARN_HOST_SLOT = "warn-host";
 export const WARN_CONTINUE_SLOT = "warn-continue";
 
-/** The quiet "Made with rdyrct" link under the 404 and the disabled page.
- *  The Worker points it at rdyrct.com, or removes it on a customer's own
- *  domain and in a self-hosted build (src/worker/not-found-page.ts). */
 export const MADE_WITH_SLOT = "made-with";

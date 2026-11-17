@@ -1,7 +1,3 @@
-/**
- * The app's icon vocabulary. Keep the aliases here so every surface uses the
- * same Tabler stroke set while call sites can stay focused on their action.
- */
 export {
   IconArrowBackUp as Undo2,
   IconArrowDown as ArrowDown,

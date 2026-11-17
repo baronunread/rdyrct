@@ -1,11 +1,6 @@
-/**
- * A label that keeps its width when it turns bold. Selected segments, tabs
- * and filter chips set their label in a heavier weight, which is wider, so
- * picking one nudged its neighbours. A zero-height bold copy, drawn by CSS
- * from `data-label`, holds the width from the start. CSS, not a second
- * element, so the text exists once for find-in-page, screen readers and
- * tests.
- */
+// A zero-height bold copy, drawn by CSS from `data-label`, holds the width a selected label
+// takes when bold. CSS, not a second element, so the text exists once for find-in-page,
+// screen readers and tests.
 export function StableLabel({ children }: { children: string }) {
   return (
     <span

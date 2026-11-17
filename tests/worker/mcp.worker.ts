@@ -255,7 +255,6 @@ describe("remote MCP server (#139)", () => {
     const dto = JSON.parse(body.result!.content![0]!.text!);
     expect(dto.destination).toBe("https://example.com/promo");
 
-    // The org's sole organization is assumed with no org_id given.
     const list = await callMcp(`Bearer ${key}`, toolCall("list_links", {}));
     const listBody = await jsonBody<JsonRpcResponse>(list);
     const links = JSON.parse(listBody.result!.content![0]!.text!);
@@ -294,7 +293,6 @@ describe("remote MCP server (#139)", () => {
     );
     const body = await jsonBody<JsonRpcResponse>(res);
     expect(body.result?.content?.[0]?.type).toBe("image");
-    // The PNG options are tuned for speed (see QR_PNG_OPTS); still a PNG.
     expect(atob(body.result?.content?.[0]?.data ?? "").slice(1, 4)).toBe("PNG");
   });
 
@@ -310,9 +308,8 @@ describe("remote MCP server (#139)", () => {
     expect(after.status).toBe(401);
   });
 
-  // Security-audit regressions: an oversized body or an unbounded QR url both
-  // reach generate_qr_code with no org-membership check gating them, so these
-  // are its only cost controls (see docs/mcp-server.md history / #139 audit).
+  // generate_qr_code has no org-membership check, so the body and url caps
+  // are its only cost controls (#139 audit).
   it("413s an oversized JSON-RPC body instead of buffering it", async () => {
     const cookie = await freeOwnerCookie();
     const { key } = await mintKey(cookie);
@@ -337,9 +334,6 @@ describe("remote MCP server (#139)", () => {
   it("a tool error thrown after an await (not a bad argument) still comes back clean", async () => {
     const cookie = await freeOwnerCookie();
     const { key } = await mintKey(cookie);
-    // resolveOrg's membership check runs an awaited DB query before it
-    // throws, unlike the argument-validation errors above: a different
-    // shape of error path through the same handler.
     const res = await callMcp(
       `Bearer ${key}`,
       toolCall("get_link_stats", { slug: "sale", org_id: "not-my-org" }),
@@ -350,10 +344,8 @@ describe("remote MCP server (#139)", () => {
     expect(body.result?.content?.[0]?.text).toContain("not a member");
   });
 
-  // get_link_stats/get_org_stats used to return the dashboard's own DTO
-  // unfiltered: a year of daily series, deltas, rangeDays, and (for the org
-  // one) an hourSeries, heatmap and UTM breakdowns nobody asked for. Locks
-  // in that the trim stays a trim, not just that the promised fields exist.
+  // The stats tools once returned the dashboard's whole DTO. Lock in that the
+  // trim stays a trim, not just that the promised fields exist.
   it("get_link_stats and get_org_stats answer only what their descriptions promise", async () => {
     const cookie = await freeOwnerCookie();
     const { key } = await mintKey(cookie);
@@ -363,7 +355,6 @@ describe("remote MCP server (#139)", () => {
     );
     const createdBody = await jsonBody<JsonRpcResponse>(created);
     const { slug, url } = JSON.parse(createdBody.result!.content![0]!.text!);
-    // The client gets the address to hand out, rather than guessing a host.
     expect(url).toBe(`https://${env.SHARED_LINK_HOST}/${slug}`);
 
     const linkRes = await callMcp(`Bearer ${key}`, toolCall("get_link_stats", { slug }));

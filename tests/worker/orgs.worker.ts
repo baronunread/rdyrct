@@ -16,9 +16,6 @@ import {
   overrideEnv,
 } from "./support";
 
-// A workflow instance handle that answers the one question deleteOrg asks of
-// it. Every other member throws, so a test that starts depending on Workflows
-// execution semantics says so out loud rather than reading a quiet default.
 function instanceReporting(status: InstanceStatus["status"]): WorkflowInstance {
   const untested = (): never => {
     throw new Error("this workflow instance member is not part of any deleteOrg test");
@@ -36,13 +33,8 @@ function instanceReporting(status: InstanceStatus["status"]): WorkflowInstance {
   };
 }
 
-// A workflow stub that records the ids teardown was started for, without
-// running the real OrgDeleteWorkflow, so these tests assert deleteOrg's own
-// gating logic instead of depending on Workflows execution semantics.
-//
-// `createBatch` models the documented contract deleteOrg now relies on: an id
-// already in use is skipped and left out of the returned array, rather than
-// throwing the way `create` does.
+// `createBatch` models the documented contract deleteOrg relies on: an id
+// already in use is skipped and left out of the result, unlike `create`, which throws.
 function fakeOrgDeleteWorkflow() {
   const started: string[] = [];
   const workflow: Env["ORG_DELETE"] = {
@@ -64,10 +56,8 @@ function fakeOrgDeleteWorkflow() {
   return { workflow, started };
 }
 
-// A workflow stub whose start always fails, and whose get() reports a given
-// status. With no status it throws, which is what Workflows does both for an
-// instance that does not exist and for a lookup that failed: deleteOrg cannot
-// tell those apart, so it must not treat either as proof.
+// With no status get() throws, as Workflows does for a missing instance and a
+// failed lookup alike: deleteOrg cannot tell them apart, so neither is proof.
 function failingStartWorkflow(existingStatus?: InstanceStatus["status"]): Env["ORG_DELETE"] {
   return {
     async create() {
@@ -106,8 +96,6 @@ afterEach(async () => {
 
 beforeEach(applyTestMigrations);
 
-/** Runs a delete whose workflow start fails, and reports what the flag was
- * left as. Every "start failed" case differs only in what get() then says. */
 async function failedStart(
   db: Awaited<ReturnType<typeof seedOrg>>,
   status?: InstanceStatus["status"],
@@ -118,8 +106,6 @@ async function failedStart(
   return deletingAtOf("org-1");
 }
 
-/** Deletes with a working workflow and reports which ids teardown started
- * for. Every "it starts" case differs only in the state it starts from. */
 async function startedIds(db: Awaited<ReturnType<typeof seedOrg>>): Promise<string[]> {
   const { workflow, started } = fakeOrgDeleteWorkflow();
   await deleteOrg(db, overrideEnv({ ORG_DELETE: workflow }), "org-1");
@@ -145,17 +131,13 @@ describe("deleteOrg: marking an org deleting", () => {
     await deleteOrg(db, testEnv, "org-1");
     await deleteOrg(db, testEnv, "org-1");
 
-    // Both calls ask, and the second is skipped because the id is in use.
-    // That is `createBatch`'s job rather than this function's, which is what
-    // lets a repeat DELETE double as a repair without risking a duplicate.
     expect(started).toEqual(["org-1"]);
   });
 
   it("restarts teardown for an org already flagged with no instance driving it", async () => {
     const db = await seedOrg();
-    // The state a failed start can leave behind: flagged, nothing running.
-    // Without this the org is stuck: read-only forever, and its DELETE
-    // answers 200 while doing nothing.
+    // Without this the org is stuck read-only, and its DELETE answers 200
+    // while doing nothing.
     await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'").bind(1).run();
 
     expect(await startedIds(db)).toEqual(["org-1"]);
@@ -164,26 +146,19 @@ describe("deleteOrg: marking an org deleting", () => {
   it("leaves deleting_at set when the start fails and the instance cannot be read", async () => {
     const db = await seedOrg();
 
-    // get() throws for a missing instance and for a failed lookup alike, so
-    // this is the ambiguous case. Clearing the flag on it would reopen writes
-    // under a teardown that may well be running, and those writes outlive the
-    // org as public redirects. The next DELETE restarts teardown.
+    // Ambiguous case. Clearing the flag would reopen writes under a teardown
+    // that may be running, and those writes outlive the org as public redirects.
     expect(await failedStart(db)).not.toBeNull();
     expect(await startedIds(db)).toEqual(["org-1"]);
   });
 
   it("leaves deleting_at set when the start fails but an instance is already running", async () => {
-    // The start can fail on the client side (a timeout, say) while the
-    // instance still started server-side: get() finding it "running" is the
-    // signal that teardown is genuinely underway, so the write guard must
-    // not lift.
+    // A start can fail client-side (a timeout) while the instance still
+    // started server-side: "running" means teardown is underway, so the guard stays.
     expect(await failedStart(await seedOrg(), "running")).not.toBeNull();
   });
 
   it("clears deleting_at when the start fails and the found instance is already terminal", async () => {
-    // The one case that is proof rather than a guess: the instance was read,
-    // and it is finished. Nothing is running, so the org goes back to normal
-    // and the delete can be retried.
     expect(await failedStart(await seedOrg(), "errored")).toBeNull();
   });
 });
@@ -229,9 +204,6 @@ describe("requireOrgRole: writes during teardown", () => {
   it("a duplicate DELETE is a no-op, not a 409, once the first has marked the org deleting", async () => {
     await seedOrg();
     const cookie = await adminCookie();
-    // Stub the workflow so this only exercises deleteOrg's own idempotency
-    // and the route's write-block exemption, not real Workflow execution
-    // (which runs detached from the request and would outlive the test).
     const { workflow } = fakeOrgDeleteWorkflow();
     const del = () =>
       call(
@@ -282,7 +254,6 @@ describe("DELETE /orgs/:orgId: the only organization", () => {
 describe("sweepStalledOrgDeletions", () => {
   const HOUR = 60 * 60 * 1000;
 
-  /** A workflow whose instance reports `status` and records restarts. */
   function stalledWorkflow(status?: InstanceStatus["status"], skipCreate = false) {
     const restarts: string[] = [];
     const created: string[] = [];
@@ -302,9 +273,7 @@ describe("sweepStalledOrgDeletions", () => {
         });
       },
       createBatch: arrayFormCreateBatch(async (batch) => {
-        // Modelling the documented contract: an id already in use is skipped
-        // and left out of what comes back. `skipCreate` is what an instance
-        // that exists but could not be read looks like from here.
+        // `skipCreate` is what an instance that exists but could not be read looks like.
         if (skipCreate) return [];
         created.push(...batch.map((entry) => entry.id ?? ""));
         return batch.map(() => instanceReporting("running"));
@@ -324,7 +293,6 @@ describe("sweepStalledOrgDeletions", () => {
     return db;
   }
 
-  /** One sweep against a workflow reporting `status`, and everything it did. */
   async function sweep(
     db: Awaited<ReturnType<typeof seedOrg>>,
     status?: InstanceStatus["status"],
@@ -341,9 +309,8 @@ describe("sweepStalledOrgDeletions", () => {
 
     expect(await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }))).toBe(1);
 
-    // createBatch skips an id already in use whatever its state, so a repeat
-    // DELETE could never have replaced this one: the org was read-only
-    // forever and its DELETE answered 200 while nothing ran.
+    // createBatch skips an id in use whatever its state, so a repeat DELETE
+    // could never replace this one: the org stayed read-only for good.
     expect(restarts).toEqual(["org-1"]);
   });
 
@@ -393,9 +360,8 @@ describe("sweepStalledOrgDeletions", () => {
   });
 
   it("creates one when no instance exists at all", async () => {
-    // What a failed ambiguous start leaves behind on the account-deletion
-    // path, where the only member is the account that was being deleted and
-    // there is nobody left to issue another DELETE.
+    // Account-deletion path: the only member is the deleted account, so
+    // nobody is left to issue another DELETE.
     const db = await flagOrg(2 * HOUR);
     const { binding, created } = stalledWorkflow();
 
@@ -429,9 +395,8 @@ describe("sweepStalledOrgDeletions: reporting", () => {
     await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'")
       .bind(Date.now() - 2 * HOUR)
       .run();
-    // get() throws for a missing instance and an unreadable one alike, so the
-    // create is what settles it: an id already in use is skipped and comes
-    // back absent. Reporting a restart on that is a false signal.
+    // get() throws for a missing and an unreadable instance alike, so the create
+    // settles it: an id in use comes back absent, and a restart report would be false.
     const binding: Env["ORG_DELETE"] = {
       async create() {
         throw new Error("the sweep restarts, it does not create");

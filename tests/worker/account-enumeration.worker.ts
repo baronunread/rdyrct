@@ -12,8 +12,6 @@ import {
 } from "./support";
 import { hashPassword } from "../../src/worker/password";
 
-/** Signup's MX lookup must succeed for the enumeration branches to be the
- * thing under test, so every domain looks deliverable here. */
 const stubFetch = () => captureEmails({ mx: "deliverable" });
 
 async function seedUser(email: string, emailVerified: boolean) {
@@ -49,13 +47,11 @@ function sendVerificationOtp(email: string) {
   );
 }
 
-/** The sign-up route's answer, in the only terms this test compares. */
 interface SignUpAnswer {
   token?: string;
   user?: object | null;
 }
 
-/** What an outsider can tell apart between the answers for two addresses. */
 function outsiderView(body: SignUpAnswer) {
   return {
     keys: Object.keys(body).sort(),
@@ -113,8 +109,6 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
         ctx,
       );
 
-      // The answer is here while the send is still hanging: the timing an
-      // outsider can measure no longer depends on the address existing.
       expect(res.status).toBe(200);
       expect(started()).toBe(true);
 
@@ -146,10 +140,8 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
     expect(results).toHaveLength(1);
     expect(results[0]!.id).toBe("known-1");
 
-    // The password the prober typed must not have touched the real account.
-    // Asserted on the stored hash rather than by attempting a sign-in: a
-    // failed sign-in is the point, but it also raises inside better-auth and
-    // shows up as an unhandled rejection in the run.
+    // Asserted on the stored hash, not by attempting a sign-in: a failed sign-in
+    // also raises inside better-auth as an unhandled rejection in the run.
     const [account] = await env.DB.prepare("select password from account where user_id = 'known-1'")
       .all<{ password: string }>()
       .then((r) => r.results);
@@ -181,10 +173,7 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toBe("known@gmail.com");
     expect(sent[0]!.subject).toContain("tried to sign up");
-    // A code here would be the takeover the old disguise caused: the reader
-    // is not necessarily the person who typed the form. Checked on the text
-    // part, where a code sits on a line of its own: the HTML part carries
-    // hex colours, and "#262336" is six digits.
+    // Checked on the text part: the HTML part carries hex colours, and "#262336" is six digits.
     expect(sent[0]!.text).not.toMatch(/^\s*\d{6}\s*$/m);
   });
 

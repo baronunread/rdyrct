@@ -42,25 +42,17 @@ import { cn } from "../ui/cn";
 import type { LinkDTO } from "@/shared/types";
 
 type Action = {
-  /** Unique id, plus a few synonyms the query also matches. */
   value: string;
   label: string;
   icon: ComponentType<{ size?: number; className?: string }>;
   group: "pages" | "actions";
-  /** The keys that do the same thing anywhere in the app. */
   keys?: readonly string[];
   danger?: boolean;
   disabled?: boolean;
-  /** Only once something is typed: rare enough not to crowd the opening list. */
   searchOnly?: boolean;
   run: () => void;
 };
 
-/**
- * The palette has three scopes. `all` searches links, pages and actions as
- * you type. A `link:` or `create:` prefix (Discord style) turns into a pill
- * and narrows it to one thing; Backspace on the empty field pops the pill.
- */
 type Scope = "all" | "links" | "create";
 
 const PILL_LABEL = { links: "link", create: "create" } satisfies Record<
@@ -73,7 +65,6 @@ const PREFIXES: [RegExp, Exclude<Scope, "all">][] = [
   [/^create(?: link)?:\s*/i, "create"],
 ];
 
-/** A prefix the field just gained, with the text left after it. */
 function detectPill(value: string): { scope: Exclude<Scope, "all">; rest: string } | null {
   for (const [re, scope] of PREFIXES) {
     const m = value.match(re);
@@ -82,12 +73,10 @@ function detectPill(value: string): { scope: Exclude<Scope, "all">; rest: string
   return null;
 }
 
-/** ⌘K opens on any key with a Cmd/Ctrl modifier and no Alt. */
 function isToggleChord(e: globalThis.KeyboardEvent): boolean {
   return (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k";
 }
 
-/** Every word of the query has to appear somewhere in the item's text. */
 function hit(text: string, query: string): boolean {
   const hay = text.toLowerCase();
   return query
@@ -96,27 +85,23 @@ function hit(text: string, query: string): boolean {
     .every((word) => hay.includes(word));
 }
 
-/** A one-token string with a dot in it: enough to read as "make this a link".
- * An `@` rules it out so `name@host.com` is only ever read as an email. */
+// An @ rules it out, so name@host.com reads only as an email.
 function looksLikeUrl(s: string): boolean {
   return /^https?:\/\//i.test(s) || (/\.[a-z]{2,}/i.test(s) && !/\s/.test(s) && !s.includes("@"));
 }
 
 const EMAIL = v.pipe(v.string(), v.email());
 
-/** A bare email address: offer to invite it to the current org. */
 function looksLikeEmail(s: string): boolean {
   return v.safeParse(EMAIL, s.trim()).success;
 }
 
-/** "G D", for a page that has a go-to pair. */
 function goKeys(to: string): readonly string[] | undefined {
   const key = Object.entries(GO_KEYS).find(([path]) => path === to)?.[1];
   return key ? ["G", key] : undefined;
 }
 
-/** Switch the current org, then stay put unless the route names a link (its
- * slug may not exist under the new org). Mirrors the sidebar switcher. */
+// Stay put unless the route names a link: its slug may not exist under the new org.
 function makeSwitchTo(
   close: () => void,
   setOrg: (id: string) => void,
@@ -125,12 +110,10 @@ function makeSwitchTo(
   return (id) => {
     close();
     setOrg(id);
-    // Nothing follows the navigation, so nothing waits on it.
     if (window.location.pathname.startsWith("/links/")) void navigate({ to: "/dashboard" });
   };
 }
 
-/** "Switch to <Org>" for every org the user is in except the current one. */
 function switchOrgActions(
   orgs: { id: string; name: string }[],
   currentId: string | undefined,
@@ -152,10 +135,6 @@ function switchOrgActions(
   );
 }
 
-/**
- * One flat list of the pages and actions the palette offers, built from the
- * current user, org and theme.
- */
 // A registry builder: the CRAP score is optional-chain and zero-coverage
 // noise over a handful of plain conditionals.
 // fallow-ignore-next-line complexity
@@ -178,7 +157,6 @@ function useActions(close: () => void): Action[] {
   const flip =
     theme === "dark" ? { label: "Light theme", icon: Sun } : { label: "Dark theme", icon: Moon };
 
-  // Nothing to buy on a self-hosted instance, so no billing page to go to.
   const pages: Action[] = appNavItems
     .filter(({ to }) => to !== "/billing" || shell?.user.plan !== "unlimited")
     .map(({ to, icon, label }) => ({
@@ -207,7 +185,6 @@ function useActions(close: () => void): Action[] {
       group: "actions",
       keys: ["C"],
       disabled: locked,
-      // The same dialog the header button and the C key open.
       run: act(openNewLink),
     },
     {
@@ -227,8 +204,7 @@ function useActions(close: () => void): Action[] {
       run: goto("/members"),
     },
     {
-      // No `act`: the palette stays open so you can flip back, and the
-      // item's own label swaps as the theme changes.
+      // No `act`: the palette stays open so you can flip back.
       value: "toggle theme dark light appearance",
       label: flip.label,
       icon: flip.icon,
@@ -263,12 +239,7 @@ function linkHref(l: LinkDTO): string {
   return l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 }
 
-/**
- * Links for the palette: the three newest while the field is empty, and the
- * matches for what is typed once it settles. Both only while it is open, so a
- * closed palette costs nothing. The term reaches the server, so the list
- * lags a keystroke behind the pages and actions.
- */
+/** The term reaches the server, so the list lags a keystroke behind the pages and actions. */
 function usePaletteLinks(open: boolean, term: string, limit: number) {
   const { org } = useCurrentOrg();
   const settled = useDebounced(term.trim(), 200);
@@ -313,7 +284,6 @@ function LinkRow({
       <button
         type="button"
         aria-label={`Copy ${link.url}`}
-        // Stop the press from selecting the row (which would navigate).
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
@@ -353,14 +323,6 @@ function matching(actions: Action[], group: Action["group"], search: string): Ac
   );
 }
 
-/**
- * The list for the current scope, and how many rows it holds.
- *
- * Empty field: recent links, every page, the common actions. Typing: the
- * links, pages and actions that match, the match in the accent, and a last
- * row that widens the search to every link. A URL offers to make a link; an
- * email address, to invite it.
- */
 // fallow-ignore-next-line complexity
 function usePaletteBody({
   open,
@@ -424,7 +386,6 @@ function usePaletteBody({
   const extra = (url ? 1 : 0) + (email ? 1 : 0) + (q ? 1 : 0);
   const shownLinks = q ? found : recent;
   const firstAction = [...pages, ...acts].find((a) => !a.disabled);
-  // What a press of Enter runs: the row the list opens on.
   const first = url
     ? "__create"
     : email
@@ -503,12 +464,6 @@ const PLACEHOLDER = {
   create: "Paste or type a URL",
 } satisfies Record<Scope, string>;
 
-/**
- * ⌘K / Ctrl+K: find a link, go to a page, or do something. Mounted once in
- * AppShell, so it rides on every app route. It is also where the app's
- * quieter shortcuts are written down: each page and action shows its keys
- * (G D, C), and the footer shows the palette's own.
- */
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<Scope>("all");
@@ -547,9 +502,7 @@ export function CommandMenu() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // The highlight goes back to the top whenever the list under it changes
-  // (a keystroke, or the links arriving), so Enter runs the best match
-  // rather than whatever row happened to exist first.
+  // Reset the highlight when the list changes, so Enter runs the best match.
   const [listKey, setListKey] = useState("");
   const nextKey = `${scope}|${search}|${first}`;
   if (listKey !== nextKey) {
@@ -557,7 +510,6 @@ export function CommandMenu() {
     setSelected(first);
   }
 
-  // Fresh each open.
   useEffect(() => {
     if (open) return;
     setScope("all");
@@ -565,9 +517,8 @@ export function CommandMenu() {
   }, [open]);
 
   const onValueChange = (value: string) => {
-    // Checked in every scope, not just `all`: a fast typist can land a
-    // keystroke on the controlled field before React clears the prefix, so
-    // the value can still arrive as "link:foo" while already in link scope.
+    // A fast typist can land a keystroke before React clears the prefix, so "link:foo" can arrive
+    // while already in link scope.
     const pill = detectPill(value);
     if (pill) {
       setScope(pill.scope);
@@ -578,8 +529,7 @@ export function CommandMenu() {
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    // Read the live value, not `search`: a controlled reset to "" can lag a
-    // render behind the keystroke that empties the field.
+    // Read the live value: a controlled reset to "" can lag a render behind the keystroke.
     if (e.key === "Backspace" && e.currentTarget.value === "" && scope !== "all") {
       e.preventDefault();
       setScope("all");

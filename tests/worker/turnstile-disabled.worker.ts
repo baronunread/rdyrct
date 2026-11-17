@@ -2,13 +2,8 @@ import { beforeEach, expect, it } from "vitest";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
 
-/**
- * With neither Turnstile key the gate is off and signup works as it did
- * before, which keeps local dev, self-hosting and CI from needing a key.
- *
- * Its own file because getAuth() memoizes one auth instance per isolate, and
- * that instance closes over the env that built it.
- */
+// Its own file: getAuth() memoizes one auth instance per isolate, and that
+// instance closes over the env that built it.
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();

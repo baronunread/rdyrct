@@ -30,10 +30,9 @@ const PRERENDERED_PAGES = [
 
 const HTML_FALLBACK_PAGES = [] as const;
 
-/** What React reports when hydration does not match the server HTML. The
- *  production build reports it as `pageerror` "Minified React error #418"
- *  (or #423, #425), with none of the words the development message has, so a
- *  console-only check for "hydration" never sees it. */
+/** The production build reports a hydration mismatch as `pageerror` "Minified
+ * React error #418" (or #423, #425), so a console check for "hydration"
+ * never sees it. */
 function collectHydrationErrors(page: Page) {
   const errors: string[] = [];
   const mismatch = /Minified React error #4(18|23|25)|hydration|didn't match|server html/i;
@@ -66,15 +65,12 @@ test("public content stays visible and correct before JavaScript runs", async ({
     await page.goto(path);
     await expect(page.locator("#root")).toContainText(text);
   }
-  // Auth routes render in the browser and carry no static form.
   for (const path of ["/login", "/signup"]) {
     await page.goto(path);
     await expect(page.getByRole("button", { name: /Continue with Google/i }), path).toHaveCount(0);
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
-  // The hero's WebGPU background mounts only after hydration, never in the
-  // prerendered HTML.
   await expect(page.locator("[data-hero] canvas")).toHaveCount(0);
   await expect(page.locator("#faq")).toHaveCSS("opacity", "1");
   await page.goto("/docs");
@@ -115,20 +111,17 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
   }
 });
 
-// The build bakes the landing page into index.html, the shell every app route
-// gets. A signed-in reload of /dashboard painted it until the bundle replaced
-// it. App routes must ship an empty root.
+// A signed-in reload of /dashboard painted the baked landing page until the
+// bundle replaced it. App routes must ship an empty root.
 test("an app route's raw HTML carries no landing page", async ({ request }) => {
   const body = await (await request.get("/dashboard")).text();
   expect(body).toContain('id="root"');
   expect(body).not.toContain("The link shortener that answers to you.");
 });
 
-// Auth routes read browser state on their first render, including query params.
 test("the auth pages render with query params and stay usable", async ({ page }) => {
   const hydrationErrors = collectHydrationErrors(page);
 
-  // The loaded form must retain input after its initial queries resolve.
   const typeEmail = (path: string, heading: string) =>
     expect(async () => {
       await page.goto(path);
@@ -143,7 +136,6 @@ test("the auth pages render with query params and stay usable", async ({ page })
   expect(hydrationErrors).toEqual([]);
 });
 
-// Once the client-rendered form appears, it must stay visible.
 test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   const blank: string[] = [];
   page.on("console", (message) => {
@@ -171,12 +163,9 @@ test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   expect(blank).toEqual([]);
 });
 
-// Twelve Tools, Fazier, PeerPush, Launchstag and launched.tools list
-// rdyrct.com in exchange for a link back from the homepage, and their checks
-// read the served HTML: a followed text link for Twelve Tools, each
-// directory's own badge for the others (in the footer's carousel, which only
-// moves them with CSS). On the homepage only, and the dropped directories
-// stay dropped.
+// These directories list rdyrct.com for a link back and their checkers read
+// the served HTML (a text link, or each badge in the footer's carousel).
+// Homepage only; dropped directories stay dropped.
 test("the homepage credits its directories in the served HTML, followed", async ({ request }) => {
   const res = await request.get("/");
   const home = await res.text();
@@ -192,7 +181,6 @@ test("the homepage credits its directories in the served HTML, followed", async 
     expect(anchor(href), href).not.toBe("");
     expect(anchor(href), href).not.toMatch(/nofollow|ugc|sponsored/);
   }
-  // The light badge is the one in the default render, and the CSP lets it load.
   expect(home).toContain(
     'src="https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&amp;theme=light"',
   );
@@ -201,10 +189,8 @@ test("the homepage credits its directories in the served HTML, followed", async 
   expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/peerpush\.com/);
   expect(home).toContain('src="https://launchstag.com/badge-light.svg"');
   expect(home).toContain('src="https://launchstag.com/badge-dark.svg"');
-  // The carousel's first row is the one people and screen readers meet: every
-  // badge link is in it. The copy that closes the loop is hidden from screen
-  // readers and the tab order, but not inert: on screen half the time, its
-  // badges must still take a click.
+  // Every badge link is in the carousel's first row. The closing copy is hidden
+  // from screen readers and tabs but not inert: its badges must still take a click.
   const [, firstRow = "", copyAttrs = "", copyRow = ""] =
     home.match(
       /<div class="badge-track[^"]*">(.*?)<div class="badge-copy([^>]*)>(.*?)<\/div><\/div><\/div>/s,

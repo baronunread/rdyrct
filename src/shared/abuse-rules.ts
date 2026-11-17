@@ -1,14 +1,8 @@
 /**
- * Cheap, deterministic signals that a destination is probably a scam.
- *
- * A hold, never a block: a legitimate developer can ship "paypal-checkout-demo
- * .vercel.app", so a match only puts the link on hold for a human to look at,
- * and restoring it is one click. Pure so it runs the same in the Worker and in
- * a unit test.
+ * A match only holds a link for review, never blocks: a legitimate developer can ship
+ * "paypal-checkout-demo.vercel.app". Pure so the Worker and unit tests agree.
  */
 
-/** Hosts anyone can deploy to for free. A real brand does not live on these,
- * and a scam kit that impersonates one almost always does. */
 const FREE_HOST_SUFFIXES = [
   "up.railway.app",
   "vercel.app",
@@ -32,9 +26,7 @@ const FREE_HOST_SUFFIXES = [
   "blogspot.com",
 ];
 
-/** Names scams borrow: payments, banks, shopping, delivery, government, big
- * platforms. Matched as a substring of the hostname, so "phonepewheel" hits
- * "phonepe". Short or common words are left out: they would hold real links. */
+/** Matched as a substring of the hostname. Short or common words are left out: they would hold real links. */
 const BRAND_WORDS = [
   "phonepe",
   "paytm",
@@ -82,20 +74,16 @@ function hostOf(destination: string): string | null {
   }
 }
 
-/** The free app host a destination sits on, or null. */
 function freeHostOf(host: string): string | null {
   return FREE_HOST_SUFFIXES.find((s) => host === s || host.endsWith(`.${s}`)) ?? null;
 }
 
-/** Whether a destination is on a host anyone can deploy to for free. On its
- * own that means nothing; it is the second signal that turns heavy traffic
- * from "worth a look" into "worth a pause". */
+/** On its own this means nothing; it is the second signal that turns heavy traffic into a pause. */
 export function isFreeHost(destination: string): boolean {
   const host = hostOf(destination);
   return host !== null && freeHostOf(host) !== null;
 }
 
-/** The reason to hold a link on this destination, or null to leave it alone. */
 export function holdReasonFor(destination: string): string | null {
   const host = hostOf(destination);
   if (!host) return null;
@@ -106,10 +94,8 @@ export function holdReasonFor(destination: string): string | null {
   return `Held for review: "${brand}" in the name of a free ${freeHost} site.`;
 }
 
-/** The host a blocklist entry is matched on. Lower case, no port, no "www.". */
-/** Sites a ban can never block, nor any host under them: an abuser who also
- * linked to one would otherwise take it away from every customer. A free app
- * host's own name is here, while one app on it ("x.up.railway.app") is not. */
+/** Never blocked, nor any host under them: an abuser who also linked to one would take it from every
+customer. A free app host's own name is here, while one app on it ("x.up.railway.app") is not. */
 const NEVER_BLOCKED = [
   "google.com",
   "youtube.com",
@@ -134,19 +120,13 @@ const NEVER_BLOCKED = [
   ...FREE_HOST_SUFFIXES,
 ];
 
-/** Whether a ban may put this host on the blocklist. */
 export function blockable(host: string): boolean {
   // One app on a free host is its maker's own site.
   if (FREE_HOST_SUFFIXES.some((suffix) => host.endsWith(`.${suffix}`))) return true;
   return !NEVER_BLOCKED.some((site) => host === site || host.endsWith(`.${site}`));
 }
 
-/**
- * A host and each parent domain under its top level: m.scam.example.com
- * gives itself, scam.example.com and example.com. A blocklist entry matches
- * a destination when it is any one of these, so blocking a site blocks its
- * subdomains too, and notscam.example.com never matches scam.example.com.
- */
+/** A host and each parent domain under its top level. notscam.example.com never matches scam.example.com. */
 export function hostAndParents(host: string): string[] {
   const labels = host.split(".");
   return labels.slice(0, -1).map((_, i) => labels.slice(i).join("."));

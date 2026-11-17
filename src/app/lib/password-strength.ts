@@ -1,5 +1,3 @@
-// What the password still lacks. Drives both the hover tips and the score,
-// so the two cannot drift apart.
 export function passwordTips(pw: string): string[] {
   const tips: string[] = [];
   if (pw.length < 12) tips.push("Use 12 or more characters.");

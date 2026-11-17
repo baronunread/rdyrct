@@ -3,9 +3,8 @@ import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
 
-// A request that fails is not an answer (#487). A 5xx on /user is not a
-// sign-out, and a 5xx on a list is not an empty org: each says it failed and
-// offers Retry, which recovers once the server answers again.
+// A request that fails is not an answer (#487): a 5xx on /user is not a
+// sign-out, and a 5xx on a list is not an empty org.
 
 const fail = (page: Page, url: RegExp) =>
   page.route(url, (route) => route.fulfill({ status: 500, json: { error: "boom" } }));
@@ -36,7 +35,6 @@ test("a failed /user keeps you signed in and offers Retry", async ({ page }) => 
 test("a failed /user on /welcome keeps you there and offers Retry", async ({ page }) => {
   await signUpAndVerify(page, `failed-welcome-${Date.now()}@gmail.com`, password);
 
-  // /welcome sits outside RequireAuth and has its own signed-out check.
   await fail(page, /\/api\/user$/);
   await page.goto("/welcome");
   const heading = page.getByRole("heading", { level: 1, name: "Could not reach rdyrct" });
@@ -49,7 +47,6 @@ test("a failed /user on /welcome keeps you there and offers Retry", async ({ pag
   await answered;
   await expect(heading).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/login/);
-  // Recovered into the app: the setup flow or the page it hands over to.
   await expect(page.getByRole("heading").first()).toBeVisible();
 });
 
@@ -67,7 +64,6 @@ test("failed lists say so instead of showing an empty org", async ({ page }) => 
       path: "/domains",
       url: /\/api\/orgs\/[^/]+\/domains$/,
       error: "Could not load your domains",
-      // A free plan's empty list is the upsell.
       empty: page.getByText("Custom domains are available on Hobby and Pro."),
     },
     {

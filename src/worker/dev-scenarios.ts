@@ -6,31 +6,15 @@ import { PLAN_LIMITS } from "../shared/types";
 import * as v from "valibot";
 import { parseBody } from "./schemas";
 
-/**
- * Dev-only scenarios: every account state one link away, against the real
- * Worker and the seeded database (`bun run db:seed:local`).
- *
- * `/__dev/scenarios` lists them. `/__dev/scenarios/<name>?to=/links` signs in
- * as the seeded account that is in that state, selects its org and opens the
- * page. Each scenario is a query rather than a fixed address, so it survives a
- * re-seed and always lands on a row that really is in that state.
- *
- * Two fences keep it out of anything real. index.ts imports it dynamically
- * and only under `import.meta.env.DEV`, a build-time constant, so a
- * production build carries none of this code (tests/e2e/production checks
- * the route is gone). And it signs in only as an `@seed.test` account, using
- * the seeder's shared password, so even a dev server pointed at real data
- * could not use it to become anybody else.
- */
+// Two fences keep it out of anything real: index.ts imports it only under import.meta.env.DEV (tests/e2e/production checks the route is gone),
+// and it signs in only as @seed.test accounts with the seeder shared password.
 
 const SEED_PASSWORD = "seed-password-123";
 
 type Scenario = {
   title: string;
   about: string;
-  /** Where to land when the link names no page. */
   start: string;
-  /** Returns the account's email and the org to select. */
   sql: string;
 };
 
@@ -52,9 +36,7 @@ const SCENARIOS = {
     start: "/dashboard",
     sql: ownerOf(`u.plan = 'pro' AND ${notDowngraded}`),
   },
-  // The second-busiest Pro org: as full as pro-owner, without the edge-case
-  // rows (RTL titles, very long slugs) the seed puts into that one. The
-  // landing page's screenshots are taken from it (scripts/showcase-shots.ts).
+  // Second-busiest Pro org, without the edge-case rows (RTL titles, long slugs) of pro-owner. The landing screenshots come from it (scripts/showcase-shots.ts).
   showcase: {
     title: "Showcase",
     about: "A tidy Pro org for screenshots: ordinary titles, its own domain.",
@@ -85,7 +67,6 @@ const SCENARIOS = {
     title: "Member, not owner",
     about: "Belongs to a paid org as a member.",
     start: "/links",
-    // The org's plan is its owner's, so the owner is what makes it paid.
     sql: `SELECT u.email, m.org_id AS orgId FROM org_members m JOIN user u ON u.id = m.user_id
       JOIN org_members om ON om.org_id = m.org_id AND om.role = 'owner'
       JOIN user owner ON owner.id = om.user_id
@@ -180,11 +161,7 @@ li{margin:0 0 18px}span{color:#544f61}a{color:#745ab8}.p{font-size:13px;margin-r
 <h1>Dev scenarios</h1><p>Signs in as a seeded account in that state. Needs <code>bun run db:seed:local</code>. Dev builds only.</p><ul>${rows}</ul>`;
 }
 
-/**
- * Answers every /__dev request. index.ts calls it with its own context, so the
- * request carries the app's wide event (evlog's include list names /__dev,
- * which only exists in a dev build).
- */
+// index.ts calls it with its own context so the request carries the app wide event (evlog include names /__dev).
 export async function handleDev(c: Context<AppEnv>): Promise<Response> {
   const log = c.get("log");
   const path = new URL(c.req.url).pathname;
@@ -220,20 +197,15 @@ async function signInAs(c: Context<AppEnv>, name: string): Promise<Response> {
   return res;
 }
 
-/** Where the hop lands: an app path asked for, or the scenario's own start.
- * Only plain paths: no backslash, no second slash at the start, nothing that
- * could leave the site or end the script it is written into. */
+// Only plain paths: nothing that could leave the site or end the script it is written into.
 function landing(to: string | undefined, scenario: Scenario): string {
   return to && /^\/[a-z0-9/_?=&.-]*$/i.test(to) && !to.startsWith("//") ? to : scenario.start;
 }
 
-/** A value written into an inline script. JSON.stringify leaves "<" alone,
- * so "</script>" in a value would end the script early. */
+// JSON.stringify leaves < alone, so </script> in a value would end the script early.
 const inScript = (value: string) => JSON.stringify(value).replace(/</g, "\\u003c");
 
-/** The current org and the cookie banner live in localStorage, so the hop
- * goes through a page that sets both before it opens the app. The cached
- * /user is cleared so the shell paints the new account, not the last one. */
+// Sets localStorage before opening the app; the cached /user is cleared so the shell paints the new account.
 function hopPage(scenario: Scenario, row: { email: string; orgId: string }, target: string) {
   return `<!doctype html><meta charset="utf-8"><title>${esc(scenario.title)}</title><script>
 localStorage.setItem("rdyrct:currentOrg", ${inScript(row.orgId)});
@@ -247,27 +219,12 @@ location.replace(${inScript(target)});
 const testAccountSchema = v.object({
   email: v.pipe(v.string(), v.email()),
   password: v.pipe(v.string(), v.minLength(8)),
-  // Test accounts are already asked about marketing email, so the one-time
-  // dialog does not open over every spec. A spec about that dialog sends
-  // `asked: false` to get an account that has not answered.
+  // Test accounts are already asked about marketing email, so the dialog does not open over every spec; asked: false gives one that has not answered.
   asked: v.optional(v.boolean(), true),
 });
 
-/**
- * A verified, signed-in account in one request, for browser tests that need
- * an account but are not about signing up (tests/e2e/resend.ts,
- * `signUpAndVerify`). The real form costs 6 to 7 seconds per test (Turnstile,
- * an account write, a mail send, a code read back out of the emulator) and
- * most specs paid it just to have somebody to be.
- *
- * It goes through BetterAuth's own adapter, so the databaseHooks a real
- * sign-up runs still run (the superadmin pin, the welcome mail), and signs in
- * the normal way, so the session hook creates the org exactly as it does for
- * a person. It only ever creates a new address: an existing one is refused,
- * so it cannot be used to sign in as anybody. Nor as the platform admin: the
- * SUPERADMIN_EMAIL address is refused even before it exists, or anyone who
- * can reach a dev server on the network could claim it after a database reset.
- */
+// Goes through BetterAuth own adapter, so the hooks a real sign-up runs still run. Only creates a new address, and never SUPERADMIN_EMAIL, even before it exists:
+// anyone who can reach a dev server on the network could claim it after a database reset.
 async function createTestAccount(c: Context<AppEnv>): Promise<Response> {
   const { email, password, asked } = parseBody(testAccountSchema, await c.req.json());
   if (email.toLowerCase() === c.env.SUPERADMIN_EMAIL.toLowerCase())

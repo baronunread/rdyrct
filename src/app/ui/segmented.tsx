@@ -5,17 +5,13 @@ import { Tooltip } from "./tooltip";
 import { StableLabel } from "./stable-label";
 import { useSlideTo } from "./tab-underline";
 
-/** One choice. A locked one is shown, with a lock, but not chosen: the
- * control says what the plan hides instead of hiding it. */
 export interface SegmentedItem<Id extends string> {
   id: Id;
   label: string;
   locked?: boolean;
-  /** Why it is locked, in a tooltip. */
   hint?: string;
 }
 
-/** A row of mutually exclusive choices: a section switch, or a filter. */
 export function Segmented<Id extends string>({
   items,
   value,
@@ -26,15 +22,10 @@ export function Segmented<Id extends string>({
   items: readonly SegmentedItem<Id>[];
   value: Id;
   onChange: (id: Id) => void;
-  /** What a locked choice does when pressed (open the plans, say). */
   onLocked?: (id: Id) => void;
-  /** Names the group, so a control inside it can be told from a same-named
-   * one elsewhere (the Reports view and the Reports column, say). */
   label?: string;
 }) {
   const track = useRef<HTMLDivElement>(null);
-  // One pill that slides to the chosen segment, rather than each segment
-  // drawing its own and the choice jumping across.
   const pill = useSlideTo<HTMLSpanElement>(track, '[aria-pressed="true"]');
   return (
     // Radii nest: a 9px track, 2px of padding, 7px segments.

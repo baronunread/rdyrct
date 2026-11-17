@@ -4,11 +4,6 @@ import { reset } from "cloudflare:test";
 import type { InvitePreview, MemberDTO } from "../../src/shared/types";
 import { applyTestMigrations, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
 
-/**
- * What the members page and the invite's join card read about people: when
- * each member was last active, and who sent an invite.
- */
-
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();
@@ -21,7 +16,6 @@ describe("GET /orgs/:orgId/members: lastActiveAt", () => {
       env.DB.prepare(
         "insert into user (id, name, email, email_verified, created_at, updated_at) values ('quiet-1', 'Quiet', 'quiet@example.com', 1, 0, 0)",
       ),
-      // Signed out everywhere: no session left, only the last-seen mark.
       env.DB.prepare(
         "insert into user (id, name, email, email_verified, created_at, updated_at, last_seen_at) values ('gone-1', 'Gone', 'gone@example.com', 1, 0, 0, 5000)",
       ),
@@ -31,7 +25,6 @@ describe("GET /orgs/:orgId/members: lastActiveAt", () => {
       env.DB.prepare(
         "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'quiet-1', 'viewer', 0)",
       ),
-      // An older session of the owner's, beside the one signing in made.
       env.DB.prepare(
         "insert into session (id, token, user_id, expires_at, created_at, updated_at) values ('old-s', 'old-t', 'free-1', 9999999999999, 1000, 2000)",
       ),
@@ -65,13 +58,11 @@ describe("GET /orgs/:orgId/members: lastActiveAt", () => {
     await get();
     await expect.poll(seen).toBeGreaterThan(0);
 
-    // Inside the hour: left alone.
     const recent = Date.now() - 10 * 60 * 1000;
     await env.DB.prepare("update user set last_seen_at = ? where id = 'free-1'").bind(recent).run();
     await get();
     expect(await seen()).toBe(recent);
 
-    // Past the hour: moved on.
     const stale = Date.now() - 2 * 60 * 60 * 1000;
     await env.DB.prepare("update user set last_seen_at = ? where id = 'free-1'").bind(stale).run();
     await get();

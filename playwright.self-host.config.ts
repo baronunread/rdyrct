@@ -2,24 +2,13 @@ import { defineConfig, devices } from "@playwright/test";
 import { selfHostPort, selfHostUrl } from "./tests/e2e/environment";
 
 /**
- * The build a fork deploys: no landing page, no pricing, no rdyrct.com
- * analytics. Its own config because it needs its own build, and that build
- * writes to the same dist/ as playwright.production.config.ts's, so
- * the two never run at once.
- *
- *   bun run e2e:self-host
- *
- * The worker runs on .dev.vars.self-host, not the developer's .dev.vars: no
- * email provider, no Polar and no Google sign-in, which is how a fork first
- * comes up. The build writes whatever .dev.vars it finds into
- * dist/rdyrct/.dev.vars, and that copy is the one `vite preview` reads, so
- * the command replaces it between the two.
+ * Shares dist/ with playwright.production.config.ts's build, so the two never run at once. Runs on .dev.vars.self-host
+ * (no email, Polar or Google, as a fork first comes up): the command replaces the .dev.vars copy `vite preview` reads.
  */
 export default defineConfig({
   testDir: "./tests/e2e/self-host",
   testMatch: "**/*.pw.ts",
   globalSetup: "./tests/e2e/global-setup.ts",
-  // Sign-ups share one in-memory database; two at a time is plenty.
   workers: 2,
   timeout: 60_000,
   forbidOnly: !!process.env.CI,

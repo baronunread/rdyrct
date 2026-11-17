@@ -6,42 +6,17 @@ import { captureAlert } from "./sentry";
 import { logFailure } from "./log-failure";
 
 /**
- * The click buffer (#225).
- *
- * Click ingestion used to be a queue: one message per redirect, ~3 Cloudflare
- * Queues operations each, unbounded by traffic. On the Workers Free plan that
- * capped the whole platform at ~3,300 redirects/day before the queue froze
- * (incident 2026-09-10). One Durable Object, addressed `idFromName("clicks")`,
- * takes its place: every redirect calls `add`, the rows sit in memory, and a
- * ~10 s alarm flushes them to D1 in one batch. Per click that is one DO
- * request, not three queue ops, and D1 sees one write per flush regardless of
- * click rate.
- *
- * The buffer is memory only. A DO evicted in the few seconds before its alarm
- * fires loses that window, which is the same best-effort contract the queue
- * gave (`enqueueClick` always swallowed its own failures): a lost click is
- * analytics, not correctness. Persisting each click to `ctx.storage` would buy
- * that back at the cost of one SQLite row write per click, which is the
- * amplification this change exists to remove.
- *
- * One instance is enough: a single DO handles ~1,000 req/s, far past current
- * volume.
- * ponytail: single collector, shard by linkId hash if one instance saturates.
+ * Replaced the click queue, which capped Free at ~3,300 redirects/day (#225). Memory only:
+ * a DO evicted before its alarm loses that window, fine for analytics.
+ * ponytail: single collector, shard by linkId hash if one instance saturates (~1,000 req/s).
  */
 
-/** Flush the buffer this long after the first click lands in an empty one.
- * `CLICK_FLUSH_MS` overrides it, so the e2e suite can wait half a second for
- * a click instead of racing its own test timeout against a 10 s alarm. */
+/** `CLICK_FLUSH_MS` overrides it so e2e does not wait out a 10 s alarm. */
 const FLUSH_MS = 10_000;
 
-/** Flush early rather than let a spike grow the buffer without bound. At ~120
- * bytes a row this is well under a megabyte of instance memory. */
 const MAX_BUFFER = 5_000;
 
-/** Drop the buffer after this many consecutive failed flushes, so a broken D1
- * write is a bounded loss with one alert rather than a silent forever-retry.
- * Counted in flushes, not time: about a minute in production, 3 s under the
- * e2e CLICK_FLUSH_MS. */
+/** Counted in flushes, not time, so a broken D1 write is a bounded loss with one alert. */
 const MAX_FLUSH_FAILS = 6;
 
 export class ClickBuffer extends DurableObject<Env> {
@@ -53,7 +28,6 @@ export class ClickBuffer extends DurableObject<Env> {
   // add/alarm/buffered/reset are reached by RPC or by the runtime (the alarm),
   // which fallow's static graph cannot see.
 
-  /** Record one click. Returns immediately; the write happens on the alarm. */
   // fallow-ignore-next-line unused-class-member
   async add(row: ClickMessage): Promise<void> {
     this.#buf.push(row);
@@ -71,13 +45,11 @@ export class ClickBuffer extends DurableObject<Env> {
     await this.#flush();
   }
 
-  /** The rows waiting to be written. Test inspection only. */
   // fallow-ignore-next-line unused-class-member
   buffered(): ClickMessage[] {
     return [...this.#buf];
   }
 
-  /** Drop everything pending. Test cleanup only. */
   // fallow-ignore-next-line unused-class-member
   async reset(): Promise<void> {
     this.#buf = [];
@@ -88,28 +60,19 @@ export class ClickBuffer extends DurableObject<Env> {
   async #flush(): Promise<void> {
     if (this.#flushing || this.#buf.length === 0) return;
     this.#flushing = true;
-    // Swap the buffer out synchronously, before the first await, so a click
-    // that arrives mid-flush lands in the next batch rather than this one.
+    // Swapped out before the first await so a mid-flush click lands in the next batch.
     const rows = this.#buf;
     this.#buf = [];
     try {
       const { retry, hadFailure } = await insertClicks(this.env, rows);
-      // Clamped: retry.length can exceed the room left in an emptied buffer
-      // (a big flush plus clicks that arrived during it), and a negative
-      // slice bound keeps almost everything instead of dropping down to fit.
-      // Whatever doesn't fit is the accepted loss (clicks are best-effort).
+      // Clamped: a negative slice bound would keep almost everything.
       this.#buf.unshift(...retry.slice(0, Math.max(0, MAX_BUFFER - this.#buf.length)));
-      // A row merely deferred for this invocation's D1 subrequest budget
-      // isn't a failure: only count consecutive passes that actually hit one,
-      // so a big-but-healthy backlog never trips the give-up threshold below.
+      // A row deferred for the D1 subrequest budget is not a failure.
       this.#failedFlushes = hadFailure ? this.#failedFlushes + 1 : 0;
     } catch (error) {
-      // insertClicks handles a per-row failure itself; reaching here is
-      // something unexpected. Keep the rows for the next alarm.
       this.#buf.unshift(...rows.slice(0, Math.max(0, MAX_BUFFER - this.#buf.length)));
       this.#failedFlushes++;
-      // Also to the console: Sentry is off wherever SENTRY_DSN is unset
-      // (every e2e run), and this is the only trace a lost flush leaves.
+      // Sentry is off wherever SENTRY_DSN is unset; this is the only trace of a lost flush.
       logFailure("click_flush_failed", error, { rows: rows.length });
       Sentry.captureException(error, { extra: { pending: this.#buf.length } });
     } finally {

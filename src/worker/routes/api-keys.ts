@@ -11,9 +11,8 @@ import { jsonBodyLimit } from "../body-limit";
 import { parseBody } from "../schemas";
 import type { ApiKeyDTO } from "@/shared/types";
 
-// Mounted at /api/orgs/:orgId/api-keys. Owner-only: minting a credential that
-// can act as the account is the same trust level as changing who has it, and
-// there is one credential per user (session.ts), not one per org.
+// Owner-only: minting a credential that can act as the account is the same
+// trust level as changing who has it. One credential per user (session.ts).
 export const apiKeyRoutes = new Hono<AppEnv>();
 apiKeyRoutes.use("*", jsonBodyLimit());
 
@@ -66,8 +65,7 @@ apiKeyRoutes.post("/", requireOrgRole("owner"), async (c) => {
     target: { type: "api_key", id: row.id },
     outcome: "success",
   });
-  // The only point the raw value is ever readable again: only its hash is
-  // stored, so a key shown here and lost has to be revoked and reissued.
+  // Only the hash is stored, so a lost key has to be revoked and reissued.
   return c.json({ ...dtoOf(row), key: raw } satisfies ApiKeyDTO, 201);
 });
 

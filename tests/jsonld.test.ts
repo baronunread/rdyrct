@@ -1,26 +1,12 @@
 /**
- * index.html carries one JSON-LD block, written by hand, and it is the only
- * thing an answer engine reads to learn what this product costs. Two ways it
- * goes wrong silently:
- *
- * A syntax slip makes the whole block unparseable, and nothing in the app
- * notices: the browser ignores the tag, every page still renders, and the
- * loss shows up as an absence somewhere nobody looks. The same goes for a
- * dangling `@id` reference, which parses fine and describes a graph whose
- * halves no longer connect.
- *
- * And a node Google holds to stricter rules (an app with no ratings) fails
- * its rich-result check on every page at once.
+ * index.html carries one hand-written JSON-LD block. A syntax slip or a
+ * dangling `@id` fails silently: the browser ignores the tag and every page
+ * still renders. A node Google holds to stricter rules fails on every page.
  */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as v from "valibot";
 
-/**
- * A node keeps whatever else it declares (`looseObject`), because this suite
- * is about the shape the graph hangs together by, not an inventory of every
- * property schema.org allows on it.
- */
 const Node = v.looseObject({
   "@type": v.string(),
   "@id": v.optional(v.string()),
@@ -31,13 +17,8 @@ const Document = v.object({
   "@graph": v.array(Node),
 });
 
-/** What `publisher` and `isPartOf` hold: a pointer to another node, nothing else. */
 const Reference = v.object({ "@id": v.string() });
 
-/**
- * Parsed, not asserted: an unparseable block or a node missing its `@type`
- * fails here, before any test below reads a property off it.
- */
 function graph() {
   const html = readFileSync("index.html", "utf8");
   const found = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) ?? [];
@@ -67,9 +48,8 @@ test("every @id a node points at is a node in the same graph", () => {
 });
 
 test("no app or product node goes without the ratings Google requires of it", () => {
-  // Google's rich-result check fails a SoftwareApplication (and its subtypes)
-  // that has no aggregateRating or review, on every page this head ships on.
-  // There are no ratings to cite honestly, so the node stays out until there are.
+  // Google's rich-result check fails a SoftwareApplication (and subtypes) with
+  // no aggregateRating or review. There are no honest ratings to cite yet.
   const rated = ["SoftwareApplication", "WebApplication", "MobileApplication", "Product"];
   for (const node of graph().filter((n) => rated.includes(n["@type"]))) {
     expect(
@@ -91,7 +71,6 @@ const FaqPage = v.object({
   ),
 });
 
-/** Tags stripped, whitespace collapsed: what a reader of the fallback sees. */
 function plain(html: string) {
   return html
     .replace(/<[^>]+>/g, "")
@@ -99,11 +78,7 @@ function plain(html: string) {
     .trim();
 }
 
-/**
- * The crawler fallback in #root carries its FAQ as FAQPage too, and markup
- * that says something the page does not is worse than none. Every question
- * and answer in the block has to be an h3 and the paragraph under it.
- */
+// Markup that says something the page does not is worse than none.
 test("the fallback's FAQPage says what the fallback's FAQ says", () => {
   const html = readFileSync("index.html", "utf8");
   const block = html.match(/<script type="application\/ld\+json" id="faq">([\s\S]*?)<\/script>/);

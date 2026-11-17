@@ -20,8 +20,7 @@ describe("linkUrl", () => {
     );
   });
 
-  // A self-hoster who upgrades without setting the new var keeps the links
-  // they had, on the app's own URL, rather than a crash on every request.
+  // A self-hoster who upgrades without the new var must not crash on every request.
   test("a shared link falls back to APP_URL when it is not", () => {
     const env = envWith({ ...app, SHARED_LINK_HOST: undefined });
     expect(linkUrl(env, null, "x")).toBe("https://rdyrct.com/x");

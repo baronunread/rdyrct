@@ -1,14 +1,7 @@
 /**
- * Writes that arrive while an org is being torn down (#52).
- *
- * `requireOrgRole` refuses them at the route, but it reads the flag before
- * the handler runs. A create that passed that read a moment before
- * `deleteOrg` set the flag still commits afterwards, and the teardown's
- * gather step has already taken its snapshot, so the row survives as a public
- * redirect for an org that is supposed to be gone.
- *
- * These call the insert helpers directly, because the route guard is exactly
- * what a test going through the route would be measuring instead.
+ * Writes that arrive while an org is being torn down (#52). A create that passed
+ * `requireOrgRole` just before `deleteOrg` set the flag still commits after the teardown
+ * snapshot. These call the insert helpers directly: the route would measure the guard.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
@@ -79,8 +72,7 @@ describe("creating a link while the org is tearing down", () => {
 
     expect(wrote).toBe(false);
     expect(await addressCount()).toBe(0);
-    // The batch's third statement removes a link whose address never landed,
-    // so a refused create cannot leave a row for the teardown to miss.
+    // The batch's third statement removes a link whose address never landed.
     expect(await linkCount()).toBe(0);
   });
 
@@ -122,9 +114,8 @@ describe("adding an address to an existing link while the org is tearing down", 
   });
 
   it("refuses a temp alias too", async () => {
-    // A temp_alias never counts toward the plan cap, so it used to be the one
-    // insert with no WHERE clause at all: nothing about it could refuse, and
-    // it publishes a redirect like any other address.
+    // A temp_alias never counts toward the plan cap, so it has no other WHERE
+    // clause that could refuse it, and it publishes a redirect all the same.
     await markDeleting();
     const wrote = await insertAddressWithinLimit(
       testEnv,
@@ -188,9 +179,7 @@ describe("uploading a QR logo while the org is tearing down", () => {
   });
 });
 
-/** The rename, exactly as the PATCH route builds it: move the link, move its
- * primary address, and keep the outgoing slug alive as a temp alias. Every
- * statement carries the teardown guard. */
+// The rename exactly as the PATCH route builds it; every statement carries the teardown guard.
 function renameBatch(aliasId: string) {
   const db = drizzle(env.DB, { schema });
   return env.DB.batch([
@@ -221,9 +210,7 @@ function renameBatch(aliasId: string) {
 }
 
 describe("renaming a link while the org is tearing down", () => {
-  // The other way a new KV key is born. The rename writes the primary address
-  // and its 48h alias in a batch of its own, so it never touches the guarded
-  // inserts above and needed the same clause spelled out again.
+  // The rename batches its own inserts, so it never goes through the guarded ones above.
   beforeEach(async () => {
     await insertLinkWithinLimit(
       drizzle(env.DB, { schema }),

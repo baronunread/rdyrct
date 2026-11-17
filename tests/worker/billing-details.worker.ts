@@ -19,13 +19,6 @@ import type {
   PolarPaymentMethod,
 } from "../../src/worker/billing-provider";
 
-/**
- * GET /api/billing/details and GET /api/billing/invoices/:orderId: the card
- * and invoices on the billing page, read from a stand-in Polar (worker tests
- * never reach the real one, see support.ts).
- */
-
-/** What the SDK throws for a refusal it knows: the parsed body on `error`. */
 const refusal = (name: string) =>
   Object.assign(new Error(name), { error: { error: name, detail: name } });
 
@@ -49,7 +42,6 @@ const visa: PolarPaymentMethod = {
 };
 
 type Portal = BillingProvider["customerPortal"];
-/** A session per customer, its token naming whose it is. */
 const sessionsCreate = vi.fn(async ({ customer_id }: { customer_id: string }) => ({
   customer_portal_url: "https://sandbox.polar.sh/portal/test",
   token: `tok_${customer_id}`,
@@ -77,11 +69,7 @@ const polar: BillingProvider = {
   },
 };
 
-/**
- * The billing bucket as a counter this file controls: per key, ten a minute
- * (src/worker/rate-limit.ts), emptied before each test so the
- * tests above the limit test cannot spend its budget.
- */
+// Per key, ten a minute (src/worker/rate-limit.ts), emptied before each test.
 const BILLING_LIMIT = 10;
 const billingHits = new Map<string, number>();
 const billingLimiter: RateLimit = {
@@ -92,7 +80,6 @@ const billingLimiter: RateLimit = {
   },
 };
 
-/** The token every portal call must carry: the session of the user's own customer. */
 const mine = { accessToken: "tok_cus_mine" };
 
 beforeEach(async () => {
@@ -130,7 +117,6 @@ async function call(path: string, cookie: string): Promise<Response> {
   return res;
 }
 
-/** The signed-in admin, given a Polar customer id. */
 async function customerCookie(customerId = "cus_mine"): Promise<string> {
   const cookie = await adminCookie();
   await env.DB.prepare("update user set polar_customer_id = ? where id = 'admin-1'")
@@ -186,7 +172,6 @@ describe("GET /api/billing/details", () => {
     const res = await call("/details", await customerCookie());
 
     expect(res.status).toBe(200);
-    // Read as the user's own Polar customer, through a session for it.
     expect(sessionsCreate).toHaveBeenCalledWith({ customer_id: "cus_mine" });
     expect(ordersList).toHaveBeenCalledWith(
       expect.objectContaining({ sorting: ["-created_at"] }),

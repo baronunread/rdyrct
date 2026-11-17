@@ -1,15 +1,7 @@
 /**
- * The landing page below the hero: one opening line, then a section for each
- * thing you get (links, QR codes, analytics). Each section has a plain
- * benefit heading and three details, each in a card of its own with a short
- * loop of the product doing that one thing.
- *
- * Benefits, not machinery: redirects, data centres and status codes live in
- * the docs and on the comparison pages. Competitors are not named here
- * either; that is what the comparison pages are for.
- *
- * Everything in the panels is the product's own UI over sample data, marked
- * as such, never a screenshot (rdyrct-design, "Anti-patterns").
+ * Benefits only: no redirects, data centres or competitor names here (the docs
+ * and comparison pages cover those). Panels are the product's own UI over
+ * sample data, never a screenshot (rdyrct-design, "Anti-patterns").
  */
 import {
   lazy,
@@ -68,18 +60,11 @@ type Feature = {
   icon: ComponentType<{ size?: number; className?: string }>;
   title: string;
   body: ReactNode;
-  /** How many steps the loop has. The last one is the finished state: what
-   *  the prerendered page, reduced motion and the first frame all show. */
   steps: number;
   scene: (step: number) => ReactNode;
-  /** A page the whole card opens, through its title. */
   to?: "/qr-code-generator";
 };
 
-/**
- * One section: heading and a way in, then each detail in a card of its own,
- * with a short loop of the product doing that one thing above what it is.
- */
 function Pillar({
   id,
   lead,
@@ -115,15 +100,9 @@ function Pillar({
   );
 }
 
-/** Milliseconds a step of a card's loop lasts. */
 const STEP_MS = 700;
 
-/**
- * Which step of its loop a card is on. It starts finished, so the page reads
- * whole before any script runs, then plays from the top while the card is on
- * screen. Off screen it holds still; under reduced motion it never leaves the
- * finished state.
- */
+/** Starts finished, so the prerendered page reads whole before any script runs. */
 function useLoop(card: RefObject<HTMLElement | null>, steps: number) {
   const inView = useInView(card, { amount: 0.5 });
   const reduced = useReducedMotion();
@@ -136,11 +115,6 @@ function useLoop(card: RefObject<HTMLElement | null>, steps: number) {
   return reduced ? steps - 1 : step;
 }
 
-/**
- * A detail in a block of its own: the loop on a soft light, then the icon,
- * the title and one line. The loop is the product's own UI over sample data
- * and repeats what the words say, so it is hidden from assistive tech.
- */
 function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
   const card = useRef<HTMLLIElement>(null);
   const step = useLoop(card, steps);
@@ -159,7 +133,6 @@ function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
         className="relative flex h-56 items-start justify-center overflow-hidden px-5 pt-10"
       >
         <div className="landing-mesh pointer-events-none absolute inset-x-0 top-0 h-48 opacity-70" />
-        {/* A size container, so a scene can fit a narrow card (a 360px phone). */}
         <div className="lit @container relative w-full max-w-sm rounded-xl border border-border/70 bg-surface text-sm">
           {scene(step)}
         </div>
@@ -168,7 +141,6 @@ function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
         <Icon size={18} className="text-accent" />
         <h3 className="mt-3 font-bold text-text">
           {to ? (
-            // Stretched over the card, so the whole card is the link.
             <MarketingLink to={to} className="outline-none after:absolute after:inset-0">
               {title} <span aria-hidden="true">→</span>
             </MarketingLink>
@@ -182,7 +154,6 @@ function FeatureCard({ icon: Icon, title, body, steps, scene, to }: Feature) {
   );
 }
 
-/** Shown from step `at` on: a fade and a few pixels of rise, reversible. */
 function Reveal({
   at,
   step,
@@ -207,8 +178,6 @@ function Reveal({
   );
 }
 
-/** Two values in one place, the second taking over from step `at` with the
- *  crossfade an icon swap gets (scale, opacity and blur). */
 function Swap({
   at,
   step,
@@ -240,8 +209,6 @@ function Available({ at, step, children }: { at: number; step: number; children:
   );
 }
 
-/* ---- Links ---------------------------------------------------------- */
-
 export function LinksPillar() {
   return (
     <Pillar
@@ -256,9 +223,6 @@ export function LinksPillar() {
           steps: 6,
           scene: (step) => (
             <div className="flex flex-col gap-2 p-4">
-              {/* Our domain's random address, then one on yours beside it: a
-                  link keeps the domain it was made on, so this is a choice
-                  at creation, not one link changing hosts. */}
               <p className="text-xs text-muted">Short links</p>
               <p className="relative w-fit font-mono text-muted">
                 rdyr.cc/k3Tq9
@@ -311,11 +275,7 @@ const TAGS = [
   ["Campaign", "spring-sale"],
 ] as const;
 
-/* ---- QR codes ------------------------------------------------------- */
-
-/** Where a QR card's code goes: white until the QR library loads, which it
- *  does only once the card is near the screen. The code draws its own frame,
- *  so this one has none: two frames the same size put it 2px past this box. */
+/** The code draws its own frame, so this has none: two frames put it 2px past the box. */
 function QrSlot({ children }: { children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const near = useInView(box, { once: true, margin: "200px 0px" });
@@ -330,15 +290,11 @@ function QrSlot({ children }: { children: ReactNode }) {
 }
 
 const SCENE_URL = "https://go.acme.com/spring";
-/** The poster's short link: what its code holds, whatever page it opens. */
 const POSTER_URL = "https://go.acme.com/poster";
 // A light hairline, not the theme's border: on the dark theme that is a dark
 // ring around a white code.
-// 64px in a card under 16rem, so the text beside it keeps a link on one line.
 const SCENE_FRAME = "size-24 rounded-lg border-black/10 @max-[16rem]:size-16";
 
-/** The code a QR card shows. It encodes what the card says it holds, so a
- *  phone pointed at the page reads the same address. */
 function SceneQr({ url, logo }: { url: string; logo?: boolean }) {
   return (
     <QrSlot>
@@ -352,22 +308,14 @@ function SceneQr({ url, logo }: { url: string; logo?: boolean }) {
   );
 }
 
-/** Ink, then two brand colours a customer might pick. */
 const QR_COLOURS = ["#17151f", "#6d4fc4", "#0f766e"];
 
 /**
- * The colours card's code: a plain code, the logo landing in the middle, then
- * the ink turning one brand colour and then another.
- *
- * Every colour is its own code, drawn once and stacked, and the step only
- * changes which ones show. Redrawing one code with new options each step
- * blanked it for a frame every time (qr-code-styling empties its SVG before
- * it draws again) and cut between colours with no transition. All three are
- * drawn with room for a logo, so their modules line up, and the logo is
- * laid over them rather than drawn in, so it can scale in on its own.
+ * Each colour is its own code, drawn once and stacked; the step only changes which show.
+ * Redrawing one code each step blanked it for a frame (qr-code-styling empties
+ * its SVG first) and cut between colours with no transition.
  */
 function BrandedQr({ step }: { step: number }) {
-  // Ink for the first two steps, then one colour a step, holding the last.
   const colour = Math.min(Math.max(step - 1, 0), QR_COLOURS.length - 1);
   return (
     <QrSlot>
@@ -398,7 +346,6 @@ function BrandedQr({ step }: { step: number }) {
   );
 }
 
-/** A download button in the colours card, pressed for the one step `at`. */
 function SceneDownload({ at, step, children }: { at: number; step: number; children: ReactNode }) {
   return (
     <span
@@ -427,11 +374,8 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
           scene: (step) => (
             <div className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
               <SceneQr url={POSTER_URL} logo />
-              {/* The code's own short link stays put; only the page it opens
-                  changes, so the two are labelled apart. */}
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="font-bold">Spring poster</p>
-                {/* Stacked on a phone: label beside value leaves the link too little room. */}
                 <dl className="grid grid-cols-1 gap-x-2 text-xs sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-y-0.5">
                   <dt className="text-muted">Code</dt>
                   <dd className="font-mono [overflow-wrap:anywhere] text-muted">
@@ -460,7 +404,6 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
           icon: ImagePlus,
           title: "Your logo and colors",
           body: "On every code, as PNG or SVG. Paid plans.",
-          // Plain, logo, two colours, then each download pressed in turn.
           steps: 7,
           scene: (step) => (
             <div className="flex items-center gap-4 p-4">
@@ -508,9 +451,6 @@ export function QrPillar({ ask }: { ask: ReactNode }) {
   );
 }
 
-/* ---- Analytics ------------------------------------------------------ */
-
-/** Sample clicks a day for two weeks, for the trend card. */
 const DAYS = [38, 44, 41, 52, 61, 47, 55, 53, 50, 58, 56, 61, 57, 64];
 const SOURCES = [
   { name: "newsletter", clicks: 1612 },
@@ -575,11 +515,9 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
   );
 }
 
-/** Bars rise one after another, then the total and the change arrive. */
 function TrendScene({ step }: { step: number }) {
   const top = Math.max(...DAYS);
   const total = DAYS.reduce((sum, day) => sum + day, 0);
-  // Worked out from the bars, so the figure always matches them.
   const sum = (days: number[]) => days.reduce((all, day) => all + day, 0);
   const change = Math.round((sum(DAYS.slice(7)) / sum(DAYS.slice(0, 7)) - 1) * 100);
   return (
@@ -609,7 +547,6 @@ function TrendScene({ step }: { step: number }) {
   );
 }
 
-/** One scale for every bar: the top source is the full width. */
 function SourcesScene({ step }: { step: number }) {
   const top = SOURCES[0].clicks;
   return (
@@ -636,8 +573,6 @@ function SourcesScene({ step }: { step: number }) {
   );
 }
 
-/** What a click leaves behind, a row at a time, and the one thing it never
- *  does: the IP address arrives struck through. */
 function ClickRecord({ step }: { step: number }) {
   return (
     <dl className="grid grid-cols-[5.5rem_1fr] gap-y-2.5 p-4 sm:grid-cols-[6.5rem_1fr]">
@@ -649,10 +584,7 @@ function ClickRecord({ step }: { step: number }) {
       ))}
       <Reveal at={4} step={step} className="col-span-2 grid grid-cols-subgrid">
         <dt className="text-muted">IP address</dt>
-        {/* The visitor's address arrives and is struck out, then the note
-            says why. Striking the words "never stored" read as the
-            opposite. 203.0.113.0/24 is reserved for examples. */}
-        {/* Wraps "not stored" under the address in a 360px card. */}
+        {/* 203.0.113.0/24 is reserved for examples. */}
         <dd className="flex flex-wrap items-baseline gap-x-1.5 text-muted max-sm:text-xs">
           <span className="relative w-fit font-mono">
             203.0.113.7
@@ -686,8 +618,6 @@ function PillarLink({ to, children }: { to: "/pricing" | "/signup"; children: Re
     </MarketingLink>
   );
 }
-
-/* ---- Teams and code ------------------------------------------------- */
 
 export function TeamsAndCode() {
   return (

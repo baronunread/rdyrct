@@ -5,15 +5,6 @@ import { cn } from "../ui/cn";
 const ACTION =
   "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium transition-[background-color,scale] duration-150 ease-out active:scale-[0.97] disabled:cursor-default disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-bg [@media(hover:hover)]:hover:bg-bg/10";
 
-/**
- * What to do with the ticked rows. It takes the toolbar's place while
- * anything is ticked, at the toolbar's height, so ticking a box never moves
- * the table: the search and filters come back as soon as the selection
- * clears.
- *
- * Ink on paper inverted (the one dark strip on the page) because it is a
- * mode: everything on it acts on the selection, not on the table.
- */
 export function BulkBar({
   count,
   onDownloadQr,
@@ -24,7 +15,6 @@ export function BulkBar({
   count: number;
   onDownloadQr: () => void;
   downloading: boolean;
-  /** Undefined for somebody who cannot delete (a viewer, a read-only org). */
   onDelete?: () => void;
   onClear: () => void;
 }) {

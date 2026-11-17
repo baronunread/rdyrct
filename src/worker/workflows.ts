@@ -32,16 +32,9 @@ interface DomainActivateParams {
 }
 
 /**
- * Org teardown as a durable, multi-step process. Once the request handler
- * creates an instance, Cloudflare Workflows runs every step to completion and
- * retries each one on its own, so a KV or R2 outage cannot leave the teardown
- * half done. The steps run in this order:
- *
- *   gather -> delete the org row (D1) -> Cloudflare hostnames -> KV -> R2
- *
- * The D1 delete comes right after gather so the rest of the system (including
- * reconciliation) already agrees the org's KV/R2 data should go. Every step is
- * safe to run more than once.
+ * Steps run in order: gather -> delete org row (D1) -> Cloudflare hostnames -> KV -> R2.
+ * Each is retried on its own and safe to run twice. The D1 delete comes right
+ * after gather so reconciliation already agrees the org's KV/R2 data should go.
  */
 export class OrgDeleteWorkflow extends WorkflowEntrypoint<Env, OrgDeleteParams> {
   async run(event: Readonly<WorkflowEvent<OrgDeleteParams>>, step: WorkflowStep): Promise<void> {
@@ -54,13 +47,11 @@ export class OrgDeleteWorkflow extends WorkflowEntrypoint<Env, OrgDeleteParams> 
 
     await step.do("d1-delete", async () => {
       const db = drizzle(this.env.DB, { schema });
-      // Foreign-key cascades remove the org's links, domains, members, invites.
       await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
     });
 
     await step.do("cf-hostnames", async () => {
-      // Each delete tolerates an already-gone hostname, so a step retry that
-      // re-runs this callback after a partial failure is still safe.
+      // Each delete tolerates an already-gone hostname, so a step retry is safe.
       await Promise.all(
         gathered.cfHostnameIds.map((cfHostnameId) => cfDeleteHostname(this.env, cfHostnameId)),
       );
@@ -73,19 +64,9 @@ export class OrgDeleteWorkflow extends WorkflowEntrypoint<Env, OrgDeleteParams> 
 }
 
 /**
- * Custom-domain activation as a durable, resumable process. Domain creation
- * commits the D1 row and creates one instance keyed by the row id, then returns.
- * The workflow does every external step off the request path and resumes safely
- * after a Worker or provider failure. The steps run in this order:
- *
- *   ensure-hostname -> probe (loop, DNS then TLS) -> publish-kv
- *
- * `ensure-hostname` is get-or-create, so a retry never makes a duplicate custom
- * hostname (see ensureHostname). Each `probe` advances the D1 status one step
- * and is idempotent; `step.sleep` between probes backs off and does not count
- * toward the step limit. A domain that never resolves lands in `error` (a probe
- * enforces a 24h deadline) instead of polling forever. `publish-kv` is a
- * separate step so a failed KV publish retries without re-running the probes.
+ * Steps: ensure-hostname (get-or-create, so a retry never duplicates a custom
+ * hostname) -> probe (loop, DNS then TLS, 24h deadline then `error`) -> publish-kv.
+ * `step.sleep` between probes does not count toward the step limit.
  */
 export class DomainActivateWorkflow extends WorkflowEntrypoint<Env, DomainActivateParams> {
   async run(
@@ -97,7 +78,6 @@ export class DomainActivateWorkflow extends WorkflowEntrypoint<Env, DomainActiva
     const ensured = await step.do("ensure-hostname", () =>
       ensureHostname(this.env, domainId, hostname),
     );
-    // null means the domain row was deleted while we set up: nothing to activate.
     if (ensured === null) return;
 
     for (let attempt = 0; ; attempt++) {
@@ -112,12 +92,7 @@ export class DomainActivateWorkflow extends WorkflowEntrypoint<Env, DomainActiva
   }
 }
 
-/**
- * An import from another service (#383), run off the request so closing the
- * page does not stop it. Each step writes one chunk of pending rows and
- * records their outcomes (importNextChunk), so a retried or resumed step
- * picks up exactly where the last one left off and never writes a row twice.
- */
+/** Each step writes one chunk and records outcomes, so a resumed step never writes a row twice (#383). */
 export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: string }> {
   async run(
     event: Readonly<WorkflowEvent<{ importId: string }>>,
@@ -130,8 +105,7 @@ export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: stri
         if (pending === 0) break;
       }
     } catch (err) {
-      // A step that failed every retry: end the import rather than leave it
-      // running for good, which would block the org's next one.
+      // A step that failed every retry: end the import, or it blocks the org's next one.
       await step.do("give up", () => stopImport(this.env, importId));
       throw err;
     }
@@ -139,35 +113,20 @@ export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: stri
   }
 }
 
-/** A provider hiccup is retried for about ten minutes before the send fails. */
 const BATCH_RETRIES = {
   retries: { limit: 6, delay: "10 seconds", backoff: "exponential" },
 } as const;
 
 /**
- * One newsletter send (newsletter-send.ts), keyed by its send id. It waits
- * until the scheduled time, if there is one, then goes batch by batch until
- * nobody is left, so a Worker restart or a provider error retries one batch,
- * not the whole send. Each batch is two steps: `pick-n` freezes who gets it
- * (Workflows keeps the result, so a retry never reads again) and `batch-n`
- * delivers to that list under one provider key. The steps run in this order:
- *
- *   load -> wait (scheduled only) -> start
- *     -> pick-0, batch-0, pick-1, batch-1, ... -> finish
- *
- * Steps per instance are capped (MAX_BATCHES in newsletter-send.ts); a send
- * that would pass the cap is refused before it starts, and fails here if its
- * audience grew past it while it waited.
- *
- * Cancelling a scheduled send marks its row and terminates the instance;
- * `start` also finds the row cancelled if the instance outlives that.
+ * Each batch is two steps: `pick-n` freezes who gets it (a retry never reads again) and
+ * `batch-n` delivers under one provider key. Steps are capped (MAX_BATCHES in
+ * newsletter-send.ts). `start` finds the row cancelled if the instance outlives a cancel.
  */
 export class NewsletterSendWorkflow extends WorkflowEntrypoint<Env, { sendId: string }> {
   async run(event: Readonly<WorkflowEvent<{ sendId: string }>>, step: WorkflowStep): Promise<void> {
     const { sendId } = event.payload;
     const at = await step.do("load", () => sendTime(this.env, sendId));
     if (at === null) return;
-    // A time already past returns at once.
     if (at > 0) await step.sleepUntil("wait", at);
     const startedAt = await step.do("start", () => beginSend(this.env, sendId));
     if (startedAt === null) return;
@@ -188,8 +147,7 @@ export class NewsletterSendWorkflow extends WorkflowEntrypoint<Env, { sendId: st
         );
       }
     } catch (err) {
-      // A batch that failed every retry: the send ends as failed, with what
-      // went counted, rather than show as sending for good.
+      // A batch that failed every retry: end the send as failed rather than show sending forever.
       await step.do("give up", () => finishSend(this.env, sendId, "failed"));
       throw err;
     }

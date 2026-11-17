@@ -1,12 +1,4 @@
-/**
- * Export an org's links as CSV (#75): the way out, so a locked or over-plan
- * org can still export (a GET passes requireOrgRole's write checks).
- *
- * The header uses names the import (src/shared/link-import.ts) reads, so an
- * export goes back in as it came out: `Short link`, `Destination URL` (with
- * the link's UTM fields put back on) and `Title`. Rows stream out a batch at
- * a time, so a large org never sits in one query or in memory.
- */
+/** Export an org's links as CSV (#75). A GET passes requireOrgRole's write checks, so a locked org can still export. */
 import { Hono } from "hono";
 import { and, asc, eq, or, gt, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -17,12 +9,9 @@ import { linkUrl } from "../util";
 import { buildDestination } from "@/shared/utm";
 import { csvRow } from "@/shared/csv";
 
-// Mounted at /api/orgs/:orgId/link-export
 export const linkExportRoutes = new Hono<AppEnv>();
 
-/** Links per D1 query. Large, because the stream reads every batch in one
- * Worker invocation and Workers Free allows 50 D1 queries there: at 500 a
- * self-hosted org reaches that limit only past about 24,000 links. */
+/** Large: the stream reads every batch in one invocation and Workers Free allows 50 D1 queries there. */
 export const EXPORT_BATCH = 500;
 
 export const EXPORT_HEADER = [
@@ -34,9 +23,7 @@ export const EXPORT_HEADER = [
   "Clicks",
 ];
 
-// Literal `links.id`, as in links.ts: an interpolated column renders
-// unqualified. Hosts and slugs hold no spaces (SLUG_RE), so a space
-// separates them safely; an empty host is the shared domain.
+// Literal `links.id`, as in links.ts: an interpolated column renders unqualified.
 const otherAddresses = sql<string | null>`(
   select group_concat(coalesce(d.hostname, '') || '/' || la.slug, ' ')
   from link_addresses la left join domains d on d.id = la.domain_id
@@ -89,8 +76,6 @@ function toCells(env: Env, { link, domain, clicks, others }: ExportRow): string[
   ];
 }
 
-/** `rdyrct-links-acme-inc-2026-10-27.csv`. ASCII only, so the header needs
- * no encoding. */
 function filename(orgName: string): string {
   const name = orgName
     .toLowerCase()
@@ -114,7 +99,7 @@ linkExportRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   let after: { createdAt: number; id: string } | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      // The BOM makes Excel read the file as UTF-8, as the analytics export does.
+      // The BOM makes Excel read the file as UTF-8.
       controller.enqueue(encoder.encode(`﻿${csvRow(EXPORT_HEADER)}\r\n`));
     },
     async pull(controller) {

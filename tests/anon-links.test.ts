@@ -7,19 +7,9 @@ import {
   type StoredAnonLink,
 } from "../src/app/lib/anon-links";
 
-/**
- * The store behind the hero's anonymous links (Direction A of #96).
- *
- * Worth testing directly because every one of its failure modes is silent:
- * an expired link renders as a URL that 404s, a lost claim token turns
- * "keep this link" into a lie, and junk under our key would otherwise decide
- * what requests signup makes.
- */
-
 const HOUR = 60 * 60 * 1000;
 const KEY = "rdyrct:anon-links:v3";
 
-/** The two methods this module touches, and nothing else. */
 function fakeStorage() {
   const map = new Map<string, string>();
   installBrowserGlobals({
@@ -83,7 +73,6 @@ describe("the cap", () => {
     }
     const kept = storedAnonLinks();
     expect(kept).toHaveLength(MAX_ANON_LINKS);
-    // The most recent survive, newest first; the oldest two are gone.
     const newest = Array.from(
       { length: MAX_ANON_LINKS },
       (_, i) => `slug${MAX_ANON_LINKS + 1 - i}`,
@@ -92,8 +81,6 @@ describe("the cap", () => {
   });
 
   test("shows only the cap, even if this browser stored more before", () => {
-    // The cap used to be three. A browser that filled it must not keep
-    // rendering three links the form no longer lets anyone make.
     store.set(
       KEY,
       JSON.stringify(

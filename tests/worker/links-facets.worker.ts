@@ -4,12 +4,6 @@ import { reset } from "cloudflare:test";
 import type { LinkFacets, LinkListItem } from "../../src/shared/types";
 import { applyTestMigrations, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
 
-/**
- * The chips above the links table and the sparkline in each row: the counts
- * (GET /links/facets), the `filter=` that narrows the list to a chip, and the
- * 14-day series and attention note on every listed link.
- */
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = Date.now();
 const OLD = NOW - 30 * DAY_MS;
@@ -18,7 +12,6 @@ const dayKey = (daysAgo: number) => new Date(NOW - daysAgo * DAY_MS).toISOString
 interface Seed {
   id: string;
   createdAt?: number;
-  /** Clicks by days ago. */
   clicks?: Record<number, number>;
   extra?: Partial<{ suspended_at: number; warned_at: number; qr_color: string; domain_id: string }>;
   org?: string;
@@ -40,7 +33,6 @@ async function seedLink({ id, createdAt = NOW, clicks = {}, extra = {}, org = "o
       .run();
 }
 
-/** One of each case the chips tell apart. */
 async function seedOrg() {
   const cookie = await freeOwnerCookie({ id: "dom-1", hostname: "go.example.test" });
   await seedLink({ id: "quiet", createdAt: OLD, clicks: { 20: 5 } });
@@ -78,7 +70,6 @@ beforeEach(async () => {
 describe("GET /orgs/:orgId/links/facets", () => {
   it("counts each chip over the org's links", async () => {
     const cookie = await seedOrg();
-    // Another org's links never count.
     await env.DB.prepare(
       "insert into orgs (id, name, created_at) values ('org-2', 'Other', 0)",
     ).run();
@@ -110,7 +101,6 @@ describe("GET /orgs/:orgId/links?filter=", () => {
     expect(await ids("qr")).toHaveLength(10);
     expect(await ids("custom")).toEqual(["custom"]);
     expect(await ids("all")).toHaveLength(10);
-    // Anything else is the whole list, not an error.
     expect(await ids("nonsense")).toHaveLength(10);
   });
 
@@ -130,7 +120,6 @@ describe("the links list's sparkline and attention note", () => {
     // One week, the free plan's analytics window, whatever the plan.
     expect(drop.spark).toHaveLength(7);
     expect(drop.spark[4]).toBe(3); // 2 days ago
-    // 10 days ago is outside the week, so it is not in the line.
     expect(drop.spark.reduce((a, b) => a + b, 0)).toBe(3);
     expect(items.find((l) => l.id === "quiet")!.spark).toEqual(Array.from({ length: 7 }, () => 0));
   });
@@ -147,7 +136,6 @@ describe("the links list's sparkline and attention note", () => {
       drop: "85% fewer clicks",
       "small-drop": null,
       steady: null,
-      // The table's "paused" badge already says it.
       paused: null,
       warned: "Visitors see a warning",
       qr: null,

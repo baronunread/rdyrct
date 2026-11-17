@@ -31,8 +31,7 @@ test("a new account gets one welcome email once its address is verified", async 
 test("a sign-up sent before /api/config answers still carries a Turnstile token", async ({
   page,
 }) => {
-  // The site key arrives with /api/config. A form submitted before that used
-  // to go out with no token, be refused, retry with no token again, and fail.
+  // The site key arrives with /api/config; a form submitted before it goes out with no token.
   await page.route("**/api/config", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 6_000));
     await route.continue();
@@ -92,17 +91,12 @@ test.describe("authentication forms", () => {
     await submitLogin(page, email, password);
 
     await expect(page).toHaveURL(/\/dashboard$/);
-    // Signed in and already able to work: the account was given an
-    // organization on its first session, so the switcher names one.
     await expect(currentOrgName(page)).not.toHaveText("No organization");
   });
 
-  // Regression for the case a mode-gated capture missed: someone signs up,
-  // closes the tab before entering the code, and later comes back through
-  // /login instead of /signup. trySignIn's EMAIL_NOT_VERIFIED branch sends
-  // them to the same verify-otp screen, but under mode="login" this time.
-  // That verification is still this account's one and only activation, so
-  // it must still count as a signup (see auth.tsx's runVerify).
+  // Regression: sign up, close the tab before the code, come back through /login. The
+  // EMAIL_NOT_VERIFIED branch lands on verify-otp under mode="login", and that verification
+  // must still count as a signup (auth.tsx runVerify).
   test("resuming an abandoned signup through /login still counts as a signup", async ({ page }) => {
     const email = `resume-${Date.now()}@gmail.com`;
     const password = "test-password-123";
@@ -112,10 +106,8 @@ test.describe("authentication forms", () => {
       timeout: 30_000,
     });
 
-    // Simulates actually closing the tab: sessionStorage's pendingVerify
-    // survives a same-tab navigation, and readPending() would otherwise
-    // resume straight to the code screen and skip the /login form (and the
-    // EMAIL_NOT_VERIFIED branch this test means to exercise) entirely.
+    // Simulates closing the tab: sessionStorage's pendingVerify survives a same-tab navigation,
+    // and readPending() would skip the /login form and the EMAIL_NOT_VERIFIED branch under test.
     await page.evaluate(() => sessionStorage.removeItem("rdyrct:pendingVerify"));
     await page.goto("/login");
     await submitLogin(page, email, password);
@@ -132,10 +124,7 @@ test.describe("authentication forms", () => {
         if (event === "user_signed_up") window.recordSignupMethod(properties?.method);
       };
     });
-    // The functional regression this covers: verifying through /login used
-    // to run the exact same code path as verifying through /signup (see
-    // runVerify in auth.tsx), just under mode="login". Reaching /dashboard
-    // here proves the resumed signup completes. Observe the capture call
+    // Reaching /dashboard proves the resumed signup completes. Observe the capture call
     // directly so the assertion does not depend on the SDK's transport.
     await verifySignup(page, email);
     expect(completed).toEqual(["email"]);
@@ -259,11 +248,9 @@ test.describe("authentication forms", () => {
     await page.getByLabel("Password").fill("another-password-456");
     await page.getByRole("button", { name: "Sign up" }).click();
 
-    // Exactly what a free address gives: on to the code screen, no hint.
     await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
     await expect(page.getByText("already has an account")).toBeHidden();
 
-    // The owner is told, in the one place only they can read.
     await expect
       .poll(async () => {
         const response = await page.request.get("http://localhost:4000/emails", {
@@ -284,7 +271,6 @@ test("signing in from an invite says which organization comes next", async ({ pa
   await guest.goto(`/login?next=${encodeURIComponent(`/invite/${token}`)}`);
   await expect(guest.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(guest.getByText(/^Then you join .+ as a (member|viewer|admin)\.$/)).toBeVisible();
-  // "Forgot it?" sits in the password's label row, and leads to the reset.
   await guest.getByRole("button", { name: "Forgot it?" }).click();
   await expect(guest.getByRole("heading", { name: "Reset your password" })).toBeVisible();
   await context.close();

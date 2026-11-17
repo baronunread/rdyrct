@@ -1,69 +1,29 @@
-/**
- * The landing-to-activation funnel (#64).
- *
- * One list, in order, so the funnel is something the codebase states rather
- * than something you reconstruct by grepping for capture() calls. PostHog's
- * funnel builder needs these names to be stable: renaming one silently breaks
- * the historical series, so treat them as an API.
- *
- * Measurement caveat, recorded here because it is easy to forget when reading
- * a dashboard: PostHog is off until the visitor accepts the consent banner
- * (see posthog.ts). Steps before that are buffered and flushed on Accept, and
- * nothing at all is recorded for a visitor who rejects. So these events count
- * *consenting* visitors. The honest denominator for the top of the funnel is
- * Cloudflare's own request count for the landing route, which needs no
- * consent because it is aggregate.
- */
+// Event names must stay stable: PostHog's funnel builder silently breaks the
+// historical series on a rename. Only consenting visitors are counted (see posthog.ts),
+// so Cloudflare's own request count is the true top of the funnel.
 export const FUNNEL = {
-  /** 1. Landing page rendered. */
   landingViewed: "funnel_landing_viewed",
-  /** 2. A call to action was clicked. `placement` says which one. */
   ctaClicked: "funnel_cta_clicked",
-  /** 3. The pricing section scrolled into view. */
   pricingViewed: "funnel_pricing_viewed",
-  /** 3a. The signup form rendered. 19 people reached /signup in the 60 days
-   *  before this existed and 3 submitted it, with nothing in between to say
-   *  why. */
   signupViewed: "funnel_signup_viewed",
-  /** 3b. The first keystroke in the signup form. Viewed but not started is
-   *  a page problem; started but not submitted is a form problem. */
   signupStarted: "funnel_signup_started",
-  /** 4. Signup form submitted and accepted. Already covered by
-   *  `user_signed_up`; this is the funnel-shaped name for the same moment. */
   signupSubmitted: "funnel_signup_submitted",
-  /** 5a. Verification code sent. */
   verificationSent: "funnel_verification_sent",
-  /** 5b. Verification code accepted. */
   verificationCompleted: "funnel_verification_completed",
-  /** 6. An organization was created. */
   orgCreated: "funnel_org_created",
-  /** 7. A link was created. The activation event: a signed-up user with no
-   *  link is not activated, so this is the end of the headline metric.
-   *
-   *  Both of these fire on every creation, not only the first. A funnel step
-   *  counts a person once, at their first occurrence, so gating client-side
-   *  would mean keeping "has this user created one before?" state in the
-   *  browser to arrive at the same number. Only genuinely new links reach
-   *  this: merging into an existing link goes through useAddressMutations. */
+  // Fires on every creation, not only the first: a funnel counts a person once,
+  // at their first occurrence, so gating client-side would need browser state.
   linkCreated: "funnel_link_created",
 } as const;
 
-/** Not funnel-shaped (kept for its own PostHog history), but the same
- *  moment as `verificationCompleted` and just as easy to lose: fired from
- *  the same call site, right after OTP verification succeeds. Buffered
- *  alongside the funnel steps below, or a visitor who hasn't yet answered
- *  the consent banner when they verify has this dropped silently while
- *  `verificationCompleted` survives, undercounting signups. */
+// Fired from the same call site as `verificationCompleted` and buffered with it, or a
+// visitor who has not answered the consent banner drops this one and signups are undercounted.
 export const USER_SIGNED_UP = "user_signed_up";
 
-/** A signup submit that did not create an account, with `reason` set to the
- *  error code (never the address). Buffered like the steps: it is the answer
- *  to "started but not submitted". */
 export const SIGNUP_FAILED = "signup_failed";
 
-/** Appended by the server's redirect after a Google sign-in that created the
- *  account (BetterAuth's newUserCallbackURL), because that signup never
- *  passes through the form or the code screen that fire the events above. */
+// Appended by the server's redirect after a Google sign-in creates the account
+// (newUserCallbackURL): that signup never passes the form or code screen.
 const GOOGLE_SIGNUP_PARAM = "signup";
 
 const FUNNEL_EVENTS: ReadonlySet<string> = new Set([
@@ -72,8 +32,7 @@ const FUNNEL_EVENTS: ReadonlySet<string> = new Set([
   SIGNUP_FAILED,
 ]);
 
-/** A successful email response may be a pending or duplicate signup. Only a
- * session token proves the new account is already usable without an OTP. */
+// Only a session token proves the new account is usable without an OTP.
 export function captureEmailSignup(
   capture: (event: string, props: { method: string }) => void,
   signup: { token?: string | null } | null,
@@ -82,16 +41,12 @@ export function captureEmailSignup(
   if (signup?.token) capture(USER_SIGNED_UP, { method: "email" });
 }
 
-/** `next` with `?signup=google` added, for newUserCallbackURL. */
 export function googleSignupUrl(next: string): string {
   const url = new URL(next, window.location.origin);
   url.searchParams.set(GOOGLE_SIGNUP_PARAM, "google");
   return url.pathname + url.search + url.hash;
 }
 
-/** Fires the signup events for a Google account created on the round trip
- *  that just landed, then takes the marker out of the address bar so a
- *  reload does not count it twice. */
 export function captureGoogleSignup(capture: (event: string, props: { method: string }) => void) {
   const url = new URL(window.location.href);
   if (url.searchParams.get(GOOGLE_SIGNUP_PARAM) !== "google") return;
@@ -101,75 +56,38 @@ export function captureGoogleSignup(capture: (event: string, props: { method: st
   capture(USER_SIGNED_UP, { method: "google" });
 }
 
-/** Buffer this event when it fires before the visitor has answered the
- *  consent banner. Only funnel steps are worth holding; a QR download by an
- *  unconsented visitor is not part of any funnel. */
 export function isFunnelEvent(event: string): boolean {
   return FUNNEL_EVENTS.has(event);
 }
 
-/**
- * Where a CTA lives, so the hero, the pricing table and the closing block can
- * be told apart. #64 asks for exactly this: the hero click distinguished from
- * the secondary and from the final-CTA-section click.
- */
 export type CtaPlacement =
   | "hero_primary"
-  // The hero's anonymous shortener (Direction A of #96): using it, and then
-  // clicking through to keep the link that came out of it. The second is the
-  // one worth watching, because it is intent earned by the product rather
-  // than by the copy above it.
   | "hero_shortener"
   | "hero_shortener_claim"
-  // "Sign up free" under the shortener before it has made anything.
   | "hero_shortener_signup"
-  // The custom-domain second screen (Direction C of #96), the first paid
-  // ask on the page.
   | "second_screen_domain"
-  // The bar that follows a visitor who made an anonymous link down the page,
-  // with its 24-hour countdown.
   | "anon_link_bar"
-  // The one ask in the long middle of the page, at the end of the analytics
-  // preview. Worth its own placement: it fires right after somebody has been
-  // shown the payoff, so it measures whether the mock actually sells.
   | "analytics_preview"
-  // The landing page's QR section, which sells codes you can edit after
-  // printing, so it asks for the account those need.
   | "qr_pillar"
-  // The standalone QR generator (Direction D of #96). The page asks nothing
-  // of the visitor, so these two are the only intent it can report: taking
-  // the free account, or going to read what the paid ones cost.
   | "qr_page_signup"
   | "qr_page_pricing"
   | "header"
-  // The three /...-alternative comparison pages: one placement, since the
-  // pageview already says which competitor the visitor was reading about.
   | "alternative_page_signup"
-  // The free UTM builder: shortening the tagged link anonymously, and taking
-  // an account (to keep that link, or after this browser has spent its one).
   | "utm_page_shorten"
   | "utm_page_signup"
-  // Its many-links mode (copy all, the CSV) and saved templates: not sign-ups,
-  // but whether the features that set it apart from other builders get used.
   | "utm_page_bulk_copy"
   | "utm_page_bulk_csv"
   | "utm_page_template"
-  // The /branded-link-shortener page's one sign-up.
   | "branded_page_signup"
-  // The /google-url-shortener page's one sign-up, for people leaving goo.gl.
   | "googl_page_signup"
   | "pricing_free"
   | "pricing_hobby"
   | "pricing_pro"
   | "final_cta";
 
-/**
- * A campaign tag is supposed to name a campaign, but the query string is
- * attacker- and mistake-controlled, and a link built by hand can easily carry
- * `utm_campaign=alice@example.com`. Anything outside a conservative shape is
- * dropped rather than truncated: a length cap does not make an email address
- * stop being one.
- */
+// The query string is attacker- and mistake-controlled (`utm_campaign=alice@example.com`):
+// anything outside a conservative shape is dropped, since truncating does not
+// stop an email address being one.
 const SAFE_CAMPAIGN_VALUE = /^[a-zA-Z0-9._\-+ ]{1,64}$/;
 
 function safeCampaignValue(value: string): string | null {
@@ -181,7 +99,6 @@ function safeCampaignValue(value: string): string | null {
   return trimmed;
 }
 
-/** The campaign parameters a landing URL is read for. */
 const CAMPAIGN_PARAMS = [
   "utm_source",
   "utm_medium",
@@ -190,19 +107,10 @@ const CAMPAIGN_PARAMS = [
   "utm_content",
 ] as const;
 
-/** What a landing pageview carries about where the visitor came from. Every
- * field is optional: most visits offer none of them. */
 type LandingContext = Partial<Record<(typeof CAMPAIGN_PARAMS)[number] | "referrer_host", string>>;
 
-/**
- * Campaign attribution for the landing view, read from the URL and the
- * referrer.
- *
- * Referrer is reduced to its hostname. The full URL can carry a search query
- * or a private path, and storing referrer hostnames rather than URLs is
- * already the rule for click analytics (#20); the marketing funnel does not
- * get a weaker standard than the product does.
- */
+// Referrer is reduced to its hostname: the full URL can carry a search query
+// or a private path (#20).
 export function landingContext() {
   const out: LandingContext = {};
   try {
@@ -216,8 +124,6 @@ export function landingContext() {
       const host = new URL(document.referrer).hostname;
       if (host && host !== window.location.hostname) out.referrer_host = host;
     }
-  } catch {
-    /* a malformed referrer or search string is not worth failing a pageview */
-  }
+  } catch {}
   return out;
 }

@@ -1,24 +1,13 @@
-/**
- * CSV for the analytics export (#78).
- *
- * Built here, from data the page already holds, so an export costs no
- * request and no D1 read. That also settles the plan cap for free: the rows
- * on screen are the rows the server already trimmed to the org's
- * analyticsDays, so an export cannot reach further back than the UI does.
- */
+// Built from data the page holds, so an export costs no request and cannot reach
+// further back than the plan-trimmed rows on screen (#78).
 
 import { toCsv } from "@/shared/csv";
 import type { SeriesPoint, TopEntry } from "@/shared/types";
 
-/**
- * Hand the file to the browser.
- *
- * A blob URL rather than a data: URL: the strict CSP forbids the second, and
- * a download of unknown size should not sit in an attribute anyway.
- */
+// A blob URL: the strict CSP forbids data: URLs.
 export function downloadCsv(filename: string, csv: string): void {
-  // The BOM is what makes Excel read it as UTF-8 rather than the local
-  // codepage, which otherwise mangles every non-ASCII country name.
+  // The BOM makes Excel read UTF-8 rather than the local codepage,
+  // which mangles non-ASCII country names.
   downloadBlob(filename, new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" }));
 }
 
@@ -38,12 +27,6 @@ export interface ExportableStats {
   devices: TopEntry[];
 }
 
-/**
- * One file, not four: a `section` column keeps the time series and the three
- * breakdowns together, which is what somebody assembling a campaign summary
- * wants to open. Sections are named in the singular so a spreadsheet filter
- * reads as a sentence.
- */
 export function statsToCsv(stats: ExportableStats): string {
   const sections: [string, { key: string; clicks: number }[]][] = [
     ["date", stats.series.map((point) => ({ key: point.day, clicks: point.clicks }))],
@@ -57,8 +40,6 @@ export function statsToCsv(stats: ExportableStats): string {
   return toCsv(rows);
 }
 
-/** `rdyrct-analytics-30d-2026-08-08.csv`, so a folder of exports sorts and
- * reads without opening any of them. */
 export function statsFilename(scope: string, days: number): string {
   const today = new Date().toISOString().slice(0, 10);
   return `rdyrct-${scope}-${days}d-${today}.csv`;

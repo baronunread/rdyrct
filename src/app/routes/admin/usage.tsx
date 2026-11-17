@@ -13,7 +13,6 @@ import { adminUsageQuery, useAdminUsageRange, type AdminUsageData } from "../../
 import { SectionHeading, fullNumber } from "./admin-kit";
 import { rangeDays, usageDaysFrom, useUsageRange } from "./usage-range";
 
-/** "Oct 5" from "2026-10-05", as on the analytics page. */
 const dayTick = (day: string) =>
   new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
@@ -25,8 +24,6 @@ function Chart({ data, height }: { data: SeriesPoint[]; height?: number }) {
   return <AreaChart data={data} tickFormat={dayTick} height={height} />;
 }
 
-/** New per day, from a running total: each day minus the one before. The
- * first day has nothing before it, so it is dropped rather than guessed. */
 function perDay(running: SeriesPoint[]): SeriesPoint[] {
   return running
     .slice(1)
@@ -41,17 +38,11 @@ interface Kpi {
   id: KpiId;
   label: string;
   value: number;
-  /** Beside the value: what the range added, or a share. */
   note?: ReactNode;
-  /** What the chart plots when this figure is picked; null when the API
-   * has no daily history for it yet. */
   series: SeriesPoint[] | null;
-  /** Names the series above the chart. */
   per: string;
 }
 
-/** "↑ 9": what the range added. Mint, with the arrow, so the colour never
- * says it alone; the words are there for a screen reader. */
 function Added({ n, days }: { n: number; days: number }) {
   return (
     <span className="inline-flex items-center gap-0.5 text-xs font-medium text-accent-2">
@@ -114,11 +105,6 @@ function kpis(s: AdminUsageData, days: number): Kpi[] {
 
 const CHART_HEIGHT = 200;
 
-/**
- * Five figures over one chart, and the chart plots the one picked
- * (rdyrct-design, "Stats and the chart share a card"). Each figure is a
- * toggle, so the shaded one is always the one the chart is drawing.
- */
 function KpiChart({ s, days }: { s: AdminUsageData; days: number }) {
   const [picked, setPicked] = useState<KpiId>("users");
   const figures = kpis(s, days);
@@ -163,8 +149,6 @@ function KpiChart({ s, days }: { s: AdminUsageData; days: number }) {
         {current?.series && current.series.length > 0 ? (
           <Chart data={current.series} height={CHART_HEIGHT} />
         ) : (
-          // Never a made-up line: the box keeps the chart's height and says
-          // why it is empty.
           <div
             className="grid place-items-center rounded-lg bg-surface-2/50 px-6 text-center text-sm text-pretty text-muted"
             style={{ height: CHART_HEIGHT }}
@@ -177,10 +161,7 @@ function KpiChart({ s, days }: { s: AdminUsageData; days: number }) {
   );
 }
 
-/** Feature access by plan, and sign-ups over the range. Access and money are
- * separate questions (#82): the plan mix counts comps, "pay" does not, and
- * subscriptions are Polar's own count. No money here: Polar knows what it
- * charged, net of discounts, tax and refunds. */
+/** Access and money are separate (#82): the plan mix counts comps, "pay" does not. No money here: Polar knows what it charged. */
 function PlanMix({ s }: { s: AdminUsageData }) {
   return (
     <PanelTabs
@@ -199,9 +180,7 @@ function PlanMix({ s }: { s: AdminUsageData }) {
                   { key: "Enterprise", clicks: s.planCounts.enterprise },
                 ]}
               />
-              {/* Comped belongs here rather than in a bar of its own: a comp is
-                  not a fourth plan, it is how some of the Hobby and Pro rows
-                  above were paid for, so a bar would count those people twice. */}
+              {/* A comp is how some Hobby and Pro rows were paid for, so a bar of its own would count those people twice. */}
               <p className="mt-3 text-xs text-muted">
                 <span className="tnum">{fullNumber(s.compedUsers)}</span> comped.{" "}
                 {s.paidConversionRate !== null && (
@@ -234,7 +213,6 @@ function PlanMix({ s }: { s: AdminUsageData }) {
   );
 }
 
-/** A count against its ceiling, as a bar and as figures in full. */
 function Meter({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
@@ -250,8 +228,6 @@ function Meter({ label, value, max }: { label: string; value: number; max: numbe
   );
 }
 
-/** Calls to Google Web Risk, against the cap the Worker enforces each day
- * and Google's free 100,000 a month. */
 function WebRisk({ s }: { s: AdminUsageData }) {
   return (
     <PanelTabs
@@ -334,7 +310,6 @@ function TopLists({ s }: { s: AdminUsageData }) {
               formatKey={(id) => {
                 const o = s.topOrgs.find((t) => t.id === id);
                 if (!o) return id;
-                // The plan is an attribute of the row: plain text, no pill.
                 return (
                   <>
                     {o.name} <span className="text-muted capitalize">{o.plan}</span>
@@ -368,8 +343,6 @@ function TopLists({ s }: { s: AdminUsageData }) {
   );
 }
 
-/** A share of a cap: red and named "over" past 100%, so the colour never
- * says it alone. */
 function CapCell({ pct, label }: { pct: number; label: string }) {
   const over = pct > 100;
   return (
@@ -395,9 +368,6 @@ function CapCell({ pct, label }: { pct: number; label: string }) {
   );
 }
 
-/** A plain table for inside a panel: the panel is already the raised
- * surface, so the kit's Table, which brings its own, would nest a card. On a
- * phone each row folds into a name over its figures. */
 function PanelTable({ head, children }: { head: ReactNode; children: ReactNode }) {
   return (
     <div className="-mx-1 px-1 sm:overflow-x-auto">
@@ -413,16 +383,11 @@ function PanelTable({ head, children }: { head: ReactNode; children: ReactNode }
   );
 }
 
-/** How hard an org presses on its plan: the worst of its three shares. */
 const worst = (c: AdminUsageData["capPressure"][number]) =>
   Math.max(c.linksPct, c.membersPct, c.domainsPct);
 
 const FIRST = 5;
 
-/**
- * Orgs pressing on their plan, worst first. Five show, and the rest are one
- * press away: every row stays reachable, none is dropped.
- */
 function CapPressure({ s }: { s: AdminUsageData }) {
   const [all, setAll] = useState(false);
   const sorted = [...s.capPressure].sort((a, b) => worst(b) - worst(a));
@@ -484,7 +449,6 @@ function CapPressure({ s }: { s: AdminUsageData }) {
   );
 }
 
-/** Orgs whose traffic jumped against their own two-week average. */
 function Anomalies({ s }: { s: AdminUsageData }) {
   return (
     <PanelTabs
@@ -529,7 +493,6 @@ function Anomalies({ s }: { s: AdminUsageData }) {
   );
 }
 
-/** The usage page's first frame (see lib/route-preload.ts). */
 export const preload = (qc: QueryClient, searchStr: string) =>
   settle([qc.ensureQueryData(adminUsageQuery(usageDaysFrom(searchStr)))]);
 

@@ -17,18 +17,8 @@ import {
   testDb,
 } from "./support";
 
-/**
- * Reconciliation (#158): what a plan change does to the orgs a user owns.
- *
- * Every case here is a downgrade the product used to ignore entirely, plus
- * the two properties the whole design rests on: running the pass twice
- * changes nothing, and re-upgrading undoes all of it with no manual step.
- */
-
 const NOW = 1_700_000_000_000;
 
-/** An owner on `plan`, owning `orgs` orgs oldest-first, each with the given
- * number of extra members and domains. */
 async function seed({
   plan = "pro",
   orgs = 1,
@@ -40,7 +30,6 @@ async function seed({
   orgs?: number;
   members?: number;
   domains?: number;
-  /** The admin's custom `orgs` limit. Null: the plan's own cap, which is one. */
   orgLimit?: number | null;
 } = {}) {
   const statements = [
@@ -84,7 +73,6 @@ async function seed({
   await setOrgs(orgLimit);
 }
 
-/** Sets (or clears) the owner's custom `orgs` limit. */
 async function setOrgs(limit: number | null) {
   await saveLimitOverrides(testDb(), "owner-1", limit === null ? null : { orgs: limit });
 }
@@ -94,12 +82,8 @@ async function setPlan(plan: string) {
 }
 
 /**
- * An env whose storage queue records instead of delivering.
- *
- * Outbound mail is deliberately *not* stubbed here. `reconcileUser` catches
- * every failure, so a send that fails is swallowed and logged, which is what
- * lets the cases below assert D1 and KV without caring about Resend. The
- * cases that are about the emails wrap themselves in `withMail`.
+ * Mail is not stubbed here: `reconcileUser` swallows send failures, so cases
+ * asserting D1 and KV need not care. The email cases use `withMail`.
  */
 function quietEnv() {
   const { env: captured, sent } = captureStorage();
@@ -126,8 +110,6 @@ async function domains() {
   return testDb().select().from(schema.domains).orderBy(schema.domains.createdAt);
 }
 
-/** Seeds an account, drops it to a lower plan, and runs the pass: the
- * opening three lines of nearly every case below. */
 async function downgrade(
   seedArgs: Parameters<typeof seed>[0],
   to: string,
@@ -140,7 +122,6 @@ async function downgrade(
   return quiet;
 }
 
-/** Runs `body` with outbound mail captured, and always restores fetch. */
 async function withMail(body: (mail: ReturnType<typeof captureEmails>) => Promise<void>) {
   const mail = captureEmails();
   try {
@@ -173,7 +154,6 @@ describe("entitlement reconciliation", () => {
     await seed({ plan: "hobby", domains: 2 });
     const { env: e, storage } = quietEnv();
     await reconcileUser(e, testDb(), "owner-1", NOW);
-    // Hobby allows one domain: the older one keeps serving.
     expect((await domains()).map((d) => d.lockedAt)).toEqual([null, NOW]);
 
     await setPlan("free");
@@ -182,7 +162,6 @@ describe("entitlement reconciliation", () => {
     const row = await entitlement();
     expect(JSON.parse(row.overJson)).toEqual({ domains: 2 });
     expect(row.graceEndsAt).toBe(NOW + GRACE_PERIOD_MS);
-    // Only the domains whose verdict moved get a KV republish.
     expect(storage.map((m) => ("key" in m ? m.key : ""))).toContain("domain:d0.example.com");
   });
 
@@ -214,7 +193,6 @@ describe("entitlement reconciliation", () => {
   });
 
   it("demotes over-cap members to viewer, longest-standing first, owner exempt", async () => {
-    // Pro allows 25; free allows 3 (owner + 2).
     await downgrade({ plan: "pro", members: 4 }, "free");
 
     const rows = await members();
@@ -225,7 +203,6 @@ describe("entitlement reconciliation", () => {
       ["member-2", "viewer"],
       ["member-3", "viewer"],
     ]);
-    // What they were is recorded, and only for the ones that moved.
     expect(rows.map((r) => r.previousRole)).toEqual([null, null, null, "member", "member"]);
     expect(JSON.parse((await entitlement()).overJson)).toEqual({ members: 5 });
   });
@@ -241,7 +218,6 @@ describe("entitlement reconciliation", () => {
     await reconcileUser(e, testDb(), "owner-1", NOW);
     expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, null, NOW]);
 
-    // Raising it unlocks, lowering it locks again, clearing it leaves the plan's one.
     await setOrgs(3);
     await reconcileUser(e, testDb(), "owner-1", NOW + 1);
     expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, null, null]);
@@ -306,9 +282,8 @@ describe("entitlement reconciliation", () => {
     await reconcileUser(e, testDb(), "owner-1", later);
     // The domain that only just went over must not inherit an expired clock.
     expect((await entitlement()).graceEndsAt).toBe(later + GRACE_PERIOD_MS);
-    // And every locked domain is republished, not just the one whose lock
-    // moved: the KV value carries the deadline, so the two already locked
-    // would otherwise keep the old one and 404 through the new grace period.
+    // Every locked domain is republished: the KV value carries the deadline,
+    // so the two already locked would keep the old one and 404 early.
     expect(storage.map((m) => ("key" in m ? m.key : "")).sort()).toEqual([
       "domain:d0.example.com",
       "domain:d1.example.com",
@@ -325,16 +300,13 @@ describe("entitlement reconciliation", () => {
       expect(mail.sent[0].text).toContain("Questions? Write to support@mail.rdyrct.com.");
       expect(mail.sent[0].text).not.toContain("Not you?");
 
-      // A second pass on the same plan sends nothing more.
       await reconcileUser(e, testDb(), "owner-1", NOW + 1000);
       expect(mail.sent).toHaveLength(1);
 
-      // Day 23 of 30: one week left.
       const day23 = NOW + GRACE_PERIOD_MS - 6 * 86_400_000;
       expect(await sweepGraceWarnings(e, testDb(), day23)).toBe(1);
       expect(mail.sent).toHaveLength(2);
       expect(mail.sent[1].subject).toContain("loses its custom domains soon");
-      // And only once.
       expect(await sweepGraceWarnings(e, testDb(), day23 + 1000)).toBe(0);
     });
   });

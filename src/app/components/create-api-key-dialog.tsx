@@ -8,7 +8,6 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 
-/** The key value, shown once right after minting, with its copy buttons. */
 function NewKeyShownOnce({ apiKey, onDone }: { apiKey: ApiKeyDTO; onDone: () => void }) {
   const toast = useToast();
   return (
@@ -80,9 +79,6 @@ function NameForm({ onCreate, creating }: { onCreate: (name: string) => void; cr
   );
 }
 
-/** "New key": name it, then the minted key is shown once, in the same dialog,
- * until Done or close. Server failures are toasts in the caller: no field owns
- * them. */
 export function CreateApiKeyDialog({
   open,
   onOpenChange,

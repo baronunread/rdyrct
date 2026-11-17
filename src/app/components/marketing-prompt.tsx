@@ -9,9 +9,6 @@ import { errorMessage } from "../lib/error-message";
 import { useCurrentUser } from "../lib/hooks";
 import { useSetMarketing, type ListChoice } from "../lib/marketing";
 
-/** One list's row in the dialog: its name and what it sends on the left,
- * a switch on the right. The whole row is the target. Nothing saves until
- * Save. */
 export function ListRow({
   label,
   hint,
@@ -45,16 +42,7 @@ export function ListRow({
   );
 }
 
-/**
- * The one-time "hear from rdyrct by email?" question, for an account that has
- * not answered. Two switches, both off, one per list (product news, offers).
- * Every existing account starts there; one that answered in onboarding (the
- * last step of the /welcome setup flow) never sees it.
- *
- * Any answer ends it: Save with both off, "No thanks" and closing the
- * dialog are all a no to both lists. It never shows during the /welcome
- * setup flow, which asks the same question as its last step.
- */
+/** Never shows in /welcome, whose last step asks the same question. */
 export function MarketingPrompt() {
   const currentUser = useCurrentUser();
   const pathname = useLocation({ select: (l) => l.pathname });

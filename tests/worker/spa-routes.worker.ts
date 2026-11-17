@@ -3,13 +3,6 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
 
-/**
- * The SPA fallback serves the router's pages and 404s everything else
- * (src/shared/spa-routes.ts). Before, any path the Worker didn't own got the
- * shell under a 200 with the landing page's title and canonical: a soft 404
- * for every mistyped or invented address a crawler found.
- */
-
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
@@ -68,7 +61,6 @@ describe("the SPA fallback", () => {
     expect(res.status).toBe(404);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("etag")).toBeNull();
-    // Still the SPA, which renders its NotFound page.
     expect(await res.text()).toContain('<div id="root">');
   });
 
@@ -115,9 +107,8 @@ describe("the SPA fallback", () => {
   });
 
   it("passes a real file under an unknown path through untouched", async () => {
-    // In dev the source modules come through this fallback, and in production
-    // any root file not excluded from run_worker_first does: only the HTML
-    // shell may turn into a 404.
+    // In dev the source modules come through this fallback, and in production any
+    // root file not excluded from run_worker_first does: only the HTML shell may 404.
     const script = "export {};";
     const assets: Fetcher = {
       fetch: async () => new Response(script, { headers: { "content-type": "text/javascript" } }),

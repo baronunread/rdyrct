@@ -13,32 +13,23 @@ import { cn } from "./cn";
 import { OverflowTip } from "./overflow-tip";
 import { Tooltip } from "./tooltip";
 
-// Lifted by a ring shadow rather than bordered (rdyrct-design, "The app's
-// surfaces"). Invalid draws the danger ring; focus draws the accent ring and
-// its soft halo. A field that is both keeps the danger ring and takes a
-// danger halo, so the mark does not vanish the moment focus lands on it.
+// A field that is both invalid and focused keeps the danger ring and takes a danger halo,
+// so the mark does not vanish the moment focus lands on it.
 const inputClass =
   "h-9 w-full rounded-lg bg-surface px-3 text-sm text-text smooth-shadow-ring-xs transition-[box-shadow] duration-150 placeholder:text-placeholder aria-invalid:shadow-[0_0_0_1.5px_var(--danger)] focus-visible:shadow-[0_0_0_1.5px_var(--accent),0_0_0_4px_color-mix(in_oklab,var(--accent)_25%,transparent)] aria-invalid:focus-visible:shadow-[0_0_0_1.5px_var(--danger),0_0_0_4px_color-mix(in_oklab,var(--danger)_18%,transparent)] focus-visible:outline-none disabled:opacity-50";
 
-/** What a Field tells the control inside it: whether it is in error, the id
- * of the reason so the control can point at it, and that it sits in a Field
- * at all (which is what gives an Input room for the × mark). */
 const FieldState = createContext<{ invalid: boolean; describedBy?: string; inField: boolean }>({
   invalid: false,
   inField: false,
 });
 
-/** The ARIA a control inside a Field should carry. */
 function useFieldAria() {
   const { invalid, describedBy } = useContext(FieldState);
   return invalid ? { "aria-invalid": true, "aria-describedby": describedBy } : {};
 }
 
-/**
- * The × inside a field that is wrong: the shape that says so without the
- * colour (rdyrct-design: semantic colour never carries meaning alone). Place
- * it in a `relative` box around the input; the input needs `pr-8`.
- */
+// The shape that says so without the colour (rdyrct-design: semantic colour never carries
+// meaning alone). Place it in a `relative` box around the input; the input needs `pr-8`.
 export function InvalidMark({ className }: { className?: string }) {
   return (
     <X
@@ -52,17 +43,9 @@ export function InvalidMark({ className }: { className?: string }) {
   );
 }
 
-/**
- * A text input. Inside a Field it always sits in its own small box, so the ×
- * can appear when the field is marked without the input moving (it is never
- * remounted, so it keeps focus and what was typed).
- */
-/**
- * Keeps password managers (Bitwarden, 1Password, LastPass, Dashlane) off a
- * field. They ignore autocomplete="off" and guess from the label, so a link
- * title, an org name or a teammate's address gets offered the user's own
- * name, email or card. Each reads its own attribute.
- */
+// Password managers (Bitwarden, 1Password, LastPass, Dashlane) ignore autocomplete="off"
+// and guess from the label, offering the user's own name, email or card for a link title.
+// Each reads its own attribute.
 export const NO_AUTOFILL = {
   "data-bwignore": true,
   "data-1p-ignore": true,
@@ -70,9 +53,6 @@ export const NO_AUTOFILL = {
   "data-form-type": "other",
 } as const;
 
-/** An input with no autocomplete token (or "off") asks for something the
- * browser cannot know, so password managers stay away; one with a token
- * (email, name, new-password...) is the user's own and keeps autofill. */
 const autofillProps = (autoComplete: string | undefined) =>
   !autoComplete || autoComplete === "off" ? NO_AUTOFILL : undefined;
 
@@ -100,8 +80,6 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 );
 Input.displayName = "Input";
 
-/** Several lines of input, such as one web address per line. The input's
- * look, grown to the rows it is given. */
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
   TextareaHTMLAttributes<HTMLTextAreaElement>
@@ -135,7 +113,6 @@ export const Select = forwardRef<
 ));
 Select.displayName = "Select";
 
-/** The info mark beside a field's label, with its advice behind a tooltip. */
 function FieldTip({ label, tip }: { label: string; tip: string }) {
   return (
     <Tooltip content={tip}>
@@ -156,11 +133,6 @@ function FieldTip({ label, tip }: { label: string; tip: string }) {
 
 const VALID = { invalid: false, inField: true };
 
-/**
- * The reason a field is wrong, on the right of its label line: a small × and
- * a few words. A longer explanation rides along for screen readers and on
- * hover, so the line itself never wraps and nothing below it moves.
- */
 export function FieldReason({
   id,
   reason,
@@ -187,8 +159,6 @@ export function FieldReason({
   return longer ? <Tooltip content={longer}>{row}</Tooltip> : row;
 }
 
-/** The label line: the name, its tip, and on the right the reason it is
- * wrong, so an error never pushes the form down. */
 function FieldLabelRow({
   label,
   optional,
@@ -234,29 +204,13 @@ export function Field({
   children,
 }: {
   label: string;
-  /** Adds "· optional" after the label, quietly. */
   optional?: boolean;
   hint?: ReactNode;
-  /**
-   * Advice about the field, behind an info mark on the label.
-   *
-   * For the thing worth knowing before you choose but not worth a line of
-   * text under every field forever: a tip is read once and then ignored,
-   * while a hint is read on every visit and starts to crowd the form.
-   */
   tip?: string;
-  /** Something small on the right of the label line ("Forgot it?"). An
-   * error takes its place while the field is marked. Keep it out of the
-   * label's own click target: it is rendered inside the label, so a link or
-   * button here should stop the click from reaching the input if needed. */
+  // Rendered inside the label: a link or button here should stop the click
+  // from reaching the input if needed.
   aside?: ReactNode;
-  /**
-   * Why the value is wrong, set after a submit. It sits on the right of the
-   * label line, so marking a field never pushes the form down (rdyrct-design,
-   * form errors). Keep it short: "Needs https://", "Already taken".
-   */
   error?: string;
-  /** The longer explanation of `error`, for screen readers and on hover. */
   errorDetail?: string;
   className?: string;
   children: ReactNode;

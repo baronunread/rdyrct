@@ -1,22 +1,9 @@
-/**
- * The one rule that decides whether a Turnstile-guarded request gets a second go.
- *
- * Its own module so it can be tested without loading the Turnstile script.
- */
 import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 
-/** Either shape a refusal arrives in: an ApiError carrying `.code`, or the
- * `{ error }` better-auth resolves with instead of throwing. */
 type TurnstileRefusal = { code?: string; error?: { code?: string } } | null | undefined;
 
-/**
- * Whether a refusal is the Worker turning down a Turnstile token.
- *
- * Two shapes reach here, and both have to be read. better-auth resolves with
- * `{ error }` on the object rather than throwing; api() rejects with an
- * ApiError carrying `.code`. Reading only the first is what made the retry
- * below dead code for every api() caller.
- */
+// better-auth resolves with `{ error }` rather than throwing; api() rejects with an
+// ApiError carrying `.code`. Both shapes must be read.
 export function isTurnstileFailure<T>(result: T): boolean {
   // SAFETY: this reads two optional fields off whatever arrived. Both shapes
   // are this app's own (an ApiError, and the { error } better-auth resolves
@@ -25,21 +12,8 @@ export function isTurnstileFailure<T>(result: T): boolean {
   return refusal?.code === TURNSTILE_FAILED_CODE || refusal?.error?.code === TURNSTILE_FAILED_CODE;
 }
 
-/**
- * Runs a Turnstile-guarded request, and if the Worker refuses the token, solves a
- * fresh one and runs it exactly once more.
- *
- * A token can be refused for reasons the browser cannot see coming: it
- * expired, it was already spent, or the server forgot it. None of those are
- * the visitor's doing and none of them are worth an error message, so proving
- * ourselves again is the honest response. Once, not in a loop: a second
- * refusal means something is actually wrong, and that one belongs on screen.
- *
- * The refusal has to be caught as well as inspected. A rejected promise never
- * reached the check, so a spent token surfaced as "could not verify you are
- * human" in front of somebody who had done nothing wrong, on the one path
- * where retrying always would have worked.
- */
+// Retry once, not in a loop: a second refusal is real. The rejection must be caught
+// as well as inspected, or a spent token surfaced as a human-check error.
 export async function retryOnTurnstileFailure<T>(
   run: (headers: Record<string, string>) => Promise<T>,
   headers: () => Promise<Record<string, string>>,

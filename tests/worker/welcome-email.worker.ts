@@ -60,7 +60,6 @@ describe("welcome email", () => {
     // (wrangler vars, .dev.vars); the person does not.
     expect(welcome?.from).toMatch(/^Andrea at rdyrct <andrea@[^>]+>$/);
     expect(welcome?.text).toContain("/dashboard");
-    // A letter to someone who just signed up: no "Not you?" boilerplate.
     expect(welcome?.text).not.toContain("Not you?");
     mail.restore();
   });
@@ -85,8 +84,6 @@ describe("welcome email", () => {
   });
 
   it("is not sent to an account that was already verified when the column arrived", async () => {
-    // The migration marks every verified account as welcomed; reproduce its
-    // effect on a row and show the next update stays quiet.
     await env.DB.batch([
       env.DB.prepare(
         "insert into user (id, name, email, email_verified, is_admin, plan, welcome_sent_at, created_at, updated_at) values ('u2','Veteran','vet@example.com',1,0,'free',1,0,0)",

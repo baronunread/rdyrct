@@ -1,14 +1,6 @@
-/**
- * Which field of the link editor a failed save is about, and what to say in
- * its label row.
- *
- * A form error marks its field (rdyrct-design): the server's refusal of a
- * destination or a slug belongs on that field, not in a toast. Every such
- * refusal carries a code (`cause: { code }` in `routes/links.ts`,
- * `abuse.ts` and `abuse-hold.ts`), and this reads the code alone: the
- * message is for people and may change. A custom domain's root redirect
- * goes through the same destination rules (#488) and reads its reason here.
- */
+// Reads the error code alone: the message is for people and may change. Codes come from
+// `cause: { code }` in `routes/links.ts`, `abuse.ts` and `abuse-hold.ts`. A custom
+// domain's root redirect uses the same destination rules (#488).
 import { lookup } from "@/shared/lookup";
 import { ApiError } from "./api";
 
@@ -16,9 +8,7 @@ export type LinkErrorField = "destination" | "slug";
 
 export interface LinkFieldError {
   field: LinkErrorField;
-  /** A few words for the label row. */
   reason: string;
-  /** The whole explanation, for screen readers and on hover. */
   detail: string;
 }
 
@@ -35,20 +25,14 @@ const RULES = {
   blocked_destination: { field: "destination", reason: "Not allowed" },
 } satisfies Record<string, { field: LinkErrorField; reason: string }>;
 
-/** The field a save error belongs to, or null when no field owns it (a toast
- * says those). */
 export function linkFieldError(error: Error): LinkFieldError | null {
   if (!(error instanceof ApiError) || !error.code) return null;
   const rule = lookup(RULES, error.code);
   return rule ? { field: rule.field, reason: rule.reason, detail: error.message } : null;
 }
 
-/**
- * The same test the server makes of a destination (`isValidHttpUrl` in
- * `src/worker/util.ts`), so a typo is marked before the round trip: a
- * scheme-less address gets https://, and a host needs a real top-level
- * domain. "copperkettle winter menu" passes a plain URL check and fails this.
- */
+// The same test as the server's `isValidHttpUrl` (`src/worker/util.ts`), so a typo is
+// marked before the round trip. "copperkettle winter menu" passes a plain URL check.
 export function isWebAddress(raw: string): boolean {
   const value = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   let url: URL;

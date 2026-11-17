@@ -5,17 +5,8 @@ import * as schema from "./db/schema";
 import type { DB } from "./env";
 import { logFailure } from "./log-failure";
 
-/**
- * Where an account's custom limits live: the `limit_overrides` table, one row
- * per limit that differs from the plan. Nothing else in the Worker reads or
- * writes it, so moving it changes this file and a migration and nothing else.
- *
- * The ways in: `loadLimitOverrides` and `loadAllLimitSettings` to read,
- * `saveLimitOverrides` to write, and `trackedClicksOverrideSql` for the one
- * query that has to compare a limit inside SQL (the usage email sweep).
- */
+// Nothing else in the Worker reads or writes the limit_overrides table. trackedClicksOverrideSql is the one query that compares a limit inside SQL (the usage email sweep).
 
-/** A PlanLimits key and the `limit_key` it is stored under. The one mapping. */
 const COLUMNS = [
   ["orgs", "orgs"],
   ["links", "links"],
@@ -26,22 +17,18 @@ const COLUMNS = [
   ["trackedClicks", "tracked_clicks"],
 ] as const satisfies readonly (readonly [keyof PlanLimits, string])[];
 
-/** What an admin set for one account, and the record of it. */
 export type LimitSetting = {
   overrides: LimitOverrides;
   note: string | null;
-  /** The admin's user id. */
   setBy: string | null;
   setAt: number;
 };
 
 type Row = typeof schema.limitOverrides.$inferSelect;
 
-/** Rows already reported as unreadable, so a bad one is logged once per
- * isolate and not on every request that reads it. */
+// Rows already reported as unreadable: a bad one is logged once per isolate.
 const reported = new Set<string>();
 
-/** The overrides a user's rows spell, as a candidate for the schema. */
 function candidateOf(rows: Row[]) {
   return Object.fromEntries(
     COLUMNS.flatMap(([key, column]) => {
@@ -51,15 +38,12 @@ function candidateOf(rows: Row[]) {
   );
 }
 
-/** The note, who set it and when: every row of one save carries the same. */
 function recordOf(rows: Row[]) {
   const first = rows[0];
   return { note: first?.note ?? null, setBy: first?.setBy ?? null, setAt: first?.setAt ?? 0 };
 }
 
-/** One user's rows as a setting. Rows that are not valid overrides are no
- * overrides: the account gets its plan's limits, which is the safe answer,
- * and the user is logged so somebody can repair the rows. */
+// Rows that are not valid overrides are no overrides: the account gets its plan limits, the safe answer, and is logged so somebody can repair the rows.
 function settingOf(userId: string, rows: Row[]): LimitSetting {
   const parsed = parseLimitOverrides(candidateOf(rows));
   if (!parsed && !reported.has(userId)) {
@@ -75,11 +59,9 @@ function group(rows: Row[]): Map<string, LimitSetting> {
   return new Map([...byUser].map(([userId, mine]) => [userId, settingOf(userId, mine)]));
 }
 
-/** D1 binds at most 100 parameters to one statement. */
+// D1 binds at most 100 parameters to one statement.
 const CHUNK = 50;
 
-/** The overrides of each user asked for. A user with none has no entry, so
- * `map.get(id) ?? {}` is always the answer. */
 export async function loadLimitOverrides(
   db: DB,
   userIds: readonly string[],
@@ -99,16 +81,10 @@ export async function loadLimitOverrides(
   return found;
 }
 
-/** Every user's setting, with its note and who set it, for the admin list. */
 export async function loadAllLimitSettings(db: DB): Promise<Map<string, LimitSetting>> {
   return group(await db.select().from(schema.limitOverrides));
 }
 
-/**
- * Replaces a user's overrides with `overrides`, or clears them with null (an
- * empty object is none). Every row written carries the note and the admin who
- * set it. False when no such user exists.
- */
 export async function saveLimitOverrides(
   db: DB,
   userId: string,
@@ -141,9 +117,7 @@ export async function saveLimitOverrides(
   return true;
 }
 
-/** How many users hold custom limits, by their stored plan, for the admin
- * metrics: the paid ones among them are Enterprise. Banned people are left
- * out, as they are from the plan counts this is subtracted from. */
+// Banned people are left out, as they are from the plan counts this is subtracted from.
 export async function countLimitHoldersByPlan(db: DB): Promise<{ plan: string; n: number }[]> {
   return db.all<{ plan: string; n: number }>(
     sql`select u.plan as plan, count(*) as n from user u
@@ -153,12 +127,7 @@ export async function countLimitHoldersByPlan(db: DB): Promise<{ plan: string; n
   );
 }
 
-/**
- * A SQL expression for a user's custom monthly click count, or 0, given the
- * alias the query gives the `user` table. Zero on Free, where overrides do not
- * apply (see effectiveLimits). For the usage email sweep, which has to compare
- * a limit in SQL so its batch holds only orgs that are due.
- */
+// Zero on Free, where overrides do not apply (effectiveLimits). In SQL so the usage email batch holds only orgs that are due.
 export function trackedClicksOverrideSql(userAlias: string): string {
   return `case when ${userAlias}.plan = 'free' then 0 else coalesce((
     select value from limit_overrides

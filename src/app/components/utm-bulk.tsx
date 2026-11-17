@@ -1,13 +1,3 @@
-/**
- * The UTM builder's "Many links" mode: one tagged link for every address
- * and channel, to copy at once or download as a spreadsheet.
- *
- * The two jobs it covers are the ones a single builder makes tedious: one
- * page posted to several channels (one address, several channels) and one
- * campaign across many pages (many addresses, one channel). Built in the
- * browser like the single link, and never shortened: the anonymous
- * shortener makes one link per browser.
- */
 import { useEffect, useRef } from "react";
 import { Check, Copy, Download } from "@/app/ui/icons";
 import { Button } from "../ui/button";
@@ -24,7 +14,6 @@ import { TaggedText } from "./utm-tagged-text";
 
 type Bulk = BulkLinksState;
 
-/** The addresses, one per line, and the channels to tag them for. */
 export function BulkInputs({ bulk }: { bulk: Bulk }) {
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -57,8 +46,6 @@ export function BulkInputs({ bulk }: { bulk: Bulk }) {
   );
 }
 
-/** The channels as pressed buttons, any number at once: each one picked is
- *  one more link per address. */
 function Channels({ bulk }: { bulk: Bulk }) {
   return (
     <div className="min-w-0">
@@ -92,7 +79,6 @@ function Channels({ bulk }: { bulk: Bulk }) {
   );
 }
 
-/** The links, and Copy all and Download beside their count. */
 export function BulkOutput({ bulk }: { bulk: Bulk }) {
   const toast = useToast();
   const { links } = bulk.result;
@@ -117,7 +103,6 @@ export function BulkOutput({ bulk }: { bulk: Bulk }) {
             variant="outline"
             onClick={() => {
               if (!links.length) return bulk.refuse();
-              // A failure has already said so in a toast.
               copyToClipboard(all, toast, {
                 success: `Copied ${links.length} ${links.length === 1 ? "link" : "links"}`,
               }).catch(() => {});

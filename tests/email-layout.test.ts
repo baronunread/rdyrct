@@ -39,7 +39,6 @@ describe("renderEmail (#73)", () => {
   });
 
   test("hides the preheader from the rendered message", () => {
-    // It belongs in the inbox preview line, not at the top of the email.
     expect(renderEmail(base, APP_URL, TO).html.html).toContain("display:none");
   });
 
@@ -56,9 +55,7 @@ describe("renderEmail (#73)", () => {
     );
 
     expect(html.html).not.toContain(`href="https://phish.example"`);
-    // Exactly one anchor: the layout's own, and only when there is a CTA.
     expect(html.html.match(/<a\s/g) ?? []).toHaveLength(0);
-    // The text part is not markup, so it carries the name as typed.
     expect(text).toContain(hostile);
   });
 
@@ -138,7 +135,6 @@ describe("renderEmail (#73)", () => {
     expect(html.html).toContain('class="band"');
     expect(text).toContain("WELCOME TO RDYRCT");
     expect(text).toContain("https://example.com/long -> rdyr.cc/hello");
-    // Both layouts open with the same brand band.
     expect(renderEmail(base, APP_URL, TO).html.html).toContain('class="band"');
 
     const bare = renderEmail(
@@ -180,7 +176,7 @@ describe("renderEmail (#73)", () => {
   test("keeps a dark-mode block but styles light without it", () => {
     const { html } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain("prefers-color-scheme: dark");
-    // The light values are inline, so a client that drops <style> still reads.
+    // Inline, so a client that drops <style> still reads.
     expect(html.html).toContain("background:#f7f4ef");
   });
 

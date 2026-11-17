@@ -1,21 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
 
-/**
- * The head each public page goes out with (#96).
- *
- * The SPA is one index.html for every route, so without this the QR
- * generator claimed the landing page's title, description and canonical:
- * two pages competing for one search result, and a link preview describing
- * the wrong thing. Setting them in the browser on mount is not enough,
- * because the clients behind a link preview (Slack, WhatsApp, iMessage) read
- * the bytes and never run the JavaScript.
- *
- * The rewrite is asserted here rather than through a request, because the
- * worker test environment has no built asset bundle and so serves no HTML.
- * The whole path is covered against the real bundle in
- * tests/e2e/production/seo.pw.ts.
- */
+// Asserted on the rewrite, not a request: the worker test environment has no
+// asset bundle and serves no HTML. The full path is in tests/e2e/production/seo.pw.ts.
 
 const SHELL = `<!doctype html><html><head>
 <title>rdyrct - branded short links for your team</title>
@@ -49,9 +36,8 @@ describe("the head a public page ships", () => {
   it("leads the landing page with what people search for", async () => {
     const html = await rewrite("/");
 
-    // "URL shortener" and "QR code generator" are the searches; the brand is
-    // not, and a title that opens with it spends the result's best words on a
-    // name nobody is looking for yet.
+    // The searches are "URL shortener" and "QR code generator", not the brand,
+    // so a title opening with the brand wastes the result's best words.
     expect(html).toContain("URL shortener and QR code generator");
   });
 
@@ -65,8 +51,6 @@ describe("the head a public page ships", () => {
   });
 
   it("leaves the signed-in app on the default head", async () => {
-    // Nothing behind the login wants search traffic, so it keeps whatever
-    // index.html says rather than earning an entry in the table.
     const html = await rewrite("/dashboard");
 
     // Closing tag included: without it the assertion is a prefix, and a title
@@ -85,7 +69,6 @@ describe("the head a public page ships", () => {
     const dashboard = await page("/dashboard");
     expect(dashboard).not.toContain("Know which channel");
     expect(dashboard).toContain('<div id="root" data-prerendered="/"></div>');
-    // The homepage keeps what it was built with.
     expect(await page("/")).toContain("Know which channel earned the click.");
   });
 
@@ -149,9 +132,6 @@ describe("the Markdown representation", () => {
   });
 });
 
-// What a crawler, a link preview or an AI fetcher reads without running the
-// app. index.html carries the homepage's copy, so before this /pricing served
-// the homepage's H1 to all of them.
 describe("the body a page ships before JavaScript", () => {
   const withRoot = () =>
     new Response(

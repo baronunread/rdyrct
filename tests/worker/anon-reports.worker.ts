@@ -21,12 +21,8 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import type { AdminReportRow } from "../../src/shared/types";
 
-/**
- * Reports about anonymous links from the landing page (#488). They used to
- * match nothing: the lookup only read link_addresses, so the report kept no
- * link, mailed nobody and warned nothing. An anonymous link now gets a free
- * org's link's rules, less the org flag it has no org for.
- */
+// Reports about anonymous links (#488): the lookup once read only
+// link_addresses, so they matched nothing.
 
 const HOUR = 60 * 60 * 1000;
 const ADMIN = "admin@example.com";
@@ -102,7 +98,6 @@ describe("a report about an anonymous link", () => {
 
   it("is told in the next digest when it came in during the quiet window", async () => {
     await seedAnon();
-    // Another report already took this hour's mail.
     await env.DB.prepare(
       "insert into link_reports (id, slug, reason, created_at, notified_at) values ('r0', 'x', 'spam', 0, ?)",
     )
@@ -124,14 +119,12 @@ describe("a report about an anonymous link", () => {
 
   it("puts the warning page in front at the threshold of different reporters", async () => {
     await seedAnon();
-    // One reporter twice is still one reporter.
     await report("anon123", "203.0.113.9");
     await report("anon123", "203.0.113.9");
     expect(await kvValue()).not.toHaveProperty("warn");
 
     for (let i = 0; i < REPORTERS_TO_WARN; i++) await report();
     expect(await kvValue()).toMatchObject({ warn: true, orgId: "", linkId: "anon-1" });
-    // The redirect path shows the warning page instead of redirecting.
     const visit = await fetchWorker(
       new Request("http://localhost/anon123", { redirect: "manual" }),
     );
@@ -169,7 +162,6 @@ describe("a report about an anonymous link", () => {
     const mail = captureEmails();
     try {
       await report();
-      // The quiet window is over, so only the first-report rule holds a mail back.
       await env.DB.prepare("update link_reports set notified_at = notified_at - ?")
         .bind(REPORT_NOTICE_WINDOW_MS + 1)
         .run();

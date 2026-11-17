@@ -1,7 +1,5 @@
 import type { DomainDTO } from "@/shared/types";
 
-/** The recheck toast: null when there's nothing worth telling the user
- * (e.g. still checking_dns with no change). */
 export function recheckMessage(
   oldStatus: DomainDTO["status"],
   newStatus: DomainDTO["status"],

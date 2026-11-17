@@ -4,13 +4,10 @@ import { Toast } from "@base-ui/react/toast";
 import { Check, X } from "@/app/ui/icons";
 import { cn } from "./cn";
 
-// A standalone manager, not context state, so the many call sites that just
-// want to push a toast don't subscribe to the toast list and re-render on
-// every add/dismiss elsewhere in the app.
+// A standalone manager, not context state, so call sites that just push a toast don't
+// re-render on every add/dismiss elsewhere.
 type ToastData = {
-  /** A muted second line: what to do next, or the reason. */
   detail?: string;
-  /** An identifier set in mono after the message: "Copied <url>". */
   code?: string;
 };
 const manager = Toast.createToastManager<ToastData>();
@@ -18,20 +15,11 @@ const manager = Toast.createToastManager<ToastData>();
 type ToastKind = "info" | "error";
 
 export interface ToastOptions {
-  /** A muted second line under the message. */
   detail?: string;
-  /** An identifier (a short link, a domain) shown in mono after the message. */
   code?: string;
-  /** One button on the right, like "Open". Pressing it closes the toast. */
   action?: { label: string; onClick: () => void };
 }
 
-/**
- * `toast("Link created")`, `toast("Could not save", "error")`, and with the
- * optional third argument a second line, an identifier in mono, or one
- * action button: `toast("Link created", "info", { action: { label: "Open",
- * onClick } })`.
- */
 export function useToast() {
   return useCallback((message: string, kind: ToastKind = "info", options?: ToastOptions) => {
     let id = "";
@@ -49,21 +37,14 @@ export function useToast() {
             },
           }
         : undefined,
-      // An error with a second line, or one that offers an action, needs a
-      // little longer to read than "Copied".
       timeout: options?.action || options?.detail ? 5000 : undefined,
     });
   }, []);
 }
 
-/**
- * Whether the mouse has really moved since the last toast appeared. Base UI
- * pauses toasts on the viewport's mouseenter and mousemove, and the browser
- * sends those, with no movement, when a toast appears under a cursor that is
- * resting there. That kept a toast on screen until the mouse moved off it.
- * Until the mouse moves, the viewport ignores them; a real hover still
- * pauses, so somebody reading a toast keeps it.
- */
+// Base UI pauses toasts on the viewport's mouseenter and mousemove, which the browser sends
+// with no movement when a toast appears under a resting cursor, keeping it on screen.
+// Until the mouse really moves the viewport ignores them.
 let movedSinceToast = true;
 
 function useTrackPointerMoves() {
@@ -76,7 +57,6 @@ function useTrackPointerMoves() {
   }, []);
 }
 
-/** Base UI's hover pause, only for a mouse that moved there. */
 function skipHoverUntilMoved(event: BaseUIEvent<ReactMouseEvent<HTMLDivElement>>) {
   if (!movedSinceToast) event.preventBaseUIHandler();
 }
@@ -98,8 +78,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** ✓ in mint for an outcome, × in the danger colour for a failure. The word
- * carries the meaning; the mark only helps the eye find it. */
 function ToastMark({ error }: { error: boolean }) {
   return (
     <span

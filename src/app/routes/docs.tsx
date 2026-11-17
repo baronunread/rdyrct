@@ -1,19 +1,4 @@
-/**
- * Developer docs: the REST API and the MCP server, each its own chapter
- * behind an anchor (#api, #mcp) rather than separate pages. One person
- * maintains this, and two real chapters do not earn two page loads yet;
- * split the moment a third chapter (an OpenAPI reference, #133) makes the
- * page too long to scan.
- *
- * Its own shell, not <MarketingPage>: that component is a centred hero over
- * prose, right for a page that is selling something. Docs are reference
- * material somebody scans and jumps around in, so this reads left-aligned
- * with a chapter list beside it instead, the shape a person expects from
- * Stripe's or GitHub's docs rather than a landing page. It still reuses
- * MarketingPage's own pieces (header, footer, SEO, the marketing-scroll
- * ride-up) so it stays the same product outside the content area, and the
- * outer width stays the shared page-column, like every public page.
- */
+/** Two chapters behind anchors rather than separate pages; split when a third (#133) makes the page too long. */
 import type { ReactNode } from "react";
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import { highlight, type LanguageName } from "sugar-high";
@@ -32,9 +17,6 @@ import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
 import { useMcpUrl } from "../lib/mcp-url";
 
-/** A static, developer-written example, highlighted and copyable. `lang`
- * defaults to plaintext for the HTTP request-line/header lines sugar-high
- * has no grammar for; pass "json" for an actual JSON body. */
 function CodeBlock({
   children,
   lang = "plaintext",
@@ -86,8 +68,6 @@ const CHAPTERS = [
   { id: "mcp", label: "MCP server" },
 ];
 
-/** The chapter list: a sticky left rail of stacked links from lg up, a row
- * of pills above the content on anything narrower. Same links, two shapes. */
 function ChapterNav({ className, pills }: { className?: string; pills?: boolean }) {
   return (
     <nav className={className}>
@@ -183,7 +163,6 @@ export function DocsPage() {
                 <ChapterNav className="sticky top-20 flex flex-col gap-0.5" />
               </aside>
 
-              {/* A reading measure, however wide the page column is. */}
               <div className="min-w-0 max-w-3xl flex-1">
                 <Chapter id="api" title="REST API">
                   <p>

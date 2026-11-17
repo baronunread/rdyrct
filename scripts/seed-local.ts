@@ -1,15 +1,6 @@
 /**
- * Seed the LOCAL dev environment with fake orgs, members, links and clicks.
- *
- * Talks only to the local Explorer API of this checkout's dev server
- * (scripts/dev-hosts.ts), so it can never touch remote D1/KV. Run the dev server first, then:
- *
- *   bun run db:seed:local           # wipe previous seed data, re-seed
- *   bun run db:seed:local -- --wipe # only remove seed data
- *
- * Every seeded row carries a "seed-" id prefix and every seeded user email
- * ends in @seed.test, so re-runs are idempotent. All seeded users share the
- * password below and have verified emails, so you can log in as any of them.
+ * Seeds the LOCAL dev environment through this checkout's Explorer API only, so it can never touch remote D1/KV.
+ * Every seeded row has a `seed-` id prefix and every email ends in @seed.test, so re-runs are idempotent.
  */
 
 import { ALIAS_TTL_MS } from "../src/worker/util";
@@ -17,7 +8,6 @@ import { PLAN_LIMITS, type JsonValue, type OverLimits } from "../src/shared/type
 import { defaultOrgName } from "../src/shared/org-name";
 import { devHosts } from "./dev-hosts";
 
-// Each checkout has its own address, so a worktree seeds its own database.
 const API = `${(await devHosts()).app}/cdn-cgi/explorer/api`;
 const PASSWORD = "seed-password-123";
 
@@ -26,8 +16,6 @@ const CONFIG = {
   extraUsersPool: 220, // non-owner users to spread across orgs as members
   clickDays: 90, // how far back click history goes
 };
-
-/* ---------------- deterministic PRNG (stable re-runs) ---------------- */
 
 let rngState = 0xc0ffee;
 function rand(): number {
@@ -39,7 +27,6 @@ function rand(): number {
 }
 const randInt = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
 const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
-/** Weighted pick: [value, weight] pairs. */
 function pickW<T>(pairs: readonly (readonly [T, number])[]): T {
   const total = pairs.reduce((s, [, w]) => s + w, 0);
   let r = rand() * total;
@@ -59,8 +46,6 @@ const randomFrom = (alphabet: string, len: number) => {
 };
 const uid = () => `seed-${randomFrom(ID_ALPHABET, 12)}`;
 const randomSlug = () => randomFrom(SLUG_ALPHABET, 7);
-
-/* ---------------- Explorer API helpers ---------------- */
 
 async function apiJson(path: string, init?: RequestInit): Promise<any> {
   const res = await fetch(`${API}${path}`, init);
@@ -117,7 +102,7 @@ async function kvDelete(key: string): Promise<void> {
 /** SQL string literal (all inputs come from the pools below, none user-supplied). */
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-/* ---------------- password hash (mirrors src/worker/password.ts) ---------------- */
+// Mirrors src/worker/password.ts.
 
 async function hashPassword(password: string): Promise<string> {
   const iterations = 100_000;
@@ -138,8 +123,6 @@ async function hashPassword(password: string): Promise<string> {
   const b64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
   return `pbkdf2:${iterations}:${b64(salt.buffer)}:${b64(hash)}`;
 }
-
-/* ---------------- data pools ---------------- */
 
 const ORG_NAME_PREFIX = [
   "Nimbus",
@@ -197,8 +180,7 @@ const ORG_NAME_SUFFIX = [
 const usedOrgNames = new Set<string>();
 function makeOrgName(): string {
   let name = "";
-  // ORG_NAME_PREFIX x ORG_NAME_SUFFIX is a finite pool: once CONFIG.orgs
-  // approaches it, fall back to a numbered suffix instead of spinning forever.
+  // ORG_NAME_PREFIX x ORG_NAME_SUFFIX is finite: near CONFIG.orgs, fall back to a numbered suffix.
   for (let attempt = 0; attempt < 50; attempt++) {
     name = `${pick(ORG_NAME_PREFIX)} ${pick(ORG_NAME_SUFFIX)}`;
     if (!usedOrgNames.has(name)) break;
@@ -270,8 +252,6 @@ const UTM_SOURCES = ["newsletter", "twitter", "linkedin", "print", "qr", ""];
 const UTM_MEDIUMS = ["email", "social", "offline", "cpc", ""];
 const CAMPAIGNS = ["spring-2026", "launch", "always-on", "summer-promo", ""];
 
-/** Broad pool spanning every populated continent, so different orgs land on
- * different parts of the world map instead of all skewing US/Western Europe. */
 const COUNTRY_POOL = [
   "US",
   "CA",
@@ -328,13 +308,9 @@ const COUNTRY_POOL = [
   "AU",
   "NZ",
 ] as const;
-/** Each org gets its own randomized subset and weighting of the pool, so
- * click distributions (and the country ranking + map) vary org to org. */
 function randomCountryMix(): (readonly [string, number])[] {
   const count = randInt(6, 12);
   const shuffled = [...COUNTRY_POOL].sort(() => rand() - 0.5).slice(0, count);
-  // Descending random weights so each mix still has a clear "top country"
-  // instead of a flat spread.
   const mix = shuffled
     .map((code) => [code, rand() ** 2] as const)
     .sort((a, b) => b[1] - a[1])
@@ -360,8 +336,6 @@ const DEVICES: readonly (readonly [string, number])[] = [
   ["bot", 4],
 ];
 
-/* ---------------- wipe previous seed data ---------------- */
-
 async function wipe(): Promise<number> {
   const links = await sql("SELECT slug, domain_id FROM links WHERE id LIKE 'seed-%'");
   const addresses = await sql(
@@ -380,15 +354,8 @@ async function wipe(): Promise<number> {
   }
   for (const d of domains) await kvDelete(`domain:${d.hostname}`);
 
-  // Explicit order instead of trusting cascades.
-  //
-  // A seed row is not the only thing that can point at a seed domain: sign in
-  // as a seeded user, add a link on their domain through the app, and that
-  // link carries a real id and a real org. `links.domain_id` and
-  // `link_addresses.domain_id` are both NO ACTION, so those rows block the
-  // domain delete and the whole wipe fails on a foreign key. Clearing by
-  // domain as well as by `seed-` prefix covers them. It cannot take anything
-  // else with it: the domain being freed is a seed domain either way.
+  // A seed domain can also be pointed at by real rows (a link added through the app). `domain_id` is NO ACTION,
+  // so clear by domain as well as by `seed-` prefix, or the wipe fails on a foreign key.
   await sqlBatch([
     "DELETE FROM clicks WHERE org_id LIKE 'seed-%'",
     "DELETE FROM click_daily WHERE org_id LIKE 'seed-%'",
@@ -412,19 +379,12 @@ async function wipe(): Promise<number> {
   return links.length;
 }
 
-/**
- * The stats pages read the click rollups (#26). The seed writes raw clicks
- * straight into D1, past insertClicks, so it builds the rollups the way the
- * migration backfilled production: migration 0042's own INSERT ... SELECT
- * statements, limited to seed orgs. Then it checks every rollup adds up to the
- * raw rows, so a seeded org never shows charts that disagree with its clicks.
- */
+/** The seed writes raw clicks past insertClicks, so it builds the rollups from migration 0042's own
+ * INSERT ... SELECT statements, then checks they add up to the raw rows (#26). */
 async function buildRollups(): Promise<void> {
   await sqlBatch(await rollupBackfill("org_id LIKE 'seed-%'"));
 
-  // Four counts, one request each and retried once: a single request
-  // scanning all four tables after the backfill was long enough for the
-  // local D1 to answer 500, which failed the whole seed at its last step.
+  // Retried once: one request scanning all four tables after the backfill made the local D1 answer 500.
   const total = async (query: string): Promise<number> => {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -456,8 +416,7 @@ async function buildRollups(): Promise<void> {
   console.log(`  rollups built, matching ${row.raw} raw clicks`);
 }
 
-/** Migration 0042's three backfills, reading only the raw clicks `where`
- * picks (its first `WHERE true` is the one that reads `clicks`). */
+/** Its first `WHERE true` is the one that reads `clicks`. */
 async function rollupBackfill(where: string): Promise<string[]> {
   const migration = await Bun.file(
     new URL("../migrations/0042_click_rollups.sql", import.meta.url),
@@ -470,8 +429,6 @@ async function rollupBackfill(where: string): Promise<string[]> {
   if (backfill.length !== 3) throw new Error("migration 0042 no longer has its three backfills");
   return backfill;
 }
-
-/* ---------------- seed ---------------- */
 
 interface SeedUser {
   id: string;
@@ -495,7 +452,6 @@ async function seed() {
   const day = 86_400_000;
   const passwordHash = await hashPassword(PASSWORD);
 
-  /* users: one owner per org + a shared pool of members */
   const users: SeedUser[] = [];
   const emailSeen = new Set<string>();
   const makeUser = (plan: SeedUser["plan"]): SeedUser => {
@@ -517,7 +473,6 @@ async function seed() {
     return u;
   };
 
-  // Same 20% pro / 30% hobby / 50% free split as before, scaled to any org count.
   const owners = Array.from({ length: CONFIG.orgs }, () =>
     makeUser(
       pickW([
@@ -529,13 +484,6 @@ async function seed() {
   );
   const pool = Array.from({ length: CONFIG.extraUsersPool }, () => makeUser("free"));
 
-  // Paid access comes from one of two places, and the seed has both so the
-  // admin views have something to tell apart (#81): most paid owners have a
-  // real subscription, and every fifth is comped instead. `plan` is derived
-  // from whichever it is.
-  // Every third subscriber is on the way out: still paying, still entitled,
-  // and gone at the period end. The admin list has its own badge for that
-  // state, which needs a row to land on.
   let paidSeen = 0;
   const billingFor = (u: SeedUser) => {
     if (u.plan === "free") return { sub: false, comp: null, leaving: false };
@@ -546,25 +494,16 @@ async function seed() {
 
   const userRows = users.map((u, index) => {
     const { sub, comp, leaving } = billingFor(u);
-    // A subscriber has Polar ids; a comped user has none. Leaving them off
-    // made every seeded subscriber look comped on /billing, which is the one
-    // page where the difference is the whole point.
+    // A subscriber has Polar ids, a comped user none: /billing shows the difference.
     return `(${q(u.id)}, ${q(u.name)}, ${q(u.email)}, 1, ${q(u.plan)}, ${
       sub ? q(u.plan) : "NULL"
     }, ${sub ? "'active'" : "NULL"}, ${sub ? q(`sub_seed_${u.id.slice(5)}`) : "NULL"}, ${
       sub ? q(`cus_seed_${u.id.slice(5)}`) : "NULL"
     }, ${leaving ? 1 : 0}, ${
-      // The period end Polar's webhook writes, so /billing can say "renews Nov 14".
       sub ? now + randInt(3, 28) * day : "NULL"
     }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
       comp ? u.createdAt : "NULL"
-    }, ${
-      // Every fourth account opted in to product news and every fifth to
-      // offers (so the admin newsletter screen has counts for both), and all
-      // are already asked: nobody meets the one-time dialog by accident. The
-      // "unasked" scenario is the account that does.
-      index % 4 === 0 ? `${u.createdAt}, 'settings'` : "NULL, NULL"
-    }, ${
+    }, ${index % 4 === 0 ? `${u.createdAt}, 'settings'` : "NULL, NULL"}, ${
       index % 5 === 0 ? `${u.createdAt}, 'onboarding'` : "NULL, NULL"
     }, ${u.createdAt}, ${u.createdAt}, ${u.createdAt})`;
   });
@@ -582,7 +521,6 @@ async function seed() {
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);
 
-  /* orgs + members */
   const memberCap = { free: 3, hobby: 5, pro: 25 } as const;
   const linkRange = { free: [6, 28], hobby: [30, 110], pro: [60, 220] } as const;
 
@@ -618,7 +556,6 @@ async function seed() {
       `INSERT INTO org_members (org_id, user_id, role, created_at) VALUES ${memberRows.join(",")}`,
     );
 
-    /* one active custom domain for paid orgs (fake host, data only) */
     if (org.plan !== "free" && rand() < 0.7) {
       org.domain = {
         id: uid(),
@@ -639,7 +576,6 @@ async function seed() {
       });
   }
 
-  /* links + addresses (primary + aliases, #38) + KV + clicks */
   interface SeedLink {
     id: string;
     org: SeedOrg;
@@ -707,10 +643,7 @@ async function seed() {
         host,
         url: dest,
         createdAt,
-        // Pareto-ish: a few hot links, a long tail, some dead ones. Kept
-        // modest (not the pre-#38 40-100) because `orgs` (and so total link
-        // count) now scales much higher: unbounded weight here means clicks
-        // grow as orgs x links/org x days, which made local seeding crawl.
+        // Kept modest: total link count scales with `orgs`, and unbounded weight here made local seeding crawl.
         weight: rand() < 0.15 ? randInt(20, 55) : rand() < 0.75 ? randInt(1, 10) : 0,
       };
       links.push(link);
@@ -733,9 +666,6 @@ async function seed() {
       };
       addresses.push(primary);
 
-      // Aliases mirror how real links pick them up: renaming a custom-domain
-      // slug leaves a 48h temp_alias, and links occasionally accumulate a
-      // permanent_alias from an explicit add or a same-destination merge.
       const aliasChance = onCustomDomain ? 0.35 : 0.08;
       if (rand() < aliasChance) {
         const aliasCount = rand() < 0.25 ? 2 : 1;
@@ -771,7 +701,6 @@ async function seed() {
                 kind: "permanent_alias",
                 creationReason: rand() < 0.3 ? "same_destination_merge" : "created",
                 expiresAt: null,
-                // A small share were later removed by hand and kept for history.
                 retiredAt:
                   rand() < 0.1 ? Math.min(now, aliasCreatedAt + randInt(1, 30) * day) : null,
                 createdAt: aliasCreatedAt,
@@ -800,8 +729,7 @@ async function seed() {
 
   const linkById = new Map(links.map((l) => [l.id, l]));
   const liveAddresses = addresses.filter((a) => a.retiredAt === null); // retired addresses resolve to nothing
-  // Same reasoning as the click inserts above: one KV PUT per address is
-  // thousands of serial round trips at this scale, so run a few at once.
+  // One KV PUT per address is thousands of round trips: run a few at once.
   const KV_CONCURRENCY = 8;
   let publishedAddresses = 0;
   for (let i = 0; i < liveAddresses.length; i += KV_CONCURRENCY) {
@@ -827,7 +755,6 @@ async function seed() {
     `  links published to KV: ${publishedAddresses} (${links.length} links, ${addresses.length - links.length} aliases)`,
   );
 
-  /* clicks: random per-day spikes + random per-hour spikes */
   let totalClicks = 0;
   const clickValues: string[] = [];
   const baseHourWeights = [
@@ -841,7 +768,6 @@ async function seed() {
       Math.max(1, Math.floor((now - link.createdAt) / day)),
     );
 
-    // Per-day multipliers: most days are quiet, a few spike hard.
     const dailyMult: number[] = [];
     for (let d = 0; d < ageDays; d++) {
       let m = 0;
@@ -855,7 +781,6 @@ async function seed() {
       dailyMult[randInt(0, ageDays - 1)] = randInt(8, 25);
     }
 
-    // A couple of hot hours for this link, plus a common business-hour bump.
     const spikeHours = new Set<number>();
     if (rand() < 0.7) spikeHours.add(randInt(8, 18));
     if (rand() < 0.35) spikeHours.add(randInt(0, 23));
@@ -877,9 +802,7 @@ async function seed() {
         );
         const h = pickW(hourWeights);
         const offset = h * 3_600_000 + randInt(0, 3_599_999);
-        // Today has only run until now: fit a whole day's clicks into the
-        // hours so far, so the last point on every chart is a full day and
-        // not a dip to zero for a seed loaded early in the morning.
+        // Today has only run until now: fit a whole day's clicks into the hours so far, so no chart ends in a dip.
         const t =
           d === 0 ? dayStart + Math.floor((offset / day) * (now - dayStart)) : dayStart + offset;
         clickValues.push(
@@ -889,11 +812,7 @@ async function seed() {
       }
     }
   }
-  // Bigger batches + a few requests in flight at once: sequential single-row
-  // batches slow down as the clicks table (and its 4 indexes) grows, since
-  // each batch is its own HTTP round trip to the local D1 emulator. Running
-  // several concurrently keeps wall-clock time roughly flat instead of
-  // climbing over the run.
+  // Bigger batches, a few in flight: single-row batches slow down as the clicks table and its indexes grow.
   const CLICK_BATCH = 500; // D1 caps statement text size; larger batches hit SQLITE_TOOBIG
   const CLICK_CONCURRENCY = 8;
   const clickBatches: string[] = [];
@@ -922,13 +841,11 @@ async function seed() {
   await seedPlanHistory(now, day);
   await seedEdgeCases(now);
 
-  // The seed writes link_addresses directly, past allocateSharedSlug, so
-  // record its shared-domain slugs the way the app would have.
+  // Written past allocateSharedSlug, so record its shared-domain slugs as the app would.
   await sqlBatch([
     "INSERT OR IGNORE INTO issued_slugs (slug, issued_at) SELECT slug, created_at FROM link_addresses WHERE domain_id IS NULL",
   ]);
 
-  /* summary */
   console.log("\nSeeded:");
   console.log(`  users:  ${users.length} (password for all: ${PASSWORD})`);
   console.log(`  orgs:   ${orgs.length}`);
@@ -941,19 +858,8 @@ async function seed() {
     );
 }
 
-/**
- * Links the random seed never produces, to push the Links table and the link
- * page to their limits: no title, very long titles and destinations, a very
- * long custom domain and an IDN one, ten aliases on one link, a temporary
- * alias beside permanent ones, seven-figure and zero click counts, emoji, RTL
- * text and one unbroken word.
- *
- * They go in the org the `pro-owner` scenario opens (same query as
- * src/worker/dev-scenarios.ts), dated in the last day so they fill the top of
- * its first page, newest first. Runs after buildRollups: the seven-figure
- * counts are written straight into the rollups, as seedClickUsage writes its
- * counter, rather than as millions of raw clicks.
- */
+/** Written into the org the `pro-owner` scenario opens (same query as dev-scenarios.ts). Runs after buildRollups:
+ * seven-figure counts go straight into the rollups. */
 async function seedEdgeCases(now: number): Promise<void> {
   const [org] = await sql<{ id: string; owner: string }>(
     `SELECT o.id, u.id AS owner FROM orgs o
@@ -967,8 +873,6 @@ async function seedEdgeCases(now: number): Promise<void> {
   const hour = 3_600_000;
   const day = 24 * hour;
 
-  // Two more custom domains: one as long as a hostname reasonably gets, and
-  // an IDN, stored the way the app stores one (punycode, from URL).
   const longHost =
     "go.the-very-long-and-entirely-unnecessary-name-of-our-agency.campaigns-and-partnerships-europe.test";
   const idnHost = new URL("https://kürzer.bäckerei-müller-straße.test").hostname;
@@ -992,14 +896,11 @@ async function seedEdgeCases(now: number): Promise<void> {
     destination: string;
     slug?: string;
     domain?: { id: string; hostname: string };
-    /** Total clicks written straight into the rollups. */
     clicks?: number;
-    /** Raw clicks on the primary address, rolled up like the rest. */
     rawClicks?: number;
     aliases?: Alias[];
   };
   const shared = () => randomSlug();
-  // Newest first: the first entry is the top row.
   const edges: Edge[] = [
     {
       title: "",
@@ -1011,7 +912,6 @@ async function seedEdgeCases(now: number): Promise<void> {
       destination:
         "https://shop.example.com/collections/spring-2026/limited-edition/outdoor-furniture-and-garden-accessories/teak-folding-chairs-with-cushions?utm_source=print&utm_medium=flyer&utm_campaign=spring-2026-northern-region-launch&utm_content=back-cover-qr-code-variant-b&ref=partner-newsletter-april&lang=en-GB",
       domain: long,
-      // 64 characters, the most a slug may have.
       slug: "spring-2026-printed-flyer-for-the-northern-region-store-v2-final",
       rawClicks: 214,
       aliases: Array.from({ length: 10 }, (_, i): Alias => ({
@@ -1112,7 +1012,6 @@ async function seedEdgeCases(now: number): Promise<void> {
         host ? `slug:${host}:${a.slug}` : `slug:${a.slug}`,
         { linkId, addressId: a.id, orgId: org.id, url: edge.destination, expiresAt },
       ]);
-      // Raw clicks, inside the last 7 days so an alias's count shows.
       const n = a.alias ? (a.alias.clicks ?? 0) : (edge.rawClicks ?? 0);
       for (let c = 0; c < n; c++) {
         const ts = now - randInt(0, 6 * day);
@@ -1123,9 +1022,7 @@ async function seedEdgeCases(now: number): Promise<void> {
       if (n) rawLinkIds.push(linkId);
     }
 
-    // Seven figures, spread over the last 90 days, growing toward today.
-    // Added to the rollups rather than inserted: an alias's raw clicks may
-    // already have rolled up into the same days.
+    // Added to the rollups, not inserted: an alias's raw clicks may already have rolled up into the same days.
     if (edge.clicks) {
       const days = 90;
       const weights = Array.from({ length: days }, (_, d) => (days - d) ** 1.5 * (0.6 + rand()));
@@ -1160,7 +1057,6 @@ async function seedEdgeCases(now: number): Promise<void> {
             .join(",")} ON CONFLICT DO UPDATE SET clicks = clicks + excluded.clicks`,
         );
         if (d === 0) {
-          // Today's clicks across the hours so far, for the 24-hour chart.
           const start = now - (now % day);
           const hours = Math.max(1, Math.floor((now - start) / hour) + 1);
           for (let h = 0; h < hours; h++) {
@@ -1192,11 +1088,6 @@ async function seedEdgeCases(now: number): Promise<void> {
   );
 }
 
-/**
- * Two accounts the random seed never produces, for the dev scenarios
- * (src/worker/dev-scenarios.ts): one that has just signed up and owns an empty
- * org, and a platform admin. Fixed addresses, so a scenario can name them.
- */
 async function seedScenarioAccounts(passwordHash: string, now: number, day: number) {
   const accounts = [
     {
@@ -1205,12 +1096,9 @@ async function seedScenarioAccounts(passwordHash: string, now: number, day: numb
       email: "fresh.account@seed.test",
       admin: 0,
       asked: 1,
-      // What sign-up names a first org for someone on a personal address.
       org: defaultOrgName("sam.rivera@gmail.com", "Sam Rivera"),
     },
     {
-      // An existing account that has never been asked about marketing email:
-      // the one-time dialog opens on its first app page.
       key: "unasked",
       name: "Nico Pending",
       email: "unasked.account@seed.test",
@@ -1245,22 +1133,8 @@ async function seedScenarioAccounts(passwordHash: string, now: number, day: numb
   console.log(`  scenario accounts: ${accounts.map((a) => a.email).join(", ")}`);
 }
 
-/**
- * Puts a few orgs mid-downgrade (#29), so local dev and any screenshot taken
- * from it show the state a plan change leaves behind.
- *
- * The marks are written directly, the same ones `reconcileUser` writes: this
- * is a seeder, so it fabricates an end state rather than driving the pass
- * that produces one. Keep it in step with `src/worker/reconcile.ts` if the
- * rules there change.
- *
- * Deliberately a handful, not a sweep: the point is to have one of each state
- * to look at, while the rest of the seeded data stays ordinary.
- */
+/** Marks are written directly, as `reconcileUser` writes them: keep in step with src/worker/reconcile.ts. */
 async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promise<void> {
-  // Paid orgs with a custom domain and the most people in them. Picking blind
-  // left every downgraded org with two members, so the demotion state, one of
-  // the four this is here to show, never appeared in a seeded database.
   const withDomains = orgs.filter((o) => o.plan !== "free" && o.domain !== null);
   if (!withDomains.length) return;
   const memberCounts = new Map(
@@ -1275,12 +1149,9 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
     .slice(0, 3);
 
   const statements: string[] = [];
-  // The real caps, so this stays true if a plan changes.
   const free = PLAN_LIMITS.free;
 
   for (const [index, org] of candidates.entries()) {
-    // Staggered, so the countdown reads differently on each: one just
-    // downgraded, one with a week left, one already past its grace.
     const graceEndsAt = now + [27 * day, 6 * day, -2 * day][index];
 
     const [links, members] = await Promise.all([
@@ -1300,23 +1171,12 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
     statements.push(`UPDATE user SET plan = 'free' WHERE id = ${q(org.ownerId)}`);
     statements.push(
       `UPDATE domains SET locked_at = ${now} WHERE org_id = ${q(org.id)}`,
-      // QR defaults set while the org was paying. They keep applying on free
-      // and only go read-only (#162), which is the whole point of that rule
-      // and a state nothing else here produced: the settings screen had no
-      // seeded org that could show it.
-      //
-      // Not 'rounded'/'extra-rounded': the built-in defaults are the empty
-      // string in this form, and the pickers leave them out of their options
-      // rather than listing each twice. Writing the names the app never
-      // writes gave the read-only pickers a value with no option to match,
-      // so they rendered blank under a preview that was visibly styled.
+      // Not 'rounded'/'extra-rounded': the built-in defaults are the empty string here, and the pickers omit them (#162).
       `UPDATE orgs SET qr_style = 'dots', qr_corner = 'dot', qr_color = '#7c5cff', qr_eye_color = '#2f1f5e' WHERE id = ${q(org.id)}`,
       `INSERT INTO org_entitlements (org_id, plan, over_json, grace_ends_at, reconciled_at, notified_at)
        VALUES (${q(org.id)}, 'free', ${q(JSON.stringify(over))}, ${graceEndsAt}, ${now}, ${now})`,
     );
 
-    // Longest-standing keep their role, owner exempt; the rest become viewers
-    // with what they were recorded, exactly as the pass does it.
     const keep = new Set(members.slice(0, free.members).map((m) => m.user_id));
     for (const member of members) {
       if (keep.has(member.user_id) || member.role === "owner" || member.role === "viewer") continue;
@@ -1326,8 +1186,7 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
       );
     }
 
-    // The redirect path reads the deadline off KV and never touches D1, so a
-    // seeded lock that skipped this would keep serving forever.
+    // The redirect path reads the deadline off KV, never D1: a lock that skipped this would serve forever.
     await kvPut(`domain:${org.domain!.hostname}`, {
       domainId: org.domain!.id,
       orgId: org.id,
@@ -1336,7 +1195,6 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
     });
   }
 
-  // One owner over the owned-org cap, so the locked-org state exists too.
   const extraOrgId = uid();
   statements.push(
     `INSERT INTO orgs (id, name, created_at, locked_at) VALUES (${q(extraOrgId)}, ${q(`${candidates[0].name} Labs`)}, ${now - 30 * day}, ${now})`,
@@ -1348,13 +1206,7 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
   console.log(`  downgraded: ${candidates.length} orgs, 1 locked org with ${moved} links`);
 }
 
-/**
- * Hands up to `limit` of one org's shared-domain links, with their clicks
- * and rollups, to another org. The locked org exists only after the links
- * are seeded, and a read-only org with nothing in it shows the empty state,
- * not the read-only table it is there to show. Custom-domain links stay put:
- * their domain belongs to the first org.
- */
+/** The locked org exists only after the links are seeded, and a read-only org with nothing in it shows the empty state. */
 async function moveLinksToOrg(from: string, to: string, limit: number): Promise<number> {
   const rows = await sql<{ id: string }>(
     `SELECT id FROM links WHERE org_id = ${q(from)} AND domain_id IS NULL ORDER BY created_at DESC LIMIT ${limit}`,
@@ -1367,7 +1219,6 @@ async function moveLinksToOrg(from: string, to: string, limit: number): Promise<
         `UPDATE ${table} SET org_id = ${q(to)} WHERE ${table === "links" ? "id" : "link_id"} IN (${ids})`,
     ),
   );
-  // The redirect's KV value names the org too.
   const addresses = await sql<{
     id: string;
     link_id: string;
@@ -1392,10 +1243,6 @@ async function moveLinksToOrg(from: string, to: string, limit: number): Promise<
   return rows.length;
 }
 
-/**
- * A few links with their own QR look, so the Links table's QR thumbnails
- * and the link page's QR card have something other than the default to draw.
- */
 async function seedLinkQrLooks(): Promise<void> {
   const looks = [
     "qr_style = 'dots', qr_corner = 'dot', qr_color = '#1f6f5c'",
@@ -1407,7 +1254,6 @@ async function seedLinkQrLooks(): Promise<void> {
       WHERE l.org_id LIKE 'seed-%' AND o.locked_at IS NULL
       ORDER BY (SELECT count(*) FROM clicks c WHERE c.link_id = l.id) DESC LIMIT 60`,
   );
-  // Every fourth of the busiest links, so most orgs with any traffic get one.
   const statements = rows
     .filter((_, i) => i % 4 === 0)
     .map((r, i) => `UPDATE links SET ${looks[i % looks.length]} WHERE id = ${q(r.id)}`);
@@ -1415,13 +1261,6 @@ async function seedLinkQrLooks(): Promise<void> {
   console.log(`  QR looks: ${statements.length} links`);
 }
 
-/**
- * Polar's plan changes on the Audit page (migration 0050). Every account's
- * audited plan is set level with its plan, so the first reconcile after
- * seeding logs nothing it did not see happen, and a few accounts get the
- * upgrade (and one the cancellation) that would have put them where they
- * are.
- */
 async function seedPlanHistory(now: number, day: number): Promise<void> {
   const entry = (from: string, to: string, ago: string) =>
     `INSERT INTO admin_actions (id, actor_user_id, action, target_type, target_id, detail, created_at)
@@ -1440,11 +1279,6 @@ async function seedPlanHistory(now: number, day: number): Promise<void> {
   ]);
 }
 
-/**
- * When each seeded account was last here (migration 0048): most within the
- * last month, a few never, so Members' "Last active" shows its range. Seeded
- * accounts have no sessions, so without this every one of them read "Never".
- */
 async function seedLastSeen(now: number, day: number): Promise<void> {
   await sqlBatch([
     `UPDATE user SET last_seen_at = CASE WHEN abs(random()) % 8 = 0 THEN NULL
@@ -1453,16 +1287,6 @@ async function seedLastSeen(now: number, day: number): Promise<void> {
   ]);
 }
 
-/**
- * The monthly tracked-click counter (#387): this month's seeded clicks,
- * counted by migration 0043's own backfill, then one free org at its cap and
- * one Hobby org past 80%, so the billing meter, the banner and both emails
- * have a seeded org to show them.
- *
- * Those two counts are written directly and run ahead of the raw rows: the
- * seeder fabricates the end state rather than replaying 5,000 clicks, as
- * seedDowngrades does for its marks.
- */
 async function seedClickUsage(): Promise<void> {
   const migration = await Bun.file(
     new URL("../migrations/0043_org_click_usage.sql", import.meta.url),
@@ -1475,8 +1299,6 @@ async function seedClickUsage(): Promise<void> {
   if (backfill.length !== 1) throw new Error("migration 0043 no longer has its backfill");
   await sqlBatch(backfill);
 
-  // Orgs nothing else here changed: no downgrade marks, no lock, and read
-  // after seedDowngrades, so the plan is the one the owner has now.
   const ordinary = await sql<{ id: string; name: string; email: string; plan: string }>(
     `SELECT o.id, o.name, u.email, u.plan FROM orgs o
      JOIN org_members m ON m.org_id = o.id AND m.role = 'owner'
@@ -1503,8 +1325,6 @@ async function seedClickUsage(): Promise<void> {
     if (org) console.log(`  ${label}: ${org.name} (${org.email})`);
   }
 }
-
-/* ---------------- main ---------------- */
 
 const dbs = await apiJson("/d1/database");
 DB_ID = dbs.result.find((d: any) => d.name === "DB")?.uuid;

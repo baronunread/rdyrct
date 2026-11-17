@@ -6,8 +6,7 @@ import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
-/** This account's organization: the suite runs in parallel, so "the first
- * org" is somebody else's. */
+// The suite runs in parallel, so "the first org" is somebody else's.
 async function orgOf(page: Page, email: string) {
   const [{ id }] = await queryRows<{ id: string }>(
     page,
@@ -20,11 +19,6 @@ async function orgOf(page: Page, email: string) {
   return id;
 }
 
-/**
- * The links table's own actions (the redesign): ticking rows brings up a bar
- * that downloads their QR codes or deletes them, and every delete, one or
- * many, asks for the slug (or "delete") to be typed first.
- */
 test("ticked rows download their QR codes and delete together; one link asks for its slug", async ({
   page,
 }) => {
@@ -44,8 +38,6 @@ test("ticked rows download their QR codes and delete together; one link asks for
     .getByRole("button", { name: "Reject" })
     .click();
 
-  // One link from its row menu: the dialog names it, says what goes, and
-  // one press of Delete link confirms. No typing.
   const row = page.getByRole("row", { name: /Bulk 0/ });
   await row.hover();
   await row.getByRole("button", { name: /^Actions for / }).click();
@@ -57,11 +49,9 @@ test("ticked rows download their QR codes and delete together; one link asks for
   await expect(page.getByText("Link deleted")).toBeVisible();
   await expect(page.getByRole("row", { name: /Bulk 0/ })).toHaveCount(0);
 
-  // The other two, ticked.
   await page.getByRole("checkbox", { name: "Select every link on this page" }).check();
   const bar = page.getByRole("toolbar", { name: "Selected links" });
   await expect(bar.getByText("2 selected")).toBeVisible();
-  // The bar takes the toolbar's place, so the search is gone while it shows.
   await expect(page.getByPlaceholder("Search links")).toBeHidden();
 
   const download = page.waitForEvent("download");
@@ -73,8 +63,6 @@ test("ticked rows download their QR codes and delete together; one link asks for
   await many.getByRole("button", { name: "Delete 2 links" }).click();
   await expect(page.getByText("2 links deleted")).toBeVisible();
 
-  // Nothing left: the empty state, with no search box over it and the
-  // import offered beside New link.
   await expect(page.getByRole("heading", { name: "No links yet" })).toBeVisible();
   await expect(page.getByPlaceholder("Search links")).toHaveCount(0);
   await expect(
@@ -87,7 +75,6 @@ test("a read-only organization keeps Import and New link on screen, greyed, and 
 }) => {
   const email = `links-locked-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  // One link, so the page is the table rather than the empty state.
   await page.goto("/links");
   const made = await page.request.post(`${appUrl}/api/orgs/${await orgOf(page, email)}/links`, {
     data: { destination: "https://example.com/locked" },
@@ -132,8 +119,6 @@ test("the chips above the links table count and filter", async ({ page }) => {
     "aria-pressed",
     "true",
   );
-  // Two fresh links: neither needs a look. Every link has a QR code, so
-  // there is no QR chip to filter by.
   await expect(chips.getByRole("button", { name: "Needs attention 0" })).toBeVisible();
   await expect(chips.getByRole("button", { name: /QR/ })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Last 7 days" })).toBeVisible();

@@ -76,29 +76,19 @@ const ownerEmail = sql<string | null>`(
   limit 1
 )`;
 
-// Mounted at /api/admin: platform-level views for the instance admin.
 export const adminRoutes = new Hono<AppEnv>();
 
 adminRoutes.use("*", jsonBodyLimit());
 
 adminRoutes.use("*", requireAdmin);
 
-// Mounted after requireAdmin, and that order is the whole security of it:
-// Hono applies middleware registered before a route, so a sub-router mounted
-// above this line is reachable by any signed-in user. It was, briefly, and a
-// test caught it (#67).
+// Mounted after requireAdmin, and that order is the whole security of it: a sub-router
+// mounted above this line is reachable by any signed-in user (#67).
 adminRoutes.route("/links", adminLinkRoutes);
 adminRoutes.route("/newsletter", adminNewsletterRoutes);
 
 const AUDIT_MAX_ROWS = 200;
 
-/**
- * The audit log, newest first, optionally narrowed to one target.
- *
- * Here rather than under /links, where it started: admin_actions covers users
- * and orgs too, and a path that says otherwise is a lie about what it serves
- * (#104).
- */
 adminRoutes.get("/audit", async (c) => {
   const log = c.get("log");
   const db = c.var.db;
@@ -117,8 +107,7 @@ adminRoutes.get("/audit", async (c) => {
       createdAt: schema.adminActions.createdAt,
     })
     .from(schema.adminActions)
-    // Left join: the actor may have been deleted since, and the entry has to
-    // outlive them. That is why the table holds no foreign key.
+    // Left join: the actor may be deleted since, and the entry must outlive them (no foreign key).
     .leftJoin(schema.user, eq(schema.user.id, schema.adminActions.actorUserId))
     .where(
       targetType && targetId
@@ -136,8 +125,6 @@ adminRoutes.get("/audit", async (c) => {
 const day = sql<string>`date(ts / 1000, 'unixepoch')`;
 const userDay = sql<string>`date(created_at / 1000, 'unixepoch')`;
 const orgDay = sql<string>`date(created_at / 1000, 'unixepoch')`;
-
-/* ─────────── helpers ─────────── */
 
 function cumulativeSeries(
   dailyRows: { day: string; clicks: number }[],
@@ -169,8 +156,6 @@ function computePlanCounts(
 ) {
   const planCounts = { free: 0, hobby: 0, pro: 0, enterprise: 0 };
   for (const r of planCountRows) planCounts[orgPlanOf(r.plan)] = r.n;
-  // An account on a paid plan with custom limits is Enterprise, not Pro: move
-  // it out of its plan's count into its own.
   for (const r of limitHolderRows) {
     const plan = orgPlanOf(r.plan);
     if (plan !== "hobby" && plan !== "pro") continue;
@@ -187,54 +172,35 @@ export interface SubscriptionCountRow {
   status: string | null;
 }
 
-/**
- * How many people actually pay (#82).
- *
- * Deliberately a count and nothing else. `mrr` used to be
- * `hobby * 4 + pro * 9` over the `plan` column, which counted comps as money,
- * read every discount at list price and rewrote history whenever prices
- * changed. Polar already knows what it charged, net of discounts, tax and
- * refunds, so revenue is read there and this reports only what Polar cannot:
- * how the numbers split against our own plans and comps.
- *
- * A subscription is counted while it entitles anything, which includes one
- * scheduled to cancel: the customer has not left yet. Who is leaving shows on
- * their own row in the user list, where it names someone to act on rather
- * than being one more number on a dashboard.
- */
+// A count and nothing else: Polar knows what it charged, so revenue is read there. A subscription
+// counts while it entitles anything, including one scheduled to cancel (#82).
 export function computeSubscriptionCounts(rows: SubscriptionCountRow[]) {
   return { payingSubscribers: rows.filter((row) => subscriptionGrantsAccess(row.status)).length };
 }
 
-/** Every business-metrics query returns its count as the first row's `n`,
- * or no rows at all when the count is zero. */
+/** A count query returns its count as the first row's `n`, or no rows when it is zero. */
 export function firstCount(rows: { n: number }[]): number {
   return rows[0]?.n ?? 0;
 }
 
-// The "Business" row of /usage: signup/conversion/revenue figures pulled
-// out of their raw count-query rows.
 export function computeBusinessMetrics(rows: {
   users: { n: number }[];
   paidPlanUsers: { n: number }[];
   compedUserRows: { n: number }[];
   subscriptionRows: SubscriptionCountRow[];
   planCountRows: { plan: string; n: number }[];
-  /** Users with custom limits, by plan: the paid ones are Enterprise. */
   limitHolderRows: { plan: string; n: number }[];
   signups7dRows: { n: number }[];
   signups7dPrevRows: { n: number }[];
   wauRows: { n: number }[];
 }) {
   const totalUsers = firstCount(rows.users);
-  // Feature access, comps included: this is how many people are on a paid
-  // plan, which is a different question from how many people pay.
+  // Feature access, comps included: a different question from how many people pay.
   const paidPlanUsers = firstCount(rows.paidPlanUsers);
   const compedUsers = firstCount(rows.compedUserRows);
   const planCounts = computePlanCounts(rows.planCountRows, rows.limitHolderRows);
   const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
-  // "Paid users" is who actually pays, so comps come out: a comp grants
-  // access but is not a paying customer (#82).
+  // Comps come out: a comp grants access but is not a paying customer (#82).
   const payingUsers = Math.max(0, paidPlanUsers - compedUsers);
   const paidConversionRate = totalUsers > 0 ? Math.round((payingUsers / totalUsers) * 100) : null;
   const signups7d = firstCount(rows.signups7dRows);
@@ -254,8 +220,6 @@ export function computeBusinessMetrics(rows: {
   };
 }
 
-// Anomaly candidates only carry org ids: resolve their display names in one
-// batched lookup, skipping the query entirely when there's nothing to name.
 async function resolveAnomalyNames(db: DB, candidates: AnomalyCandidate[]) {
   if (!candidates.length) return new Map<string, string>();
   const rows = await db
@@ -272,7 +236,6 @@ async function resolveAnomalyNames(db: DB, candidates: AnomalyCandidate[]) {
 
 type AnomalyCandidate = { orgId: string; clicks24h: number; avg14d: number; ratio: number };
 
-// Orgs whose 24h clicks exceed 5x their trailing 14d daily average.
 function findAnomalies(
   recentRows: { orgId: string; clicks: number }[],
   baselineRows: { orgId: string; clicks: number }[],
@@ -304,7 +267,6 @@ type CapPressureRow = {
   domainCount: number;
 };
 
-// Orgs at >=80% of any plan limit.
 function findCapPressure(orgs: CapPressureRow[], overrides: Map<string, LimitOverrides>) {
   const capPressure: Array<{
     orgId: string;
@@ -340,7 +302,7 @@ function findCapPressure(orgs: CapPressureRow[], overrides: Map<string, LimitOve
   );
 }
 
-// D1 caps at 10 GB; ~100 bytes per click row → ~107M max rows.
+// D1 caps at 10 GB; ~100 bytes per click row, so ~107M rows at most.
 const MAX_CLICK_ROWS = 107_000_000;
 
 function projectTableGrowth(seriesRows: { day: string; clicks: number }[], tableSize: number) {
@@ -353,10 +315,6 @@ function projectTableGrowth(seriesRows: { day: string; clicks: number }[], table
   return projectedDays !== null && projectedDays <= 3650 ? projectedDays : null;
 }
 
-/* ─────────── /usage ─────────── */
-
-/** Today's calls to Google Web Risk and this UTC month's, from the counter
- * the daily cap spends (risk.ts, takeWebRiskLookup). */
 async function webRiskUsage(db: DB) {
   const today = webRiskDay();
   const now = new Date();
@@ -427,21 +385,17 @@ adminRoutes.get("/usage", async (c) => {
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(and(ne(schema.user.plan, "free"), liveUser)),
-    // everything that follows the picked range
     usageForRange(db, days),
-    // plan distribution
     db
       .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
       .from(schema.user)
       .where(liveUser)
       .groupBy(schema.user.plan),
     countLimitHoldersByPlan(db),
-    // signups 7d (current)
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(and(gte(schema.user.createdAt, new Date(since7)), liveUser)),
-    // signups 7d (previous period)
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
@@ -452,7 +406,6 @@ adminRoutes.get("/usage", async (c) => {
           liveUser,
         ),
       ),
-    // weekly active users (distinct sessions in 7d)
     db
       .select({ n: sql<number>`count(distinct user_id)` })
       .from(schema.session)
@@ -462,7 +415,6 @@ adminRoutes.get("/usage", async (c) => {
           sql`${schema.session.userId} not in (select id from "user" where banned = 1)`,
         ),
       ),
-    // user creation all-time (for cumulative)
     db
       .select({
         day: userDay,
@@ -471,7 +423,6 @@ adminRoutes.get("/usage", async (c) => {
       .from(schema.user)
       .where(liveUser)
       .groupBy(userDay),
-    // org creation (for weekly)
     db
       .select({
         day: orgDay,
@@ -480,7 +431,6 @@ adminRoutes.get("/usage", async (c) => {
       .from(schema.orgs)
       .where(liveOrg)
       .groupBy(orgDay),
-    // clicks per org in last 24h (anomaly detection)
     db
       .select({
         orgId: schema.clicks.orgId,
@@ -489,7 +439,6 @@ adminRoutes.get("/usage", async (c) => {
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since24h))
       .groupBy(schema.clicks.orgId),
-    // clicks per org in last 14d (anomaly baseline)
     db
       .select({
         orgId: schema.clicks.orgId,
@@ -498,19 +447,15 @@ adminRoutes.get("/usage", async (c) => {
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since14d))
       .groupBy(schema.clicks.orgId),
-    // comped users: paid access an admin granted, which is not revenue (#82)
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(isNotNull(schema.user.compPlan)),
-    // live subscriptions: counted, never priced. Money is Polar's figure.
     db
       .select({ status: schema.user.subscriptionStatus })
       .from(schema.user)
       .where(isNotNull(schema.user.subscriptionPlan)),
   ]);
-
-  // ── Business row ──
 
   const {
     totalUsers,
@@ -534,12 +479,8 @@ adminRoutes.get("/usage", async (c) => {
     wauRows,
   });
 
-  // ── Growth row ──
-
   const cumulativeUsers = cumulativeSeries(userCreationRows, cumDays);
   const cumulativeOrgs = cumulativeSeries(orgCreationRows, cumDays);
-
-  // ── Health row ──
 
   const anomalyCandidates = findAnomalies(anomaly24hRows, anomaly14dRows);
   const anomalyNames = await resolveAnomalyNames(db, anomalyCandidates);
@@ -574,7 +515,6 @@ adminRoutes.get("/usage", async (c) => {
     ),
   );
 
-  // Table size and growth projection
   const tableSize = clicks[0]?.n ?? 0;
   const tableProjectedDays = projectTableGrowth(range.series, tableSize);
 
@@ -620,8 +560,7 @@ adminRoutes.get("/orgs", async (c) => {
       ownerId,
       ownerName,
       ownerEmail,
-      // literal orgs.id: interpolated columns render unqualified inside
-      // correlated subqueries and bind to the wrong table
+      // literal orgs.id: interpolated columns render unqualified in correlated subqueries
       members: sql<number>`(
         select count(*) from org_members where org_members.org_id = orgs.id
       )`,
@@ -636,7 +575,6 @@ adminRoutes.get("/orgs", async (c) => {
         order by suspend_reason like 'Held with its organization%', suspended_at
         limit 1
       )`,
-      // From the rollups (#26), like every other click figure.
       ...orgPlanStateColumns(computeWindows(30).since30),
     })
     .from(schema.orgs)
@@ -671,8 +609,6 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
         email: schema.user.email,
         role: schema.orgMembers.role,
         createdAt: schema.orgMembers.createdAt,
-        // A downgrade demoted this member to viewer (#161), rather than
-        // anybody choosing it. Worth seeing from admin too.
         demoted: sql<boolean>`${schema.orgMembers.previousRole} is not null`,
         lastActiveAt: memberLastActiveAt,
       })
@@ -686,8 +622,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
         domain: schema.domains.hostname,
         destination: schema.links.destination,
         createdAt: schema.links.createdAt,
-        // literal links.id: interpolated columns render unqualified inside
-        // correlated subqueries and bind to the wrong table
+        // literal links.id: interpolated columns render unqualified in correlated subqueries
         clicks: sql<number>`(
           select count(*) from clicks where clicks.link_id = links.id
         )`,
@@ -718,8 +653,7 @@ adminRoutes.delete("/orgs/:orgId", async (c) => {
   const log = c.get("log");
   const orgId = c.req.param("orgId");
   log.set({ orgId });
-  // Read the name before the teardown removes it: an audit entry saying
-  // which org was deleted is the entire value of the entry (#67).
+  // Read the name before teardown removes it: the audit entry has to say which org was deleted (#67).
   const rows = await c.var.db
     .select({ name: schema.orgs.name })
     .from(schema.orgs)
@@ -757,8 +691,6 @@ adminRoutes.get("/users", async (c) => {
         compPlan: schema.user.compPlan,
         compReason: schema.user.compReason,
         compGrantedAt: schema.user.compGrantedAt,
-        // Who granted the comp, by email: an admin reading this list wants a
-        // person, not an id. Null once that admin's account is gone.
         compGrantedBy: sql<string | null>`(
         select grantor.email from "user" as grantor
         where grantor.id = "user".comp_granted_by
@@ -770,9 +702,8 @@ adminRoutes.get("/users", async (c) => {
         orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
       )`,
-        // literal "user".id: interpolated columns render unqualified inside
-        // correlated subqueries and bind to the wrong table. last_seen_at
-        // outlives the sessions a sign-out deletes (memberLastActiveAt).
+        // literal "user".id: interpolated columns render unqualified in correlated subqueries.
+        // last_seen_at outlives the sessions a sign-out deletes (memberLastActiveAt).
         lastSeen: sql<number | null>`(
         select max(t) from (
           select session.updated_at as t from session where session.user_id = "user".id
@@ -802,8 +733,6 @@ adminRoutes.get("/users", async (c) => {
   );
 });
 
-/** What the users list says about an account's custom limits: the limits, the
- * note, and the email of the admin who set them. Nothing when there are none. */
 function limitFields(
   plan: OrgPlan,
   setting: LimitSetting | undefined,
@@ -850,30 +779,19 @@ async function validateBannedPatch(
   return value;
 }
 
-// Superadmin controls: toggle platform-admin and ban/unban. Granting a plan
-// by hand is not here: it is a comp, and it has its own routes below, because
-// a comp written into `plan` was indistinguishable from a paid subscription
-// (#81).
-/** What the user-patch route reads off its request body. A flag sent as
- * something other than a boolean parses to null, which the validators below
- * refuse by name rather than by silently ignoring. */
+// Granting a plan by hand is not here: it is a comp with its own routes below, because a comp
+// written into `plan` was indistinguishable from a paid subscription (#81).
 const userPatchSchema = v.object({
   isAdmin: optionalFlag,
   banned: optionalFlag,
   plan: v.optional(v.unknown()),
-  // A ban only: why (required), and which of the hosts the user linked to
-  // to block for everyone (none unless picked).
   reason: optionalText,
   blockHosts: v.optional(v.fallback(v.array(v.string()), []), []),
 });
 
-/** Somebody's uploaded picture, for the Users list. /api/user/avatar
- * answers only the signed-in account, so this serves the same object by id;
- * it sits behind requireAdmin like everything here, so anybody else gets the
- * 404 every admin route gives. */
+/** /api/user/avatar answers only the signed-in account, so this serves the same object by id. */
 adminRoutes.get("/users/:userId/avatar", (c) => serveAvatar(c, c.req.param("userId")));
 
-/** Destination hosts in the orgs a user owns, for the ban dialog to offer. */
 adminRoutes.get("/users/:userId/hosts", async (c) =>
   c.json(await ownedDestinationHosts(c.var.db, c.req.param("userId"))),
 );
@@ -896,7 +814,6 @@ adminRoutes.patch("/users/:userId", async (c) => {
   };
   if (patch.isAdmin === undefined && patch.banned === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
-  // Checked before anything is written.
   const banReason = body.reason.trim();
   if (patch.banned === true && !banReason)
     throw new HTTPException(400, { message: "A reason is required" });
@@ -935,16 +852,8 @@ adminRoutes.patch("/users/:userId", async (c) => {
   return c.json({ ok: true });
 });
 
-/**
- * Writes the `comp_*` columns and re-derives `plan` from them.
- *
- * Never the `subscription_*` columns: a comp says nothing about what Polar
- * knows, so it must not be able to invent a subscription. The reverse holds
- * in routes/billing.ts, where a webhook cannot clear a comp (#81).
- *
- * Granting and revoking are the same statement with opposite values, so they
- * share one, and with it the 404 that means the id matched nobody.
- */
+// Never the `subscription_*` columns: a comp must not be able to invent a subscription. The
+// reverse holds in billing.ts, where a webhook cannot clear a comp (#81).
 async function writeComp(
   db: DB,
   targetId: string,
@@ -958,16 +867,14 @@ async function writeComp(
       compGrantedBy: comp?.grantedBy ?? null,
       compGrantedAt: comp ? new Date() : null,
       plan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
-      // The comp's own entry records this change, so the audit log is level
-      // with it and reconcileUser finds no Polar change to log.
+      // The comp's own entry records this change, so reconcileUser finds no Polar change to log.
       auditedPlan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
     })
     .where(eq(schema.user.id, targetId));
   if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
 }
 
-/** Grant and revoke both change `plan`, so both owe the owner's orgs a pass
- * (#158). Manual too: an admin fixing a stuck org runs this route. */
+/** Manual too: an admin fixing a stuck org runs this route (#158). */
 adminRoutes.post("/users/:userId/reconcile", async (c) => {
   const log = c.get("log");
   log.set({ userId: c.req.param("userId") });
@@ -975,13 +882,11 @@ adminRoutes.post("/users/:userId/reconcile", async (c) => {
   return c.json({ ok: true });
 });
 
-/** What the comp route reads off its request body. */
 interface CompBody {
   plan?: string;
   reason?: string;
 }
 
-/** Grant a comp: paid access an admin gives by hand, recorded as such (#81). */
 adminRoutes.post("/users/:userId/comp", async (c) => {
   const log = c.get("log");
   log.set({ userId: c.req.param("userId") });
@@ -992,8 +897,7 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
   const reason = (body.reason ?? "").trim();
-  // A comp with no reason is the state #81 was written about: access nobody
-  // can account for later.
+  // A comp with no reason is the state #81 was written about: access nobody can account for.
   if (!reason) throw new HTTPException(400, { message: "reason is required" });
   if (reason.length > 500) throw new HTTPException(400, { message: "reason is too long" });
 
@@ -1013,8 +917,7 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
   return c.json({ ok: true });
 });
 
-/** Revoke a comp. The subscription underneath, if there is one, comes back:
- * `plan` re-derives from the columns the webhook owns. */
+/** The subscription underneath, if any, comes back: `plan` re-derives from the webhook's columns. */
 adminRoutes.delete("/users/:userId/comp", async (c) => {
   const log = c.get("log");
   log.set({ userId: c.req.param("userId") });
@@ -1029,12 +932,8 @@ adminRoutes.delete("/users/:userId/comp", async (c) => {
   return c.json({ ok: true });
 });
 
-/**
- * Set or clear a user's custom limits: the Enterprise arrangement, done by
- * hand. An override only raises (the effective value is the higher of it and
- * the plan's), so removing one locks what no longer fits and adding one
- * unlocks it, which is what the reconcile after the write does.
- */
+// An override only raises, so removing one locks what no longer fits and adding one unlocks it,
+// which the reconcile after the write does.
 adminRoutes.put("/users/:userId/limits", async (c) => {
   const log = c.get("log");
   const targetId = c.req.param("userId");
@@ -1043,7 +942,6 @@ adminRoutes.put("/users/:userId/limits", async (c) => {
     limitsBodySchema,
     await c.req.json<JsonValue>().catch((): JsonValue => null),
   );
-  // No keys is the same as none: store null, not "{}".
   const overrides = body.overrides && Object.keys(body.overrides).length ? body.overrides : null;
   const note = body.note || null;
   if (!(await saveLimitOverrides(c.var.db, targetId, overrides, { note, setBy: c.var.user!.id })))
@@ -1072,9 +970,7 @@ adminRoutes.delete("/users/:userId", async (c) => {
   log.set({ userId: targetId });
   if (targetId === c.var.user!.id)
     throw new HTTPException(400, { message: "Cannot delete yourself" });
-  // Read the address, and which orgs go with the account, first: the entry
-  // has to say who was deleted, and afterwards there is nowhere left to look
-  // it up (#67).
+  // Read the address and the orgs first: the entry has to say who was deleted (#67).
   const target = await db
     .select({ email: schema.user.email })
     .from(schema.user)
@@ -1084,10 +980,8 @@ adminRoutes.delete("/users/:userId", async (c) => {
     .select({ orgId: schema.orgMembers.orgId })
     .from(schema.orgMembers)
     .where(and(eq(schema.orgMembers.userId, targetId), eq(schema.orgMembers.role, "owner")));
-  // The same path as a user deleting their own account: an org has no plan of
-  // its own (its owner's), so one left ownerless has no plan, no billing and
-  // nobody who can delete it. Every org the account owns goes with it, through
-  // the teardown workflow.
+  // Same path as a user deleting their own account: an org has no plan of its own, so one left
+  // ownerless has no plan, billing or deleter. Every org the account owns goes, via teardown.
   await deleteAccountAndOwnedOrgs(c.env, targetId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,

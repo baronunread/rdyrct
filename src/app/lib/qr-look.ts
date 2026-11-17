@@ -9,7 +9,6 @@ import {
 } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 
-/** All of a QR code's appearance, already resolved to concrete values. */
 export interface QrLook {
   dot: DotType;
   corner: string;
@@ -20,16 +19,12 @@ export interface QrLook {
   logoSize: number;
 }
 
-/** Whether a resolved `bg` value has any transparency: the legacy
- * 'transparent' sentinel, or a hex color whose alpha byte is below 0xff. */
 export function hasTransparency(bg: string): boolean {
   if (bg === "transparent") return true;
   const alpha = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})$/.exec(bg)?.[1];
   return alpha != null && parseInt(alpha, 16) < 255;
 }
 
-/** Resolves QRPreview's individual appearance props (each an override:
- * empty/undefined falls back to the built-in default) into a concrete QrLook. */
 export function resolveLook({
   logo,
   dotStyle,
@@ -59,47 +54,27 @@ export function resolveLook({
   };
 }
 
-/**
- * Whether the logo has to be inlined by us rather than by the library.
- *
- * qr-code-styling fetches the image with XMLHttpRequest to turn it into a
- * data URI (its `saveAsBlob` step), which a browser refuses to do for a
- * `data:` or `blob:` URL. The XHR never completes, the promise it gates the
- * drawing on never resolves, and the result is an empty square: 439 paths
- * with no logo, zero with one. Switching that step off makes it use the URL
- * we already handed it, which is what a data URI is for.
- */
-/** What qr-code-styling is told about the image it draws in the middle. */
+// qr-code-styling fetches the image by XMLHttpRequest, which a browser refuses for `data:`
+// and `blob:` URLs: the promise never resolves and the code draws empty. Switching that
+// step off makes it use the URL we handed it.
 interface QrImageOptions {
   margin: number;
   imageSize: number | undefined;
   saveAsBlob?: false;
 }
 
-/**
- * The error correction level a look needs, rather than "H" for everything.
- *
- * "H" keeps a code readable with 30% of it missing, which is what a logo
- * punched through the middle asks for. A code with no logo has nothing to
- * recover from, and the redundancy is not free: the same short link is 33
- * modules a side at "H" and 25 at "M", so every module is a third wider at
- * the same printed size, which is what scanning from a distance comes down
- * to. "M" still recovers 15%, enough for print wear and a phone camera.
- */
+// "H" costs size: the same link is 33 modules a side at "H" and 25 at "M". Only a logo
+// needs "H"'s 30% recovery; "M" still covers print wear.
 export const eccFor = (look: QrLook) => (look.logo ? "H" : "M");
 
 export function imageOptionsFor(look: QrLook) {
   const inlineAlready = !!look.logo && /^(data|blob):/.test(look.logo);
   const options: QrImageOptions = { margin: 4, imageSize: look.logoSize };
-  // Left off entirely otherwise, so the library keeps its own default, which
-  // is what a logo it still has to fetch needs.
+  // Left off otherwise so the library keeps its default, which a logo it still has to fetch needs.
   if (inlineAlready) options.saveAsBlob = false;
   return options;
 }
 
-/** QRPreview's props, spread from the string values the fields hold. */
-/** Every QR appearance value, as the strings the fields edit. An empty
- * string means "use the built-in default". */
 export interface QrValues {
   qrStyle: string;
   qrColor: string;
@@ -110,33 +85,22 @@ export interface QrValues {
   qrLogoSize: string;
 }
 
-/**
- * Has anything been set at all?
- *
- * Every field is a string and "" means unset, so one test answers for all of
- * them, `qrLogoSize` included. Comparing that one against null instead, as
- * the org settings card used to, is always true: an org that had set nothing
- * was told its defaults were locked.
- */
+// Every field is a string and "" means unset, `qrLogoSize` included. Comparing that one
+// against null is always true: an org that set nothing was told its defaults were locked.
 export function hasAnyQrValue(values: QrValues): boolean {
   return Object.values(values).some((v) => v !== "");
 }
 
-/** What the QR editor's rows draw with, every value concrete (defaults
- * applied). */
 export interface QrLookValue {
   dot: (typeof QR_DOT_STYLES)[number];
   corner: (typeof QR_CORNER_STYLES)[number];
   dotColor: string;
   cornerColor: string;
-  /** A hex, possibly with alpha, or the legacy "transparent". */
   bg: string;
-  /** The logo's URL, or "" for none. */
   logo: string;
   logoSize: number;
 }
 
-/** A change from the rows, in the field names a link and an org both store. */
 export type QrPatch = Partial<{
   qrStyle: string;
   qrCorner: string;
@@ -147,8 +111,6 @@ export type QrPatch = Partial<{
   qrLogoSize: number;
 }>;
 
-/** The rows' view of a set of field values: each empty one resolved to its
- * default. */
 export function qrLookOf(v: QrValues): QrLookValue {
   const ink = v.qrColor || QR_DEFAULT_COLOR;
   return {
@@ -162,7 +124,6 @@ export function qrLookOf(v: QrValues): QrLookValue {
   };
 }
 
-/** A patch from the rows applied over field values. */
 export function applyQrPatch(v: QrValues, p: QrPatch): QrValues {
   return {
     qrStyle: p.qrStyle ?? v.qrStyle,

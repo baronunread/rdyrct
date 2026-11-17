@@ -4,12 +4,6 @@ import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";
 import { createQuickLink } from "./orgs";
 
-/**
- * What a visitor meets on a held or warned link (#344), served by the Worker
- * in place of the redirect. The worker tests cover the KV values and the
- * markup; this covers a person opening the link in a browser.
- */
-
 const password = "test-password-123";
 
 async function slugFor(page: Page, destination: string) {
@@ -23,7 +17,6 @@ async function slugFor(page: Page, destination: string) {
 
 test("a held link says it is under review instead of a 404", async ({ page }) => {
   await signUpAndVerify(page, `held-${Date.now()}@gmail.com`, password);
-  // Scam-shaped, so it is created on hold (abuse-rules).
   const destination = `https://phonepewheel-${Date.now()}.up.railway.app/`;
   await createQuickLink(page, destination);
   const slug = await slugFor(page, destination);
@@ -33,7 +26,6 @@ test("a held link says it is under review instead of a 404", async ({ page }) =>
   await expect(
     page.getByRole("heading", { level: 1, name: "This link is under review." }),
   ).toBeVisible();
-  // Neither where it led nor why it stopped.
   await expect(page.getByText("railway.app")).toHaveCount(0);
 });
 
@@ -57,7 +49,6 @@ test("an admin warns a link in one click, and a visitor continues past the warni
   await expect(page.getByText(/Warning on\./)).toBeVisible({ timeout: 10_000 });
   await expect(row.getByText("Warning", { exact: true })).toBeVisible();
 
-  // A visitor, with no session, and no real trip to example.com.
   const visitor = await (await browser.newContext()).newPage();
   await visitor.route("https://example.com/**", (route) =>
     route.fulfill({ contentType: "text/html", body: "<h1>Landed</h1>" }),

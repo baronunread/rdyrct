@@ -22,7 +22,6 @@ function stubFetch(res: {
   status?: number;
   statusText?: string;
   json?: () => Promise<JsonValue>;
-  /** A body that is not JSON, for the branch where res.json() rejects. */
   text?: string;
 }) {
   const calls: { url: string; init?: RequestInit }[] = [];
@@ -62,9 +61,8 @@ describe("shortUrl", () => {
     expect(shortUrl("abc123", null, "rdyr.cc")).toBe("https://rdyr.cc/abc123");
   });
 
-  // No SHARED_LINK_HOST: the link host is the app's own, and the worker
-  // builds those links from APP_URL, scheme included. A forced https here
-  // previewed a QR code for an address that does not exist on plain http.
+  // No SHARED_LINK_HOST: the worker builds the app's own links from APP_URL, scheme
+  // included. A forced https previewed a QR code for an address that does not exist on http.
   test("keeps the page's scheme when the link host is the app's own", () => {
     expect(shortUrl("abc123", null, "localhost:5173")).toBe("http://localhost:5173/abc123");
   });

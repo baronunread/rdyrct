@@ -17,14 +17,7 @@ interface BanResult {
   subscriptionEnded: boolean;
 }
 
-/**
- * The one way to decide that a user is abuse, from the users list or from
- * one of their organizations. It says what happens before it happens.
- *
- * Blocking a host is opt-in, per host: most scam kits live on a throwaway
- * address that never comes back, and a blocked host is refused for every
- * customer. Sites everyone uses are listed but cannot be ticked.
- */
+/** Blocking a host is opt-in, per host: scam kits live on throwaway addresses, and a blocked host is refused for every customer. */
 export function BanDialog({
   user,
   onClose,
@@ -34,7 +27,6 @@ export function BanDialog({
 }) {
   return (
     <Dialog open={!!user} onOpenChange={(open) => !open && onClose()} title="Ban user">
-      {/* Keyed so a second ban starts from an empty form. */}
       {user && <BanForm key={user.id} user={user} onClose={onClose} />}
     </Dialog>
   );
@@ -83,8 +75,6 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
     });
 
   return (
-    // The reason is required, and the button still works without one: pressing
-    // it marks the field instead of greying out with no word as to why.
     <form
       className="flex flex-col gap-4"
       noValidate
@@ -191,7 +181,5 @@ const orgsLine = (n: number) =>
 const hostsLine = (n: number) =>
   n === 0 ? "" : n === 1 ? "1 host blocked." : `${n} hosts blocked.`;
 
-/** A host with break opportunities before each dot, so a long one wraps at
- * ".up" rather than mid-word on a phone. */
 const breakAtDots = (host: string) =>
   host.split(".").flatMap((part, i) => (i === 0 ? [part] : [<wbr key={i} />, `.${part}`]));

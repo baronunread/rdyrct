@@ -65,13 +65,10 @@ export function InvitePage() {
       await qc.invalidateQueries({ queryKey: ["user"] });
       posthog.capture("organization_invite_accepted");
       setOrg(res.orgId);
-      // Not awaited: a failed navigation is not a failed invite.
       void navigate({ to: "/dashboard" });
     } catch (e) {
       toast(errorMessage(e), "error");
-      // A 404 here means the link is spent or revoked, and the card is still
-      // offering to accept it. Re-asking flips it to the dead-invite screen,
-      // so a second click cannot just repeat the toast.
+      // A 404 means the invite is spent or revoked; re-asking flips to the dead-invite screen instead of repeating the toast.
       if (e instanceof ApiError && e.status === 404)
         await qc.invalidateQueries({ queryKey: ["invite", token] });
     }
@@ -79,7 +76,6 @@ export function InvitePage() {
 
   const here = `/invite/${token}`;
 
-  // The mock's join screen (auth-panel.tsx), in the same card as sign-in.
   if (preview.isLoading || currentUser.isLoading)
     return (
       <AuthPanel className="text-center">

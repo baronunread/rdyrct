@@ -8,7 +8,6 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 
-/** Draw the chosen crop rectangle onto a square canvas and hand back a WebP. */
 async function cropToWebp(src: string, area: Area): Promise<Blob> {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image();
@@ -142,7 +141,6 @@ export function AvatarPictureDialog({
   onApply,
   onRemove,
 }: {
-  /** There is a picture to remove: a saved one, or a staged crop. */
   hasImage: boolean;
   onClose: () => void;
   onApply: (blob: Blob) => void;

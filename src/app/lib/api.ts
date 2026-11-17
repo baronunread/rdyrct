@@ -3,10 +3,8 @@ import type { JsonValue } from "@/shared/types";
 
 export class ApiError extends Error {
   status: number;
-  /** machine-readable code from the error body, e.g. "slug_taken" */
   code?: string;
-  /** The full parsed error body, for a code that carries extra fields beyond
-   * message/code (e.g. "same_destination_match"'s matchedLinkId/matchedLink). */
+  // The full parsed error body, for a code that carries extra fields (e.g. "same_destination_match"'s matchedLink).
   data?: unknown;
   constructor(status: number, message: string, code?: string, data?: JsonValue) {
     super(message);
@@ -16,8 +14,6 @@ export class ApiError extends Error {
   }
 }
 
-/** The two fields the app reads off an error body; the rest rides along on
- * ApiError.data for the caller that knows to look for it. */
 const errorBodySchema = v.object({
   message: v.optional(v.fallback(v.string(), ""), ""),
   code: v.optional(v.fallback(v.string(), ""), ""),
@@ -33,9 +29,7 @@ async function throwIfNotOk(res: Response): Promise<void> {
     const body = v.parse(errorBodySchema, data ?? {});
     if (body.message) message = body.message;
     code = body.code || undefined;
-  } catch {
-    /* non-JSON error body */
-  }
+  } catch {}
   throw new ApiError(res.status, message, code, data);
 }
 
@@ -61,13 +55,9 @@ export async function api<T>(
   return res.json() as Promise<T>;
 }
 
-/** What the QR-logo upload answers with. */
 const uploadedLogoSchema = v.object({ url: v.string() });
 
-/**
- * Upload a QR logo image to R2; returns the serving URL to store on the org
- * or link row. Raw body, not JSON, so this doesn't go through api().
- */
+// Raw body, not JSON, so this does not go through api().
 export async function uploadQrLogo(orgId: string, file: File): Promise<string> {
   const res = await fetch(`/api/orgs/${orgId}/qr-logo`, {
     method: "POST",
@@ -79,8 +69,6 @@ export async function uploadQrLogo(orgId: string, file: File): Promise<string> {
   return url;
 }
 
-/** Fetch a file the Worker builds (a CSV export), with the name its
- * Content-Disposition gives it. */
 export async function fetchDownload(path: string): Promise<{ blob: Blob; filename: string }> {
   const res = await fetch(`/api${path}`);
   await throwIfNotOk(res);
@@ -91,7 +79,6 @@ export async function fetchDownload(path: string): Promise<{ blob: Blob; filenam
 
 const uploadedAvatarSchema = v.object({ image: v.string() });
 
-/** Upload a profile picture (raw body, not JSON); returns the new serving URL. */
 export async function uploadUserAvatar(file: Blob): Promise<string> {
   const res = await fetch("/api/user/avatar", {
     method: "POST",
@@ -103,7 +90,6 @@ export async function uploadUserAvatar(file: Blob): Promise<string> {
   return image;
 }
 
-/** Remove the profile picture, reverting to the generated blobatar. */
 export async function deleteUserAvatar(): Promise<void> {
   const res = await fetch("/api/user/avatar", { method: "DELETE" });
   await throwIfNotOk(res);

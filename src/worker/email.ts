@@ -1,21 +1,10 @@
 import type { Env } from "./env";
 import type { EmailBody } from "./email-layout";
 
-/** Whether this instance can send mail at all. Sign-up verification and
- * password reset depend on it; the one place that decides, so a second
- * provider changes this line and the transport below. */
 export const emailConfigured = (env: Env) => Boolean(env.RESEND_API_KEY);
 
-/**
- * Sends via the Resend HTTP API. RESEND_BASE_URL lets local dev point at the
- * emulate.dev Resend emulator instead of the real service.
- *
- * `body` carries both parts and comes from renderEmail(), which is the only
- * thing that builds one. Two consequences, both deliberate: every send ships
- * a plain-text alternative rather than HTML alone (#73), and its HTML is
- * SafeHtml, so a template literal built from user input does not compile
- * (#72).
- */
+// body comes from renderEmail(): every send has a plain-text part (#73), and
+// SafeHtml keeps user input out of a template literal (#72).
 export async function sendEmail(
   env: Env,
   to: string,
@@ -23,8 +12,8 @@ export async function sendEmail(
   body: EmailBody,
   options: { from?: string } = {},
 ): Promise<void> {
-  // No provider, no mail. Nothing is logged: a code or reset link in a log is
-  // a secret in the wrong place.
+  // No provider, no mail. Nothing is logged: a code or reset link in a log
+  // is a secret in the wrong place.
   if (!emailConfigured(env)) return;
   const base = env.RESEND_BASE_URL || "https://api.resend.com";
   const res = await fetch(`${base}/emails`, {

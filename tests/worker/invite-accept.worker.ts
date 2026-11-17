@@ -1,14 +1,7 @@
 /**
- * What spends an invite token, and what must not (#156).
- *
- * `acceptInviteAtomically` writes the membership and spends the token in one
- * D1 batch, so the delete has to answer "did the statement before me insert a
- * row?". It asks SQLite's `changes()`. The first describe pins that this
- * works inside a batch at all, because the answer was the open question on
- * the issue; the second reproduces the race the old `created_at` test lost.
- *
- * These run on miniflare's SQLite, not on D1 itself, so they pin the
- * behaviour this code depends on rather than proving what production does.
+ * What spends an invite token, and what must not (#156). The token delete asks
+ * SQLite's `changes()` whether the insert before it in the batch landed. These
+ * run on miniflare's SQLite, not D1, so they pin what the code depends on.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
@@ -95,10 +88,8 @@ describe("acceptInviteAtomically", () => {
   });
 
   it("leaves a second token alone when the same user accepts both in one millisecond", async () => {
-    // The bug this file exists for. Both calls carry the same `ts`, which is
-    // what two requests landing in the same millisecond produce. The second
-    // insert is correctly refused, so its token must survive: an admin who
-    // issued two links should still have one to hand out.
+    // The same `ts` is what two requests in one millisecond produce. The second
+    // insert is refused, so its token must survive for the admin to hand out.
     await makeInvite("token-a");
     await makeInvite("token-b");
     const ts = Date.now();

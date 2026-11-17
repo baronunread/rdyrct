@@ -11,7 +11,6 @@ test("upload/crop, save, and remove a profile picture from Settings", async ({ p
   const save = page.getByRole("button", { name: "Save", exact: true });
   const openDialog = () => page.getByRole("button", { name: "Change picture" }).click();
 
-  // A 300x300 PNG built in the page.
   const dataUrl = await page.evaluate(() => {
     const c = document.createElement("canvas");
     c.width = c.height = 300;
@@ -22,7 +21,6 @@ test("upload/crop, save, and remove a profile picture from Settings", async ({ p
   });
   const buf = Buffer.from(dataUrl.split(",")[1], "base64");
 
-  // Pencil opens the dialog; its centre is the upload CTA.
   await openDialog();
   const dialog = page.getByRole("dialog", { name: "Profile picture" });
   await expect(dialog.getByRole("button", { name: /Upload a picture/ })).toBeVisible();
@@ -30,7 +28,6 @@ test("upload/crop, save, and remove a profile picture from Settings", async ({ p
     .locator('input[type="file"]')
     .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: buf });
 
-  // Now the crop view; Apply stages it without saving.
   await dialog.getByRole("button", { name: "Apply" }).click();
   await expect(dialog).toBeHidden();
   await expect(save).toBeEnabled();
@@ -47,7 +44,6 @@ test("upload/crop, save, and remove a profile picture from Settings", async ({ p
   expect(served.status()).toBe(200);
   expect(served.headers()["cache-control"]).toBe("private, max-age=300");
 
-  // Remove lives in the dialog, and is also deferred to Save.
   await openDialog();
   await dialog.getByRole("button", { name: "Remove picture" }).click();
   await expect(dialog).toBeHidden();

@@ -1,16 +1,3 @@
-/**
- * The shell every standalone marketing page wears: header, a centred title
- * and intro, the content, the footer.
- *
- * Extracted when /roadmap became the second page with exactly this opening
- * and fallow flagged the clone. It is not an abstraction reaching for a
- * third caller: the two that exist were the same twenty lines twice, and the
- * next one that drifts would drift in the part a visitor notices first.
- *
- * The landing page and the QR generator do not use it. Both open on
- * something other than a title (a working shortener, a working generator),
- * which is the whole point of those two pages.
- */
 import type { ReactNode } from "react";
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import { useSeo } from "../lib/seo";
@@ -28,11 +15,9 @@ export function MarketingPage({
   hero,
   children,
 }: {
-  /** Canonical path, for the head tags. Same string the route uses. */
   path: string;
   title: string;
   intro: ReactNode;
-  /** A tool that opens the page inside the hero, under the intro. */
   hero?: ReactNode;
   children: ReactNode;
 }) {

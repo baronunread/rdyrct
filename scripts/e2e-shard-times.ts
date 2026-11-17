@@ -1,18 +1,7 @@
 /**
- * Refreshes tests/e2e/shard-times.json, the per-file durations the CI shards
- * are balanced on (tests/e2e/shards.ts), from Playwright JSON reports.
- *
- *   bun run e2e:shard-times report.json [more.json ...]
- *
- * Pass every shard's report from one or more CI runs (the e2e job uploads
- * them as the `e2e-timings-*` artifacts); a full-suite run on main refreshes
- * every file, a PR run only the specs leanest picked. A file runs in one
- * shard per run, so it appears in one report per run, and its time is the
- * mean over the reports it appears in: several runs smooth out one slow
- * runner. The weekly `shard-times` workflow does this with main's last five
- * runs. A local run works too, with `--reporter=json` (local runs default to
- * `list`). Only the chromium project counts, and only the first attempt of
- * each test, so a retry does not make a file look slower than it is.
+ * Refreshes tests/e2e/shard-times.json from Playwright JSON reports: `bun run e2e:shard-times report.json ...`.
+ * Only chromium counts, and only each test's first attempt, so a retry does not make a file look slower.
+ * A local run needs `--reporter=json`.
  */
 import { existsSync } from "node:fs";
 
@@ -37,11 +26,8 @@ const specsOf = (suite: Suite): Spec[] => [
   ...(suite.suites ?? []).flatMap(specsOf),
 ];
 
-// Merged into the table already there, so a report that covers some files
-// (a PR run, one spec) refreshes those and keeps the rest. Files that no
-// longer exist drop out.
+// Merged into the table already there: a partial report keeps the rest, and files that no longer exist drop out.
 const previous: Record<string, number> = await Bun.file(out).json();
-// Each report's total per file, then the mean over the reports a file is in.
 const samples: Record<string, number[]> = {};
 for (const path of reports) {
   const report: Report = await Bun.file(path).json();

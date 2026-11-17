@@ -4,15 +4,8 @@ import { copyToClipboard } from "../lib/clipboard";
 import { useMcpUrl } from "../lib/mcp-url";
 import { useToast } from "../ui/toast";
 
-// Coding agents (Claude Code, Cursor, etc.) can be told to wire up a remote
-// MCP server themselves rather than walking a person through settings
-// screens by hand. The prompt has to cover both paths a client can take,
-// since the agent won't know which one applies until it looks: OAuth if the
-// tool supports a remote server with sign-in, or a minted API key as a
-// bearer header if it only takes a static one. It names one concrete
-// command (Claude Code's CLI) as an example, then falls back to "find the
-// setting yourself" for everything else, rather than guessing every tool's
-// config file.
+// The prompt covers both paths a client can take, since the agent won't know which applies:
+// OAuth, or a minted API key as a bearer header.
 function agentPrompt(url: string) {
   const apiKeysUrl = `${window.location.origin}/api-keys`;
   return `Connect the rdyrct MCP server to this tool.
@@ -29,8 +22,6 @@ It's a remote MCP server over streamable HTTP that supports OAuth 2.1, so most c
 Confirm once it's connected.`;
 }
 
-/** Outline, not primary: it sits beside the guide's own primary action
- * ("I've added the server") as an alternative path, not a competing one. */
 export function McpAgentPromptButton() {
   const toast = useToast();
   const url = useMcpUrl();

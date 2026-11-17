@@ -5,12 +5,6 @@ import { addActiveCustomDomain } from "./orgs";
 
 const password = "test-password-123";
 
-/**
- * Importing from another service (#383), on one page: pick the service, drop
- * the file, import. Once the rows are sent, the import runs in a workflow on
- * the server, so the page can be closed: coming back shows the outcome, read
- * from the server rather than from the tab.
- */
 test("an import runs on the server and is still there after a reload (#383)", async ({ page }) => {
   // Waiting for the domain to go active can take most of the default budget.
   test.slow();
@@ -28,7 +22,6 @@ test("an import runs on the server and is still there after a reload (#383)", as
     .getByRole("button", { name: "Reject" })
     .click();
   await expect(page.getByRole("heading", { name: "Import links" })).toBeVisible();
-  // Import with no file says so on the drop zone, not in a toast.
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText("Choose a file first")).toBeVisible();
 
@@ -47,14 +40,11 @@ test("an import runs on the server and is still there after a reload (#383)", as
   });
   await expect(page.getByText("2 links found")).toBeVisible();
 
-  // The domain is the org's and active, so the links keep it, and the file
-  // is checked (nothing written) before Import says how many will go in.
   await page.getByRole("button", { name: "Import 2 links" }).click();
   await expect(page.getByRole("heading", { name: "Your links are in" })).toBeVisible({
     timeout: 30_000,
   });
 
-  // The outcome lives on the server, not in the tab.
   await page.reload();
   await expect(page.getByRole("heading", { name: "Your links are in" })).toBeVisible();
 
@@ -62,7 +52,6 @@ test("an import runs on the server and is still there after a reload (#383)", as
   await expect(page.getByText(`${host}/spring`)).toBeVisible();
   await expect(page.getByText(`${host}/summer`)).toBeVisible();
 
-  // The finished import is the one on show, so it is not also a past one.
   await page.goto("/import");
   const pastImports = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Past imports" }),
@@ -70,7 +59,6 @@ test("an import runs on the server and is still there after a reload (#383)", as
   await expect(page.getByRole("heading", { name: "Your links are in" })).toBeVisible();
   await expect(pastImports).toHaveCount(0);
 
-  // Putting it away offers a new import, and keeps this one in the history.
   await page.getByRole("button", { name: "Import another file" }).click();
   await expect(page.getByRole("heading", { name: "From" })).toBeVisible();
   await page.reload();
@@ -80,13 +68,6 @@ test("an import runs on the server and is still there after a reload (#383)", as
   await expect(pastImports.getByRole("listitem")).toContainText("2 links");
 });
 
-/**
- * A file on a domain the org does not have yet. Its links are left out, with
- * the reason on the domain's row, and never hold back the links on a domain
- * it has: Import works throughout. Adding the domain from its row brings its
- * links in (saved now, answering once it is live), and the last step gives
- * the CNAME as one record line with its own copy button.
- */
 test("a domain the org lacks is added from its row and its links come along (#383)", async ({
   page,
 }) => {
@@ -117,7 +98,6 @@ test("a domain the org lacks is added from its row and its links come along (#38
     ),
   });
 
-  // The new domain's row says why its link stays out; the rest can go now.
   const counts = page.getByRole("list", { name: "What this import does" });
   await expect(counts).toContainText(/2\s*ready/);
   await expect(counts).toContainText(/1\s*left out/);
@@ -135,7 +115,6 @@ test("a domain the org lacks is added from its row and its links come along (#38
     timeout: 30_000,
   });
 
-  // The DNS switch: one CNAME line for the moving domain, copied whole.
   await page.getByRole("button", { name: "Next: switch the DNS" }).click();
   const line = page.locator('[data-record="CNAME"]', {
     has: page.locator(`code[title="${moving}"]`),
@@ -144,11 +123,6 @@ test("a domain the org lacks is added from its row and its links come along (#38
   await expect(line.getByRole("button", { name: "Copy the record" })).toBeVisible();
 });
 
-/**
- * A domain whose check gave up (a week without its TXT records) is not a
- * dead end: its links may already use it, so it cannot be deleted and added
- * again. Its row on Import says what happened and tries again in place.
- */
 test("a domain whose TXT check gave up is tried again from its row (#383)", async ({ page }) => {
   test.slow();
 
@@ -177,7 +151,6 @@ test("a domain whose TXT check gave up is tried again from its row (#383)", asyn
     timeout: 30_000,
   });
 
-  // A week later, the check has given up.
   await rawSql(
     page,
     "update domains set status = 'error', status_reason = 'We never saw the TXT records. Check them at your DNS provider, then try again.' where hostname = ?",

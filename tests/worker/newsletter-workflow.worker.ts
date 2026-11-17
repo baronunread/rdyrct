@@ -12,18 +12,12 @@ import {
   overrideEnv,
 } from "./support";
 
-/**
- * NewsletterSendWorkflow (src/worker/workflows.ts) on the real Workflows
- * binding, driven through the test pool's introspection: the wait for a
- * scheduled time, every batch as its own step, and Cancel. The rules each
- * step applies (who, how far, unsubscribes mid-send) are in
- * marketing.worker.ts, which calls the steps one by one.
- */
+// NewsletterSendWorkflow on the real Workflows binding, via the test pool's
+// introspection. The rules each step applies are in marketing.worker.ts.
 
 beforeEach(applyTestMigrations);
 afterEach(() => reset());
 
-/** The worker with the real workflow binding, not the stub. */
 const realWorkflow = () => overrideEnv({ ...authEnv(), NEWSLETTER_SEND: env.NEWSLETTER_SEND });
 
 const post = (cookie: string, path: string, body?: JsonValue) =>
@@ -74,8 +68,7 @@ describe("the newsletter send workflow", () => {
       scheduledFor: at,
     });
 
-    // It read when to go, and sleeps until then: still running (a local
-    // sleep reports as running), the row untouched, nobody sent to.
+    // Still running (a local sleep reports as running), the row untouched.
     expect(await instance.waitForStepResult({ name: "load" })).toBe(at);
     await new Promise((resolve) => setTimeout(resolve, 300));
     const live = await env.NEWSLETTER_SEND.get("send-later");
@@ -95,7 +88,6 @@ describe("the newsletter send workflow", () => {
     expect(await jsonBody(cancelled)).toMatchObject({ status: "cancelled" });
     await instance.waitForStatus("terminated");
     expect(await row("send-later")).toMatchObject({ status: "cancelled", sent: 0 });
-    // Once cancelled, there is nothing left to cancel.
     expect((await post(cookie, "/sends/send-later/cancel")).status).toBe(409);
   });
 
@@ -105,7 +97,6 @@ describe("the newsletter send workflow", () => {
     await seedReaders(150);
     const at = Date.now() + 60 * 60 * 1000;
     await using instance = await introspectWorkflowInstance(env.NEWSLETTER_SEND, "send-batches");
-    // The hour passes at once.
     await instance.modify(async (m) => {
       await m.disableSleeps();
     });
@@ -118,7 +109,6 @@ describe("the newsletter send workflow", () => {
     expect(Array.isArray(picked) && picked.length).toBe(100);
     expect(await instance.waitForStepResult({ name: "batch-0" })).toBe(100);
     expect(await instance.waitForStepResult({ name: "batch-1" })).toBe(50);
-    // The third pick finds nobody, so there is no third delivery.
     expect(await instance.waitForStepResult({ name: "pick-2" })).toEqual([]);
     expect(await row("send-batches")).toMatchObject({ status: "sent", sent: 150 });
     const reached = mail.batches.flatMap((b) => b.emails.map((e) => e.to[0]));

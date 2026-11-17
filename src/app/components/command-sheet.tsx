@@ -6,14 +6,6 @@ import { IconSearch } from "@tabler/icons-react";
 import { Kbd } from "../ui/kbd";
 import { cn } from "../ui/cn";
 
-/**
- * The ⌘K palette's own frame, as the redesign mock draws it: a 640px panel
- * near the top of the page on a desktop, a sheet with a handle from the
- * bottom edge on a phone (rdyrct-design, "On a phone"). cmdk does the
- * keyboard work; everything it shows is styled here so the rows, the icon
- * tiles and the key footer stay one design.
- */
-
 const PHONE = "(max-width: 639px)";
 const subscribePhone = (onChange: () => void) => {
   const query = matchMedia(PHONE);
@@ -40,9 +32,7 @@ export function CommandSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Accessible name; not shown. */
   label: string;
-  /** The highlighted row's value. */
   value: string;
   onValueChange: (value: string) => void;
   children: ReactNode;
@@ -86,8 +76,6 @@ export function CommandSheet({
                       <m.div
                         initial={{ opacity: 0, scale: 0.97 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        // Opened many times a session, so it leaves faster
-                        // than it came, with a little blur and no travel.
                         exit={{ opacity: 0, filter: "blur(4px)", transition: { duration: 0.1 } }}
                         transition={{ duration: 0.15 }}
                       />
@@ -120,8 +108,6 @@ export function CommandSheet({
   );
 }
 
-/** The search line: icon, field, an optional scope pill before the field and
- * the result count after it. */
 export function PaletteInput({
   pill,
   count,
@@ -133,8 +119,8 @@ export function PaletteInput({
       {pill}
       <CommandPrimitive.Input
         {...props}
-        // The global :focus-visible rule (styles.css) is unlayered, so it
-        // beats an `outline-none` utility. The panel is the focus indicator.
+        // The global :focus-visible rule (styles.css) is unlayered and beats `outline-none`.
+        // The panel is the focus indicator.
         style={{ outline: "none" }}
         className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-text placeholder:text-placeholder"
       />
@@ -174,7 +160,6 @@ export function PaletteGroup({ heading, children }: { heading: string; children:
   );
 }
 
-/** A 40px row (44px on a phone): tile, label, and whatever sits at its end. */
 export function PaletteItem({ className, ...props }: ComponentProps<typeof CommandPrimitive.Item>) {
   return (
     <CommandPrimitive.Item
@@ -188,7 +173,6 @@ export function PaletteItem({ className, ...props }: ComponentProps<typeof Comma
   );
 }
 
-/** The icon's tile: 26px, paper-coloured, so a row reads by its shape. */
 export function IconTile({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span
@@ -203,8 +187,6 @@ export function IconTile({ children, className }: { children: ReactNode; classNa
   );
 }
 
-/** "G D" as two keys, the hint at the end of a row. Not on a phone, which
- * has no keys to press. */
 export function RowKeys({ keys }: { keys: readonly string[] }) {
   return (
     <span aria-hidden className="ml-auto hidden shrink-0 items-center gap-1 sm:flex">
@@ -215,8 +197,6 @@ export function RowKeys({ keys }: { keys: readonly string[] }) {
   );
 }
 
-/** The keys that work here, once, at the bottom. A phone has no keyboard, so
- * it has no footer. */
 export function PaletteFooter() {
   return (
     <div
@@ -237,7 +217,6 @@ export function PaletteFooter() {
   );
 }
 
-/** Each word of `query` in the accent wherever it appears in `text`. */
 export function Highlight({ text, query }: { text: string; query: string }) {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return <>{text}</>;

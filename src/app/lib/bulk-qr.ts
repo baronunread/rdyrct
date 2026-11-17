@@ -5,7 +5,6 @@ import { resolveQrLook, type OrgQr } from "./org-qr";
 import { downloadBlob } from "./csv";
 import { zipStored } from "./zip";
 
-/** "go.example.com-menu.png": the address, safe as a file name. */
 function fileName(link: LinkDTO): string {
   const host = new URL(link.url).host;
   return `${host}-${link.slug}`.replace(/[^\w.-]+/g, "-") + ".png";
@@ -18,14 +17,8 @@ function bytesOf(dataUrl: string): Uint8Array {
   return bytes;
 }
 
-/**
- * Each link's QR code as a 1024px PNG, in its own look over the org's
- * defaults (what the QR dialog downloads one at a time), zipped into one
- * file. One link skips the zip.
- *
- * One after another rather than all at once: each is a 1024px canvas, and
- * twenty-five of those together is the kind of memory a phone refuses.
- */
+// One after another: each is a 1024px canvas, and twenty-five together is
+// memory a phone refuses.
 export async function downloadQrCodes(links: LinkDTO[], orgQr: OrgQr): Promise<void> {
   const files: { name: string; data: Uint8Array }[] = [];
   for (const link of links) {

@@ -1,15 +1,4 @@
-/**
- * The shell every platform-admin page sits in.
- *
- * The sidebar carries one "Platform" entry, not four. Four put "Links" in the
- * sidebar twice, once for the current organization's links and once for every
- * link on the instance, which is the kind of collision that makes somebody
- * click the wrong one during an incident. The five sections live here instead,
- * as tabs under one fixed title, where their labels are unambiguous because
- * everything around them is platform-wide. Switching tabs moves nothing above
- * them: the title, the subtitle and the tabs stay put, and only the section
- * below changes.
- */
+/** One "Platform" sidebar entry, not four: four put "Links" in the sidebar twice (org links and every link), which invites a wrong click in an incident. */
 import { Suspense, useRef } from "react";
 import { TabUnderline } from "../../ui/tab-underline";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
@@ -19,7 +8,6 @@ import { Segmented } from "../../ui/segmented";
 import { useUsageRange, RANGE_ITEMS } from "./usage-range";
 import { StableLabel } from "../../ui/stable-label";
 
-// The mock's order: who is on the instance before what they made.
 const TABS = [
   { to: "/admin", end: true, label: "Usage" },
   { to: "/admin/users", end: false, label: "Users" },
@@ -29,8 +17,6 @@ const TABS = [
   { to: "/admin/newsletter", end: false, label: "Newsletter" },
 ] as const;
 
-/** The usage range lives in the header, on the right of the title, so it
- * is in the same place whichever card is being read. Only on Usage. */
 function RangeControl() {
   const [range, setRange] = useUsageRange();
   return <Segmented label="Range" items={RANGE_ITEMS} value={range} onChange={setRange} />;
@@ -41,8 +27,6 @@ export function AdminLayout() {
   const pathname = useLocation({ select: (l) => l.pathname });
   const onUsage = pathname === "/admin" || pathname === "/admin/";
   const bar = useRef<HTMLElement>(null);
-  // No email and no Google: nobody proves they own the address they sign up
-  // with. Fine on a private instance, wrong on a public one.
   const unverified = config && !config.emailEnabled && !config.googleEnabled;
   return (
     <div className="flex flex-col gap-5">
@@ -53,7 +37,6 @@ export function AdminLayout() {
           turn verification on.
         </p>
       )}
-      {/* Held still while one tab changes to another (styles.css, platform). */}
       <div data-platform-head className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -64,11 +47,6 @@ export function AdminLayout() {
           </div>
           {onUsage && <RangeControl />}
         </div>
-        {/* Underline tabs, drawn as inset shadows so the hairline adds nothing
-            to the box (rdyrct-design, "Depth from layered shadows"). On a
-            phone the row is wider than the screen: the right edge fades so
-            the tabs past it read as more, and the end padding lets the last
-            one scroll clear of the fade. */}
         <nav
           ref={bar}
           aria-label="Platform sections"
@@ -92,10 +70,7 @@ export function AdminLayout() {
           <TabUnderline bar={bar} className="h-0.5" />
         </nav>
       </div>
-      {/* Local to the section, not just the shell's outer one: without it, a
-          tab whose chunk hasn't downloaded yet suspends past this nav too,
-          so switching tabs used to blank the nav bar itself, not just the
-          content below it. */}
+      {/* Local to the section: without it a tab whose chunk has not downloaded suspends past this nav too and blanks it. */}
       <Suspense fallback={<AdminSectionSkeleton />}>
         <Outlet />
       </Suspense>

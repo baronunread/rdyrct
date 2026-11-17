@@ -1,28 +1,6 @@
-/**
- * Public abuse reports against a short link.
- *
- * Unauthenticated, so it carries the same defences as the anonymous
- * shortener: Turnstile on its own scope and a per-caller rate limit
- * (the anon-link counter, under a "report:" key so the two never share a
- * count). The answer is the same whether or not the slug exists: a report
- * form that said "no such link" would be a slug probe.
- *
- * A report never suspends anything by itself. Anyone can file one, so a
- * single report could be used to take down a stranger's link. On a free
- * org's link, REPORTERS_TO_WARN different reporters with open reports put
- * the warning page in front instead (#344): one stranger alone cannot. The
- * link keeps working, one click later, until an admin dismisses the reports
- * or the daily sweep finds the warning older than REPORT_WARNING_TTL_MS. On a
- * paid org's link it only goes into the admin queue and the link stays as it
- * is: a paying customer went through billing, and one anonymous report must
- * not put an interstitial in front of their link (decided on #390). With no
- * billing (a self-hosted copy) every org is unlimited, so no report warns.
- * A link with REPORTS_TO_FLAG open reports also flags its org for review,
- * and a human decides. An anonymous link from the landing page (#488) gets
- * a free link's rules, less the org flag it has no org for. Its warning
- * lives in its KV key alone and is not lifted by dismissing the reports: the
- * link is deleted within 24 hours.
- */
+// Unauthenticated, so the answer is the same whether or not the slug exists: a form
+// saying "no such link" would be a slug probe. A report never suspends by itself.
+// Free orgs' links warn after REPORTERS_TO_WARN reporters (#344); paid ones only reach the admin queue (#390).
 import { Hono } from "hono";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
@@ -54,25 +32,16 @@ import { clearLinkWarning, WARN_REASON, warnAnonLink, warnLink } from "../link-w
 import { orgPlan } from "../plan";
 import { uid } from "../util";
 
-/** Open reports on one link before its org is flagged for review. */
 export const REPORTS_TO_FLAG = 3;
 
-/** Different reporters with open reports on a free org's link before it
- * gets the warning page. Two: one stranger cannot do it alone, and a real
- * scam, which is reported once and then clicked a thousand times, still gets
- * its warning from the second person it fools. */
+/** Two: one stranger cannot do it alone, and a scam reported once then clicked a thousand times still warns. */
 export const REPORTERS_TO_WARN = 2;
 
-/** How long a warning set by reports lasts before the daily sweep lifts it,
- * and how far back the reporters that set it are counted. An admin who wants
- * it to stay makes it their own (adoptWarning). */
+/** An admin who wants a warning to stay makes it their own (adoptWarning). */
 export const REPORT_WARNING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** The column a report names its link in: a link's id, or an anonymous
- * link's (#488). */
 type ReportTarget = typeof schema.linkReports.linkId | typeof schema.linkReports.anonLinkId;
 
-/** Whether enough different reporters have recent open reports on one link. */
 async function reportedEnough(db: DB, column: ReportTarget, id: string) {
   const [{ reporters }] = await db
     .select({ reporters: countDistinct(schema.linkReports.reporterKey) })
@@ -87,24 +56,17 @@ async function reportedEnough(db: DB, column: ReportTarget, id: string) {
   return reporters >= REPORTERS_TO_WARN;
 }
 
-/** Warn a free org's link once enough different reporters have recent open
- * reports on it. */
 async function warnIfReportedEnough(env: Env, db: DB, linkId: string) {
   if (!(await reportedEnough(db, schema.linkReports.linkId, linkId))) return false;
   await warnLink(env, db, linkId, WARN_REASON.report);
   return true;
 }
 
-/** A report that matched something: a link, or an anonymous link. The admin
- * mail counts these; a made-up slug costs no mail. */
 const matchedReport = or(
   isNotNull(schema.linkReports.linkId),
   isNotNull(schema.linkReports.anonLinkId),
 );
 
-/** Daily: lift warnings that reports set more than REPORT_WARNING_TTL_MS ago,
- * so a warning nobody acted on does not stay for good. The reports stay open
- * for the admin; an admin's own warning is never touched. */
 export async function sweepStaleReportWarnings(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
   const stale = await db
@@ -118,8 +80,8 @@ export async function sweepStaleReportWarnings(env: Env): Promise<number> {
     )
     .limit(500);
   let lifted = 0;
-  // One link at a time on purpose: each clear writes D1 and KV, and up to 500
-  // at once would put that many subrequests in flight in one cron run.
+  // One link at a time: each clear writes D1 and KV, and 500 at once would put
+  // that many subrequests in flight in one cron run.
   // react-doctor-disable-next-line react-doctor/async-await-in-loop
   for (const { id } of stale) if (await clearLinkWarning(env, db, id, WARN_REASON.report)) lifted++;
   return lifted;
@@ -133,10 +95,6 @@ const reportBodySchema = v.object({
   turnstileToken: optionalText,
 });
 
-/**
- * The slug, and the host when the reporter pasted a full URL. A bare slug
- * means the shared host. Null when nothing usable is in there.
- */
 export function parseReportedLink(raw: string): { slug: string; host: string | null } | null {
   const input = raw.trim();
   if (!input.includes("/") && !input.includes(".")) return { slug: input, host: null };
@@ -149,12 +107,7 @@ export function parseReportedLink(raw: string): { slug: string; host: string | n
   }
 }
 
-/**
- * The link a reported address points at, or the anonymous link (#488), or
- * neither. Anonymous links from the landing page live in their own table and
- * only on the shared host, and a slug is never both: the shortener checks
- * link_addresses before it takes one, and a claim deletes the anonymous row.
- */
+// A slug is never both: the shortener checks link_addresses first, and a claim deletes the anonymous row.
 async function findReportedLink(env: Env, db: DB, raw: string) {
   const parsed = parseReportedLink(raw);
   if (!parsed) return { slug: raw.slice(0, 100), link: null, anon: null };
@@ -184,17 +137,11 @@ async function findReportedLink(env: Env, db: DB, raw: string) {
   return { slug: parsed.slug, link: null, anon: anon ?? null };
 }
 
-/** At most one report mail to the admin in this long. Anyone can file a
- * report, so a mail per report would let anyone send the admin a thousand. */
+/** Anyone can file a report, so a mail per report would let anyone flood the admin. */
 export const REPORT_NOTICE_WINDOW_MS = 60 * 60 * 1000;
 
-/**
- * Mail the admin about `reportId` and whatever else came in since the last
- * mail, unless a mail already went out this window. The claim is one UPDATE
- * that only succeeds when no report carries a recent notified_at, so two
- * reports at once cannot both send. A report that loses waits for
- * sweepReportNotices.
- */
+// The claim is one UPDATE that succeeds only when no report has a recent notified_at,
+// so two reports at once cannot both send.
 async function noticeReport(env: Env, db: DB, reportId: string, path: string) {
   if (!env.SUPERADMIN_EMAIL) return false;
   const now = Date.now();
@@ -239,8 +186,6 @@ async function noticeReport(env: Env, db: DB, reportId: string, path: string) {
   return true;
 }
 
-/** Every 10 minutes: once the window has passed, mail the admin about
- * reports that came in while it was closed, so a report never goes untold. */
 export async function sweepReportNotices(env: Env): Promise<boolean> {
   const db = drizzle(env.DB, { schema });
   const [{ last }] = await db
@@ -263,7 +208,6 @@ export async function sweepReportNotices(env: Env): Promise<boolean> {
   return noticeReport(env, db, pending.id, "/admin/links");
 }
 
-/** Open reports on one link, named by its column (see reportedEnough). */
 async function openReportsOn(db: DB, column: ReportTarget, id: string): Promise<number> {
   const [{ n }] = await db
     .select({ n: count() })
@@ -272,8 +216,7 @@ async function openReportsOn(db: DB, column: ReportTarget, id: string): Promise<
   return n;
 }
 
-/** Flag the link's org for review once enough open reports name the link.
- * Never suspends: anyone can file a report. */
+/** Never suspends: anyone can file a report. */
 async function flagOrgIfReported(
   env: Env,
   db: DB,
@@ -281,9 +224,8 @@ async function flagOrgIfReported(
   reportId: string,
 ) {
   const n = await openReportsOn(db, schema.linkReports.linkId, link.linkId);
-  // The first report on a link is worth a mail on its own at this volume: a
-  // real scam is reported once and then clicked a thousand times. Bounded to
-  // one mail a window; the rest go out together after it.
+  // A real scam is reported once and then clicked a thousand times. Bounded to one
+  // mail a window; the rest go out together after it.
   if (n === 1)
     await noticeReport(env, db, reportId, `/admin/links?org=${encodeURIComponent(link.orgId)}`);
   if (n < REPORTS_TO_FLAG) return;
@@ -325,13 +267,11 @@ reportRoutes.post("/", async (c) => {
   const outcome = await actOnReport(c.env, db, found, reportId);
   if (outcome) log.set({ report: outcome });
 
-  // The same answer for a real link and a made-up one.
   return c.json({ ok: true }, 201);
 });
 
 type ReportBody = v.InferOutput<typeof reportBodySchema>;
 
-/** Write the report, whatever it named. Returns its id. */
 async function storeReport(
   env: Env,
   db: DB,
@@ -360,7 +300,6 @@ async function storeReport(
   return id;
 }
 
-/** What a report sets off, by what it named. Nothing for a made-up slug. */
 async function actOnReport(
   env: Env,
   db: DB,
@@ -372,8 +311,6 @@ async function actOnReport(
   return null;
 }
 
-/** What a report about an org's link sets off. The plan is the owner's, as
- * everywhere (plan.ts's orgPlan). */
 async function actOnLinkReport(
   env: Env,
   db: DB,
@@ -386,9 +323,6 @@ async function actOnLinkReport(
   return { plan, warned };
 }
 
-/** What a report about an anonymous link sets off (#488): a free link's
- * rules, as it has no account behind it at all. No org to flag; the admin's
- * reports list is where it is acted on. */
 async function actOnAnonReport(env: Env, db: DB, anonId: string, reportId: string) {
   const warned =
     (await reportedEnough(db, schema.linkReports.anonLinkId, anonId)) &&

@@ -1,17 +1,7 @@
 /**
- * Sending a newsletter, and the only module that knows which provider does it.
- *
- * No subscriber list lives at the provider. The opted-in users are in our D1
- * (marketing.ts) and this app sends each issue itself, one email per person,
- * through the provider's batch endpoint. Moving to another provider means
- * rewriting `postBatch` here and `emailConfigured` in email.ts, nothing else.
- *
- * The same plain `fetch` and RESEND_BASE_URL as sendEmail, so the dev
- * emulator receives newsletters too.
- *
- * Every email carries its own unsubscribe link for the list it went to, in
- * the footer and in the RFC 8058 one-click headers Gmail and Yahoo require of
- * bulk mail.
+ * The only module that knows the provider. No list lives there: opted-in users are in D1
+ * (marketing.ts). Each email carries its own unsubscribe link and the RFC 8058 one-click
+ * headers Gmail and Yahoo require of bulk mail.
  */
 import { createError } from "evlog";
 import { emailConfigured } from "./email";
@@ -20,14 +10,11 @@ import type { Env } from "./env";
 import { unsubscribeUrl } from "./marketing";
 import type { MarketingList } from "@/shared/types";
 
-/** The provider takes up to 100 messages per call. */
 export const BATCH_SIZE = 100;
 
 export interface Issue {
-  /** Who it goes to, and which list its unsubscribe link takes them off. */
   list: MarketingList;
   subject: string;
-  /** The body, written in the admin editor (newsletter-doc.ts parses it). */
   blocks: EmailBlock[];
 }
 
@@ -39,7 +26,6 @@ export interface Recipient {
 interface OutgoingEmail {
   from: string;
   to: string[];
-  /** Where a reply goes: the sending subdomain has no inbox. */
   reply_to?: string;
   subject: string;
   html: string;
@@ -47,19 +33,15 @@ interface OutgoingEmail {
   headers: Record<string, string>;
 }
 
-/** Whether this instance may send newsletters: a provider and a sender. */
 export function newsletterConfigured(env: Env): boolean {
   return emailConfigured(env) && Boolean(env.NEWSLETTER_FROM);
 }
 
-/** Why the reader gets it, in the footer: the list, by name. */
 const FOOTER_LINE = {
   news: "You get this because you opted in to product news from rdyrct.",
   offers: "You get this because you opted in to offers from rdyrct.",
 } satisfies Record<MarketingList, string>;
 
-/** One person's copy of the issue, both parts, with their own unsubscribe
- * link: what a send posts, and what the composer's Preview shows. */
 export async function renderIssue(
   env: Env,
   issue: Issue,
@@ -82,7 +64,6 @@ export async function renderIssue(
   return { body, link };
 }
 
-/** One person's copy: their own link in the footer and in the headers. */
 async function outgoing(
   env: Env,
   from: string,
@@ -106,11 +87,11 @@ async function outgoing(
   return email;
 }
 
-/** The provider call. `idempotencyKey` makes a retry of the same batch a
- * no-op there, so a double click or a timed-out request does not send twice.
- * A key the provider has seen with a different list of people (a retry after
- * someone in the batch unsubscribed) is refused with a 409: that batch went
- * already, so it counts as sent, not as a failure. */
+/**
+ * `idempotencyKey` makes a retry a no-op. A key seen with a different list of
+ * people (someone unsubscribed since) is refused with a 409: that batch went
+ * already, so it counts as sent.
+ */
 async function postBatch(
   env: Env,
   emails: OutgoingEmail[],
@@ -140,7 +121,6 @@ async function postBatch(
   return "sent";
 }
 
-/** The sender, or a structured 409 when this instance cannot send. */
 export function newsletterSender(env: Env): string {
   const from = env.NEWSLETTER_FROM;
   if (!from || !newsletterConfigured(env)) {
@@ -154,11 +134,7 @@ export function newsletterSender(env: Env): string {
   return from;
 }
 
-/**
- * Sends `issue` to one batch of at most BATCH_SIZE people, each with their
- * own unsubscribe link. `key` names the batch for the provider's
- * idempotency check; "sent-before" means the provider had it already.
- */
+/** "sent-before" means the provider had the key already. */
 export async function deliverBatch(
   env: Env,
   issue: Issue,

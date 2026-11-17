@@ -2,15 +2,9 @@ import { expect, test } from "@playwright/test";
 import { queryRows } from "./db";
 import { guestAccount, ownerWithInviteLink } from "./orgs";
 
-/** A real 1x1 PNG, small enough for the avatar route's limits. */
 const PNG_1x1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-/**
- * The members table (the redesign): the role is changed where it is shown,
- * removing someone is a trash in their row, and an open invite sits in the
- * same table as the people, with its own copy and revoke.
- */
 test("change a role in place, revoke an invite from its row, remove a member", async ({
   page,
   browser,
@@ -32,7 +26,6 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   const name = guestName[0]?.name;
   expect(name).toBeTruthy();
 
-  // The guest has a picture; the owner without one keeps the generated face.
   const uploaded = await guest.page.request.post("/api/user/avatar", {
     headers: { "content-type": "image/png" },
     data: Buffer.from(PNG_1x1, "base64"),
@@ -53,10 +46,8 @@ test("change a role in place, revoke an invite from its row, remove a member", a
     page.locator("tbody tr").filter({ hasText: owner }).first().locator("img"),
   ).toHaveAttribute("src", /^data:image\/svg\+xml/);
 
-  // Both just signed in, so both read as here now.
   await expect(page.getByRole("columnheader", { name: "Last active" })).toBeVisible();
   await expect(page.locator("tbody tr").getByText("Online now")).toHaveCount(2);
-  // The owner's own role is not a control.
   await expect(page.getByRole("button", { name: /^Change role for / })).toHaveCount(1);
 
   await page.getByRole("button", { name: `Change role for ${name}` }).click();
@@ -67,7 +58,6 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   // The role menu fades out; until it has gone, its "Viewer" is a second match.
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  // A second invite, made from the chevron, then revoked from its row.
   await page.getByRole("button", { name: "More ways to invite" }).click();
   await page.getByRole("menuitem", { name: "Viewer", exact: true }).click();
   const inviteRow = page.locator("tbody tr").filter({ hasText: "Invite link" });
@@ -75,13 +65,10 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   await inviteRow.getByRole("button", { name: "Revoke invite" }).click();
   await expect(inviteRow).toHaveCount(0);
 
-  // The trash in the row asks first, then removes.
   await page.getByRole("button", { name: `Remove ${name}` }).click();
   await page.getByRole("button", { name: "Remove member" }).click();
   await expect(page.locator("tbody tr").filter({ hasText: String(name) })).toHaveCount(0);
 
-  // No footnote spelling out the roles under the table: the role picker
-  // in the invite dialog says what each one does.
   await expect(page.getByText(/^Roles: Admins manage links/)).toHaveCount(0);
 
   await guest.context.close();

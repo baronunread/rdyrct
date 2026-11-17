@@ -44,9 +44,8 @@ describe("domainsBlockedBy", () => {
   });
 
   test("a locked org on a plan that does include domains is blocked by the lock", () => {
-    // The reason this exists. Answering "custom domains need a paid plan"
-    // here tells a Hobby owner to buy what they already have, and points at
-    // an upgrade that would not unlock the org.
+    // Answering "custom domains need a paid plan" here tells a Hobby owner to
+    // buy what they have, and points at an upgrade that would not unlock the org.
     expect(domainsBlockedBy(3, true)).toBe("lock");
   });
 

@@ -2,17 +2,7 @@ import type { ReactNode } from "react";
 import { MADE_WITH_SLOT } from "@/shared/link-pages";
 import { FrameRow } from "./marketing-kit";
 
-/**
- * The page a short link answers with when it does not redirect: the 404
- * (NotFoundView), and the held and warning pages (link-state-views.tsx). It
- * wears the marketing frame (rdyrct-design, "Light on the marketing pages")
- * but names no brand, because a customer's domain shows it too.
- *
- * `madeWith` adds the one exception, a quiet link at the foot of the page
- * that the Worker keeps only on rdyrct.com's own hosts and strips everywhere
- * else. Pinned to the bottom edge, so the frame stays centred whether or not
- * the link survives.
- */
+// Names no brand, because a customer's domain shows this page too.
 export function ShortHostFrame({
   children,
   madeWith = false,

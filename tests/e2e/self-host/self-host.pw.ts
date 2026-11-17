@@ -1,13 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-// A self-hosted copy is the app and its short links. rdyrct.com's own pages,
-// head tags and analytics stay out of it (src/shared/site.ts).
-
 test("the front door is the sign-in page", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("button", { name: /sign in|log in/i })).toBeVisible();
-  // The tab names this copy (SITE_NAME, else its host), not rdyrct.com.
   await expect(page).toHaveTitle("localhost");
 });
 
@@ -45,7 +41,6 @@ test("a dead link does not advertise rdyrct", async ({ page }) => {
 });
 
 test("a link page opened directly does not advertise rdyrct either", async ({ request }) => {
-  // The prerendered page served as it is, not through a link's redirect.
   const html = await (await request.get("/link-disabled")).text();
   expect(html).not.toContain("Made with rdyrct");
 });

@@ -2,18 +2,11 @@ import { expect, test } from "@playwright/test";
 import { signUpThroughForm } from "./resend";
 import { queryRows } from "./db";
 
-/**
- * The anonymous shortener in the hero, and the claim that follows it
- * (Direction A of #96).
- *
- * This is the one place in the app where an unauthenticated request writes to
- * the database, so what it does and does not allow is worth asserting in a
- * real browser: the Turnstile challenge runs there, not in a worker test.
- */
+// The one place an unauthenticated request writes to the database; Turnstile runs in
+// a real browser, not a worker test.
 
 const password = "test-password-123";
 
-/** Paste a URL into the hero form and wait for the short link to come back. */
 async function shorten(page: import("@playwright/test").Page, destination: string) {
   await page.goto("/");
   const field = page.getByLabel("Shorten a link, no account needed");
@@ -21,9 +14,8 @@ async function shorten(page: import("@playwright/test").Page, destination: strin
   await field.fill(destination);
   await page.getByRole("button", { name: "Shorten it" }).click();
 
-  // By its own label, not by text: the page header links the word "rdyrct"
-  // too, and that match is the one a loose selector finds first. The newest
-  // link is first in the stack.
+  // By its own label: the page header links the word "rdyrct" too, and a loose
+  // selector finds that first.
   const newest = page.getByRole("link", { name: "Your short link" }).first();
   await expect(newest).toBeVisible({ timeout: 20_000 });
   return (await newest.getAttribute("href"))!.trim();
@@ -36,13 +28,11 @@ test("a visitor with no account gets a working short link", async ({ page }) => 
   // suite, so assert the shape rather than a hard-coded hostname.
   expect(shortUrl).toMatch(/^https?:\/\/[^/]+\/[A-Za-z0-9_-]+$/);
 
-  // It actually redirects, which is the only claim on the page that matters.
   const slug = shortUrl.split("/").pop()!;
   const response = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(response.status()).toBe(302);
   expect(response.headers()["location"]).toBe(destination);
 
-  // Temporary, slug included, and the page says so before anyone relies on it.
   await expect(page.getByText("then someone else can get its address")).toBeVisible();
 });
 
@@ -55,9 +45,6 @@ test("the short link is on the shared link host, not the app's own host", async 
   expect(new URL(shortUrl).host).toBe("rdyr.cc");
 });
 
-// A running total is the reason to come back and keep the link; where the
-// clicks came from is what signing up buys. So the hero shows the count, and
-// the clicks table still holds nothing for a link with no org.
 test("an anonymous link shows its click total but records no click details", async ({ page }) => {
   const destination = `https://example.com/anon-clicks-${Date.now()}`;
   const shortUrl = await shorten(page, destination);
@@ -65,19 +52,13 @@ test("an anonymous link shows its click total but records no click details", asy
 
   await page.request.get(`/${slug}`, { maxRedirects: 0 });
 
-  // The stored link comes back on reload, and its count with it. The count
-  // lands after the redirect is sent, so it is also the sign the click has
-  // been handled.
+  // The count lands after the redirect is sent, so it also shows the click was handled.
   await page.reload();
   await expect(page.getByText("1 click so far.")).toBeVisible({ timeout: 15_000 });
-  // The count replaces the plain footer, and the notice that the link is
-  // temporary stays with it: these are the people actually using the link.
   await expect(page.getByText("then someone else can get its address")).toBeVisible();
 
-  // Scoped to clicks belonging to no real link, which is the only shape an
-  // anonymous click could take. Counting every row in the table made this
-  // depend on whatever else the suite had done, and it started failing the
-  // day another test created a click of its own.
+  // Scoped to clicks belonging to no real link. Counting every row made this depend on
+  // whatever else the suite had done.
   const clicks = await queryRows<{ n: number }>(
     page,
     "select count(*) as n from clicks where link_id not in (select id from links)",
@@ -92,13 +73,9 @@ test("signing up keeps the link that was made before the account (#65)", async (
 
   await signUpThroughForm(page, `anon-${Date.now()}@gmail.com`, password);
 
-  // The new account's first dashboard is not empty: the link they made
-  // before signing up is already in it, on the same slug.
   await page.goto("/links");
   await expect(page.getByText(slug, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
 
-  // And it is a real link now: owned, permanent, and no longer an anonymous
-  // row waiting to be swept.
   const links = await queryRows<{ n: number }>(
     page,
     "select count(*) as n from links where slug = ?",
@@ -125,15 +102,12 @@ test("a destination that is not a web address marks the field", async ({ page })
 
   await expect(field).toHaveAttribute("aria-invalid", "true", { timeout: 20_000 });
   await expect(page.getByText("Not a web address")).toBeVisible();
-  // Typing again clears the mark.
   await field.fill("example.com");
   await expect(field).not.toHaveAttribute("aria-invalid");
   await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(0);
 });
 
 test("the shortener refuses a request with no Turnstile token", async ({ page }) => {
-  // Straight to the endpoint, bypassing the widget. This is the request a
-  // script would make.
   const response = await page.request.post("/api/shorten", {
     data: { destination: "https://example.com/scripted" },
   });
@@ -150,7 +124,6 @@ test("links survive a reload, so leaving the page does not lose them", async ({ 
 
   await page.reload();
 
-  // Same link, same place, still with the address it came from.
   const restored = page.getByRole("link", { name: "Your short link" }).first();
   await expect(restored).toBeVisible({ timeout: 15_000 });
   expect(await restored.getAttribute("href")).toBe(shortUrl);
@@ -179,14 +152,12 @@ test("one link is the ceiling without an account", async ({ page }) => {
   const destination = `https://example.com/cap-${Date.now()}`;
   await shorten(page, destination);
 
-  // The button goes dead rather than failing on submit, and the one ask
-  // under the link is the way forward.
+  // The button goes dead rather than failing on submit.
   const button = page.getByRole("button", { name: "Shorten it" });
   await expect(button).toBeDisabled();
   await expect(page.getByRole("link", { name: "Keep this link" })).toHaveCount(1);
   await expect(page.getByText(`from ${destination}`)).toBeVisible();
 
-  // The ceiling holds across a reload: it is stored, not just in memory.
   await page.reload();
   await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Shorten it" })).toBeDisabled();
@@ -225,16 +196,13 @@ test("a failed QR load still leaves the new link on the page", async ({ page }) 
   await field.fill(`https://example.com/qr-fail-${Date.now()}`);
   await page.getByRole("button", { name: "Shorten it" }).click();
 
-  // Only once the QR load has failed: before that the link shows either way.
   await qrAborted;
-  // The QR's placeholder goes once the failed load has settled into no QR.
   await expect(page.getByLabel("Preparing QR code")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Your short link" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: /PNG/ })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.dataset.stayed)).toBe("yes");
 });
 
-/** The anonymous shortener must still complete its core task on a phone. */
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 

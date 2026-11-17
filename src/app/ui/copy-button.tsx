@@ -3,10 +3,6 @@ import { MorphIcon } from "morphicons/react";
 import { check, copy } from "./icon-nodes";
 import { Button, IconButton } from "./button";
 
-// Copy-to-clipboard button whose icon morphs into a tick on success. The
-// tick holds for two seconds after the last click: a click while ticked
-// copies again and restarts the hold, but never replays the morph, and the
-// icon flips back once, when the clicks stop.
 export function CopyButton({
   text,
   label,
@@ -38,9 +34,7 @@ export function CopyButton({
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 2000);
       setCopied(true);
-    } catch {
-      // The caller reports clipboard errors in the app's usual toast.
-    }
+    } catch {}
   };
 
   const icon = (

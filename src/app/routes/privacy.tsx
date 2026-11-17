@@ -100,11 +100,8 @@ export function PrivacyPage() {
         </p>
       </section>
 
-      {/* Addressable on its own. People (and the scanners that check for a
-          site's cookie policy) look for a page about cookies, not a heading
-          two thirds of the way down a privacy policy. This is that page's
-          address; splitting it into a real second page would mean two
-          documents saying the same thing and drifting apart. */}
+      {/* Addressable on its own: people and cookie-policy scanners look for a page about cookies.
+         Splitting it would give two documents that drift apart. */}
       <section id="cookies">
         <h2 className="mb-2 font-bold">Cookies</h2>
         <p className="text-muted">

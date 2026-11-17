@@ -5,11 +5,6 @@ import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "@/app/ui/tooltip";
 
-/**
- * A primary action with its alternatives beside it: "Invite", and behind the
- * chevron the other ways to do the same job. One control to the eye, two tab
- * stops, the two halves split by a hairline of the page.
- */
 export function SplitButton({
   children,
   onClick,
@@ -21,11 +16,8 @@ export function SplitButton({
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  /** Why it is disabled, on hover. */
   title?: string;
-  /** Names the chevron: "More ways to invite". */
   menuLabel: string;
-  /** The menu's items. */
   menu: ReactNode;
 }) {
   return (

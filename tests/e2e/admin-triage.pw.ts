@@ -4,12 +4,6 @@ import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows, rawSql, seedSubscriber } from "./db";
 import { createQuickLink } from "./orgs";
 
-/**
- * The admin screens an abuse report sends somebody to: the org list's review
- * and suspended states, the user table with awkward data, and what a link row
- * says about its reports and suspension.
- */
-
 const password = "test-password-123";
 
 async function ownerWithLink(page: import("@playwright/test").Page, label: string) {
@@ -39,7 +33,6 @@ test("an org flagged for review can be found, filtered and marked reviewed", asy
   const row = page.getByRole("row").filter({ hasText: email });
   await expect(row.getByText("needs review")).toBeVisible({ timeout: 10_000 });
 
-  // The filter narrows to flagged orgs.
   await page.getByRole("button", { name: "Needs review", exact: true }).click();
   await expect(row).toBeVisible();
 
@@ -97,19 +90,15 @@ test("a link row is one line: its state, its report count, and why behind the ba
 
   await page.goto(`/admin/links?org=${link.org_id}`);
   const row = page.getByRole("row").filter({ hasText: link.slug });
-  // One badge, the worst state, and the reason is not printed in the row.
   const badge = row.getByRole("button", { name: /^Suspended: asks for card numbers · Risk: / });
   await expect(badge).toHaveText("Suspended", { timeout: 10_000 });
   await expect(row.getByText("asks for card numbers")).toHaveCount(0);
-  // Reports is a count of its own, like Clicks.
   const reportsColumn = await page
     .getByRole("columnheader")
     .evaluateAll((ths) => ths.findIndex((th) => th.textContent?.trim() === "Reports"));
   await expect(row.getByRole("cell").nth(reportsColumn)).toHaveText("2");
-  // One line: the badge and its reason used to stack the row three high.
   expect((await row.boundingBox())!.height).toBeLessThan(56);
 
-  // The reason on hover, and from the keyboard.
   const detail = page.getByText(/^Suspended: asks for card numbers · Risk: /);
   await badge.hover();
   await expect(detail).toBeVisible();
@@ -118,13 +107,10 @@ test("a link row is one line: its state, its report count, and why behind the ba
   await badge.focus();
   await expect(detail).toBeVisible();
   await page.keyboard.press("Escape");
-  // And in the row menu, for a touch screen with no hover.
   await row.getByRole("button", { name: /^Actions for / }).click();
   await expect(page.getByRole("menu").getByText("Suspended: asks for card numbers")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // The filter row lines up: the search and the org chip were two
-  // heights, with the chip sitting lower than the box beside it.
   const clear = page.getByRole("button", { name: /^Clear filter: / });
   const controls = [page.getByRole("textbox", { name: "Search links" }), clear];
   const boxes = await Promise.all(controls.map((c) => c.boundingBox()));
@@ -132,8 +118,6 @@ test("a link row is one line: its state, its report count, and why behind the ba
     expect(box!.height).toBe(boxes[0]!.height);
     expect(Math.abs(box!.y - boxes[0]!.y)).toBeLessThanOrEqual(1);
   }
-  // On a laptop the whole table fits its card, actions menu included: it
-  // used to be wider than the column and hide the last column off the edge.
   const tableScroll = await page.evaluate(() => {
     const wrapper = document.querySelector("table")!.parentElement!;
     return wrapper.scrollWidth - wrapper.clientWidth;
@@ -159,25 +143,21 @@ test("the users table keeps one line per user when the name and email are huge",
   const row = page.getByRole("row").filter({ hasText: email });
   await expect(row).toBeVisible({ timeout: 10_000 });
 
-  // Plan and billing are one column now.
   await expect(page.getByRole("columnheader", { name: "Billing" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Plan" })).toBeVisible();
 
-  // Truncated, not wrapped: a long value used to stretch the row and the table.
   const box = await row.boundingBox();
   expect(box!.height).toBeLessThan(90);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
-  // And the table itself fits its card: an auto-layout column grows to the
-  // longest value and the card starts scrolling sideways.
+  // An auto-layout column grows to the longest value and the card scrolls sideways.
   const tableScroll = await page.evaluate(() => {
     const wrapper = document.querySelector("table")!.parentElement!;
     return wrapper.scrollWidth - wrapper.clientWidth;
   });
   expect(tableScroll).toBeLessThanOrEqual(0);
-  // The full value stays in the row.
   await expect(row.getByText(email)).toBeVisible();
   await expect(row.getByText(longName).first()).toBeVisible();
 });
@@ -212,7 +192,6 @@ test("the plan column is the plan, plus a badge only when billing has news", asy
   await expect(leaverRow.getByText("pro", { exact: true })).toBeVisible({ timeout: 10_000 });
   await expect(leaverRow.getByText(/^cancels .*2030$/)).toBeVisible();
 
-  // Nothing to add for an ordinary row: no badge beside the plan.
   const adminRow = page.getByRole("row").filter({ hasText: admin });
   await expect(adminRow.getByText(/cancels|past due|comped/)).toHaveCount(0);
 });
@@ -239,7 +218,6 @@ test("deleting a user deletes the organizations they own", async ({ page, browse
   await page.getByRole("menuitem", { name: "Delete user" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete user" }).click();
 
-  // The message used to be "User owns organizations, delete those orgs first".
   await expect(page.getByText("User deleted")).toBeVisible({ timeout: 10_000 });
   await expect(row).toHaveCount(0);
   await expect

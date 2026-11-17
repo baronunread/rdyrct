@@ -8,7 +8,6 @@ import { Switch } from "../../ui/switch";
 import { Field, Input } from "../../ui/field";
 import { BusyContent } from "../../ui/spinner";
 
-/** The numeric limits an admin can set, in the order the dialog shows them. */
 const NUMBER_FIELDS = [
   ["orgs", "Organizations owned"],
   ["links", "Links"],
@@ -22,14 +21,12 @@ type NumberKey = (typeof NUMBER_FIELDS)[number][0];
 type Drafts = Partial<Record<NumberKey, string>>;
 type Errors = Partial<Record<NumberKey, string>>;
 
-/** Whether a draft is empty (the plan's value) or a number the schema accepts. */
 function draftError(key: NumberKey, text: string): string | undefined {
   if (!text.trim()) return undefined;
   const parsed = v.safeParse(limitOverridesSchema.entries[key], Number(text));
   return parsed.success ? undefined : "Whole number, too low or high";
 }
 
-/** The note saved with the limits, and who saved them last. */
 function NoteField({
   value,
   setBy,
@@ -51,7 +48,6 @@ function NoteField({
   );
 }
 
-/** The overrides the drafts spell, and the reason each bad one is bad. */
 type Collected = { overrides: LimitOverrides; errors: Errors };
 
 function collect(read: (key: NumberKey) => string): Collected {
@@ -66,12 +62,6 @@ function collect(read: (key: NumberKey) => string): Collected {
   return { overrides, errors };
 }
 
-/**
- * Enterprise is handled by hand: an admin sets custom limits for one account.
- * An empty field uses the plan's value, and a custom value only ever raises
- * it, so one below the plan's changes nothing. They apply while the account is
- * on a paid plan.
- */
 export function LimitsDialog({
   user,
   onClose,
@@ -88,7 +78,6 @@ export function LimitsDialog({
   const [qrCustom, setQrCustom] = useState(user.limitOverrides?.qrCustom ?? false);
   const [errors, setErrors] = useState<Errors>({});
   const plan = PLAN_LIMITS[user.plan];
-  // What a field shows: what was typed, else what is stored.
   const valueOf = (key: NumberKey) => drafts[key] ?? user.limitOverrides?.[key]?.toString() ?? "";
 
   const submit = () => {

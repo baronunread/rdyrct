@@ -20,15 +20,11 @@ import { Tooltip } from "@/app/ui/tooltip";
 
 const HOUR = 60 * 60 * 1000;
 
-/** Temporary aliases first, since each asks for a decision before it runs
- * out; then the newest first. */
 function byUrgency(a: AddressDTO, b: AddressDTO): number {
   const temp = Number(b.kind === "temp_alias") - Number(a.kind === "temp_alias");
   return temp || b.createdAt - a.createdAt;
 }
 
-/** Hours up to two days ("48h left" for a rename's fresh 48h alias, "30h
- * left"), so the last two days are not all "2d"; "5d left" beyond that. */
 function timeLeft(expiresAt: number, now = Date.now()): string {
   const ms = expiresAt - now;
   if (ms <= 0) return "Expired";
@@ -36,11 +32,9 @@ function timeLeft(expiresAt: number, now = Date.now()): string {
   return hours <= 48 ? `${hours}h left` : `${Math.floor(hours / 24)}d left`;
 }
 
-/** 32px to look like the link's own menu, 40px to hit (the ::after). */
 const ICON =
   "relative grid size-8 place-items-center rounded-md text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] after:absolute after:-inset-1 [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text";
 
-/** Shown on hover or focus where there is hover; always on a touch screen. */
 const REVEAL =
   "[@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 [@media(hover:hover)]:sm:group-focus-within:opacity-100";
 
@@ -54,7 +48,6 @@ function AliasRow({
   pending,
 }: {
   address: AddressDTO;
-  /** The link's own custom domain, or null for the shared one. */
   linkDomain: string | null;
   last: boolean;
   onKeep: () => void;
@@ -68,10 +61,6 @@ function AliasRow({
   const clicks = address.recentClicks;
 
   return (
-    // One row per alias on the link's own columns (styles.css draws the
-    // tree): the slug under the link's title, the host only when it is not
-    // the link's, a temporary alias's time left and Keep, its week's clicks
-    // when it has any, the day it was added, and its actions.
     <m.tr
       className={cn("alias-row group", last && "alias-row-last")}
       initial={{ opacity: 0, y: -4 }}
@@ -165,8 +154,6 @@ function AliasRow({
   );
 }
 
-/** A link's other addresses, as tree rows under it on the table's own
- * columns, so each shares the link's row height and alignment. See #38. */
 export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   const addresses = useAddresses(orgId, link.id);
   const { keepForever, remove, promote } = useAddressMutations(orgId, link.id);
@@ -175,9 +162,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
 
   if (addresses.isLoading)
     return (
-      // The same cells as an alias row, one per column the table draws at
-      // this width. A span asking for a column the table does not have
-      // makes the browser add one, and the header jumps while they load.
+      // A span for a column the table lacks makes the browser add one, and the header jumps.
       <tr className="alias-row alias-row-last">
         <Td className="alias-tree-check hidden p-0 sm:table-cell" />
         <Td className="alias-tree-link py-1.5">

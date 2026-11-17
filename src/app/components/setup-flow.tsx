@@ -50,20 +50,9 @@ import { ListRow } from "./marketing-prompt";
 import { useSetMarketing, type ListChoice } from "../lib/marketing";
 import { OrgCard } from "./org-card";
 
-/**
- * A new organization's setup, on a screen of its own between the sign-in
- * card and the app: its name, its first link, a domain of its own, its team,
- * and whether to hear from us by email. One question a screen, each with a way past it. The organization card on
- * the right is what the sign-in card became, and it fills in as the answers
- * come; when the flow is done it becomes the org switcher as the app builds
- * around it (onDone, in routes/welcome.tsx).
- */
-
 const ORDER: FlowStep[] = ["name", "link", "domain", "team", "email"];
 
-/** The steps this account gets: the email question only for one that has
- * not answered it (the one-time dialog, or another tab, may have). Read once,
- * so answering it does not pull the step out from under the screen. */
+// Read once, so answering the email question does not pull the step out from under the screen.
 function useSteps(): FlowStep[] {
   const user = useCurrentUser().data?.user;
   const skip = Boolean(user?.marketing.asked) || user?.marketingOffered === false;
@@ -71,10 +60,7 @@ function useSteps(): FlowStep[] {
   return steps;
 }
 
-/** Where a checkout the domain step opened stands, back from Polar: waiting
- * on the webhook, past the wait, or paid. Null when there was none. */
 export type Payment = "confirming" | "slow" | "paid" | null;
-/** As long as .setup-screen-out runs (styles.css). */
 const STEP_OUT_MS = 150;
 
 export function SetupFlow({
@@ -86,25 +72,19 @@ export function SetupFlow({
   onDone,
 }: {
   org: UserOrg;
-  /** The plan somebody came in for, if any: the domain step sells that one. */
   intent: PlanIntent | null;
-  /** Where to pick up: a checkout from the domain step comes back to it. */
   start: FlowStep;
-  /** Back from a checkout the domain step opened, with no payment. */
   cancelled?: boolean;
-  /** Back from a checkout the domain step opened, paid or still confirming. */
   payment: Payment;
   onDone: () => void;
 }) {
   const steps = useSteps();
   const { step, leaving, next } = useStepper(org.id, steps, start, onDone);
-  // The name as typed; the org's own until somebody types.
   const [edited, setName] = useState<string | null>(null);
   const name = edited ?? org.name;
   const [link, setLink] = useState<LinkDTO | null>(null);
   const [invited, setInvited] = useState<string[]>([]);
   const [domain, setDomain] = useState<string | null>(null);
-  // What the domain step has typed so far, for the card to show.
   const [typed, setTyped] = useState("");
   const host = useExampleHost(name);
   const kept = useOrgSetup(org.id)?.host;
@@ -174,13 +154,7 @@ export function SetupFlow({
   );
 }
 
-/** Which question is on screen. Moving on, the one there steps out,
- * quieter than the next comes in, before the next arrives; the last one
- * ends the flow. The step is kept per browser (lib/setup.ts), so a trip to
- * checkout comes back to it. */
 function useStepper(orgId: string, order: FlowStep[], start: FlowStep, onDone: () => void) {
-  // A step this account no longer gets (the email question, answered since)
-  // resumes on the last one it does.
   const [step, setStep] = useState<FlowStep>(() =>
     order.includes(start) ? start : (order.at(-1) ?? start),
   );
@@ -200,14 +174,11 @@ function useStepper(orgId: string, order: FlowStep[], start: FlowStep, onDone: (
   return { step, leaving, next };
 }
 
-/** A domain kept through checkout that is already on the org (a reload
- * after the domain step added it). */
 function useKeptDomain(org: UserOrg, kept: string | undefined): string | null {
   const domains = useDomains(org.id, org.plan !== "free" && !!kept);
   return kept && domains.data?.some((d) => d.hostname === kept) ? kept : null;
 }
 
-/** Whether the added domain is serving yet, so the card can say so. */
 function useDomainLive(org: UserOrg, host: string | null): boolean {
   const domains = useDomains(org.id, org.plan !== "free" && !!host);
   return !!domains.data?.some(
@@ -215,8 +186,6 @@ function useDomainLive(org: UserOrg, host: string | null): boolean {
   );
 }
 
-/** The org's first click, asked for every few seconds once there is a
- * link, so opening it during the flow shows up on the card. */
 function useFirstClick(orgId: string, hasLink: boolean) {
   const clicks = useQuery({
     ...recentClicksQuery(orgId),
@@ -226,16 +195,12 @@ function useFirstClick(orgId: string, hasLink: boolean) {
   return clicks.data?.[0] ?? null;
 }
 
-/** Where a domain of their own would live: theirs if the address says, or
- * one made from the organization's name. */
 function useExampleHost(name: string): string {
   const user = useCurrentUser().data?.user;
   return exampleHost(user?.email ?? "", user?.name ?? "", name);
 }
 
-/** The work domain, else one made from a name the owner chose. The default
- * name of a consumer address is a person's ("Maya's links"), which makes a
- * poor domain, so it stays generic until they name the org. */
+// A consumer address gives a person's name ("Maya's links"), a poor domain, so stay generic until they name the org.
 function exampleHost(email: string, userName: string, name: string): string {
   const work = workDomain(email);
   if (work) return `go.${work}`;
@@ -287,7 +252,6 @@ function SkipButton({ onClick, label = "Skip" }: { onClick: () => void; label?: 
   );
 }
 
-/** A reason short enough for a label line, from whatever the server said. */
 const reasonFrom = (err: Error, fallback: string) =>
   err instanceof ApiError && err.message.length <= 48 ? err.message : fallback;
 
@@ -356,7 +320,6 @@ function NameStep({
   );
 }
 
-/** How long the made link stays in view before the next question. */
 const LINK_BEAT = 1300;
 
 function LinkStep({
@@ -384,7 +347,6 @@ function LinkStep({
     create.mutate(
       { destination: value, domainId: null },
       {
-        // The link lands in the card; a beat to see it, then on by itself.
         onSuccess: (made) => {
           onLink(made);
           window.setTimeout(onNext, LINK_BEAT);
@@ -434,8 +396,6 @@ function LinkStep({
   );
 }
 
-/** Off to Polar for a plan, back through /welcome, where the flow picks up
- * at this step (setupAt). */
 function useUpgrade() {
   const checkout = useCheckout();
   const toast = useToast();
@@ -450,8 +410,6 @@ function useUpgrade() {
   return { start, busy: checkout.isPending || checkout.isSuccess };
 }
 
-/** The slug a custom domain would let them choose: the last word of the
- * first link's path, as a person would type it. */
 function chosenSlug(destination: string | undefined): string {
   try {
     const last = new URL(destination ?? "").pathname.split("/").filter(Boolean).pop() ?? "";
@@ -486,20 +444,16 @@ function DomainStep({
   link: LinkDTO | null;
   intent: PlanIntent | null;
   onTyped: (hostname: string) => void;
-  /** The domain typed before a checkout, waiting to be added. */
   kept: string | undefined;
-  /** Back from a checkout with no payment. */
   cancelled: boolean;
   payment: Payment;
   onAdded: (hostname: string) => void;
   onNext: () => void;
 }) {
-  // Paid with no domain typed: the plan was the point, so on to the team.
   const paidOnly = payment === "paid" && !kept && org.plan !== "free";
   const next = useEffectEvent(onNext);
   useEffect(() => {
     if (!paidOnly) return;
-    // Long enough to read that the plan is on.
     const timer = window.setTimeout(next, 1400);
     return () => window.clearTimeout(timer);
   }, [paidOnly]);
@@ -522,7 +476,6 @@ function DomainStep({
   );
 }
 
-/** The moment between the payment landing and the next step. */
 function PaymentDone({ tier }: { tier: AccountTier }) {
   return (
     <div className="flex flex-col">
@@ -531,15 +484,12 @@ function PaymentDone({ tier }: { tier: AccountTier }) {
   );
 }
 
-/** The domain step's heading: while it holds for the payment, the heading
- * says so, or the busy button reads as stuck. */
 function upsellTitle(confirming: boolean, slow: boolean): string {
   if (slow) return "Still waiting on Polar";
   if (confirming) return "Confirming your payment with Polar";
   return "Use your own domain";
 }
 
-/** What the domain step says above its field. */
 function upsellLine(cancelled: boolean, confirming: boolean, slow: boolean): string {
   if (slow) return "Polar has not confirmed the payment yet. This step goes on the moment it does.";
   if (confirming) return "Polar tells us when the payment goes through, usually within seconds.";
@@ -554,12 +504,6 @@ const INTERVALS = [
 
 const OTHER = { hobby: "pro", pro: "hobby" } as const;
 
-/**
- * The domain step on Free: their link as it is and as it would be on their
- * own domain. On the shared domain every slug is random; choosing it is the
- * one thing only a domain gives, so that is what the step shows. The domain
- * typed here waits through checkout and is added when they come back paid.
- */
 function DomainUpsell({
   orgId,
   host,
@@ -579,13 +523,11 @@ function DomainUpsell({
   intent: PlanIntent | null;
   kept: string | undefined;
   cancelled: boolean;
-  /** Back from checkout, the payment not confirmed yet: the step holds. */
   confirming: boolean;
   slow: boolean;
   onNext: () => void;
 }) {
   const upgrade = useUpgrade();
-  // Opening checkout, or back from it and waiting on the payment.
   const busy = upgrade.busy || confirming;
   const [plan, setPlan] = useState<PlanIntent>(intent ?? { target: "hobby", interval: "month" });
   const [hostname, setHostname] = useState(kept ?? "");
@@ -656,8 +598,6 @@ function DomainUpsell({
 
 const PRO_FACTS = `${PLAN_LIMITS.pro.domains} domains, ${PLAN_LIMITS.pro.members} members`;
 
-/** The other paid plan, one click away: Hobby leads, since a domain step
- * needs one domain; Pro is for more. */
 function PlanSwitch({ plan, onPlan }: { plan: PlanIntent; onPlan: (plan: PlanIntent) => void }) {
   const pro = plan.target === "pro";
   const other = { ...plan, target: OTHER[plan.target] };
@@ -696,12 +636,6 @@ function Address({ label, address, accent }: { label: string; address: string; a
 
 const HOSTNAME = /^(?!https?:)([a-z0-9-]+\.)+[a-z]{2,}$/i;
 
-/**
- * The domain step on a paid plan. A domain kept from before checkout is
- * added on its own; otherwise the field asks for one. Once added, the step
- * shows the record to set, and moves on when they say so: DNS takes its
- * time, and Domains keeps checking.
- */
 function DomainForm({
   org,
   host,
@@ -729,8 +663,7 @@ function DomainForm({
       },
       onError: (err) => setError(reasonFrom(err, "Could not add it")),
     });
-  // Back from checkout with a domain typed before it: add that one, unless
-  // a reload already did (then it is in the list, and shown from there).
+  // Back from checkout with a domain typed before it: add that one, unless a reload already did.
   const existing = kept ? domains.data?.find((d) => d.hostname === kept) : undefined;
   useEffect(() => {
     if (!kept || tried.current || !domains.data) return;
@@ -795,7 +728,6 @@ const TIER_LABEL = {
   unlimited: "Unlimited",
 } satisfies Record<AccountTier, string>;
 
-/** The domain is theirs: the record to set, and on. */
 function DomainAdded({
   org,
   domain,
@@ -837,8 +769,6 @@ function TeamStep({
   org: UserOrg;
   invited: string[];
   onInvited: (emails: string[]) => void;
-  /** The primary's label once somebody is invited: "Open rdyrct" when
-   * the flow ends here (the email question was answered before). */
   doneLabel: string;
   onNext: () => void;
 }) {
@@ -880,7 +810,6 @@ function TeamStep({
     const reason = emailsProblem(all);
     setError(reason);
     if (reason) chips.current?.focus();
-    // After a failed send the field holds those invites: Send retries them.
     else invite.mutate({ addresses: all, resend: Boolean(invite.data?.failed.length) });
   };
   const count = emails.length + splitEmails(draft).length;
@@ -944,7 +873,6 @@ function TeamStep({
   );
 }
 
-/** What is wrong with a list of addresses, if anything. */
 function emailsProblem(all: string[]): string | undefined {
   if (!all.length) return "Add an email";
   const bad = all.filter((a) => !isEmail(a));
@@ -953,7 +881,6 @@ function emailsProblem(all: string[]): string | undefined {
   return undefined;
 }
 
-/** A single-use invite link, made and copied in one press. */
 function InviteLinkButton({
   orgId,
   role,
@@ -1003,13 +930,6 @@ function InviteLinkButton({
   );
 }
 
-/**
- * The last question: product news and offers, a switch each, off unless
- * the account already said yes somewhere.
- * The same two lists as the one-time dialog (components/marketing-prompt.tsx),
- * which an account that answers here never sees. Skip keeps any yes already
- * given and answers no for the rest.
- */
 function EmailStep({ onNext }: { onNext: () => void }) {
   const toast = useToast();
   const set = useSetMarketing();

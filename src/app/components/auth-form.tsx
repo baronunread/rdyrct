@@ -10,9 +10,6 @@ const METER = [
   { label: "Strong", fill: "bg-mint" },
 ] as const;
 
-/** Lives in the password field's hint slot; shows the plain "8+ characters"
- *  hint until the user types, then a 4-segment strength bar. The strength
- *  word is aria-only: sighted users read the fill, screen readers the label. */
 export function PasswordMeter({ password }: { password: string }) {
   if (!password) return <>8+ characters</>;
   const score = passwordScore(password);
@@ -37,9 +34,7 @@ export function PasswordMeter({ password }: { password: string }) {
       }
     >
       <span className="flex cursor-help items-center gap-2">
-        {/* The visible label never changes; the level itself is aria-only, so
-            screen readers hear "Strength Weak" while sighted users read the
-            fill. */}
+        {/* The level is aria-only: screen readers hear "Strength Weak", sighted users read the fill. */}
         <span className="shrink-0 underline decoration-dotted underline-offset-2">Strength</span>
         <span className="sr-only">{label}</span>
         <span aria-hidden className="flex flex-1 items-center gap-1">

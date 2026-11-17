@@ -1,11 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Public pages run wide, as the best pages in this category do: the frame,
-// the closing band and the footer share one column, much wider than a
-// reading measure, without ever scrolling the page sideways.
-
-/** Content wider than the viewport, scrollbar excluded: Linux Chrome draws a
- *  15px one where macOS overlays it, so the viewport width is not the test. */
+/** Linux Chrome draws a 15px scrollbar where macOS overlays it, so viewport
+ * width is not the test. */
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => {
     const root = document.documentElement;

@@ -1,21 +1,14 @@
 import { oneOf } from "./lookup";
 
-/** Carries a solved Turnstile token (#304) on the requests that need one. A header,
- * not a body field, because better-auth validates each endpoint's body
- * against its own schema. */
+/** A header, not a body field: better-auth validates each endpoint's body against its own schema (#304). */
 export const TURNSTILE_TOKEN_HEADER = "x-turnstile-token";
 
-/** Why somebody reports a link. The form offers these and the admin list
- * shows them. */
 export const REPORT_REASONS = ["phishing", "malware", "spam", "other"] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 
-/** What the Worker answers when a Turnstile token is missing, expired, or already
- * spent. The browser retries once with a fresh one rather than showing it. */
+/** The browser retries once with a fresh token rather than showing this. */
 export const TURNSTILE_FAILED_CODE = "TURNSTILE_FAILED";
 
-/** Anything that survives a round trip through JSON: what a request or
- * response body is, before anyone has checked it means what it should. */
 export type JsonValue =
   | string
   | number
@@ -24,10 +17,7 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-/** Ordered least to most powerful, which is also the order a role picker
- * should offer them. `viewer` reads everything an org holds and writes
- * nothing: an analyst who should see the numbers without touching the links,
- * and what an over-cap member is demoted to on downgrade (#29). */
+/** `viewer` is what an over-cap member is demoted to on downgrade (#29). */
 export const ORG_ROLES = ["owner", "admin", "member", "viewer"] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
 
@@ -37,22 +27,12 @@ export type InvitableRole = (typeof INVITABLE_ROLES)[number];
 
 export const ORG_PLANS = ["free", "hobby", "pro"] as const;
 
-/** The plans an admin may comp: the paid ones, since comping free is nothing. */
 export const COMP_PLANS = ["hobby", "pro"] as const;
-/** What a row stores. */
 export type StoredPlan = (typeof ORG_PLANS)[number];
-/** What a response carries: a stored plan, or `unlimited`, which the Worker
- * resolves to at read time when billing is not set up. Never written to a
- * row. A self-hosted instance has no caps and nothing to buy. */
+/** `unlimited` is resolved at read time when billing is not set up. Never written to a row. */
 export type OrgPlan = StoredPlan | "unlimited";
 
-/**
- * The plan on a row, which reaches here as a text column or a JSON field.
- *
- * Anything unrecognised is free. A plan nobody sells must never grant more
- * than the free one does, and that decision belongs here rather than at each
- * of the places that read one.
- */
+/** Anything unrecognised is free: a plan nobody sells must never grant more than free does. */
 export function orgPlanOf(value: string | null | undefined): StoredPlan {
   return oneOf(ORG_PLANS, value ?? "", "free");
 }
@@ -62,24 +42,15 @@ export interface PlanLimits {
   links: number;
   members: number; // total members incl. owner
   domains: number;
-  /** Whether the plan may style a QR: logo, colors, dot and corner shapes,
-   * and the org-wide defaults. Generating a plain QR and downloading it is
-   * free on every plan, so this gates the look, never the code itself. */
+  /** Generating and downloading a plain QR is free on every plan; this gates the look, never the code. */
   qrCustom: boolean;
   analyticsDays: number; // how far back click analytics look
-  /** Clicks recorded per org per UTC calendar month (#387). Past it, links
-   * keep redirecting and the clicks are not recorded. */
   trackedClicks: number;
 }
 
-/**
- * What to call an account to its holder: its plan, except that a paid account
- * with custom limits is Enterprise (`tierOf`). Derived, never stored: the
- * `plan` column, Polar and `PLAN_LIMITS` know nothing of it.
- */
+/** Derived, never stored: the `plan` column, Polar and `PLAN_LIMITS` know nothing of it. */
 export type AccountTier = OrgPlan | "enterprise";
 
-/** The keys of PlanLimits an admin has set for one account (`limitOverridesSchema`). */
 export type LimitOverrides = Partial<PlanLimits>;
 
 export const PLAN_LIMITS = {
@@ -123,43 +94,26 @@ export const PLAN_LIMITS = {
   },
 } satisfies Record<OrgPlan, PlanLimits>;
 
-/**
- * How long a downgraded org's custom domains keep serving (#159).
- *
- * Stopping a custom domain breaks every link on it, including QR codes
- * already printed on physical things. Thirty days and two emails is what
- * turns that into something the owner was warned about twice.
- */
+/** Stopping a custom domain breaks every link on it, QR codes already printed included (#159). */
 export const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** How long before the grace ends the second email goes out: day 23 of 30. */
 export const GRACE_WARNING_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * The live count of each resource an org holds more of than its plan allows.
- * A key is absent when that resource is inside its cap, so `{}` means fine.
- */
 export interface OverLimits {
   links?: number;
   members?: number;
   domains?: number;
 }
 
-/** An org's tracked clicks this UTC month against its plan's cap (#387):
- * GET /orgs/:orgId/click-usage. */
 export interface ClickUsage {
-  /** `YYYY-MM`, UTC. */
   month: string;
   clicks: number;
   limit: number;
-  /** Epoch ms the count starts again: the first instant of next month. */
   resetsAt: number;
 }
 
-/** Which resources an over-limit banner can name, in the order it names them. */
 export const OVER_LIMIT_KEYS = ["links", "members", "domains"] as const;
 
-/** Whether an org is over any of its caps. */
 export function isOverLimit(over: OverLimits): boolean {
   return OVER_LIMIT_KEYS.some((key) => over[key] !== undefined);
 }
@@ -170,8 +124,7 @@ export const PLAN_PRICES = {
   pro: "$9",
 } satisfies Record<Exclude<StoredPlan, "free">, string>;
 
-/** Monthly-equivalent price when billed yearly: 10% off PLAN_PRICES. The real
- * charge lives on the yearly product in Polar. */
+/** 10% off PLAN_PRICES. The real charge lives on the yearly product in Polar. */
 export const PLAN_PRICES_YEARLY = {
   hobby: "$3.60",
   pro: "$8.10",
@@ -179,7 +132,6 @@ export const PLAN_PRICES_YEARLY = {
 
 export const YEARLY_DISCOUNT_LABEL = "Save 10%";
 
-/** QR dot styles supported by qr-code-styling; "" means inherit/default. */
 export const QR_DOT_STYLES = [
   "rounded",
   "square",
@@ -188,20 +140,14 @@ export const QR_DOT_STYLES = [
   "classy-rounded",
   "extra-rounded",
 ] as const;
-/** Corner ('eye') shapes; "" means inherit/default (QR_DEFAULT_CORNER). */
 export const QR_CORNER_STYLES = ["extra-rounded", "rounded", "dot", "square", "classy"] as const;
-/** Built-in defaults when neither link nor org overrides them. */
 export const QR_DEFAULT_COLOR = "#17151f";
 export const QR_DEFAULT_CORNER = "extra-rounded";
 export const QR_DEFAULT_BG = "#ffffff";
-/** Logo footprint (qr-code-styling imageSize ratio) when the org doesn't set one. */
 export const QR_DEFAULT_LOGO_SIZE = 0.35;
-/** QR logos are converted to a square WebP before storage in R2. */
 export const QR_LOGO_MAX_BYTES = 256 * 1024;
 export const QR_LOGO_MAX_DIMENSION = 512;
 
-/** Profile pictures: the client downscales to a square WebP within these
- * bounds; the worker rejects anything past them. */
 export const AVATAR_MAX_BYTES = 256 * 1024;
 export const AVATAR_MAX_DIMENSION = 512;
 
@@ -211,141 +157,85 @@ export interface User {
   name: string;
   isAdmin: boolean;
   emailVerified: boolean;
-  // The user's own subscription: drives the billing tab.
   plan: OrgPlan;
-  /** What this account is called: its plan, or Enterprise with custom limits. */
   tier: AccountTier;
-  /** What this account may use: its plan with any custom limits. `limits.orgs`
-   * is how many orgs it may own. */
   limits: PlanLimits;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
-  /** The billing cycle of the subscription, or null with none (or before its next event). */
   polarSubscriptionInterval: "month" | "year" | null;
-  /**
-   * Whether a Polar customer exists for this user, which is what the
-   * subscription portal needs. A paid plan does not imply one: an admin can
-   * comp a plan, and a webhook can carry a null customer id. Without this the
-   * billing page cannot tell a subscriber from a comped user, and offers both
-   * a portal only one of them has (#85). Never the customer id itself: the
-   * client has no use for a provider identifier.
-   */
+  /** A paid plan does not imply a Polar customer (comp, or a webhook with a null id) (#85). Never the id itself: the client has no use for it. */
   hasBillingAccount: boolean;
-  /**
-   * Whether this plan was granted by an admin rather than bought (#81).
-   *
-   * Separate from `hasBillingAccount`, because the two answer different
-   * questions and can disagree: a comped user has no portal, and so does a
-   * subscriber whose webhook carried no customer id. Telling the second group
-   * their plan "was granted directly" would be a plain lie, so the page needs
-   * to know which one it is talking to.
-   */
+  /** Separate from hasBillingAccount: a comped user and a subscriber with no customer id both lack a portal, but only one was granted the plan (#81). */
   comped: boolean;
-  /** Same-origin serving URL for the user's avatar, or null (blobatar). */
   image: string | null;
   /** Marketing consent, per list. Never read off the cached user: see marketing.ts. */
   marketing: MarketingState;
-  /** This instance can send newsletters (newsletterConfigured). Without it
-   * nobody is asked: no dialog, no setup step, no Settings switches. */
   marketingOffered: boolean;
 }
 
-/** Where a marketing answer was given. */
 export const MARKETING_SOURCES = ["onboarding", "prompt", "settings"] as const;
 export type MarketingSource = (typeof MARKETING_SOURCES)[number];
 
-/** The two marketing lists, each its own consent: product news (new features
- * and tips) and offers (deals on paid plans). */
 export const MARKETING_LISTS = ["news", "offers"] as const;
 export type MarketingList = (typeof MARKETING_LISTS)[number];
 
-/** What each list is called on screen. */
 export const MARKETING_LIST_LABELS = {
   news: "Product news",
   offers: "Offers",
 } satisfies Record<MarketingList, string>;
 
 export interface MarketingState {
-  /** Opted in to product news right now. */
   news: boolean;
-  /** Opted in to offers right now. */
   offers: boolean;
-  /** Answered anywhere, about either list, even by dismissing the dialog.
-   * False means the one-time dialog still owes them the question. */
   asked: boolean;
 }
 
-/** One answer, from one place. A list left out stays as it is, so Settings
- * can change one list; onboarding and the dialog send both. */
+/** A list left out stays as it is, so Settings can change one list; onboarding and the dialog send both. */
 export interface MarketingAnswer {
   source: MarketingSource;
   news?: boolean;
   offers?: boolean;
 }
 
-/** Where an account is with the product, for narrowing a newsletter send.
- * What each one means is decided in worker/marketing.ts. */
 export const AUDIENCE_STAGES = ["any", "new", "active", "slipping"] as const;
 export type AudienceStage = (typeof AUDIENCE_STAGES)[number];
 
-/** Days without a visit after which an account that made a link is
- * slipping away rather than active. */
 export const ACTIVE_WITHIN_DAYS = 30;
 
-/** Which plans a send reaches. Paid is Hobby or Pro, comps included. */
 export const AUDIENCE_PLANS = ["any", "free", "paid"] as const;
 export type AudiencePlan = (typeof AUDIENCE_PLANS)[number];
 
-/** What narrows a send beyond its list. Every filter holds at once (AND),
- * and "any" leaves that one out. A new filter is a new field here with an
- * "any" default, plus its clause in marketing.ts's `audienceWhere`. */
+/** Every filter holds at once (AND). A new one needs an "any" default and a clause in marketing.ts's `audienceWhere`. */
 export interface AudienceFilter {
   stage: AudienceStage;
   plan: AudiencePlan;
 }
 
-/** Nobody left out: what a send with no filters, and an older send, used. */
 export const EVERYONE: AudienceFilter = { stage: "any", plan: "any" };
 
-/** How every account has answered one list, for the admin newsletter screen. */
 export interface NewsletterAnswers {
-  /** Opted in now, by where the yes came from. Counts every account, so the
-   * total can be above `optedIn` (unverified or banned accounts get no send). */
+  /** Counts every account, so the total can exceed `optedIn` (unverified or banned accounts get no send). */
   yes: Record<MarketingSource, number>;
-  /** Answered no, dismissed the dialog, or unsubscribed later. */
   no: number;
-  /** Never asked: the dialog still owes them the question. */
   unasked: number;
 }
 
-/** Where a send stands: waiting for its time, going out, done, cancelled
- * before it went, or stopped by a batch that failed every retry. */
 export type NewsletterSendStatus = "scheduled" | "sending" | "sent" | "cancelled" | "failed";
 
-/** One newsletter, sent or waiting, for the send history. Tests are not kept. */
 export interface NewsletterSendRow {
   id: string;
-  /** The list it goes to. */
   list: MarketingList;
-  /** Who in the list it was narrowed to. */
   audience: AudienceFilter;
   subject: string;
-  /** Email of the admin who sent it; null once that account is gone. */
   sentBy: string | null;
-  /** When the admin pressed Send now or Schedule, ms epoch. */
   createdAt: number;
-  /** When it goes, ms epoch; null for Send now. */
   scheduledFor: number | null;
   status: NewsletterSendStatus;
-  /** Emails the provider accepted so far. */
   sent: number;
-  /** When it ended (sent, cancelled or failed), ms epoch. */
   finishedAt: number | null;
 }
 
-/** The newsletter body as the admin editor writes it (a TipTap JSON
- * document): only the nodes and marks the email layout renders.
- * worker/newsletter-doc.ts parses a document against this allow-list. */
+/** worker/newsletter-doc.ts parses a document against this allow-list. */
 export type DocMark =
   | { type: "bold" | "italic" | "underline" }
   | { type: "link"; attrs: { href: string } };
@@ -360,7 +250,6 @@ export type DocBlock =
   | { type: "orderedList"; attrs?: { start?: number | null }; content: DocListItem[] };
 export type NewsletterDoc = { type: "doc"; content: DocBlock[] };
 
-/** A past send loaded back into the composer by Duplicate. */
 export interface NewsletterDraft {
   list: MarketingList;
   audience: AudienceFilter;
@@ -368,41 +257,30 @@ export interface NewsletterDraft {
   doc: NewsletterDoc;
 }
 
-/** The composer's Preview: the issue as the admin would get it. */
 export interface NewsletterPreview {
   html: string;
 }
 
-/** What the admin newsletter screen reads. */
 export interface NewsletterStatus {
-  /** Per list: verified, not banned, opted in. Who a send to it reaches. */
   optedIn: Record<MarketingList, number>;
   answers: Record<MarketingList, NewsletterAnswers>;
-  /** Newest first, at most NEWSLETTER_HISTORY of them. */
   sends: NewsletterSendRow[];
-  /** NEWSLETTER_FROM and the provider are set. Without them a send is
-   * refused. */
   configured: boolean;
 }
 
-/** An account's answer about one list, as one word. */
 export type ConsentAnswer = "on" | "off" | "unasked";
 
-/** How many people a send to one list, narrowed by a filter, reaches now. */
 export interface NewsletterAudienceCount {
   count: number;
-  /** What was counted, echoed back: the page words the number from these,
-   * so a count still loading never shows under the next filter's wording. */
+  /** Echoed back so a count still loading never shows under the next filter's wording. */
   list: MarketingList;
   filter: AudienceFilter;
 }
 
-/** What a test send answers. */
 export interface NewsletterTestResult {
   sent: number;
 }
 
-/** What Send now and Schedule answer: the send, as it now stands. */
 export interface NewsletterSendState {
   id: string;
   status: NewsletterSendStatus;
@@ -423,29 +301,13 @@ export interface UserOrg extends QrOverrides {
   id: string;
   name: string;
   role: OrgRole;
-  // Effective plan for this org = its owner's plan (not the caller's).
   plan: OrgPlan;
-  /**
-   * Which domain new links start on (#69), or null for the shared one.
-   *
-   * A preference, not a permission: the id can point at a domain that has
-   * since stopped serving, so a reader resolves it against the org's active
-   * domains rather than trusting it (`resolveDefaultDomainId`).
-   */
+  /** A preference, not a permission: the id can point at a domain that stopped serving, so resolve it with `resolveDefaultDomainId`. */
   defaultDomainId: string | null;
-  /**
-   * This org is beyond its owner's `orgs` cap, so it is read-only until they
-   * upgrade or pick it as the one to keep (#160). Its links keep redirecting.
-   */
   locked: boolean;
-  /** What the org's owner is called: the plan, or Enterprise with custom limits. */
   tier: AccountTier;
-  /** What this org may use: its owner's plan with any custom limits applied.
-   * The app reads limits here, never off `plan`. */
   limits: PlanLimits;
-  /** What this org holds more of than its plan allows (#158). `{}` means fine. */
   over: OverLimits;
-  /** Epoch ms the 30-day grace ends, or null when nothing is over (#159). */
   graceEndsAt: number | null;
 }
 
@@ -460,38 +322,25 @@ export interface MemberDTO {
   email: string;
   role: OrgRole;
   createdAt: number;
-  /**
-   * This member is a viewer because a downgrade demoted them, not because
-   * anyone chose it (#161). The members page says so, and an upgrade puts
-   * their old role back.
-   */
+  /** Demoted by a downgrade, not chosen (#161): an upgrade puts the old role back. */
   demoted: boolean;
-  /** Epoch ms of the member's newest session activity, or null when they
-   * have no session left (never signed in, or signed out everywhere). */
   lastActiveAt: number | null;
-  /** The member's picture, served through this org
-   * (`/api/orgs/:orgId/members/:userId/avatar`), or null when they have none.
-   * The org's members route always sends it; the admin org view does not. */
+  /** The org's members route always sends it; the admin org view does not. */
   image?: string | null;
 }
 
 export interface InviteDTO {
   token: string;
   role: OrgRole;
-  /** Address the magic link was emailed to, or null for a copy-only link. */
   email: string | null;
   createdAt: number;
   expiresAt: number;
 }
 
-/** What POST /orgs/:id/invites answers. `failed` lists the addresses whose
- * email did not go out; their invites exist, and asking again resends the
- * same ones. */
+/** `failed` addresses have invites that exist; asking again resends the same ones. */
 export interface InvitesCreated {
   invites: InviteDTO[];
   failed: string[];
-  /** Addresses that already had an open invite, refreshed but not mailed
-   * again because the request did not ask for a resend. */
   reused: string[];
 }
 
@@ -499,56 +348,35 @@ export interface DomainDTO {
   id: string;
   hostname: string;
   status: "checking_dns" | "issuing_tls" | "active" | "error";
-  /** Why the domain is in `error`, ready to show. Empty for every other status. */
   statusReason: string;
   rootRedirect: string;
   /** "txt" for a domain moving from another service (#383): it is checked
    * through TXT records, so it can be ready before its CNAME switches. */
   validation: "http" | "txt";
   createdAt: number;
-  /** Epoch ms the current check gives up, while the domain is still being
-   * checked; null once it is active or has failed. */
   checkUntil: number | null;
-  /**
-   * Epoch ms this domain went beyond the org's plan (#159), or null while it
-   * is fine. A locked domain keeps serving until the org's `graceEndsAt`,
-   * cannot be the org's default, and takes no new links.
-   */
+  /** A locked domain keeps serving until the org's `graceEndsAt` (#159). */
   lockedAt: number | null;
 }
 
-/** Public deployment config the SPA needs (no secrets). */
 export interface AppConfig {
-  /** App/API origin; the CNAME target for custom domains. */
   appHost: string;
-  /** Host new shared-domain links use for display, copy, and redirects. */
   linkHost: string;
-  /** Whether the instance can send email. Off: sign-up skips the code and
-   * password reset is unavailable. */
   emailEnabled: boolean;
-  /** Whether Google sign-in is configured and the button should show. */
   googleEnabled: boolean;
-  /** Turnstile site key, public by design. Absent: no check on this instance. */
   turnstileSiteKey?: string;
 }
 
-/** The org's fresh link-quota count, plus when it was read. The timestamp
- * lets the client drop an out-of-order mutation response instead of
- * overwriting a newer cached count with a stale one: two mutations racing
- * can have their HTTP responses arrive in the opposite order from the D1
- * writes that produced them. */
+/** The timestamp lets the client drop an out-of-order mutation response: racing mutations can answer opposite to their D1 writes. */
 export interface QuotaUsage {
   quotaUsage: number;
   quotaUsageAt: number;
 }
 
-/** A link/address mutation's response, plus its fresh QuotaUsage (see #100):
- * the write that changed the count already knows it, so the client can skip
- * the follow-up GET /links/quota-usage. */
+/** The write already knows the count, so the client skips the follow-up GET /links/quota-usage (#100). */
 export type WithQuotaUsage<T> = T & QuotaUsage;
 
-/** A scoped API key (#131), as returned by list/create. `key` carries the
- * raw value and is present only in the create response, shown once. */
+/** `key` is the raw value, present only in the create response. */
 export interface ApiKeyDTO {
   id: string;
   name: string;
@@ -562,10 +390,8 @@ export interface ApiKeyDTO {
 export interface LinkDTO extends QrOverrides {
   id: string;
   domainId: string | null;
-  /** hostname of the custom domain, null = shared default domain */
   domain: string | null;
   slug: string;
-  /** The full short link, on its custom domain or the shared link host. */
   url: string;
   destination: string;
   title: string;
@@ -576,54 +402,36 @@ export interface LinkDTO extends QrOverrides {
   utmContent: string;
   createdAt: number;
   clicks: number;
-  /** Count of active addresses (primary + aliases) this link answers to. See #38. */
   addressCount: number;
-  /** User id of the creator, null when that account is gone. */
   createdBy: string | null;
-  /** When the link was paused (by an admin or an automatic hold), or null.
-   * A paused link does not redirect; the owner has to be able to see that. */
   suspendedAt: number | null;
 }
 
-/** The chips above the links table, as `filter=` on the list route. */
 export const LINK_FILTERS = ["all", "attention", "custom"] as const;
 export type LinkFilter = (typeof LINK_FILTERS)[number];
 
-/** How many of an org's links each chip holds (GET /orgs/:orgId/links/facets).
- * Counted over the whole org: search and the domain picker do not narrow them. */
 export interface LinkFacets {
   all: number;
-  /** Paused, warned, quiet for a week, or down by half: see links-page.ts. */
   attention: number;
   customDomain: number;
 }
 
-/** One row of the links list: the link, plus the two things only the list
- * needs. */
 export interface LinkListItem extends LinkDTO {
-  /** Clicks per UTC day for the last 7 days, oldest first, today last. */
   spark: number[];
-  /** Why the link needs a look ("82% fewer clicks"), or null when it is fine. */
   attention: string | null;
 }
 
-/** One address (primary or alias) a link answers to. See #38. */
 export interface AddressDTO {
   id: string;
   domainId: string | null;
-  /** hostname of the custom domain, null = shared default domain */
   domain: string | null;
   slug: string;
-  /** The full address, on its custom domain or the shared link host. */
   url: string;
   kind: "primary" | "temp_alias" | "permanent_alias";
   creationReason: "created" | "renamed" | "promoted" | "same_destination_merge" | "";
-  /** Epoch ms; null = never expires. Set only on a temp_alias. */
   expiresAt: number | null;
-  /** Epoch ms once removed or swept; null while still active. */
   retiredAt: number | null;
   createdAt: number;
-  /** Clicks in the last 7 days; only meaningful for a non-primary address. */
   recentClicks: number;
   lastUse: number | null;
   referrers: TopEntry[];
@@ -639,10 +447,7 @@ export type LinkInput = {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
-  /** Create only: skip the same-destination match and always start a new link. */
   forceSeparateLink?: boolean;
-  /** Create only: add this address to an existing link (from a same-destination
-   * match) instead of creating a new one. */
   mergeIntoLinkId?: string;
 } & Partial<QrOverrides>;
 
@@ -659,12 +464,9 @@ export interface TopEntry {
 export interface DeltaValue {
   current: number;
   previous: number;
-  /** Percentage change relative to the previous period, null when previous is 0. */
   pct: number | null;
 }
 
-/** A link as the stats lists name it. `domain` is the custom hostname, or
- * null on the shared domain: with the slug it is the link's address. */
 export interface StatsLinkRef {
   id: string;
   slug: string;
@@ -677,50 +479,35 @@ export interface OrgStats {
   totalLinks: number;
   clicks7d: number;
   rangeDays: number; // analytics window for this org's plan
-  /** Whether the returned series is bucketed by day or by hour. */
   bucket: "day" | "hour";
   series: SeriesPoint[];
-  /** 24 hour buckets for the last 24 hours, populated when bucket is "hour". */
   hourSeries: SeriesPoint[];
   totalClicksDelta: DeltaValue | null;
   clicks7dDelta: DeltaValue | null;
-  /** The most-clicked links in the range. */
   topLinks: (StatsLinkRef & { clicks: number })[];
-  /** Whether any link in the org has a click on record, in any range. The
-   * empty Analytics page rests on this, not on the range's own lists. */
+  /** The empty Analytics page rests on this, not on the range's own lists. */
   everClicked: boolean;
   countries: TopEntry[];
   referrers: TopEntry[];
   devices: TopEntry[];
-  /** Links with zero clicks in the last 30 days. */
   deadLinks: StatsLinkRef[];
-  /** Links whose last-7d clicks dropped more than 50% vs the prior 7d. */
   decayingLinks: (StatsLinkRef & { drop: number })[];
-  /** Day-of-week × hour-of-day heatmap over the window. */
   heatmap: HeatmapRow[];
-  /** Clicks grouped by utm_campaign (non-empty only). */
   campaigns: { campaign: string; clicks: number }[];
-  /** Clicks grouped by utm_source (non-empty only). */
   sources: { source: string; clicks: number }[];
-  /** Clicks grouped by utm_medium (non-empty only). */
   mediums: { medium: string; clicks: number }[];
-  /** Distinct links with at least one click in the range. */
   linksClicked: number;
-  /** The same count for the equal range before it. */
   linksClickedDelta: DeltaValue | null;
-  /** Distinct countries in the range, the ones the edge could not place
-   * left out. */
+  /** Countries the edge could not place are left out. */
   countryCount: number;
 }
 
-/** One sentence the dashboard's "What changed" card tells, as data. */
 export type OrgInsight =
   | {
       kind: "country";
       country: string;
       current: number;
       previous: number;
-      /** Rounded percent change, positive or negative. */
       pct: number;
     }
   | {
@@ -728,41 +515,32 @@ export type OrgInsight =
       link: StatsLinkRef;
       current: number;
       previous: number;
-      /** Rounded percent the link fell, always positive. */
       pct: number;
     }
   | {
       kind: "first_referrer";
       link: StatsLinkRef;
-      /** The referrer's host. */
       referrer: string;
       clicks: number;
-      /** UTC `YYYY-MM-DD` of its first click in the range. */
       since: string;
     };
 
-/** GET /orgs/:orgId/insights: what moved in a range against the range before. */
 export interface OrgInsights {
-  /** Days the answer compares: the range, or 1 for the 24-hour view. */
   days: number;
   insights: OrgInsight[];
-  /** The biggest country move when none cleared the floor. */
   minor: OrgInsight | null;
 }
 
 export interface HeatmapRow {
-  /** 0=Monday … 6=Sunday */
   dayOfWeek: number;
   hour: number;
   clicks: number;
 }
 
-/** One row of the org's recent-clicks feed on the dashboard. */
 export interface RecentClick {
   id: number;
   ts: number;
   country: string;
-  /** Referrer host, "" for direct/unknown traffic. */
   referrer: string;
   device: string;
   slug: string;
@@ -782,18 +560,14 @@ export interface LinkStats {
   devices: TopEntry[];
   slug: string;
   domain: string | null;
-  /** The full short link, on its custom domain or the shared link host. */
   url: string;
   destination: string;
   title: string;
   createdAt: number;
   lastClick: number | null;
   createdBy: string | null;
-  /** Distinct countries in the range, the ones the edge could not place
-   * left out. */
+  /** Countries the edge could not place are left out. */
   countryCount: number;
-  /** This link's clicks in the range by utm_campaign: one row when the link
-   * carries a campaign tag and has clicks, none otherwise. */
   campaigns: { campaign: string; clicks: number }[];
 }
 
@@ -803,20 +577,13 @@ export interface AdminUsage {
   links: number;
   clicks: number;
   clicks7d: number;
-  /** People holding a paid plan who actually pay: comped users are excluded. */
   payingUsers: number;
-  /** The range, in days, that `series` and everything said to share its
-   * window cover: 7, 30 or 90, from `?days=`. */
   days: number;
   series: SeriesPoint[];
-  /** New accounts per day, same window as `series`. */
   signups: SeriesPoint[];
-  /** New links per day, same window as `series`. Links deleted since are
-   * not counted: nothing records them once they are gone. */
+  /** Links deleted since are not counted: nothing records them. */
   linkSeries: SeriesPoint[];
-  /** Sign-ups in the range, by the plan each account holds today. */
   signupsByPlan: { free: number; hobby: number; pro: number };
-  /** Most-clicked orgs/links over the same window as `series`. */
   topOrgs: { id: string; name: string; clicks: number; plan: OrgPlan }[];
   topLinks: {
     id: string;
@@ -825,14 +592,7 @@ export interface AdminUsage {
     orgName: string;
     clicks: number;
   }[];
-  /** Business row.
-   *
-   * Counts, never money (#82). `planCounts` describes feature access and
-   * includes comped users; `payingUsers` counts people on a paid plan who
-   * actually pay and excludes them; `payingSubscribers` counts real Polar
-   * subscriptions; `compedUsers` is the gap between access and paying. Revenue
-   * is read in the Polar dashboard, which knows what it charged net of
-   * discounts, tax and refunds. */
+  /** Counts, never money (#82): revenue is read in the Polar dashboard, net of discounts, tax and refunds. */
   planCounts: { free: number; hobby: number; pro: number; enterprise: number };
   payingSubscribers: number;
   compedUsers: number;
@@ -840,17 +600,14 @@ export interface AdminUsage {
   signups7d: number;
   signups7dDelta: DeltaValue | null;
   wau: number;
-  /** Growth row */
   cumulativeUsers: SeriesPoint[];
   cumulativeOrgs: SeriesPoint[];
-  /** Health row */
   botSeries: SeriesPoint[];
   anomalies: AnomalyEntry[];
   capPressure: CapPressureEntry[];
   tableSize: number;
   tableGrowth: SeriesPoint[];
   tableProjectedDays: number | null;
-  /** Calls to Google Web Risk, site-wide, against the daily cap. */
   webRisk: { today: number; month: number; perDay: number };
 }
 
@@ -879,29 +636,17 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
-  /** Clicks in the last 30 days (today and the 29 before it). */
   clicks30d: number;
-  /** Over its plan right now: its `org_entitlements` row names a resource
-   * over cap. */
   overPlan: boolean;
-  /** When the grace period for being over its plan ends (ms epoch), or null
-   * when it is not over. */
   graceEndsAt: number | null;
-  /** Read-only after a downgrade (`orgs.locked_at`), or null. */
   lockedAt: number | null;
-  /** When one of its custom domains stopped serving, being locked past the
-   * grace period, or null. */
   domainStoppedAt: number | null;
   ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
-  /** When the owner was banned, which disables every link, or null. */
   disabledAt: number | null;
-  /** When the org's links were suspended, or null. */
   linksSuspendedAt: number | null;
-  /** Why, from the held link that caused it, or null when nothing is held. */
   suspendReason: string | null;
-  /** When the sweep or enough reports flagged the org for a human look. */
   reviewFlaggedAt: number | null;
 }
 
@@ -922,12 +667,10 @@ export interface AdminOrgDetail {
   series: SeriesPoint[];
 }
 
-/** One link in the cross-org admin list (#67). Never returned to an org. */
 export interface AdminLinkRow {
   id: string;
   slug: string;
   domain: string | null;
-  /** The full short link, on its custom domain or the shared link host. */
   url: string;
   destination: string;
   orgId: string;
@@ -937,25 +680,20 @@ export interface AdminLinkRow {
   clicks: number;
   suspendedAt: number | null;
   suspendReason: string | null;
-  /** A warning page in front of the redirect (#344). Null means none. */
   warnedAt: number | null;
   warnReason: string | null;
-  /** Destination scoring (#68). Null means unscored, never clean. */
   riskScore: number | null;
   riskReasons: string[];
   riskCheckedAt: number | null;
-  /** Open public reports against this link. */
   reportCount: number;
 }
 
-/** A destination host nobody may link to. */
 export interface AdminBlockedHostRow {
   host: string;
   reason: string;
   createdAt: number;
 }
 
-/** A public abuse report, as the admin list shows it. */
 export interface AdminReportRow {
   id: string;
   slug: string;
@@ -966,12 +704,10 @@ export interface AdminReportRow {
   note: string;
   contact: string;
   createdAt: number;
-  /** The address named an anonymous link from the landing page (#488). */
   anonymous: boolean;
 }
 
-/** An anonymous link made on the landing page (Direction A of #96). It has no
- * org and no owner, so it cannot share AdminLinkRow's shape. */
+/** No org and no owner, so it cannot share AdminLinkRow's shape. */
 export interface AdminAnonLinkRow {
   id: string;
   slug: string;
@@ -993,8 +729,6 @@ export interface AdminActionRow {
   createdAt: number;
 }
 
-/** How the admin link list may be ordered. `risk` puts the worst first, which
- * is the whole reason #68 fills those columns. */
 export const ADMIN_LINK_SORTS = ["created", "clicks", "risk"] as const;
 export type AdminLinkSort = (typeof ADMIN_LINK_SORTS)[number];
 
@@ -1005,44 +739,30 @@ export interface AdminUserRow {
   isAdmin: boolean;
   banned: boolean;
   emailVerified: boolean;
-  /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
-  /** Each list: opted in now, answered no, or never asked. */
   news: ConsentAnswer;
   offers: ConsentAnswer;
-  /** Effective plan: what this user may do. A comp counts here (#81). */
   plan: StoredPlan;
-  /** What Polar says, separately from what the user may do. `null` means no
-   * subscription; the status is Polar's own string (`active`, `past_due`, …). */
+  /** What Polar says, separately from what the user may do. */
   subscriptionPlan: Exclude<StoredPlan, "free"> | null;
   subscriptionStatus: string | null;
   cancelAtPeriodEnd: boolean;
-  /** When the paid period ends (ms epoch), null with no subscription. */
   currentPeriodEnd: number | null;
-  /** What an admin granted by hand, and who granted it. */
   compPlan: Exclude<StoredPlan, "free"> | null;
   compReason: string | null;
   compGrantedAt: number | null;
   compGrantedBy: string | null;
-  /** The custom limits an admin set for this account, or null for the plan's own. */
   limitOverrides: LimitOverrides | null;
-  /** What the account is called: its plan, or Enterprise when paid with custom limits. */
   tier: AccountTier;
-  /** The note an admin left with them, and the email of the admin who set them. */
   limitNote: string | null;
   limitSetBy: string | null;
   createdAt: number;
   orgCount: number;
-  /** Links this person made, across every org. */
   links: number;
-  /** Their uploaded picture, served to admins, or null for the generated one. */
   image: string | null;
-  /** Last session activity (ms epoch), null if never signed in. */
   lastSeen: number | null;
 }
 
-/** How many links each filter of the admin list holds, under the same
- * search and org as the list. */
 export interface AdminLinkCounts {
   all: number;
   reported: number;
@@ -1054,26 +774,18 @@ export interface AdminLinkCounts {
 export interface InvitePreview {
   orgName: string;
   role: OrgRole;
-  /** The name of whoever made the invite, or null when that account is gone. */
   invitedBy: string | null;
 }
 
 export type Sort = { key: string; dir: 1 | -1 };
 
-/**
- * The signed-in user's card and invoices, as `GET /api/billing/details`
- * answers them from Polar. Empty (no card, no invoices) for anybody Polar
- * has no customer for: free, comped, or a copy that sells nothing.
- */
+/** Empty for anybody Polar has no customer for. */
 export interface BillingDetails {
-  /** The default card on file, or null with none. */
   card: PaymentCard | null;
-  /** Newest first. */
   invoices: Invoice[];
 }
 
 export interface PaymentCard {
-  /** "visa", "mastercard", "amex"… as Polar names it. */
   brand: string;
   last4: string;
   expMonth: number;
@@ -1081,19 +793,11 @@ export interface PaymentCard {
 }
 
 export interface Invoice {
-  /** Polar's order id. */
   id: string;
-  /** Epoch ms. */
   date: number;
-  /** The plan the order paid for, or null for a product this copy does not map. */
   plan: (typeof COMP_PLANS)[number] | null;
-  /** What was charged, tax included. */
   amountCents: number;
-  /** ISO 4217, "usd". */
   currency: string;
-  /** "credit": a negative order, what a plan change gave back. */
   status: "paid" | "open" | "refunded" | "credit";
-  /** `/api/billing/invoices/<id>`, which redirects to the PDF; null while
-   * there is nothing to download (an open order). */
   pdfUrl: string | null;
 }

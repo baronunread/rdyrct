@@ -1,16 +1,6 @@
 /**
- * How a feature the plan lacks offers itself.
- *
- * A whole page the plan does not include (Domains on Free) says so once, in
- * a locked state with one way to the plans. A setting the plan cannot save
- * (QR code defaults on Free) stays fully usable to try, and saving it opens
- * the plan picker, which goes straight to checkout.
- *
- * Billing is the owner's, so anyone else is told who can upgrade instead of
- * being handed a button that would upgrade their own account and change
- * nothing here. Over-plan and locked states are a different message ("you
- * have more than you pay for") and stay with `OverLimitBanner` and
- * `LockedPanel`.
+ * Billing is the owner's, so anyone else is told who can upgrade, not handed a
+ * button that would upgrade their own account and change nothing here.
  */
 import { useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
@@ -28,8 +18,6 @@ import { useToast } from "../ui/toast";
 
 type PaidPlan = "hobby" | "pro";
 
-/** Who pays for this org, to go in front of " can …": "Luca Toth, the
- * owner," once the member list is in, else "the owner". */
 export function useOwnerLabel(orgId: string): string {
   const members = useMembers(orgId);
   const owner = members.data?.find((m) => m.role === "owner");
@@ -37,11 +25,6 @@ export function useOwnerLabel(orgId: string): string {
   return name ? `${name}, the owner,` : "the owner";
 }
 
-/**
- * A page the plan does not include: a lock, what the feature is on, one line
- * on what it does, and "See plans" for the owner (who pays), or who can
- * upgrade for anyone else.
- */
 export function FeatureLocked({
   title,
   line,
@@ -51,7 +34,6 @@ export function FeatureLocked({
   title: string;
   line: ReactNode;
   isOwner: boolean;
-  /** What anyone but the owner reads instead of the button. */
   ownerNote: string;
 }) {
   return (
@@ -82,13 +64,10 @@ export function FeatureLocked({
   );
 }
 
-/** What brought someone to the picker: that fact leads each card. */
 type Reason = "qr" | "domains";
 
 const PLAN_NAMES = { hobby: "Hobby", pro: "Pro" } as const;
 
-/** Four facts per plan, the one that brought them here first. Each fits
- * one line of a card. */
 function planFacts(plan: PaidPlan, reason: Reason): string[] {
   const l = PLAN_LIMITS[plan];
   const n = (count: number) => count.toLocaleString("en-US");
@@ -98,12 +77,7 @@ function planFacts(plan: PaidPlan, reason: Reason): string[] {
   return [lead, next, `${n(l.links)} links`, `${l.members} members`];
 }
 
-/**
- * Hobby and Pro as two cards to pick from, each with its price and four
- * facts, Hobby picked; the button names the plan and goes to its checkout.
- * `onCheckout` runs just before the browser leaves, for whatever has to
- * survive the trip (a tried QR style).
- */
+/** `onCheckout` runs just before the browser leaves, for whatever must survive the trip (a tried QR style). */
 export function PlanPickerDialog({
   open,
   onClose,
@@ -153,7 +127,6 @@ export function PlanPickerDialog({
           {(["hobby", "pro"] as const).map((p) => {
             const on = plan === p;
             return (
-              // A native radio in each card: one Tab stop, arrows move between them.
               <label
                 key={p}
                 className={cn(
@@ -170,7 +143,6 @@ export function PlanPickerDialog({
                   checked={on}
                   onChange={() => setPlan(p)}
                   aria-label={`${PLAN_NAMES[p]}, ${PLAN_PRICES[p]} a month`}
-                  // Invisible, over the whole card: the card is what you press.
                   className="absolute inset-0 cursor-pointer appearance-none rounded-xl opacity-0"
                 />
                 <span

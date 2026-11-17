@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-// The marketing header is part of the page at the top and floats once the
-// page moves, the way getopen.so does it: no fill or edge until then, then a
-// narrower frosted pill.
-
 test("the header sits flush at the top and floats once the page scrolls", async ({ page }) => {
   await page.goto("/pricing");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -25,7 +21,6 @@ test("the header sits flush at the top and floats once the page scrolls", async 
     })
     .toBeGreaterThanOrEqual(0.6);
   await expect(pill).toHaveCSS("backdrop-filter", /blur/);
-  // And it draws in once the 700ms shrink has run.
   await expect.poll(async () => (await pill.boundingBox())!.width).toBeLessThan(flushWidth - 100);
 
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -56,7 +51,6 @@ test("the header and the launch banner ask for a GitHub star, on a phone too", a
   await expect(star).toContainText("Star on GitHub");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  // Icon only on a phone, still a link with its name.
   await expect(star).toBeVisible();
   await expect(star.getByText("Star on GitHub")).toBeHidden();
   await expect(banner).toBeVisible();

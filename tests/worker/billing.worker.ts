@@ -27,14 +27,7 @@ import type { JsonValue } from "../../src/shared/types";
 import type { BillingProvider } from "../../src/worker/billing-provider";
 import { deleteAccountAndOwnedOrgs } from "../../src/worker/better-auth";
 
-// The real Polar client makes real HTTP calls and expects a large,
-// version-specific response schema back. The routes take their client off the
-// env (see BillingProvider), so these tests hand them a stand-in the same way
-// they hand over a queue or a rate limiter, and stay about our own route
-// logic.
 const checkoutsCreate = vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" }));
-/** The shape `checkouts.get` returns, named so the default mock below states
- * it once instead of widening each null field with an inline assertion. */
 type CheckoutStatus = {
   status: string;
   product_id: string | null;
@@ -64,7 +57,6 @@ const billingProvider: BillingProvider = {
   customerPortal: unreachableBilling.customerPortal,
 };
 
-/** billingEnv() with the stand-in checkout/portal client wired in. */
 const polarEnv = (): Env => ({ ...billingEnv(), BILLING: billingProvider });
 
 beforeEach(async () => {
@@ -136,16 +128,11 @@ async function confirmCheckout(cookie: string, checkoutId: string): Promise<Resp
 
 let nextMsgId = 0;
 
-/** Signs a Polar webhook payload the same way `standardwebhooks` verifies
- * it, so posting through the real handler round-trips correctly. Each call
- * gets its own delivery id, matching real Polar/Svix deliveries, which never
- * reuse one across distinct events. */
+// Each call gets its own delivery id: real Polar/Svix never reuse one across events.
 function signPayload(payload: string) {
   return signPayloadWithId(payload, `msg-${++nextMsgId}`);
 }
 
-/** Same as signPayload, but with an explicit delivery id: for tests that
- * simulate a redelivered (or spoofed-id) webhook. */
 function signPayloadWithId(payload: string, msgId: string, key = btoa(POLAR_WEBHOOK_SECRET)) {
   const timestamp = new Date();
   const signature = new Webhook(key).sign(msgId, timestamp, payload);
@@ -156,8 +143,6 @@ function signPayloadWithId(payload: string, msgId: string, key = btoa(POLAR_WEBH
   };
 }
 
-/** The standard subscription.active payload the redelivery tests build a
- * scenario on top of. */
 function subscriptionActivePayload(): string {
   return JSON.stringify({
     type: "subscription.active",
@@ -202,7 +187,6 @@ describe("POST /api/billing/checkout", () => {
         success_url: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
         customer_email: "admin@example.com",
         metadata: { userId: "admin-1" },
-        // A customer can type a discount code.
         allow_discount_codes: true,
       }),
     );
@@ -317,8 +301,6 @@ describe("POST /api/billing/portal", () => {
   });
 });
 
-/** The checkouts.get() response for "free-1"'s pro checkout, with per-test
- * overrides — every /confirm test starts from one of these two shapes. */
 function succeededCheckout(overrides: Partial<CheckoutStatus> = {}): CheckoutStatus {
   return {
     status: "succeeded",
@@ -337,10 +319,6 @@ function openCheckout(): CheckoutStatus {
   };
 }
 
-/** The subscription.active payload for "free-1"'s sub_1, with per-test
- * overrides — the /confirm redelivery/renewal tests below only differ by
- * timestamp. Distinct from subscriptionActivePayload() above, which is
- * user-1's fixed payload for the older redelivery tests. */
 function confirmRedeliveryPayload(
   overrides: Partial<{
     id: string;
@@ -364,8 +342,6 @@ function confirmRedeliveryPayload(
 }
 
 describe("POST /api/billing/checkout/:id/confirm", () => {
-  // The checkout's subscription, live: what Polar lists for cus_1 right
-  // after a pro checkout succeeds. The replay tests below take it away.
   beforeEach(() => {
     subscriptionsList.mockResolvedValue({
       items: [{ id: "sub_1", product_id: POLAR_PRO_PRODUCT_ID }],
@@ -385,9 +361,7 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     const user = await getUser("free-1");
     expect(user?.plan).toBe("pro");
     expect(user?.polarCustomerId).toBe("cus_1");
-    // A placeholder, not the real subscription id (which Polar never handed
-    // back): see the route's own comment for why, and the redelivery tests
-    // below for what replaces it once a webhook does arrive.
+    // A placeholder: Polar never handed back the real subscription id (see the route).
     expect(user?.polarSubscriptionId).toBe("pending:checkout_1");
   });
 
@@ -420,8 +394,6 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     await confirmCheckout(cookie, "checkout_1");
     expect((await getUser("free-1"))?.plan).toBe("pro");
 
-    // The subscription ends. Polar sends the revocation, a moment after the
-    // confirm's own "now", and stops listing it as active.
     await postWebhook({
       type: "subscription.revoked",
       data: {
@@ -432,13 +404,12 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     });
     expect((await getUser("free-1"))?.plan).toBe("free");
     subscriptionsList.mockResolvedValue({ items: [] });
-    // Days pass: the revocation is now well before any request's "now".
     await db()
       .update(schema.user)
       .set({ polarEventAt: new Date(Date.now() - 86_400_000) })
       .where(eq(schema.user.id, "free-1"));
 
-    // The same checkout id, POSTed again: still "succeeded" at Polar forever.
+    // A checkout stays "succeeded" at Polar forever, so a replay looks valid.
     checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     const res = await confirmCheckout(cookie, "checkout_1");
     expect(res.status).toBe(200);
@@ -468,10 +439,8 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     await confirmCheckout(cookie, "checkout_1");
 
-    // A genuinely stale redelivery, carrying the subscription's real
-    // created_at from before the fallback ran. notStale correctly drops the
-    // whole write, id included: this is the design's one known gap, noted on
-    // the route itself, not a bug in this test.
+    // notStale drops the whole write, id included: the design's one known
+    // gap, noted on the route, not a bug in this test.
     await postWebhook(confirmRedeliveryPayload({ created_at: new Date(0).toISOString() }));
 
     const user = await getUser("free-1");
@@ -496,16 +465,13 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
   it("does not clobber a real subscription id the webhook already wrote, even if the client's poll races it", async () => {
     const cookie = await freeOwnerCookie();
 
-    // The real webhook lands first, with a realistic (recent) timestamp.
     await postWebhook(confirmRedeliveryPayload({ modified_at: new Date().toISOString() }));
     const afterWebhook = await getUser("free-1");
     expect(afterWebhook?.plan).toBe("pro");
     expect(afterWebhook?.polarSubscriptionId).toBe("sub_1");
 
-    // The client's poll didn't see it land yet and calls confirm anyway.
-    // Without the already-granted check, this route's synthetic "now"
-    // timestamp always outranks the webhook's, and it would overwrite sub_1
-    // with a placeholder.
+    // Without the already-granted check, this route's synthetic "now" always
+    // outranks the webhook's and would overwrite sub_1 with a placeholder.
     checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     await confirmCheckout(cookie, "checkout_1");
 
@@ -535,10 +501,8 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
   }
 
   it("reports no period end at all for a user without a subscription", async () => {
-    // Number(null) is 0, not NaN, so a helper that only guarded against NaN
-    // handed every free account a subscription ending on 1 January 1970. The
-    // billing page reads that date straight out, and the cancel notice shows
-    // it to whoever is looking.
+    // Number(null) is 0, not NaN, so a helper that only guarded NaN gave every
+    // free account a subscription ending on 1 January 1970.
     const cookie = await adminCookie();
 
     expect((await currentUser(cookie)).user.polarSubscriptionCurrentPeriodEnd).toBeNull();
@@ -555,11 +519,9 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
 
     expect(user.plan).toBe("pro");
     expect(user.hasBillingAccount).toBe(false);
-    // A subscription with no customer id is not a comp, and the page says so
-    // rather than telling them their plan was granted by hand (#81).
+    // A subscription with no customer id is not a comp (#81).
     expect(user.comped).toBe(false);
-    // The signal has to agree with the route it guards, or the button is
-    // dead again.
+    // The signal has to agree with the route it guards, or the button is dead.
     expect((await portal(cookie)).status).toBe(400);
   });
 
@@ -623,8 +585,7 @@ describe("POST /api/webhooks/polar", () => {
     expect((await getUser()).plan).toBe("free");
   });
 
-  /** A correctly signed subscription.active for user-1, padded past the
-   * body cap: it would upgrade the user if the handler read and verified it. */
+  // Signed and padded past the body cap: it would upgrade the user if read and verified.
   function oversizedSignedEvent() {
     const payload = JSON.stringify({
       type: "subscription.active",
@@ -822,8 +783,6 @@ describe("POST /api/webhooks/polar", () => {
     expect(user.polarSubscriptionCurrentPeriodEnd).toBeNull();
   });
 
-  // What each status does to access now lives in entitlement.worker.ts (#84);
-  // this keeps the original pair, which is still the common case.
   it("subscription.updated grants the plan on an active status and not on a canceled one", async () => {
     await seedUser({ plan: "free" });
     await postWebhook({
@@ -849,10 +808,8 @@ describe("POST /api/webhooks/polar", () => {
     expect((await getUser()).plan).toBe("hobby");
   });
 
-  // The event that arrives first wins on freshness, and `subscription.active`
-  // is not guaranteed to be it. If only that event carried the customer id,
-  // the loser would take the id down with it and leave a paying user unable
-  // to open the billing portal.
+  // `subscription.active` is not guaranteed to arrive first. If only it carried
+  // the customer id, a losing event would drop the id and lock out the portal.
   it("subscription.updated stores the customer id, so the portal opens without an active event", async () => {
     await seedUser({ plan: "free", polarCustomerId: null });
     await postWebhook({
@@ -976,9 +933,7 @@ describe("POST /api/webhooks/polar", () => {
   it("a late subscription.revoked cannot downgrade a user a newer event already upgraded (#17)", async () => {
     await seedUser({ plan: "free" });
 
-    // The revoke happened first at Polar, the activation after it. Delivery
-    // arrives in the opposite order, which Polar explicitly does not
-    // guarantee against: the stale revoke must not win.
+    // Polar does not guarantee delivery order: the stale revoke must not win.
     await postWebhook({
       type: "subscription.active",
       data: {
@@ -999,8 +954,7 @@ describe("POST /api/webhooks/polar", () => {
       },
     });
 
-    // 200, not an error: nothing is wrong, the event is simply obsolete.
-    // A non-2xx would earn a retry, and ten in a row disable the endpoint.
+    // 200, not an error: a non-2xx earns a retry, and ten in a row disable the endpoint.
     expect(stale.status).toBe(200);
     const user = await getUser();
     expect(user.plan).toBe("pro");
@@ -1071,9 +1025,7 @@ describe("POST /api/webhooks/polar", () => {
       POLAR_PRO_PRODUCT_ID,
     });
 
-    // No seeded user: the checkout metadata points at nobody, so the plan
-    // this event paid for lands on no one. Silent 200 is still the right
-    // answer to Polar, but it must not be silent to us.
+    // A 200 to Polar is still right, but a paid plan landing on no one must not be silent to us.
     const res = await postWebhook(
       {
         type: "subscription.active",
@@ -1135,7 +1087,6 @@ describe("POST /api/webhooks/polar", () => {
       alerting,
     );
 
-    // The row exists and the guard did its job: nothing to report.
     expect(captureSpy).not.toHaveBeenCalled();
     captureSpy.mockRestore();
   });
@@ -1168,7 +1119,6 @@ describe("POST /api/webhooks/polar", () => {
   });
 });
 
-/** What the Polar SDK throws for an HTTP error: its status and parsed body. */
 class PolarStatusError extends Error {
   readonly error: { error: string };
   constructor(

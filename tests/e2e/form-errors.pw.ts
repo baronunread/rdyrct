@@ -1,8 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
 
-// A form error marks its field: the outline, a short reason on the label
-// line, focus on the field, and nothing under it moves (AGENTS.md).
-
 // Measured against the page, not the viewport: focusing the marked field may
 // scroll, and a scroll is not a shift.
 const top = (el: Locator) => el.evaluate((node) => node.getBoundingClientRect().top + scrollY);

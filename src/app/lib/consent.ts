@@ -1,12 +1,5 @@
-/**
- * The visitor's answer to the analytics banner, and the one way to ask again.
- *
- * Storing the answer is strictly necessary (it is what stops the banner
- * reappearing on every page), so it needs no consent of its own. An answer
- * lapses after six months, the interval the Garante's 2021 cookie guidelines
- * give for asking again, and the visitor can reopen the banner at any time
- * from "Cookie settings" to withdraw or change it (GDPR Art. 7(3)).
- */
+// Storing the answer is strictly necessary, so it needs no consent. An answer lapses
+// after six months (Garante's 2021 cookie guidelines); GDPR Art. 7(3) needs a way to withdraw.
 import { useSyncExternalStore } from "react";
 
 export const CONSENT_KEY = "rdyrct:consent:v2";
@@ -17,8 +10,6 @@ const serverSnapshot = () => false;
 
 export type ConsentAnswer = "accepted" | "rejected";
 
-/** The stored answer, or null when there is none or it has lapsed. Any value
- *  other than "accepted" counts as a refusal. */
 export function readConsent(now: number = Date.now()): ConsentAnswer | null {
   try {
     const value = localStorage.getItem(CONSENT_KEY);
@@ -50,17 +41,14 @@ export function writeConsent(answer: ConsentAnswer, now: number = Date.now()) {
   try {
     localStorage.setItem(CONSENT_KEY, answer);
     localStorage.setItem(ANSWERED_AT_KEY, String(now));
-  } catch {
-    /* ignore */
-  }
+  } catch {}
   bannerOpen = false;
   notify();
 }
 
 let lapseHandler: (() => void) | null = null;
 
-/** What to stop when an accepted answer lapses in a page that is still open.
- *  Registered by posthog.ts, which this module cannot import. */
+// Registered by posthog.ts, which this module cannot import.
 export function onConsentLapse(handler: () => void) {
   lapseHandler = handler;
 }
@@ -82,7 +70,6 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-/** Whether this browser has accepted analytics, updated in other tabs too. */
 export function useAnalyticsConsent() {
   const ready = useSyncExternalStore(subscribe, browserReady, serverSnapshot);
   const accepted = useSyncExternalStore(
@@ -93,13 +80,11 @@ export function useAnalyticsConsent() {
   return { ready, accepted: ready && accepted };
 }
 
-/** Shows the banner again, whatever the stored answer. */
 export function openConsentBanner() {
   bannerOpen = true;
   notify();
 }
 
-/** Whether the banner should be on screen: no answer yet, or reopened. */
 export function useConsentBannerVisible(): boolean {
   return useSyncExternalStore(
     subscribe,

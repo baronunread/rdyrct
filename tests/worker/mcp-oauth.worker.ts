@@ -12,13 +12,6 @@ import {
 import { reset } from "cloudflare:test";
 import { hashPassword } from "../../src/worker/password";
 
-// End-to-end coverage of the MCP OAuth server (#139 follow-up): a client
-// registered out of band (CIMD/DCR is a separate, already-reviewed concern —
-// this seeds the row directly, the way an admin-created client would look),
-// then the real authorize -> consent -> token -> /api/mcp round trip a
-// genuine MCP client drives, plus the failure shapes session.ts and the
-// route's requireMcpAuth wrapping are responsible for.
-
 async function base64url(bytes: Uint8Array): Promise<string> {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
@@ -36,12 +29,9 @@ const CLIENT_ID = "e2e-test-client";
 const REDIRECT_URI = "https://client.example/callback";
 const RESOURCE = "http://localhost/api/mcp";
 
+// mcp() creates oauth_resource lazily; write it here too so tests do not
+// depend on that timing.
 async function registerTestClient() {
-  // mcp() creates the oauth_resource row lazily, on the authorization
-  // server's own first relevant request — tied to when `getAuth()`'s
-  // module-cached instance was first built, not to this test's own D1 reset.
-  // Written here too (idempotently) so this test doesn't depend on that
-  // timing.
   await env.DB.batch([
     env.DB.prepare(
       `insert or ignore into oauth_resource (id, identifier, name, created_at, updated_at)
@@ -64,8 +54,6 @@ interface RedirectBody {
   url: string;
 }
 
-/** Drives authorize -> consent for a signed-in cookie, returning the minted
- * authorization code. */
 async function grantAuthorizationCode(
   cookie: string,
   challenge: string,
@@ -182,10 +170,8 @@ describe("MCP OAuth (#139 follow-up)", () => {
     const code = await grantAuthorizationCode(cookie, challenge);
     const { access_token: accessToken } = await exchangeCode(code, verifier);
 
-    // Same token that authenticates /api/mcp above, aimed at a real REST
-    // route instead: its aud claim names only /api/mcp, and withSession's
-    // oauthTokenPath now enforces that, so this must come back unauthed
-    // rather than resolving to the token owner's full session.
+    // The token's aud names only /api/mcp: a REST route must refuse it, not
+    // resolve to the owner's full session.
     const res = await fetchWorker(
       new Request("http://localhost/api/user", {
         headers: { authorization: `Bearer ${accessToken}` },
@@ -220,23 +206,19 @@ describe("MCP OAuth (#139 follow-up)", () => {
     const cookie = await freeOwnerCookie();
     await registerTestClient();
     const { verifier, challenge } = await pkcePair();
-    // offline_access, so the token exchange also issues a refresh token to
-    // prove dead: a code-only grant never gets one to revoke in the first
-    // place.
+    // offline_access: a code-only grant has no refresh token to prove dead.
     const code = await grantAuthorizationCode(cookie, challenge, "openid offline_access");
     const { refresh_token } = await exchangeCode(code, verifier);
     expect(refresh_token).toBeTruthy();
 
+    // Our route, not better-auth's delete-consent, which leaves the refresh
+    // token live.
     const [{ id: consentId }] = await env.DB.prepare(
       "select id from oauth_consent where client_id = ?",
     )
       .bind(CLIENT_ID)
       .all<{ id: string }>()
       .then((r) => r.results);
-    // oauth-connections.ts, not better-auth's own /oauth2/delete-consent:
-    // that endpoint only deletes the consent row and leaves the refresh
-    // token live (verified below), so this is the route hooks.ts's
-    // useRevokeConnectedApp actually calls.
     const revokeRes = await fetchWorker(
       new Request(`http://localhost/api/oauth-connections/${consentId}`, {
         method: "DELETE",
@@ -246,12 +228,8 @@ describe("MCP OAuth (#139 follow-up)", () => {
     );
     expect(revokeRes.status).toBe(200);
 
-    // Not a live refresh-grant call: oauth-provider's own error handling for
-    // "the refresh token row was deleted out from under it" throws in a way
-    // that escapes as an unhandled rejection even once the request itself
-    // answers correctly (third-party, not this route). The row being gone is
-    // the actual invariant oauth-connections.ts promises, so assert that
-    // directly.
+    // Not a live refresh call: oauth-provider's error handling for a deleted
+    // row escapes as an unhandled rejection. Assert the row is gone instead.
     const [{ count }] = await env.DB.prepare(
       "select count(*) as count from oauth_refresh_token where client_id = ?",
     )
@@ -404,7 +382,7 @@ describe("MCP dynamic client registration", () => {
 
   it("sweeps only anonymous clients older than a day that never got a grant", async () => {
     const { sweepAbandonedOAuthClients } = await import("../../src/worker/mcp-oauth");
-    await freeOwnerCookie(); // a user for the consent row to belong to
+    await freeOwnerCookie();
     const old = Date.now() - 2 * 24 * 60 * 60 * 1000;
     const insert = (id: string, createdAt: number, discovery: string | null) =>
       env.DB.prepare(
