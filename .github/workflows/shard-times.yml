@@ -1,0 +1,74 @@
+name: Refresh e2e shard times
+
+# The e2e shards are balanced on tests/e2e/shard-times.json
+# (tests/e2e/shards.ts). New specs count as the median until the table
+# knows them, and specs drift slower or faster, so once a week this
+# rebuilds the table from main's last five full-suite runs and opens a PR
+# when it changed. Rerunning it updates the same branch and PR.
+#
+# Needs "Allow GitHub Actions to create and approve pull requests" in the
+# repository's Actions settings. A PR opened with GITHUB_TOKEN starts no
+# workflows, so its checks do not run; it changes one JSON file, and the
+# push to main after the merge runs the full suite on it.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: shard-times
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: chore/e2e-shard-times
+    steps:
+      # main, even when run by hand from another branch, so the PR carries
+      # only the table. No stored credentials; the push passes the token.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # Pushes to main run the full suite; PR runs only what leanest picked.
+      # Five runs, so one slow runner does not skew a file.
+      - name: Download timings from main's last five runs
+        run: |
+          gh run list --workflow test.yml --branch main --event push --status success \
+            --limit 5 --json databaseId --jq '.[].databaseId' |
+          while read -r id; do
+            gh run download "$id" --pattern 'e2e-timings-*' --dir "timings/$id" || true
+          done
+      - name: Rebuild the table
+        run: |
+          reports=$(find timings -name report.json)
+          if [ -z "$reports" ]; then echo "No timings found"; exit 1; fi
+          # shellcheck disable=SC2086
+          bun scripts/e2e-shard-times.ts $reports
+      - name: Open or update the PR
+        run: |
+          if git diff --quiet -- tests/e2e/shard-times.json; then
+            echo "shard-times.json is current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -m "e2e: refresh shard times from main's last five runs" -- tests/e2e/shard-times.json
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$BRANCH" --base main \
+              --title "e2e: refresh shard times" \
+              --body "Rebuilt \`tests/e2e/shard-times.json\` from main's last five full-suite runs by the weekly \`shard-times\` workflow, so the six e2e shards stay balanced. Checks do not run on a PR the workflow opens; the push to main after the merge runs the full suite."
+          fi
