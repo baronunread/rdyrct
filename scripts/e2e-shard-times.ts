@@ -4,12 +4,15 @@
  *
  *   bun run e2e:shard-times report.json [more.json ...]
  *
- * Pass every shard's report from one CI run (the e2e job uploads them as
- * the `e2e-timings-*` artifacts); a full-suite run on main refreshes every
- * file, a PR run only the specs leanest picked. A local run works too, with
- * `--reporter=json` (local runs default to `list`). Only the
- * chromium project counts, and only the first attempt of each test, so a
- * retry does not make a file look slower than it is.
+ * Pass every shard's report from one or more CI runs (the e2e job uploads
+ * them as the `e2e-timings-*` artifacts); a full-suite run on main refreshes
+ * every file, a PR run only the specs leanest picked. A file runs in one
+ * shard per run, so it appears in one report per run, and its time is the
+ * mean over the reports it appears in: several runs smooth out one slow
+ * runner. The weekly `shard-times` workflow does this with main's last five
+ * runs. A local run works too, with `--reporter=json` (local runs default to
+ * `list`). Only the chromium project counts, and only the first attempt of
+ * each test, so a retry does not make a file look slower than it is.
  */
 import { existsSync } from "node:fs";
 
@@ -38,18 +41,24 @@ const specsOf = (suite: Suite): Spec[] => [
 // (a PR run, one spec) refreshes those and keeps the rest. Files that no
 // longer exist drop out.
 const previous: Record<string, number> = await Bun.file(out).json();
-const seconds: Record<string, number> = {};
+// Each report's total per file, then the mean over the reports a file is in.
+const samples: Record<string, number[]> = {};
 for (const path of reports) {
   const report: Report = await Bun.file(path).json();
   // production/ and self-host/ have configs of their own.
   const specs = report.suites.flatMap(specsOf).filter((spec) => !OWN_CONFIG.test(spec.file));
+  const inReport: Record<string, number> = {};
   for (const spec of specs) {
     const firsts = spec.tests
       .filter((test) => test.projectName === "chromium")
       .map((test) => test.results[0]?.duration ?? 0);
-    seconds[spec.file] = (seconds[spec.file] ?? 0) + firsts.reduce((a, b) => a + b, 0) / 1000;
+    inReport[spec.file] = (inReport[spec.file] ?? 0) + firsts.reduce((a, b) => a + b, 0) / 1000;
   }
+  for (const [file, s] of Object.entries(inReport)) (samples[file] ??= []).push(s);
 }
+const seconds = Object.fromEntries(
+  Object.entries(samples).map(([file, s]) => [file, s.reduce((a, b) => a + b, 0) / s.length]),
+);
 
 const sorted = Object.fromEntries(
   Object.entries({ ...previous, ...seconds })

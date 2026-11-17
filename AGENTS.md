@@ -182,9 +182,11 @@ run goes through [leanest](https://github.com/baronunread/leanest), which
 runs only the specs the diff could affect, and every spec when it is unsure.
 A push to main always runs the full suite. The shards split the spec
 files by duration (`tests/e2e/shards.ts`, `E2E_SHARD=2/6`), not by test
-count; when one shard runs well past the others, refresh
-`tests/e2e/shard-times.json` from a run's `e2e-timings-*` artifacts with
-`bun scripts/e2e-shard-times.ts`.
+count. Every Monday `.github/workflows/shard-times.yml` rebuilds
+`tests/e2e/shard-times.json` from main's last five runs (their
+`e2e-timings-*` artifacts, through `bun scripts/e2e-shard-times.ts`) and
+opens a PR when it changed. Run that workflow by hand when one shard runs
+well past the others.
 
 Lint and format take no path list: `.` plus the ignores in `.gitignore` and
 `.oxfmtrc.json`. One scope, so the hook and CI cannot check different files.
