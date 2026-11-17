@@ -470,7 +470,7 @@ describe("sweepAbusiveOrgs", () => {
 
   it("alerts but does not suspend an established org over the ceiling", async () => {
     // A flood aimed at any org's public link can clear the ceiling in
-    // minutes (RL_CLICK_RECORDING allows 600/min), so raw volume alone
+    // minutes (the click rate limit allows 600/min), so raw volume alone
     // cannot be trusted to suspend an org that isn't new: that would make
     // our own abuse control a way to take down a stranger's links. seedLink
     // dates org-1 at epoch 0, well past the new-org window.

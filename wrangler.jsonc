@@ -192,115 +192,14 @@
       "class_name": "NewsletterSendWorkflow",
     },
   ],
-  // Cloudflare Workers Rate Limiting counters. Namespace IDs are unique within
-  // this account. Counters are permissive and local to each Cloudflare location,
-  // so these are abuse controls, not billing or exact quota enforcement.
-  //
-  // Set for the person who is having trouble, not for the bot. Somebody who
-  // mistypes a password, retries a signup, or pastes six links in a row must
-  // never meet a wall, because they read it as the product being broken and
-  // they are right. The ceilings that matter for abuse are elsewhere: Turnstile
-  // challenges each attempt (#304), RL_EMAIL_RECIPIENT bounds what one inbox
-  // can be made to receive, and the WAF rules in docs/rate-limiting.md sit in
-  // front of all of it.
+  // The limits are RATE_LIMITS in src/worker/rate-limit.ts; this is their
+  // shared pool. Changing namespace_id resets every counter.
   "ratelimits": [
     {
-      // Per caller, per path: login and signup count separately, so this is
-      // 30 tries at one door, not 30 across all of them.
-      "name": "RL_AUTH_PUBLIC",
-      "namespace_id": "14001",
+      "name": "RATE_LIMIT",
+      "namespace_id": "14011",
       "simple": {
-        "limit": 30,
-        "period": 60,
-      },
-    },
-    {
-      // Per caller, per path. Raised from 3: a signup that goes wrong costs
-      // a send each time somebody retries, and three of those inside a minute
-      // is a person having a bad day, not a bot. Turnstile already challenges each
-      // attempt (#304), so this does not have to be the tight one.
-      "name": "RL_EMAIL",
-      "namespace_id": "14002",
-      "simple": {
-        "limit": 10,
-        "period": 60,
-      },
-    },
-    {
-      "name": "RL_WRITE_FREE",
-      "namespace_id": "14003",
-      "simple": {
-        "limit": 90,
-        "period": 60,
-      },
-    },
-    {
-      "name": "RL_WRITE_PAID",
-      "namespace_id": "14004",
-      "simple": {
-        "limit": 300,
-        "period": 60,
-      },
-    },
-    {
-      "name": "RL_QR_UPLOAD",
-      "namespace_id": "14005",
-      "simple": {
-        "limit": 20,
-        "period": 60,
-      },
-    },
-    {
-      "name": "RL_DOMAIN_SETUP",
-      "namespace_id": "14006",
-      "simple": {
-        "limit": 30,
-        "period": 60,
-      },
-    },
-    {
-      "name": "RL_BILLING",
-      "namespace_id": "14007",
-      "simple": {
-        "limit": 10,
-        "period": 60,
-      },
-    },
-    {
-      "name": "RL_CLICK_RECORDING",
-      "namespace_id": "14008",
-      "simple": {
-        "limit": 600,
-        "period": 60,
-      },
-    },
-    // The anonymous shortener on the landing page (Direction A of #96). Its
-    // own namespace, not RL_AUTH_PUBLIC: a flood at the landing form must not
-    // lock anybody out of signing in. Generous enough that a person trying a
-    // few links never notices, tight enough that farming short links from one
-    // address is not worth the Turnstile challenge each one already costs.
-    {
-      "name": "RL_ANON_LINK",
-      "namespace_id": "14010",
-      "simple": {
-        "limit": 15,
-        "period": 60,
-      },
-    },
-    // Keyed by the recipient address rather than the caller, so many callers
-    // cannot each stay under RL_EMAIL while all aiming at one inbox (#50).
-    // Still the tight one, and it is the limit that matters: it bounds what
-    // an inbox can be made to receive however many callers aim at it. Four a
-    // minute covers a signup plus a couple of impatient resends.
-    //
-    // `period` only accepts 10 or 60, so this caps the rate, not the daily
-    // total. Closing that needs a durable counter rather than Cloudflare's
-    // per-location one; see the follow-up noted on #50.
-    {
-      "name": "RL_EMAIL_RECIPIENT",
-      "namespace_id": "14009",
-      "simple": {
-        "limit": 4,
+        "limit": 1800,
         "period": 60,
       },
     },
@@ -431,94 +330,10 @@
       ],
       "ratelimits": [
         {
-          "name": "RL_AUTH_PUBLIC",
-          "namespace_id": "24001",
+          "name": "RATE_LIMIT",
+          "namespace_id": "24011",
           "simple": {
-            "limit": 40,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_EMAIL",
-          "namespace_id": "24002",
-          "simple": {
-            // Higher than production's (10): the e2e suite's real sign-ups
-            // and password-reset sends across files share this one budget.
-            // Three concurrent browser workers can exceed 30 before a minute
-            // elapses, turning an unrelated scenario into a rate-limit test.
-            "limit": 100,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_WRITE_FREE",
-          "namespace_id": "24003",
-          "simple": {
-            "limit": 90,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_WRITE_PAID",
-          "namespace_id": "24004",
-          "simple": {
-            "limit": 300,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_QR_UPLOAD",
-          "namespace_id": "24005",
-          "simple": {
-            "limit": 20,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_DOMAIN_SETUP",
-          "namespace_id": "24006",
-          "simple": {
-            "limit": 30,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_BILLING",
-          "namespace_id": "24007",
-          "simple": {
-            "limit": 10,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_CLICK_RECORDING",
-          "namespace_id": "24008",
-          "simple": {
-            "limit": 600,
-            "period": 60,
-          },
-        },
-        {
-          // Higher than production's 15: the e2e run creates several anonymous
-          // links from one address in one minute, and rate limiting the test
-          // suite proves nothing about the feature.
-          "name": "RL_ANON_LINK",
-          "namespace_id": "24010",
-          "simple": {
-            "limit": 30,
-            "period": 60,
-          },
-        },
-        {
-          "name": "RL_EMAIL_RECIPIENT",
-          "namespace_id": "24009",
-          "simple": {
-            // One above production's (4), leaving the two sends a sign-up
-            // costs (submit, then the resend on the code screen's reload)
-            // some headroom. Every test mints its own
-            // `something-${Date.now()}@gmail.com`, so no other address is
-            // near this; the e2e scenario trips it deliberately.
-            "limit": 5,
+            "limit": 1800,
             "period": 60,
           },
         },

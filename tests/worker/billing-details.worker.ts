@@ -10,6 +10,7 @@ import {
   POLAR_HOBBY_YEARLY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   unreachableBilling,
+  rateLimits,
 } from "./support";
 import type { BillingDetails } from "../../src/shared/types";
 import type {
@@ -77,8 +78,8 @@ const polar: BillingProvider = {
 };
 
 /**
- * RL_BILLING as a counter this file controls: Cloudflare's simple limiter,
- * per key, ten a minute (wrangler.jsonc), emptied before each test so the
+ * The billing bucket as a counter this file controls: per key, ten a minute
+ * (src/worker/rate-limit.ts), emptied before each test so the
  * tests above the limit test cannot spend its budget.
  */
 const BILLING_LIMIT = 10;
@@ -122,7 +123,7 @@ async function call(path: string, cookie: string): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost/api/billing${path}`, { headers: { cookie } }),
-    { ...billingEnv(), BILLING: polar, RL_BILLING: billingLimiter },
+    { ...billingEnv(), BILLING: polar, ...rateLimits({ billing: billingLimiter }) },
     ctx,
   );
   await waitOnExecutionContext(ctx);

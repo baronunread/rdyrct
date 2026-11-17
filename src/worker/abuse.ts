@@ -88,7 +88,7 @@ export function assertNotShortener(destination: string): void {
  *
  * ponytail: counted from the `clicks` table on the frequent cron, so it lags
  * a few minutes and undercounts by whatever the per-location click rate
- * limiter (RL_CLICK_RECORDING) dropped. Tighten when #50's durable limiter
+ * limiter (the click bucket) dropped. Tighten when #50's durable limiter
  * lands.
  */
 export const REDIRECT_CEILING_PER_DAY = 2_000;
@@ -101,7 +101,7 @@ const DAY_MS = 24 * HOUR_MS;
  * one is alerted and flagged, and left for a human to look at.
  *
  * The ceiling counts *recorded* clicks on the public redirect path, which
- * anyone can drive: `RL_CLICK_RECORDING` allows 600/minute per org, so an
+ * anyone can drive: the click rate limit allows 600/minute per org, so an
  * unauthenticated requester can clear 2,000 in about four minutes just by
  * hammering any org's public link. Suspending on raw volume would make our
  * own abuse control a way to take down a stranger's org -- point a flood at

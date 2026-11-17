@@ -119,7 +119,7 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
 
   const orgId = c.req.param("orgId")!;
   // Concurrent uploads can each see room for one more, so the cap can be
-  // passed by the few that RL_QR_UPLOAD lets through at once, and no further.
+  // passed by the few the qr_upload rate limit lets through at once, and no further.
   if (await qrLogoCapReached(c.env.MEDIA, orgId, qrLogoCap(limits)))
     throw new HTTPException(429, {
       message: "This organization has too many logos stored. Try again tomorrow",

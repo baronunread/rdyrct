@@ -304,7 +304,7 @@ reportRoutes.post("/", async (c) => {
   log.set({ route: "/api/reports" });
   const key = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
   if (
-    !(await rateLimitAllows(c.env.RL_ANON_LINK, `report:${key}`, {
+    !(await rateLimitAllows(c.env, "anon_link", `report:${key}`, {
       group: "anon_link",
       method: "POST",
     }))

@@ -8,6 +8,7 @@ import {
   exhaustedLimit,
   openLimit,
   overrideEnv,
+  rateLimits,
   recordingLimit,
 } from "./support";
 import type { JsonValue } from "../../src/shared/types";
@@ -44,11 +45,9 @@ afterEach(reset);
 
 describe("recipient-keyed email rate limit (#50)", () => {
   it("refuses a send once the recipient's budget is gone, even though the caller's is not", async () => {
-    const testEnv = overrideEnv({
-      RL_EMAIL: openLimit(),
-      RL_AUTH_PUBLIC: openLimit(),
-      RL_EMAIL_RECIPIENT: exhaustedLimit(),
-    });
+    const testEnv = overrideEnv(
+      rateLimits({ email: openLimit(), auth: openLimit(), email_recipient: exhaustedLimit() }),
+    );
 
     const res = await requestReset(testEnv, "victim@example.com");
 
@@ -57,11 +56,11 @@ describe("recipient-keyed email rate limit (#50)", () => {
 
   it("is indistinguishable from the caller limit, so it leaks no account state", async () => {
     const callerLimited = await requestReset(
-      overrideEnv({ RL_EMAIL: exhaustedLimit(), RL_EMAIL_RECIPIENT: openLimit() }),
+      overrideEnv(rateLimits({ email: exhaustedLimit(), email_recipient: openLimit() })),
       "victim@example.com",
     );
     const recipientLimited = await requestReset(
-      overrideEnv({ RL_EMAIL: openLimit(), RL_EMAIL_RECIPIENT: exhaustedLimit() }),
+      overrideEnv(rateLimits({ email: openLimit(), email_recipient: exhaustedLimit() })),
       "victim@example.com",
     );
 
@@ -75,10 +74,12 @@ describe("recipient-keyed email rate limit (#50)", () => {
   it("keys on the recipient, not the caller, so distributed callers share one budget", async () => {
     const callerKeys: string[] = [];
     const recipientKeys: string[] = [];
-    const testEnv = overrideEnv({
-      RL_EMAIL: recordingLimit(callerKeys),
-      RL_EMAIL_RECIPIENT: recordingLimit(recipientKeys),
-    });
+    const testEnv = overrideEnv(
+      rateLimits({
+        email: recordingLimit(callerKeys),
+        email_recipient: recordingLimit(recipientKeys),
+      }),
+    );
 
     // One recipient, two callers. Recording both budgets' keys is what makes
     // this an assertion rather than a coincidence: the callers have to come
@@ -106,10 +107,9 @@ describe("recipient-keyed email rate limit (#50)", () => {
         return { success };
       },
     };
-    const testEnv = overrideEnv({
-      RL_EMAIL: openLimit(),
-      RL_EMAIL_RECIPIENT: recipientBudgetOfOne,
-    });
+    const testEnv = overrideEnv(
+      rateLimits({ email: openLimit(), email_recipient: recipientBudgetOfOne }),
+    );
 
     const first = await requestReset(testEnv, "victim@example.com", "203.0.113.7");
     const second = await requestReset(testEnv, "victim@example.com", "198.51.100.4");
@@ -124,10 +124,9 @@ describe("recipient-keyed email rate limit (#50)", () => {
 
   it("gives a different recipient its own budget", async () => {
     const keys: string[] = [];
-    const testEnv = overrideEnv({
-      RL_EMAIL: openLimit(),
-      RL_EMAIL_RECIPIENT: recordingLimit(keys),
-    });
+    const testEnv = overrideEnv(
+      rateLimits({ email: openLimit(), email_recipient: recordingLimit(keys) }),
+    );
 
     await requestReset(testEnv, "one@example.com");
     await requestReset(testEnv, "two@example.com");
@@ -137,10 +136,9 @@ describe("recipient-keyed email rate limit (#50)", () => {
 
   it("never puts the raw address in the rate-limit key", async () => {
     const keys: string[] = [];
-    const testEnv = overrideEnv({
-      RL_EMAIL: openLimit(),
-      RL_EMAIL_RECIPIENT: recordingLimit(keys),
-    });
+    const testEnv = overrideEnv(
+      rateLimits({ email: openLimit(), email_recipient: recordingLimit(keys) }),
+    );
 
     await requestReset(testEnv, "victim@example.com");
 
@@ -150,10 +148,9 @@ describe("recipient-keyed email rate limit (#50)", () => {
 
   it("does not consume a recipient budget when the body names no address", async () => {
     const keys: string[] = [];
-    const testEnv = overrideEnv({
-      RL_EMAIL: openLimit(),
-      RL_EMAIL_RECIPIENT: recordingLimit(keys),
-    });
+    const testEnv = overrideEnv(
+      rateLimits({ email: openLimit(), email_recipient: recordingLimit(keys) }),
+    );
 
     await requestReset(testEnv, 42);
 

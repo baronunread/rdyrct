@@ -10,6 +10,7 @@ import {
   overrideEnv,
   fillFreePlanLinks,
   recordingLimit,
+  rateLimits,
 } from "./support";
 import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 import { publishLink } from "../../src/worker/kv";
@@ -279,10 +280,10 @@ describe("the click total", () => {
   it("counts each redirect and tells only the maker", async () => {
     const anon = await seedAnon();
     await publishAnon(anon);
-    // Open, so the test config's one-a-minute budget does not decide it, and
+    // Open, so the limit does not decide it, and
     // recording, so the budget is shown to be this link's own.
     const keys: string[] = [];
-    const testEnv = { ...authEnv(), RL_CLICK_RECORDING: recordingLimit(keys) };
+    const testEnv = { ...authEnv(), ...rateLimits({ click: recordingLimit(keys) }) };
     for (let i = 0; i < 2; i++) {
       const res = await fetchWorker(
         new Request(`http://localhost/${anon.slug}`, { redirect: "manual" }),
@@ -331,12 +332,14 @@ describe("the click total", () => {
     const testEnv = overrideEnv({
       DB,
       BETTER_AUTH_SECRET: authEnv().BETTER_AUTH_SECRET,
-      RL_ANON_LINK: {
-        limit: async ({ key }) => {
-          keys.push(key);
-          return { success: left-- > 0 };
+      ...rateLimits({
+        anon_link: {
+          limit: async ({ key }) => {
+            keys.push(key);
+            return { success: left-- > 0 };
+          },
         },
-      },
+      }),
     });
     const ask = (headers: HeadersInit = {}) =>
       fetchWorker(new Request("http://localhost/api/shorten/clicks", { headers }), testEnv);
@@ -359,6 +362,6 @@ describe("the click total", () => {
     expect(reads).toBe(readsBefore);
     // Its own key, so polling never spends the budget for making links.
     expect(keys).toHaveLength(3);
-    for (const key of keys) expect(key).toMatch(/^clicks:[0-9a-f]{64}$/);
+    for (const key of keys) expect(key).toMatch(/^anon_link:clicks:[0-9a-f]{64}$/);
   });
 });

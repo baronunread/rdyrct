@@ -93,35 +93,35 @@ API or mobile app traffic". That collides with the public API in #74. Super
 Bot Fight Mode is skippable but needs a Pro zone plan. Revisit once #74 has
 a shape.
 
-## Layer 2: Workers Rate Limiting (`wrangler.jsonc`)
+## Layer 2: Workers Rate Limiting (`src/worker/rate-limit.ts`)
 
-Defined in `wrangler.jsonc` under `ratelimits`, applied in
-`src/worker/rate-limit.ts`. Counters are permissive and local to each
-Cloudflare location, so treat these as abuse controls, never as quota
-enforcement.
+One binding, `RATE_LIMIT` in `wrangler.jsonc`, counts every limit. Each
+bucket's limit lives in `RATE_LIMITS` in `src/worker/rate-limit.ts`. The
+binding allows 1,800 units per key a minute, and a call spends
+1,800 / limit units (the binding's `delta`), so each bucket allows exactly
+its own limit; every key starts with its bucket, so no two share a counter.
+Counters are permissive and local to each Cloudflare location, so treat
+these as abuse controls, never as quota enforcement.
 
-These are the production numbers. The dev and test environments in
-`wrangler.jsonc` deliberately run several of them looser (`RL_AUTH_PUBLIC`,
-`RL_EMAIL`, `RL_EMAIL_RECIPIENT`), because the e2e suite signs up
-dozens of times a minute from one address and rate limiting the test run
-proves nothing about the feature.
+The browser tests run on these same numbers.
 
-| Binding              | Limit   | Keyed by          | Guards                        |
-| -------------------- | ------- | ----------------- | ----------------------------- |
-| `RL_AUTH_PUBLIC`     | 30/min  | IP, path          | `/api/auth/*`                 |
-| `RL_EMAIL`           | 10/min  | IP, path          | Anything that sends mail      |
-| `RL_EMAIL_RECIPIENT` | 4/min   | Recipient address | One inbox, many callers (#50) |
-| `RL_WRITE_FREE`      | 90/min  | User              | Writes on a free plan         |
-| `RL_WRITE_PAID`      | 300/min | User              | Writes on a paid plan         |
-| `RL_QR_UPLOAD`       | 20/min  | User              | QR logo uploads to R2         |
-| `RL_DOMAIN_SETUP`    | 30/min  | User              | Custom hostname calls         |
-| `RL_BILLING`         | 10/min  | User              | Polar checkout and reads      |
-| `RL_CLICK_RECORDING` | 600/min | Org, visitor (IP) | Click ingestion               |
+| Bucket            | Limit   | Keyed by          | Guards                         |
+| ----------------- | ------- | ----------------- | ------------------------------ |
+| `auth`            | 30/min  | IP, path          | `/api/auth/*`, unsubscribe     |
+| `email`           | 10/min  | IP, path          | Anything that sends mail       |
+| `email_recipient` | 4/min   | Recipient address | One inbox, many callers (#50)  |
+| `write_free`      | 90/min  | User              | Writes on a free plan          |
+| `write_paid`      | 300/min | User              | Writes on a paid plan          |
+| `qr_upload`       | 20/min  | User              | QR logo uploads to R2          |
+| `domain`          | 30/min  | User              | Custom hostname calls          |
+| `billing`         | 10/min  | User              | Polar checkout and reads       |
+| `click`           | 600/min | Org, visitor (IP) | Click ingestion                |
+| `anon_link`       | 15/min  | IP                | Landing shortener, report form |
 
 These are set for the person having trouble, not for the bot: someone who
 mistypes a password, retries a signup or pastes six links in a row must never
 meet a wall, because a wall reads as the product being broken. Only
-`RL_EMAIL_RECIPIENT` stays tight, because it is the one that bounds what an
+`email_recipient` stays tight, because it is the one that bounds what an
 inbox can be made to receive however many callers aim at it. The real
 ceilings are the WAF rules above and the Turnstile challenge on each attempt.
 
@@ -199,5 +199,8 @@ caught.
 `TURNSTILE_SITE_KEY` (`bunx wrangler secret delete`). The check disables
 itself and every guarded form works as it did without it. No deploy needed.
 
-**A Workers limiter is too tight.** Change the `limit` in `wrangler.jsonc`
-and deploy. Keep the `namespace_id`: changing it resets every counter.
+**A Workers limiter is too tight.** Change its number in `RATE_LIMITS`
+(`src/worker/rate-limit.ts`) and deploy. 1,800 must be a multiple of it, or
+`tests/rate-limit.test.ts` fails; raise the pool in `wrangler.jsonc` and
+`RATE_LIMIT_POOL` together if it does not. Keep the `namespace_id`:
+changing it resets every counter.

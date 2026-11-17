@@ -30,6 +30,8 @@ import {
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
+  openLimit,
+  rateLimits,
 } from "./support";
 
 /**
@@ -485,7 +487,7 @@ describe("an anonymous link (#341 review)", () => {
   it("spends at most its caller's daily share of the site-wide lookups (security #7)", async () => {
     const lookups = stubGoogle();
     // Open, so the per-minute limit does not decide it: this is the day's.
-    const testEnv = { ...withKey(), RL_ANON_LINK: { limit: async () => ({ success: true }) } };
+    const testEnv = { ...withKey(), ...rateLimits({ anon_link: openLimit() }) };
     const from = (ip: string, destination: string) =>
       fetchWorker(
         new Request("http://localhost/api/shorten", {

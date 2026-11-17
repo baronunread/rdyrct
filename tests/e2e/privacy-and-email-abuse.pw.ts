@@ -96,11 +96,11 @@ test("one address cannot be mailed without limit by many callers (#50)", async (
     if (response.status() === 429) break;
   }
 
-  // Refused on the sixth, not merely somewhere: RL_EMAIL_RECIPIENT allows 5
-  // a minute in this environment, so the position of the 429 is what names
+  // Refused on the fifth, not merely somewhere: the email_recipient limit allows 4
+  // a minute, so the position of the 429 is what names
   // which budget ran out. Anything later would mean the recipient limit let
-  // a sixth send through.
-  expect(statuses.indexOf(429)).toBe(5);
+  // a fifth send through.
+  expect(statuses.indexOf(429)).toBe(4);
 });
 
 test("a throttled verification email still lands on the code screen (#50)", async ({ page }) => {

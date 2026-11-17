@@ -3,12 +3,15 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import {
   applyTestMigrations,
+  authEnv,
   bufferedClicks,
   clicksStub,
+  exhaustedLimit,
   fetchWorker,
   overrideEnv,
   overriding,
   resetClicks,
+  rateLimits,
 } from "./support";
 
 // SAFETY: vitest.config.ts binds SHARED_LINK_HOST for every worker test.
@@ -183,13 +186,9 @@ describe("redirect hot path", () => {
         url: "https://example.com/viral",
       }),
     );
-    // The test config allows one recorded click per visitor a minute: the
-    // first visit spends it.
-    await fetchWorker(new Request("http://localhost/viral", { redirect: "manual" }));
-    await resetClicks();
-
     const response = await fetchWorker(
       new Request("http://localhost/viral", { redirect: "manual" }),
+      { ...authEnv(), ...rateLimits({ click: exhaustedLimit() }) },
     );
 
     expect(response.status).toBe(302);
@@ -214,7 +213,7 @@ describe("redirect hot path", () => {
         return { success: used <= 3 };
       },
     };
-    const limitedEnv = overrideEnv({ RL_CLICK_RECORDING: threePerKey });
+    const limitedEnv = overrideEnv(rateLimits({ click: threePerKey }));
     const visit = async (ip: string) => {
       const res = await fetchWorker(
         new Request("http://localhost/summer", {
@@ -253,7 +252,7 @@ describe("redirect hot path", () => {
         return { success: true };
       },
     };
-    const limitedEnv = overrideEnv({ RL_CLICK_RECORDING: recordKeys });
+    const limitedEnv = overrideEnv(rateLimits({ click: recordKeys }));
     for (const forwarded of ["203.0.113.1", "203.0.113.2", "203.0.113.3"]) {
       const res = await fetchWorker(
         new Request("http://localhost/summer", {
