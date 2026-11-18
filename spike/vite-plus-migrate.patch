@@ -1,0 +1,916 @@
+diff --git a/.gitignore b/.gitignore
+index 79b2a0ff..6272dacb 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -14,3 +14,4 @@ package-lock.json
+ # remotion renders
+ out/
+ e2e-timings/
++.vitest/
+diff --git a/package.json b/package.json
+index f0b632a6..879d385e 100644
+--- a/package.json
++++ b/package.json
+@@ -7,15 +7,15 @@
+   "scripts": {
+     "dev": "bun scripts/dev.ts",
+     "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" sh -c 'polar listen \"$(bun scripts/dev-hosts.ts app)/api/webhooks/polar\"'",
+-    "build": "vite build && bun scripts/prerender-app-shell.tsx && bun scripts/prerender-public.tsx && bun scripts/prerender-404.tsx",
++    "build": "vp build && bun scripts/prerender-app-shell.tsx && bun scripts/prerender-public.tsx && bun scripts/prerender-404.tsx",
+     "check": "bun check && bun check -p tsconfig.worker.json && bun check -p tests/worker/tsconfig.json",
+-    "lint": "oxlint --deny-warnings .",
+-    "lint:fix": "oxlint --fix .",
++    "lint": "vp lint --deny-warnings .",
++    "lint:fix": "vp lint --fix .",
+     "format": "bun fmt",
+     "format:check": "bun fmt --check",
+     "test": "bun test",
+-    "test:worker": "vitest run --config vitest.config.ts",
+-    "test:worker:self-host": "VITE_RDYRCT_SITE=0 vitest run --config vitest.config.ts tests/worker/self-host.worker.ts",
++    "test:worker": "vp test run --config vitest.config.ts",
++    "test:worker:self-host": "VITE_RDYRCT_SITE=0 vp test run --config vitest.config.ts tests/worker/self-host.worker.ts",
+     "e2e:install": "playwright install chromium",
+     "e2e:smoke": "playwright test",
+     "e2e:production": "playwright test --config playwright.production.config.ts",
+@@ -92,6 +92,7 @@
+   },
+   "devDependencies": {
+     "@cloudflare/vite-plugin": "^1.66.0",
++    "@cloudflare/vitest-plugin": "^1.6.1",
+     "@cloudflare/vitest-pool-workers": "^0.23.0",
+     "@cloudflare/workers-types": "5.20261031.1",
+     "@evlog/cli": "0.11.1",
+@@ -116,17 +117,19 @@
+     "jsonc-parser": "^3.3.1",
+     "jsqr": "^1.4.0",
+     "lefthook": "^2.2.2",
+-    "oxlint": "1.90.0",
+     "portless": "^0.15.12",
+     "react-doctor": "^0.9.18",
+     "style-doctor": "0.5.2",
+     "tailwindcss": "^4.3.3",
+     "typescript": "^7.0.2",
+-    "vite": "^8.3.5",
+-    "vitest": "^4.1.12",
++    "vite": "npm:@voidzero-dev/vite-plus-core@1.5.1",
++    "vite-plus": "1.5.1",
++    "vitest": "5.1.0",
+     "wrangler": "^4.156.0"
+   },
+   "overrides": {
++    "vite": "npm:@voidzero-dev/vite-plus-core@1.5.1",
++    "vitest": "5.1.0",
+     "zod": "4.6.5"
+   },
+   "packageManager": "bun@1.4.4",
+diff --git a/tests/worker/abuse-hold.worker.ts b/tests/worker/abuse-hold.worker.ts
+index 501eb0d6..eea7ac44 100644
+--- a/tests/worker/abuse-hold.worker.ts
++++ b/tests/worker/abuse-hold.worker.ts
+@@ -1,5 +1,5 @@
+ // fallow-ignore-file code-duplication -- worker specs repeat their setup so each reads on its own
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/abuse.worker.ts b/tests/worker/abuse.worker.ts
+index af6dbdea..7c22c54c 100644
+--- a/tests/worker/abuse.worker.ts
++++ b/tests/worker/abuse.worker.ts
+@@ -1,5 +1,5 @@
+ // fallow-ignore-file code-duplication -- sweep specs repeat their setup so each reads on its own
+-import { beforeEach, describe, expect, it, vi } from "vitest";
++import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import * as Sentry from "@sentry/cloudflare";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+diff --git a/tests/worker/account-deletion.worker.ts b/tests/worker/account-deletion.worker.ts
+index b3fd317a..6be9f2ca 100644
+--- a/tests/worker/account-deletion.worker.ts
++++ b/tests/worker/account-deletion.worker.ts
+@@ -6,7 +6,7 @@
+  * live account whose organizations are already being destroyed, and keeps a
+  * membership race from leaving an ownerless org.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/account-enumeration.worker.ts b/tests/worker/account-enumeration.worker.ts
+index 8389e981..6b35d71f 100644
+--- a/tests/worker/account-enumeration.worker.ts
++++ b/tests/worker/account-enumeration.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/admin-moderation.worker.ts b/tests/worker/admin-moderation.worker.ts
+index d62a2113..12ec590d 100644
+--- a/tests/worker/admin-moderation.worker.ts
++++ b/tests/worker/admin-moderation.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/admin-platform.worker.ts b/tests/worker/admin-platform.worker.ts
+index fb722c46..57d45f39 100644
+--- a/tests/worker/admin-platform.worker.ts
++++ b/tests/worker/admin-platform.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import * as schema from "../../src/worker/db/schema";
+diff --git a/tests/worker/admin-restore-batch.worker.ts b/tests/worker/admin-restore-batch.worker.ts
+index da41da87..179f4dd4 100644
+--- a/tests/worker/admin-restore-batch.worker.ts
++++ b/tests/worker/admin-restore-batch.worker.ts
+@@ -11,7 +11,7 @@
+  * These count what one restore costs, by statement and by call, rather than
+  * waiting for a limit miniflare does not enforce.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/analytics.worker.ts b/tests/worker/analytics.worker.ts
+index 75ed906a..7bedf8f8 100644
+--- a/tests/worker/analytics.worker.ts
++++ b/tests/worker/analytics.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/anon-links.worker.ts b/tests/worker/anon-links.worker.ts
+index fafbb2c0..f3075c4f 100644
+--- a/tests/worker/anon-links.worker.ts
++++ b/tests/worker/anon-links.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/api-keys.worker.ts b/tests/worker/api-keys.worker.ts
+index 0a192bdd..de8f0b40 100644
+--- a/tests/worker/api-keys.worker.ts
++++ b/tests/worker/api-keys.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+ import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
+diff --git a/tests/worker/app-shell.worker.ts b/tests/worker/app-shell.worker.ts
+index 75153522..a8f73a5b 100644
+--- a/tests/worker/app-shell.worker.ts
++++ b/tests/worker/app-shell.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
+ 
+diff --git a/tests/worker/avatars.worker.ts b/tests/worker/avatars.worker.ts
+index 7721643d..68bc1599 100644
+--- a/tests/worker/avatars.worker.ts
++++ b/tests/worker/avatars.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/ban.worker.ts b/tests/worker/ban.worker.ts
+index 68fbd78b..cb7f1e70 100644
+--- a/tests/worker/ban.worker.ts
++++ b/tests/worker/ban.worker.ts
+@@ -1,5 +1,5 @@
+ // fallow-ignore-file code-duplication -- worker specs repeat their setup so each reads on its own
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/better-auth-migration.worker.ts b/tests/worker/better-auth-migration.worker.ts
+index a93d9c21..a7d74c39 100644
+--- a/tests/worker/better-auth-migration.worker.ts
++++ b/tests/worker/better-auth-migration.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, expect, test } from "vitest";
++import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { applyD1Migrations, reset } from "cloudflare:test";
+ import { hashPassword } from "../../src/worker/password";
+diff --git a/tests/worker/billing-details.worker.ts b/tests/worker/billing-details.worker.ts
+index d9ce8513..a5228087 100644
+--- a/tests/worker/billing-details.worker.ts
++++ b/tests/worker/billing-details.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/billing.worker.ts b/tests/worker/billing.worker.ts
+index cdb3d30c..84e28f03 100644
+--- a/tests/worker/billing.worker.ts
++++ b/tests/worker/billing.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import * as Sentry from "@sentry/cloudflare";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+diff --git a/tests/worker/click-caps.worker.ts b/tests/worker/click-caps.worker.ts
+index 8fbdefa7..8ed4fb3c 100644
+--- a/tests/worker/click-caps.worker.ts
++++ b/tests/worker/click-caps.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset, runDurableObjectAlarm } from "cloudflare:test";
+ import { insertClicks, type ClickMessage } from "../../src/worker/clicks";
+diff --git a/tests/worker/click-rollups.worker.ts b/tests/worker/click-rollups.worker.ts
+index 93bb9988..18f380f3 100644
+--- a/tests/worker/click-rollups.worker.ts
++++ b/tests/worker/click-rollups.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset, runDurableObjectAlarm } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/clicks.worker.ts b/tests/worker/clicks.worker.ts
+index 82045ee0..f0c3bbd0 100644
+--- a/tests/worker/clicks.worker.ts
++++ b/tests/worker/clicks.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it, vi } from "vitest";
++import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import * as Sentry from "@sentry/cloudflare";
+ import { env } from "cloudflare:workers";
+ import { reset, runDurableObjectAlarm } from "cloudflare:test";
+diff --git a/tests/worker/default-domain.worker.ts b/tests/worker/default-domain.worker.ts
+index b0dae64e..996a04db 100644
+--- a/tests/worker/default-domain.worker.ts
++++ b/tests/worker/default-domain.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { eq } from "drizzle-orm";
+diff --git a/tests/worker/default-org.worker.ts b/tests/worker/default-org.worker.ts
+index 784809d3..9a3f8031 100644
+--- a/tests/worker/default-org.worker.ts
++++ b/tests/worker/default-org.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, authEnv, fetchWorker, signInCookie, TEST_PASSWORD } from "./support";
+diff --git a/tests/worker/domains.worker.ts b/tests/worker/domains.worker.ts
+index 4573d896..0d8c0e65 100644
+--- a/tests/worker/domains.worker.ts
++++ b/tests/worker/domains.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/email-escaping.worker.ts b/tests/worker/email-escaping.worker.ts
+index 8cbd69a6..e6fbbf9e 100644
+--- a/tests/worker/email-escaping.worker.ts
++++ b/tests/worker/email-escaping.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/email-recipient-limit.worker.ts b/tests/worker/email-recipient-limit.worker.ts
+index 17eb365a..1ff1950b 100644
+--- a/tests/worker/email-recipient-limit.worker.ts
++++ b/tests/worker/email-recipient-limit.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+ import type { Env } from "../../src/worker/env";
+diff --git a/tests/worker/entitlement-locks.worker.ts b/tests/worker/entitlement-locks.worker.ts
+index 41dda3b9..34153296 100644
+--- a/tests/worker/entitlement-locks.worker.ts
++++ b/tests/worker/entitlement-locks.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { eq } from "drizzle-orm";
+diff --git a/tests/worker/entitlement.worker.ts b/tests/worker/entitlement.worker.ts
+index 0923893e..f448d757 100644
+--- a/tests/worker/entitlement.worker.ts
++++ b/tests/worker/entitlement.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/evlog-context.worker.ts b/tests/worker/evlog-context.worker.ts
+index e45f1196..3b69ef81 100644
+--- a/tests/worker/evlog-context.worker.ts
++++ b/tests/worker/evlog-context.worker.ts
+@@ -1,5 +1,5 @@
+ import { stripVTControlCharacters } from "node:util";
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { asWideEvent } from "../../src/worker/evlog";
+ import { logFailure } from "../../src/worker/log-failure";
+diff --git a/tests/worker/expiry.worker.ts b/tests/worker/expiry.worker.ts
+index 79ee4da1..e6e76af9 100644
+--- a/tests/worker/expiry.worker.ts
++++ b/tests/worker/expiry.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { eq } from "drizzle-orm";
+diff --git a/tests/worker/google-account-email.worker.ts b/tests/worker/google-account-email.worker.ts
+index 31c075b4..cfe1df22 100644
+--- a/tests/worker/google-account-email.worker.ts
++++ b/tests/worker/google-account-email.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
+diff --git a/tests/worker/insights.worker.ts b/tests/worker/insights.worker.ts
+index e9983484..1050e7b5 100644
+--- a/tests/worker/insights.worker.ts
++++ b/tests/worker/insights.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/invite-accept.worker.ts b/tests/worker/invite-accept.worker.ts
+index a888aac7..81481058 100644
+--- a/tests/worker/invite-accept.worker.ts
++++ b/tests/worker/invite-accept.worker.ts
+@@ -10,7 +10,7 @@
+  * These run on miniflare's SQLite, not on D1 itself, so they pin the
+  * behaviour this code depends on rather than proving what production does.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { acceptInviteAtomically } from "../../src/worker/plan";
+diff --git a/tests/worker/invite-send.worker.ts b/tests/worker/invite-send.worker.ts
+index 5870d9b9..4a42c874 100644
+--- a/tests/worker/invite-send.worker.ts
++++ b/tests/worker/invite-send.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import type { InvitesCreated } from "../../src/shared/types";
+diff --git a/tests/worker/invite-verified.worker.ts b/tests/worker/invite-verified.worker.ts
+index 4004626e..341089b3 100644
+--- a/tests/worker/invite-verified.worker.ts
++++ b/tests/worker/invite-verified.worker.ts
+@@ -9,7 +9,7 @@
+  * A deployment with no email provider can prove no address at all, so there
+  * the token is all the proof there is: the admin handed it to that person.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { hashPassword } from "../../src/worker/password";
+diff --git a/tests/worker/limit-overrides.worker.ts b/tests/worker/limit-overrides.worker.ts
+index 379ed5a1..b6dda22f 100644
+--- a/tests/worker/limit-overrides.worker.ts
++++ b/tests/worker/limit-overrides.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { orgPlan } from "../../src/worker/plan";
+diff --git a/tests/worker/link-addresses.worker.ts b/tests/worker/link-addresses.worker.ts
+index 86bb1bba..d7174b17 100644
+--- a/tests/worker/link-addresses.worker.ts
++++ b/tests/worker/link-addresses.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { eq } from "drizzle-orm";
+diff --git a/tests/worker/link-export.worker.ts b/tests/worker/link-export.worker.ts
+index c616c508..af9e6548 100644
+--- a/tests/worker/link-export.worker.ts
++++ b/tests/worker/link-export.worker.ts
+@@ -2,7 +2,7 @@
+  * CSV export of an org's links (#75): every link, quoted and guarded, read
+  * from D1 a batch at a time, and in a shape the import reads back.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, fetchWorker, freeOwnerCookie, rawLinkRow, testDb } from "./support";
+diff --git a/tests/worker/link-import.worker.ts b/tests/worker/link-import.worker.ts
+index edcd34d0..a152e0d1 100644
+--- a/tests/worker/link-import.worker.ts
++++ b/tests/worker/link-import.worker.ts
+@@ -3,7 +3,7 @@
+  * Short.io, Bitly, Rebrandly or Dub export become links on the same domain and
+  * slug, and each short URL then sends people where it used to.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/link-risk.worker.ts b/tests/worker/link-risk.worker.ts
+index 8e15482f..acdf6f7f 100644
+--- a/tests/worker/link-risk.worker.ts
++++ b/tests/worker/link-risk.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/link-states.worker.ts b/tests/worker/link-states.worker.ts
+index d5f8618b..d152d64c 100644
+--- a/tests/worker/link-states.worker.ts
++++ b/tests/worker/link-states.worker.ts
+@@ -1,5 +1,5 @@
+ // fallow-ignore-file code-duplication -- specs repeat their setup so each reads on its own
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/links-facets.worker.ts b/tests/worker/links-facets.worker.ts
+index 699ea161..1a4ad7f0 100644
+--- a/tests/worker/links-facets.worker.ts
++++ b/tests/worker/links-facets.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import type { LinkFacets, LinkListItem } from "../../src/shared/types";
+diff --git a/tests/worker/links-pagination.worker.ts b/tests/worker/links-pagination.worker.ts
+index b2dbb55a..a87a8185 100644
+--- a/tests/worker/links-pagination.worker.ts
++++ b/tests/worker/links-pagination.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/links.worker.ts b/tests/worker/links.worker.ts
+index 98ee4172..9998c365 100644
+--- a/tests/worker/links.worker.ts
++++ b/tests/worker/links.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { env } from "cloudflare:workers";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/made-with.worker.ts b/tests/worker/made-with.worker.ts
+index 32fd8344..d17fdc3e 100644
+--- a/tests/worker/made-with.worker.ts
++++ b/tests/worker/made-with.worker.ts
+@@ -1,4 +1,4 @@
+-import { describe, expect, it } from "vitest";
++import { describe, expect, it } from "vite-plus/test";
+ import { MADE_WITH_SLOT } from "../../src/shared/link-pages";
+ import { RDYRCT_SITE } from "../../src/shared/site";
+ import { notFoundPage } from "../../src/worker/not-found-page";
+diff --git a/tests/worker/marketing.worker.ts b/tests/worker/marketing.worker.ts
+index 8db381a6..68b61160 100644
+--- a/tests/worker/marketing.worker.ts
++++ b/tests/worker/marketing.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import type { CurrentUser, JsonValue, MarketingState } from "../../src/shared/types";
+diff --git a/tests/worker/mcp-oauth.worker.ts b/tests/worker/mcp-oauth.worker.ts
+index 54f7071c..2e87918e 100644
+--- a/tests/worker/mcp-oauth.worker.ts
++++ b/tests/worker/mcp-oauth.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import {
+   applyTestMigrations,
+diff --git a/tests/worker/mcp.worker.ts b/tests/worker/mcp.worker.ts
+index 50aa4298..3b03827e 100644
+--- a/tests/worker/mcp.worker.ts
++++ b/tests/worker/mcp.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { env } from "cloudflare:workers";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/members-invites.worker.ts b/tests/worker/members-invites.worker.ts
+index 301d1dba..412357f0 100644
+--- a/tests/worker/members-invites.worker.ts
++++ b/tests/worker/members-invites.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import type { InvitePreview, MemberDTO } from "../../src/shared/types";
+diff --git a/tests/worker/method-not-allowed.worker.ts b/tests/worker/method-not-allowed.worker.ts
+index 0aca0a57..84f4d6f3 100644
+--- a/tests/worker/method-not-allowed.worker.ts
++++ b/tests/worker/method-not-allowed.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+ import { applyTestMigrations, testEnv } from "./support";
+diff --git a/tests/worker/newsletter-workflow.worker.ts b/tests/worker/newsletter-workflow.worker.ts
+index cef848e2..3d02a9fa 100644
+--- a/tests/worker/newsletter-workflow.worker.ts
++++ b/tests/worker/newsletter-workflow.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { introspectWorkflowInstance, reset } from "cloudflare:test";
+ import type { JsonValue } from "../../src/shared/types";
+diff --git a/tests/worker/no-email-signup.worker.ts b/tests/worker/no-email-signup.worker.ts
+index b4b769d4..6e345b5d 100644
+--- a/tests/worker/no-email-signup.worker.ts
++++ b/tests/worker/no-email-signup.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, expect, it } from "vitest";
++import { beforeEach, expect, it } from "vite-plus/test";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
+ 
+diff --git a/tests/worker/no-polar.worker.ts b/tests/worker/no-polar.worker.ts
+index 0b1a38eb..9bf3fdcf 100644
+--- a/tests/worker/no-polar.worker.ts
++++ b/tests/worker/no-polar.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, expect, it } from "vitest";
++import { beforeEach, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/noindex.worker.ts b/tests/worker/noindex.worker.ts
+index ed9f4401..5645abec 100644
+--- a/tests/worker/noindex.worker.ts
++++ b/tests/worker/noindex.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
+ 
+diff --git a/tests/worker/orgs.worker.ts b/tests/worker/orgs.worker.ts
+index 51eac5f5..ff9235ed 100644
+--- a/tests/worker/orgs.worker.ts
++++ b/tests/worker/orgs.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/page-meta.worker.ts b/tests/worker/page-meta.worker.ts
+index e600f53b..81e836aa 100644
+--- a/tests/worker/page-meta.worker.ts
++++ b/tests/worker/page-meta.worker.ts
+@@ -1,4 +1,4 @@
+-import { describe, expect, it } from "vitest";
++import { describe, expect, it } from "vite-plus/test";
+ import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
+ 
+ /**
+diff --git a/tests/worker/plan-limits.worker.ts b/tests/worker/plan-limits.worker.ts
+index 6d026921..fa2492ac 100644
+--- a/tests/worker/plan-limits.worker.ts
++++ b/tests/worker/plan-limits.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/qr-logo-cap.worker.ts b/tests/worker/qr-logo-cap.worker.ts
+index f2eddfe7..f5394310 100644
+--- a/tests/worker/qr-logo-cap.worker.ts
++++ b/tests/worker/qr-logo-cap.worker.ts
+@@ -6,7 +6,7 @@
+  * without end. The cap leaves room for every link to carry its own logo, plus
+  * the org's default and a day of uploads nobody saved.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { PLAN_LIMITS } from "../../src/shared/types";
+diff --git a/tests/worker/reconcile.worker.ts b/tests/worker/reconcile.worker.ts
+index f453f52c..aca6a154 100644
+--- a/tests/worker/reconcile.worker.ts
++++ b/tests/worker/reconcile.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { eq } from "drizzle-orm";
+diff --git a/tests/worker/redirect-before-kv.worker.ts b/tests/worker/redirect-before-kv.worker.ts
+index 14880022..6e0ac07f 100644
+--- a/tests/worker/redirect-before-kv.worker.ts
++++ b/tests/worker/redirect-before-kv.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/redirects.worker.ts b/tests/worker/redirects.worker.ts
+index 4816404d..e34252cb 100644
+--- a/tests/worker/redirects.worker.ts
++++ b/tests/worker/redirects.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/referrer-privacy.worker.ts b/tests/worker/referrer-privacy.worker.ts
+index f6411c1a..b6386d1a 100644
+--- a/tests/worker/referrer-privacy.worker.ts
++++ b/tests/worker/referrer-privacy.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/reports.worker.ts b/tests/worker/reports.worker.ts
+index afcaf912..1316807c 100644
+--- a/tests/worker/reports.worker.ts
++++ b/tests/worker/reports.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/request-validation.worker.ts b/tests/worker/request-validation.worker.ts
+index e1406525..fecf9f4b 100644
+--- a/tests/worker/request-validation.worker.ts
++++ b/tests/worker/request-validation.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+ import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
+diff --git a/tests/worker/security-headers.worker.ts b/tests/worker/security-headers.worker.ts
+index 9ed9ab0f..ff1fd6ce 100644
+--- a/tests/worker/security-headers.worker.ts
++++ b/tests/worker/security-headers.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { applySecurityHeaders, turnstileAllowed } from "../../src/worker/security-headers";
+diff --git a/tests/worker/self-host.worker.ts b/tests/worker/self-host.worker.ts
+index cbd50ded..2d2a8c8a 100644
+--- a/tests/worker/self-host.worker.ts
++++ b/tests/worker/self-host.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { reset } from "cloudflare:test";
+ import { RDYRCT_SITE } from "../../src/shared/site";
+ import { applySecurityHeaders } from "../../src/worker/security-headers";
+diff --git a/tests/worker/slug-reclaim.worker.ts b/tests/worker/slug-reclaim.worker.ts
+index 78086b78..cf93a5bb 100644
+--- a/tests/worker/slug-reclaim.worker.ts
++++ b/tests/worker/slug-reclaim.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, afterEach, describe, expect, it } from "vitest";
++import { beforeEach, afterEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+ import worker from "../../src/worker";
+diff --git a/tests/worker/spa-routes.worker.ts b/tests/worker/spa-routes.worker.ts
+index d3627d20..a8cd9b58 100644
+--- a/tests/worker/spa-routes.worker.ts
++++ b/tests/worker/spa-routes.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
+diff --git a/tests/worker/storage-outbox.worker.ts b/tests/worker/storage-outbox.worker.ts
+index adcf188e..3dad0465 100644
+--- a/tests/worker/storage-outbox.worker.ts
++++ b/tests/worker/storage-outbox.worker.ts
+@@ -12,7 +12,7 @@
+  * fact still lands on current D1 state. Anything added to StorageMessage has
+  * to keep that true.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { getQueueResult, reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/storage.worker.ts b/tests/worker/storage.worker.ts
+index 0184b576..1d405b75 100644
+--- a/tests/worker/storage.worker.ts
++++ b/tests/worker/storage.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it, vi } from "vitest";
++import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import * as Sentry from "@sentry/cloudflare";
+ import { env } from "cloudflare:workers";
+ import { getQueueResult, reset } from "cloudflare:test";
+diff --git a/tests/worker/support.ts b/tests/worker/support.ts
+index bb19a6d6..bedbd095 100644
+--- a/tests/worker/support.ts
++++ b/tests/worker/support.ts
+@@ -1,4 +1,4 @@
+-import { expect } from "vitest";
++import { expect } from "vite-plus/test";
+ import type { BillingProvider } from "../../src/worker/billing-provider";
+ import { env } from "cloudflare:workers";
+ import {
+diff --git a/tests/worker/teardown-writes.worker.ts b/tests/worker/teardown-writes.worker.ts
+index 5682660c..45d7b11f 100644
+--- a/tests/worker/teardown-writes.worker.ts
++++ b/tests/worker/teardown-writes.worker.ts
+@@ -10,7 +10,7 @@
+  * These call the insert helpers directly, because the route guard is exactly
+  * what a test going through the route would be measuring instead.
+  */
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { drizzle } from "drizzle-orm/d1";
+diff --git a/tests/worker/tsconfig.json b/tests/worker/tsconfig.json
+index 79a1a4a7..fd620821 100644
+--- a/tests/worker/tsconfig.json
++++ b/tests/worker/tsconfig.json
+@@ -2,7 +2,7 @@
+   "extends": "../../tsconfig.worker.json",
+   "compilerOptions": {
+     "moduleResolution": "bundler",
+-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types", "vite/client"]
++    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types", "vite/client"]
+   },
+   "include": ["./**/*.ts"]
+ }
+diff --git a/tests/worker/turnstile-disabled.worker.ts b/tests/worker/turnstile-disabled.worker.ts
+index 6e2a10ba..483052ca 100644
+--- a/tests/worker/turnstile-disabled.worker.ts
++++ b/tests/worker/turnstile-disabled.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, expect, it } from "vitest";
++import { beforeEach, expect, it } from "vite-plus/test";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
+ 
+diff --git a/tests/worker/turnstile.worker.ts b/tests/worker/turnstile.worker.ts
+index d4316b96..348a67c4 100644
+--- a/tests/worker/turnstile.worker.ts
++++ b/tests/worker/turnstile.worker.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
+diff --git a/tests/worker/viewer-role.worker.ts b/tests/worker/viewer-role.worker.ts
+index 8f8950a9..2f55d5b4 100644
+--- a/tests/worker/viewer-role.worker.ts
++++ b/tests/worker/viewer-role.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, afterEach, describe, expect, it } from "vitest";
++import { beforeEach, afterEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import { hashPassword } from "../../src/worker/password";
+diff --git a/tests/worker/web-risk.worker.ts b/tests/worker/web-risk.worker.ts
+index 06b028e8..4fa5625a 100644
+--- a/tests/worker/web-risk.worker.ts
++++ b/tests/worker/web-risk.worker.ts
+@@ -1,5 +1,5 @@
+ // fallow-ignore-file code-duplication -- specs repeat their setup so each reads on its own
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/tests/worker/welcome-email.worker.ts b/tests/worker/welcome-email.worker.ts
+index e322a066..83e77faf 100644
+--- a/tests/worker/welcome-email.worker.ts
++++ b/tests/worker/welcome-email.worker.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it } from "vite-plus/test";
+ import { env } from "cloudflare:workers";
+ import { reset } from "cloudflare:test";
+ import {
+diff --git a/vite.config.ts b/vite.config.ts
+index f0103a9a..6a9441ce 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,7 +1,7 @@
+ import { readFileSync } from "node:fs";
+ import { fileURLToPath } from "node:url";
+ import { devHostVars } from "./scripts/dev-host-keys";
+-import { defineConfig, type Plugin, type UserConfig } from "vite";
++import { defineConfig, type Plugin, type UserConfig } from "vite-plus";
+ import react from "@vitejs/plugin-react";
+ import tailwindcss from "@tailwindcss/vite";
+ import { cloudflare } from "@cloudflare/vite-plugin";
+@@ -104,6 +104,13 @@ function selfHostPages(): Plugin {
+ }
+ 
+ export default defineConfig(async (): Promise<UserConfig> => ({
++  test: {
++    // Vitest v4 compatibility: preserve mock call history.
++    // Remove after tests no longer rely on calls from setup or earlier tests.
++    // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
++    // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
++    clearMocks: false,
++  },
+   plugins: [
+     react(),
+     tailwindcss(),
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 309dd4e4..1aa5b925 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -1,9 +1,9 @@
+-import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
++import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
+ import { readFileSync } from "node:fs";
+ import { fileURLToPath } from "node:url";
+ import { parseEnv } from "node:util";
+ import path from "node:path";
+-import { defineConfig } from "vitest/config";
++import { defineConfig } from "vite-plus";
+ 
+ export default defineConfig({
+   plugins: [
+@@ -47,6 +47,11 @@ export default defineConfig({
+     },
+   },
+   test: {
++    // Vitest v4 compatibility: preserve mock call history.
++    // Remove after tests no longer rely on calls from setup or earlier tests.
++    // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
++    // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
++    clearMocks: false,
+     include: ["tests/worker/**/*.worker.ts"],
+   },
+ });
