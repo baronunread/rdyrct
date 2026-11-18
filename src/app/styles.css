@@ -630,6 +630,12 @@ html {
   animation: none;
   mix-blend-mode: normal;
 }
+/* Only the new pill is drawn: the old one is a still picture, and through the
+   see-through new pill it trailed the ride up (marketing-scroll.ts) as a pale
+   rectangle. */
+::view-transition-old(marketing-header) {
+  opacity: 0;
+}
 
 [data-marketing-pill] {
   view-transition-name: marketing-header;
