@@ -240,7 +240,7 @@ jobs:
       # up-to-date PR report. Match the locally pinned CLI so score changes
       # only when this repository updates @evlog/cli.
       - name: evlog map score gate
-        uses: evloghq/action@9e0020fc8f3e60bb63121ee0008b41229d77f809
+        uses: evloghq/action@7fc1faa11025949bd98b98938e7eaf1278a6b8bd
         with:
           version: 0.9.0
           min-score: "100"
