@@ -81,7 +81,8 @@ describe("recipient-keyed email rate limit (#50)", () => {
     // The callers' keys have to differ for "the recipient key is the same
     // anyway" to mean anything.
     await requestReset(testEnv, "victim@example.com", "203.0.113.7");
-    await requestReset(testEnv, "VICTIM@Example.com  ", "198.51.100.4");
+    // No padding: better-auth 1.7.27 refuses an address with spaces round it.
+    await requestReset(testEnv, "VICTIM@Example.com", "198.51.100.4");
 
     expect(callerKeys).toHaveLength(2);
     expect(callerKeys[0]).not.toBe(callerKeys[1]);
