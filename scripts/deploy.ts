@@ -11,6 +11,15 @@ import { isRdyrctSite, namesRdyrct } from "./site-mode";
 const source = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 const site = isRdyrctSite();
 
+// Extra flags go to wrangler deploy, e.g. `--secrets-file` to change a secret in the same version as the code.
+const deployFlags = process.argv.slice(2);
+if (deployFlags.includes("--dry-run")) {
+  console.error(
+    "No --dry-run: the source map upload and D1 migrations run first, for real. Use `bunx wrangler deploy --dry-run`.",
+  );
+  process.exit(1);
+}
+
 // Cloudflare builds a copy whose wrangler.jsonc still describes rdyrct.com, so it gets the self-hosted config.
 if (process.env.WORKERS_CI === "1" && !site && namesRdyrct(source)) {
   const host = await deploySelfHosted({ source, dropIds: false });
@@ -23,15 +32,6 @@ if (site !== namesRdyrct(source)) {
     site
       ? "VITE_RDYRCT_SITE=1 builds rdyrct.com, but wrangler.jsonc deploys somewhere else. Remove the flag."
       : "wrangler.jsonc still deploys to rdyrct.com. Run `bun run setup` to set up your own copy, or, on rdyrct.com, add VITE_RDYRCT_SITE=1 to .env.",
-  );
-  process.exit(1);
-}
-
-// Extra flags go to wrangler deploy, e.g. `--secrets-file` to change a secret in the same version as the code.
-const deployFlags = process.argv.slice(2);
-if (deployFlags.includes("--dry-run")) {
-  console.error(
-    "No --dry-run: the source map upload and D1 migrations run first, for real. Use `bunx wrangler deploy --dry-run`.",
   );
   process.exit(1);
 }
