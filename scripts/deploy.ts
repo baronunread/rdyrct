@@ -38,4 +38,5 @@ await $`bunx wrangler whoami`.quiet();
 // Migrate first, so new code never meets an old schema. CI=true skips Wrangler's prompt: answering "n" exits 0
 // having applied nothing, and the deploy would ship anyway.
 await $`bunx wrangler d1 migrations apply DB --remote`.env({ ...process.env, CI: "true" });
-await $`bunx wrangler deploy`;
+// Extra flags go to wrangler deploy, e.g. `--secrets-file` to change a secret in the same version as the code.
+await $`bunx wrangler deploy ${process.argv.slice(2)}`;

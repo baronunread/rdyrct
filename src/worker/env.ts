@@ -70,7 +70,8 @@ export interface Env {
   // click buffer flush interval in ms, e2e only. Unset means 10 s.
   CLICK_FLUSH_MS?: string; // var
 
-  SENTRY_DSN?: string; // var, from sentry.io project settings
+  // A secret, not a var: a public DSN lets every clone of this repo report into our project.
+  SENTRY_DSN?: string; // secret, from sentry.io project settings
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

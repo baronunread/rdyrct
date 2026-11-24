@@ -16,8 +16,6 @@ export default defineConfig({
           ...parseEnv(readFileSync(".dev.vars.local.example", "utf8")),
           APP_HOST: "localhost",
           APP_URL: "http://localhost",
-          // wrangler.jsonc's top-level DSN is prod's: unset so tests never report to it.
-          SENTRY_DSN: "",
           SHARED_LINK_HOST: "short.localhost",
           TEST_MIGRATIONS: await readD1Migrations(path.join(import.meta.dirname, "migrations")),
         },
