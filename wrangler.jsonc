@@ -104,10 +104,6 @@
     "POLAR_PRO_YEARLY_PRODUCT_ID": "69d9d016-8c57-4a0d-a9dd-acc492149462",
     "POLAR_HOBBY_YEARLY_PRODUCT_ID": "f96a3dde-4741-4f7c-a998-29e9adab1c81",
     "CF_ZONE_ID": "21285955570c1215ae9efd13692c950a",
-    // Project settings → Client Keys (DSN) at sentry.io. Not sensitive (it's
-    // meant to ship in client bundles), so it lives here rather than as a
-    // secret. Capture no-ops until this is set.
-    "SENTRY_DSN": "https://ef93929e3a752b79646761bf47b56792@o4511118622916608.ingest.de.sentry.io/4511945059926097",
   },
   "d1_databases": [
     {
@@ -241,9 +237,6 @@
         // Flush clicks after 0.5 s, not 10: a test that follows a click to
         // D1 should not spend a sixth of its timeout waiting on an alarm.
         "CLICK_FLUSH_MS": "500",
-        // env vars aren't inherited from the top-level "vars": left unset
-        // (capture no-ops) so e2e never calls out to Sentry.
-        "SENTRY_DSN": "",
       },
       "kv_namespaces": [
         {

@@ -14,7 +14,7 @@ const WRANGLER = new URL("../wrangler.jsonc", import.meta.url);
 /** Until the worker exists its workers.dev address may be unknown: the first deploy carries this, a second replaces it. */
 const PENDING_HOST = "pending.workers.dev";
 
-/** A copy that kept ours would report its errors to our Sentry project. */
+/** A copy that kept ours would send its mail as us and bill against our Polar products. */
 const RDYRCT_ONLY_VARS = [
   "MAIL_FROM",
   "WELCOME_FROM",
@@ -27,7 +27,6 @@ const RDYRCT_ONLY_VARS = [
   "POLAR_PRO_YEARLY_PRODUCT_ID",
   "POLAR_HOBBY_YEARLY_PRODUCT_ID",
   "CF_ZONE_ID",
-  "SENTRY_DSN",
 ];
 
 type Target = {

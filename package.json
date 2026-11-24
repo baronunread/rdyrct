@@ -169,9 +169,6 @@
       },
       "CF_ZONE_ID": {
         "description": "rdyrct.com's. Your copy drops it. Customers' own domains need your zone and an API token."
-      },
-      "SENTRY_DSN": {
-        "description": "rdyrct.com's error reports. Your copy drops it, so nothing reaches our Sentry."
       }
     }
   },
