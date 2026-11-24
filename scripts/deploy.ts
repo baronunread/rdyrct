@@ -27,6 +27,15 @@ if (site !== namesRdyrct(source)) {
   process.exit(1);
 }
 
+// Extra flags go to wrangler deploy, e.g. `--secrets-file` to change a secret in the same version as the code.
+const deployFlags = process.argv.slice(2);
+if (deployFlags.includes("--dry-run")) {
+  console.error(
+    "No --dry-run: the source map upload and D1 migrations run first, for real. Use `bunx wrangler deploy --dry-run`.",
+  );
+  process.exit(1);
+}
+
 console.log(site ? "Deploying rdyrct.com" : "Deploying a self-hosted copy");
 
 await $`bun run build`.env({ ...process.env, POSTHOG_SOURCEMAPS: site ? "1" : "0" });
@@ -38,5 +47,4 @@ await $`bunx wrangler whoami`.quiet();
 // Migrate first, so new code never meets an old schema. CI=true skips Wrangler's prompt: answering "n" exits 0
 // having applied nothing, and the deploy would ship anyway.
 await $`bunx wrangler d1 migrations apply DB --remote`.env({ ...process.env, CI: "true" });
-// Extra flags go to wrangler deploy, e.g. `--secrets-file` to change a secret in the same version as the code.
-await $`bunx wrangler deploy ${process.argv.slice(2)}`;
+await $`bunx wrangler deploy ${deployFlags}`;
