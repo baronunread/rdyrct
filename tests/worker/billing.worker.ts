@@ -192,6 +192,14 @@ describe("POST /api/billing/checkout", () => {
     );
   });
 
+  it("returns standard Polar checkout url compatible with agentic checkouts (AgentCard)", async () => {
+    const cookie = await adminCookie();
+    const res = await checkout(cookie, { plan: "pro" });
+    expect(res.status).toBe(200);
+    const data = await jsonBody<{ url: string }>(res);
+    expect(data.url).toBe("https://sandbox.polar.sh/checkout/test");
+  });
+
   it("maps the hobby plan to the hobby product", async () => {
     const cookie = await adminCookie();
     await checkout(cookie, { plan: "hobby" });
